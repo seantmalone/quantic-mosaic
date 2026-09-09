@@ -213,3 +213,55 @@ rather than assumed.
 - `rag/download_model.py` constructs `TextEmbedding` with **`threads=1`**, matching `rag/embed.py`:
   every construction in the repository now pins the ONNX thread count, so the single-core container
   of §14.3 cannot have a thread pool spawned behind its back on the cache-warming path either.
+
+## 2026-09-09 — P5 `mcpserver/`: nine tools, three transports, the confirmation gate
+
+- **Measured against `mcp` 2.2.0 today, and it contradicts one line of the spec.** §8.2 step 5 records
+  an earlier probe finding `structured_content` populated over HTTP but `None` over stdio. Measured on
+  2026-09-09 against this server, **both transports populate it** — because every tool returns an
+  explicit `CallToolResult` carrying `structured_content` *and* a JSON `TextContent`. The fallback path
+  the spec requires stays, and `tests/integration/test_mcp_tool_call.py` asserts the two paths agree on
+  both transports, so a client written against either is correct.
+- **A schema violation is `isError: true` with a text message, not a JSON-RPC `-32602`.** §8.3 describes
+  it as "`isError: true` with JSON-RPC `-32602`". In 2.2.0 the pydantic `ValidationError` is caught by
+  `MCPServer._handle_call_tool` and returned as `CallToolResult(content=[TextContent(...)],
+  is_error=True)`; the `-32602` code never reaches the wire. Nothing downstream changes — the
+  orchestrator keys on `is_error` — but `mcp/README.md` now records the observed shape.
+- **The SDK grep §17 asked for, before any MCP code was written: a native `Host`/`Origin` allowlist
+  exists.** `mcp/server/transport_security.py` defines `TransportSecuritySettings`
+  (`enable_dns_rebinding_protection`, `allowed_hosts`, `allowed_origins` with a `host:*` wildcard-port
+  form), applied by `TransportSecurityMiddleware`, and `streamable_http_app(transport_security=…)`
+  accepts it. Three caveats, all recorded in `mcp/README.md`: it is **off** unless asked for
+  (`TransportSecurityMiddleware(None)` disables rebinding protection "for backwards compatibility");
+  `streamable_http_app()` auto-fills an allowlist only when its `host` **bind** argument is loopback,
+  which a Render deployment's public hostname is not; and the endpoint is behind the app's own access
+  gate and per-IP limit anyway. So the control this project relies on is the gate, and the SDK's
+  allowlist is documented as available rather than configured.
+- **`sqlite-vec` probe on this platform** (`python scripts/probe_sqlite_vec.py`, the script CI's P11
+  `docker` job runs inside a bare `python:3.12-slim`): sqlite3 **3.53.1** · sqlite-vec **v0.1.9** ·
+  python **3.12.14**; a `vec0` table declared `distance_metric=cosine` returns distance **0.0** to an
+  identical vector and **1.0** to an orthogonal one — cosine, not the L2 default, which would have
+  given ≈1.414 and moved every calibrated threshold in the project.
+- **The `_trace` envelope is an object, not a bare list.** §8.7 says the server returns nested spans
+  "under a `_trace` key"; the same envelope also has to carry the actor and `server_timing_ms`, which
+  the `tool_call` payload of §10.2 declares, so `_trace` is
+  `{spans[], server_timing_ms, actor{}, server, transport}` and lives **inside the result body** rather
+  than in the result's `_meta`, so it survives both read paths of §8.2 step 5.
+- **The confirmation gate is a wire-level check.** It compares the **raw arguments of the request**
+  against `confirmations.arguments_json`: the handler sees schema defaults already applied, so
+  comparing those would let a caller who omitted `priority` mismatch a token minted from what the
+  client actually sent. Consequence for P8: `web/` mints from the gated attempt's `tool_call` span
+  `arguments`, and the SDK's in-process `server.call_tool(...)` shortcut always rejects (the fail-safe
+  direction), which is why every gate test runs over a real session.
+- **`sse_starlette.AppStatus.should_exit` is a process-global latch.** Stopping one uvicorn sets it and
+  every later SSE stream in the same process drains immediately — after exactly three mounted-HTTP
+  sessions, the fourth `initialize` failed with "SSE stream ended without a response". One server per
+  process is the only case its authors had in mind. `tests/integration/conftest.py` clears the latch
+  around each mounted-HTTP session; nothing in `src/` is affected, because the app runs one server.
+- **`ruff`'s isort had to be told `mcp` is third-party.** The repository has a top-level `mcp/`
+  directory (DOCS.8), so isort classified the SDK as first-party by directory name and moved
+  `from mcp import Client` into the local block. `[tool.ruff.lint.isort] known-third-party = ["mcp",
+  "mcp_types"]` is the fix — the linter's version of the §4.1 shadowing hazard.
+- **Suite after P5: 764 tests, `make lint` clean, `pytest -q` pristine** (from 590 at P6). The nine
+  tool schemas are generated from a live `tools/list` and committed under `mcp/tools/`, and
+  `python scripts/gen_tool_schemas.py && git diff --exit-code mcp/tools/` is clean.
