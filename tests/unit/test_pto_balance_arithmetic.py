@@ -7,7 +7,10 @@ the number quoted in the demo narration, the eval gold answer and `test_mcp_tool
 
 The accrual-rate check reads `corpus/facts.yml`, which P2 produces; it skips while that file is
 absent so this phase's gate stays green in isolation, and the main session runs it after the
-merge.
+merge. It asserts the proration rule of `corpus/pto-and-holidays.md` ("Accrual > Part-Time and
+Prorated Accrual") for **every** employee — `rate == round(fte * band, 2)`, with `fte` 1.0 for
+full-time — so `accrual_fact_key` always names a tenure band and the FTE factor is read from
+`employees.json` rather than duplicated onto the balance.
 """
 
 from __future__ import annotations
@@ -79,12 +82,24 @@ def test_e1042_resolves_to_thirteen_point_five():
 
 
 def test_accrual_rate_matches_the_facts_yml_band():
+    """Every rate is the tenure band's full-time value, prorated to the employee's FTE.
+
+    `corpus/pto-and-holidays.md` makes proration a *multiplier* on the band, not a band of its
+    own: "Part-time employees scheduled at 0.5 FTE or more accrue PTO in proportion to their
+    FTE." So a 0.8 FTE employee in the three-year-plus band accrues 0.8 x 1.50 = 1.20 days a
+    month and quotes `pto.accrual.ft_3y_plus`, while full-time is the same rule at fte 1.0.
+    """
     if not FACTS_YML.exists():
         pytest.skip("corpus/facts.yml not present (P2)")
     facts = yaml.safe_load(FACTS_YML.read_text(encoding="utf-8"))["facts"]
+    fte = {
+        record["employee_id"]: float(record["fte"])
+        for record in json.loads((MOCK_DATA / "employees.json").read_text(encoding="utf-8"))["records"]
+    }
     for record in _balances():
         key = record["accrual_fact_key"]
         assert key in facts, f"{record['employee_id']}: {key} is missing from corpus/facts.yml"
         entry = facts[key]
         assert entry["unit"] == "days_per_month", key
-        assert float(entry["value"]) == pytest.approx(record["accrual_rate_days_per_month"]), key
+        expected = round(fte[record["employee_id"]] * float(entry["value"]), 2)
+        assert record["accrual_rate_days_per_month"] == pytest.approx(expected), record["employee_id"]

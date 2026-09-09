@@ -136,3 +136,25 @@ rather than assumed.
   carried only the two full-time ones, so
   `tests/unit/test_pto_balance_arithmetic.py::test_accrual_rate_matches_the_facts_yml_band` failed. No
   policy prose changed — the document already stated the proration rule with a checkable number.
+
+## 2026-09-09 — P3 mock data (part-time PTO accrual follows the corpus)
+
+- `scripts/gen_mock_data.py` now sets `accrual_rate_days_per_month` to `round(fte x band_rate, 2)`
+  and `accrual_fact_key` to the **tenure band** for every employee, part-time included — the rule
+  `corpus/pto-and-holidays.md` states under "Accrual > Part-Time and Prorated Accrual". `E1132` and
+  `E1175` (0.8 FTE, three-year-plus band) were flat-rated at 0.75 d/mo and now accrue **1.20**;
+  `E1096` (0.6 FTE, under-three-year band) keeps 0.75 but now quotes `pto.accrual.ft_under_3y`. No
+  balance record names `pto.accrual.part_time_prorated` any more; the fact stays in `facts.yml` as
+  the document's own 0.6-FTE worked example. `fte` is **not** copied onto the balance — it already
+  lives in `employees.json`, and the test derives the expected rate from there.
+- **The seeded stream is shared across datasets, so a data fix ripples.** `random.randint`
+  rejection-samples, so widening two employees' `used_ytd` draw range (`int(available * 2 * 0.6)`,
+  8 → 12 half-days) consumes a different number of words and shifts every later draw. Regenerating
+  therefore also moved the sampled `used_ytd` / `pending_days` / carryover of six unrelated PTO
+  records (`E1133`, `E1138`, `E1145`, `E1162`, `E1172`, `E1192`) and the sampled plan/tier/dependants
+  of 17 `benefits_elections` records. **Nothing pinned is affected**: all 24 ids and the record order
+  are byte-identical, the four anchor PTO records are untouched, `E1042` is still 13.5 days at
+  1.50 d/mo, and `E1108`'s benefits record is still `elections: []` with `waiting_period_ends`
+  2026-11-13. Anyone changing an accrual rate again should expect the same ripple — the alternative
+  (a per-dataset or per-employee stream) would churn every sampled value once, which is why it was
+  not done here.

@@ -321,12 +321,15 @@ DE_HOLIDAYS = (
 COMPANY_BLACKOUT = ("2026-12-22", "2026-12-23")
 MANUFACTURING_BLACKOUT = ("2026-06-29", "2026-06-30")
 
-# Accrual bands. Each key must exist in corpus/facts.yml (P2) with unit `days_per_month`;
-# tests/unit/test_pto_balance_arithmetic.py asserts the two agree.
+# The two tenure bands, keyed by the corpus/facts.yml (P2) entry each rate is quoted from; both
+# carry unit `days_per_month`. These are the *full-time* rates. A part-time employee accrues in
+# proportion to their FTE — `corpus/pto-and-holidays.md`, "Accrual > Part-Time and Prorated
+# Accrual" — so proration is a multiplier on the band, not a band of its own, and
+# `accrual_fact_key` always names the tenure band. tests/unit/test_pto_balance_arithmetic.py
+# asserts `rate == round(fte * facts[band].value, 2)` for every employee.
 ACCRUAL_BANDS = {
     "pto.accrual.ft_3y_plus": 1.50,
     "pto.accrual.ft_under_3y": 1.25,
-    "pto.accrual.part_time_prorated": 0.75,
 }
 
 PLANS = {
@@ -371,10 +374,19 @@ def accrual_postings_ytd(hire_date: datetime.date) -> int:
     return sum(1 for month in range(1, AS_OF.month + 1) if datetime.date(AS_OF.year, month, 1) > hire_date)
 
 
-def accrual_band(employment_type: str, tenure_months: int) -> str:
-    if employment_type == "part_time":
-        return "pto.accrual.part_time_prorated"
+def accrual_band(tenure_months: int) -> str:
+    """The tenure band whose full-time rate the employee's accrual is quoted from."""
     return "pto.accrual.ft_3y_plus" if tenure_months >= 36 else "pto.accrual.ft_under_3y"
+
+
+def accrual_rate(fte: float, fact_key: str) -> float:
+    """The band rate prorated to the employee's FTE, to two decimal places.
+
+    Full-time (`fte == 1.0`) is the band rate itself; a 0.6 FTE employee in the under-three-year
+    band accrues 0.75 days a month and a 0.8 FTE employee in the three-year-plus band 1.20, both
+    exactly as `corpus/pto-and-holidays.md` states the rule.
+    """
+    return round(fte * ACCRUAL_BANDS[fact_key], 2)
 
 
 def first_of_next_month(day: datetime.date) -> datetime.date:
@@ -444,8 +456,10 @@ def build_pto_balances(rng: random.Random, employees: list[Employee]) -> list[Pt
     balances = []
     for employee_id in sorted(by_id):
         employee = by_id[employee_id]
-        fact_key = accrual_band(employee.employment_type, employee.tenure_months_at_as_of)
-        rate = ACCRUAL_BANDS[fact_key]
+        fact_key = accrual_band(employee.tenure_months_at_as_of)
+        # The FTE factor is not stored on the balance: it is already in `employees.json`, and one
+        # copy of a number is the only copy that can never disagree with itself.
+        rate = accrual_rate(employee.fte, fact_key)
         accrued = round(rate * accrual_postings_ytd(employee.hire_date), 2)
 
         carryover, expires_on = 0.0, None

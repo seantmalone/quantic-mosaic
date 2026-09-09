@@ -15,68 +15,6 @@
           "plan_type": "medical",
           "plan_id": "MED-PPO-1500",
           "plan_name": "MosaicCare PPO 1500",
-          "tier": "employee_spouse",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 286.0
-        },
-        {
-          "plan_type": "dental",
-          "plan_id": "DEN-STD",
-          "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_spouse",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 26.0
-        },
-        {
-          "plan_type": "vision",
-          "plan_id": "VIS-STD",
-          "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_spouse",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 11.0
-        },
-        {
-          "plan_type": "life",
-          "plan_id": "LIFE-BASIC",
-          "plan_name": "Basic Life & AD&D (company paid)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "retirement_401k",
-          "plan_id": "RET-401K",
-          "plan_name": "MosaicOne 401(k)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "fsa",
-          "plan_id": "FSA-HC",
-          "plan_name": "MosaicSave Health Care FSA",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        }
-      ],
-      "dependents": 1,
-      "open_enrollment_window": {
-        "open": "2026-11-01",
-        "close": "2026-11-21"
-      }
-    },
-    {
-      "employee_id": "E1003",
-      "plan_year": 2026,
-      "as_of": "2026-09-01",
-      "waiting_period_ends": "2018-06-03",
-      "eligibility_reason": "Eligible since 2018-06-03 (90-day new-hire waiting period complete)",
-      "elections": [
-        {
-          "plan_type": "medical",
-          "plan_id": "MED-PPO-1500",
-          "plan_name": "MosaicCare PPO 1500",
           "tier": "family",
           "effective_date": "2026-01-01",
           "employee_cost_monthly": 398.0
@@ -129,73 +67,11 @@
       }
     },
     {
-      "employee_id": "E1007",
+      "employee_id": "E1003",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2020-05-24",
-      "eligibility_reason": "Eligible since 2020-05-24 (90-day new-hire waiting period complete)",
-      "elections": [
-        {
-          "plan_type": "medical",
-          "plan_id": "MED-PPO-1500",
-          "plan_name": "MosaicCare PPO 1500",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 142.0
-        },
-        {
-          "plan_type": "dental",
-          "plan_id": "DEN-STD",
-          "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 14.0
-        },
-        {
-          "plan_type": "vision",
-          "plan_id": "VIS-STD",
-          "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 6.0
-        },
-        {
-          "plan_type": "life",
-          "plan_id": "LIFE-BASIC",
-          "plan_name": "Basic Life & AD&D (company paid)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "retirement_401k",
-          "plan_id": "RET-401K",
-          "plan_name": "MosaicOne 401(k)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "fsa",
-          "plan_id": "FSA-HC",
-          "plan_name": "MosaicSave Health Care FSA",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        }
-      ],
-      "dependents": 0,
-      "open_enrollment_window": {
-        "open": "2026-11-01",
-        "close": "2026-11-21"
-      }
-    },
-    {
-      "employee_id": "E1014",
-      "plan_year": 2026,
-      "as_of": "2026-09-01",
-      "waiting_period_ends": "2019-12-01",
-      "eligibility_reason": "Eligible since 2019-12-01 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2018-06-03",
+      "eligibility_reason": "Eligible since 2018-06-03 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -253,11 +129,11 @@
       }
     },
     {
-      "employee_id": "E1017",
+      "employee_id": "E1007",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2020-10-11",
-      "eligibility_reason": "Eligible since 2020-10-11 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2020-05-24",
+      "eligibility_reason": "Eligible since 2020-05-24 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -315,11 +191,11 @@
       }
     },
     {
-      "employee_id": "E1042",
+      "employee_id": "E1014",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2023-02-11",
-      "eligibility_reason": "Eligible since 2023-02-11 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2019-12-01",
+      "eligibility_reason": "Eligible since 2019-12-01 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -371,6 +247,130 @@
         }
       ],
       "dependents": 1,
+      "open_enrollment_window": {
+        "open": "2026-11-01",
+        "close": "2026-11-21"
+      }
+    },
+    {
+      "employee_id": "E1017",
+      "plan_year": 2026,
+      "as_of": "2026-09-01",
+      "waiting_period_ends": "2020-10-11",
+      "eligibility_reason": "Eligible since 2020-10-11 (90-day new-hire waiting period complete)",
+      "elections": [
+        {
+          "plan_type": "medical",
+          "plan_id": "MED-PPO-1500",
+          "plan_name": "MosaicCare PPO 1500",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 142.0
+        },
+        {
+          "plan_type": "dental",
+          "plan_id": "DEN-STD",
+          "plan_name": "MosaicSmile Standard Dental",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 14.0
+        },
+        {
+          "plan_type": "vision",
+          "plan_id": "VIS-STD",
+          "plan_name": "MosaicView Standard Vision",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 6.0
+        },
+        {
+          "plan_type": "life",
+          "plan_id": "LIFE-BASIC",
+          "plan_name": "Basic Life & AD&D (company paid)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "retirement_401k",
+          "plan_id": "RET-401K",
+          "plan_name": "MosaicOne 401(k)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "fsa",
+          "plan_id": "FSA-HC",
+          "plan_name": "MosaicSave Health Care FSA",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        }
+      ],
+      "dependents": 0,
+      "open_enrollment_window": {
+        "open": "2026-11-01",
+        "close": "2026-11-21"
+      }
+    },
+    {
+      "employee_id": "E1042",
+      "plan_year": 2026,
+      "as_of": "2026-09-01",
+      "waiting_period_ends": "2023-02-11",
+      "eligibility_reason": "Eligible since 2023-02-11 (90-day new-hire waiting period complete)",
+      "elections": [
+        {
+          "plan_type": "medical",
+          "plan_id": "MED-PPO-1500",
+          "plan_name": "MosaicCare PPO 1500",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 142.0
+        },
+        {
+          "plan_type": "dental",
+          "plan_id": "DEN-STD",
+          "plan_name": "MosaicSmile Standard Dental",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 14.0
+        },
+        {
+          "plan_type": "vision",
+          "plan_id": "VIS-STD",
+          "plan_name": "MosaicView Standard Vision",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 6.0
+        },
+        {
+          "plan_type": "life",
+          "plan_id": "LIFE-BASIC",
+          "plan_name": "Basic Life & AD&D (company paid)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "retirement_401k",
+          "plan_id": "RET-401K",
+          "plan_name": "MosaicOne 401(k)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "fsa",
+          "plan_id": "FSA-HC",
+          "plan_name": "MosaicSave Health Care FSA",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        }
+      ],
+      "dependents": 0,
       "open_enrollment_window": {
         "open": "2026-11-01",
         "close": "2026-11-21"
@@ -493,27 +493,27 @@
       "elections": [
         {
           "plan_type": "medical",
-          "plan_id": "MED-PPO-1500",
-          "plan_name": "MosaicCare PPO 1500",
-          "tier": "employee_only",
+          "plan_id": "MED-HDHP-3000",
+          "plan_name": "MosaicCare HDHP 3000",
+          "tier": "employee_spouse",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 142.0
+          "employee_cost_monthly": 158.0
         },
         {
           "plan_type": "dental",
           "plan_id": "DEN-STD",
           "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_only",
+          "tier": "employee_spouse",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 14.0
+          "employee_cost_monthly": 26.0
         },
         {
           "plan_type": "vision",
           "plan_id": "VIS-STD",
           "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_only",
+          "tier": "employee_spouse",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 6.0
+          "employee_cost_monthly": 11.0
         },
         {
           "plan_type": "life",
@@ -532,15 +532,15 @@
           "employee_cost_monthly": 0.0
         },
         {
-          "plan_type": "fsa",
-          "plan_id": "FSA-HC",
-          "plan_name": "MosaicSave Health Care FSA",
+          "plan_type": "hsa",
+          "plan_id": "HSA-STD",
+          "plan_name": "MosaicSave Health Savings Account",
           "tier": "employee_only",
           "effective_date": "2026-01-01",
           "employee_cost_monthly": 0.0
         }
       ],
-      "dependents": 0,
+      "dependents": 1,
       "open_enrollment_window": {
         "open": "2026-11-01",
         "close": "2026-11-21"
@@ -681,55 +681,9 @@
           "plan_type": "medical",
           "plan_id": "MED-DE-SUPP",
           "plan_name": "MosaicCare Berlin Supplement",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 22.0
-        },
-        {
-          "plan_type": "dental",
-          "plan_id": "DEN-STD",
-          "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 14.0
-        },
-        {
-          "plan_type": "vision",
-          "plan_id": "VIS-STD",
-          "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 6.0
-        },
-        {
-          "plan_type": "life",
-          "plan_id": "LIFE-BASIC",
-          "plan_name": "Basic Life & AD&D (company paid)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        }
-      ],
-      "dependents": 0,
-      "open_enrollment_window": {
-        "open": "2026-11-01",
-        "close": "2026-11-21"
-      }
-    },
-    {
-      "employee_id": "E1096",
-      "plan_year": 2026,
-      "as_of": "2026-09-01",
-      "waiting_period_ends": "2023-12-31",
-      "eligibility_reason": "Eligible since 2023-12-31 (90-day new-hire waiting period complete)",
-      "elections": [
-        {
-          "plan_type": "medical",
-          "plan_id": "MED-PPO-1500",
-          "plan_name": "MosaicCare PPO 1500",
           "tier": "family",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 398.0
+          "employee_cost_monthly": 62.0
         },
         {
           "plan_type": "dental",
@@ -746,6 +700,52 @@
           "tier": "family",
           "effective_date": "2026-01-01",
           "employee_cost_monthly": 16.0
+        },
+        {
+          "plan_type": "life",
+          "plan_id": "LIFE-BASIC",
+          "plan_name": "Basic Life & AD&D (company paid)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        }
+      ],
+      "dependents": 1,
+      "open_enrollment_window": {
+        "open": "2026-11-01",
+        "close": "2026-11-21"
+      }
+    },
+    {
+      "employee_id": "E1096",
+      "plan_year": 2026,
+      "as_of": "2026-09-01",
+      "waiting_period_ends": "2023-12-31",
+      "eligibility_reason": "Eligible since 2023-12-31 (90-day new-hire waiting period complete)",
+      "elections": [
+        {
+          "plan_type": "medical",
+          "plan_id": "MED-PPO-1500",
+          "plan_name": "MosaicCare PPO 1500",
+          "tier": "employee_children",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 262.0
+        },
+        {
+          "plan_type": "dental",
+          "plan_id": "DEN-STD",
+          "plan_name": "MosaicSmile Standard Dental",
+          "tier": "employee_children",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 24.0
+        },
+        {
+          "plan_type": "vision",
+          "plan_id": "VIS-STD",
+          "plan_name": "MosaicView Standard Vision",
+          "tier": "employee_children",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 10.0
         },
         {
           "plan_type": "life",
@@ -864,25 +864,25 @@
           "plan_type": "medical",
           "plan_id": "MED-PPO-1500",
           "plan_name": "MosaicCare PPO 1500",
-          "tier": "employee_children",
+          "tier": "employee_only",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 262.0
+          "employee_cost_monthly": 142.0
         },
         {
           "plan_type": "dental",
           "plan_id": "DEN-STD",
           "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_children",
+          "tier": "employee_only",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 24.0
+          "employee_cost_monthly": 14.0
         },
         {
           "plan_type": "vision",
           "plan_id": "VIS-STD",
           "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_children",
+          "tier": "employee_only",
           "effective_date": "2026-01-01",
-          "employee_cost_monthly": 10.0
+          "employee_cost_monthly": 6.0
         },
         {
           "plan_type": "life",
@@ -909,7 +909,7 @@
           "employee_cost_monthly": 0.0
         }
       ],
-      "dependents": 2,
+      "dependents": 0,
       "open_enrollment_window": {
         "open": "2026-11-01",
         "close": "2026-11-21"
@@ -986,130 +986,6 @@
       "elections": [
         {
           "plan_type": "medical",
-          "plan_id": "MED-PPO-1500",
-          "plan_name": "MosaicCare PPO 1500",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 142.0
-        },
-        {
-          "plan_type": "dental",
-          "plan_id": "DEN-STD",
-          "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 14.0
-        },
-        {
-          "plan_type": "vision",
-          "plan_id": "VIS-STD",
-          "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 6.0
-        },
-        {
-          "plan_type": "life",
-          "plan_id": "LIFE-BASIC",
-          "plan_name": "Basic Life & AD&D (company paid)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "retirement_401k",
-          "plan_id": "RET-401K",
-          "plan_name": "MosaicOne 401(k)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "fsa",
-          "plan_id": "FSA-HC",
-          "plan_name": "MosaicSave Health Care FSA",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        }
-      ],
-      "dependents": 0,
-      "open_enrollment_window": {
-        "open": "2026-11-01",
-        "close": "2026-11-21"
-      }
-    },
-    {
-      "employee_id": "E1138",
-      "plan_year": 2026,
-      "as_of": "2026-09-01",
-      "waiting_period_ends": "2025-05-18",
-      "eligibility_reason": "Eligible since 2025-05-18 (90-day new-hire waiting period complete)",
-      "elections": [
-        {
-          "plan_type": "medical",
-          "plan_id": "MED-PPO-1500",
-          "plan_name": "MosaicCare PPO 1500",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 142.0
-        },
-        {
-          "plan_type": "dental",
-          "plan_id": "DEN-STD",
-          "plan_name": "MosaicSmile Standard Dental",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 14.0
-        },
-        {
-          "plan_type": "vision",
-          "plan_id": "VIS-STD",
-          "plan_name": "MosaicView Standard Vision",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 6.0
-        },
-        {
-          "plan_type": "life",
-          "plan_id": "LIFE-BASIC",
-          "plan_name": "Basic Life & AD&D (company paid)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "retirement_401k",
-          "plan_id": "RET-401K",
-          "plan_name": "MosaicOne 401(k)",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        },
-        {
-          "plan_type": "fsa",
-          "plan_id": "FSA-HC",
-          "plan_name": "MosaicSave Health Care FSA",
-          "tier": "employee_only",
-          "effective_date": "2026-01-01",
-          "employee_cost_monthly": 0.0
-        }
-      ],
-      "dependents": 0,
-      "open_enrollment_window": {
-        "open": "2026-11-01",
-        "close": "2026-11-21"
-      }
-    },
-    {
-      "employee_id": "E1145",
-      "plan_year": 2026,
-      "as_of": "2026-09-01",
-      "waiting_period_ends": "2024-09-08",
-      "eligibility_reason": "Eligible since 2024-09-08 (90-day new-hire waiting period complete)",
-      "elections": [
-        {
-          "plan_type": "medical",
           "plan_id": "MED-HDHP-3000",
           "plan_name": "MosaicCare HDHP 3000",
           "tier": "family",
@@ -1164,11 +1040,11 @@
       }
     },
     {
-      "employee_id": "E1162",
+      "employee_id": "E1138",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2022-11-13",
-      "eligibility_reason": "Eligible since 2022-11-13 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2025-05-18",
+      "eligibility_reason": "Eligible since 2025-05-18 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -1226,11 +1102,11 @@
       }
     },
     {
-      "employee_id": "E1172",
+      "employee_id": "E1145",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2025-08-31",
-      "eligibility_reason": "Eligible since 2025-08-31 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2024-09-08",
+      "eligibility_reason": "Eligible since 2024-09-08 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -1288,11 +1164,11 @@
       }
     },
     {
-      "employee_id": "E1175",
+      "employee_id": "E1162",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2023-06-11",
-      "eligibility_reason": "Eligible since 2023-06-11 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2022-11-13",
+      "eligibility_reason": "Eligible since 2022-11-13 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -1350,11 +1226,11 @@
       }
     },
     {
-      "employee_id": "E1192",
+      "employee_id": "E1172",
       "plan_year": 2026,
       "as_of": "2026-09-01",
-      "waiting_period_ends": "2021-12-26",
-      "eligibility_reason": "Eligible since 2021-12-26 (90-day new-hire waiting period complete)",
+      "waiting_period_ends": "2025-08-31",
+      "eligibility_reason": "Eligible since 2025-08-31 (90-day new-hire waiting period complete)",
       "elections": [
         {
           "plan_type": "medical",
@@ -1400,6 +1276,130 @@
           "plan_type": "hsa",
           "plan_id": "HSA-STD",
           "plan_name": "MosaicSave Health Savings Account",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        }
+      ],
+      "dependents": 3,
+      "open_enrollment_window": {
+        "open": "2026-11-01",
+        "close": "2026-11-21"
+      }
+    },
+    {
+      "employee_id": "E1175",
+      "plan_year": 2026,
+      "as_of": "2026-09-01",
+      "waiting_period_ends": "2023-06-11",
+      "eligibility_reason": "Eligible since 2023-06-11 (90-day new-hire waiting period complete)",
+      "elections": [
+        {
+          "plan_type": "medical",
+          "plan_id": "MED-HDHP-3000",
+          "plan_name": "MosaicCare HDHP 3000",
+          "tier": "family",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 224.0
+        },
+        {
+          "plan_type": "dental",
+          "plan_id": "DEN-STD",
+          "plan_name": "MosaicSmile Standard Dental",
+          "tier": "family",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 38.0
+        },
+        {
+          "plan_type": "vision",
+          "plan_id": "VIS-STD",
+          "plan_name": "MosaicView Standard Vision",
+          "tier": "family",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 16.0
+        },
+        {
+          "plan_type": "life",
+          "plan_id": "LIFE-BASIC",
+          "plan_name": "Basic Life & AD&D (company paid)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "retirement_401k",
+          "plan_id": "RET-401K",
+          "plan_name": "MosaicOne 401(k)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "hsa",
+          "plan_id": "HSA-STD",
+          "plan_name": "MosaicSave Health Savings Account",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        }
+      ],
+      "dependents": 3,
+      "open_enrollment_window": {
+        "open": "2026-11-01",
+        "close": "2026-11-21"
+      }
+    },
+    {
+      "employee_id": "E1192",
+      "plan_year": 2026,
+      "as_of": "2026-09-01",
+      "waiting_period_ends": "2021-12-26",
+      "eligibility_reason": "Eligible since 2021-12-26 (90-day new-hire waiting period complete)",
+      "elections": [
+        {
+          "plan_type": "medical",
+          "plan_id": "MED-PPO-1500",
+          "plan_name": "MosaicCare PPO 1500",
+          "tier": "family",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 398.0
+        },
+        {
+          "plan_type": "dental",
+          "plan_id": "DEN-STD",
+          "plan_name": "MosaicSmile Standard Dental",
+          "tier": "family",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 38.0
+        },
+        {
+          "plan_type": "vision",
+          "plan_id": "VIS-STD",
+          "plan_name": "MosaicView Standard Vision",
+          "tier": "family",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 16.0
+        },
+        {
+          "plan_type": "life",
+          "plan_id": "LIFE-BASIC",
+          "plan_name": "Basic Life & AD&D (company paid)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "retirement_401k",
+          "plan_id": "RET-401K",
+          "plan_name": "MosaicOne 401(k)",
+          "tier": "employee_only",
+          "effective_date": "2026-01-01",
+          "employee_cost_monthly": 0.0
+        },
+        {
+          "plan_type": "fsa",
+          "plan_id": "FSA-HC",
+          "plan_name": "MosaicSave Health Care FSA",
           "tier": "employee_only",
           "effective_date": "2026-01-01",
           "employee_cost_monthly": 0.0

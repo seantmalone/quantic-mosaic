@@ -118,6 +118,34 @@ balances here have lapsed, so the term is exercised in both directions.
 `accrual_rate_days_per_month` against the `corpus/facts.yml` entry its `accrual_fact_key` names —
 so a policy edit that moves a number cannot silently contradict the data.
 
+### The accrual rate, and how part-time proration is modelled
+
+`accrual_rate_days_per_month` is always **`fte` x the tenure band's full-time rate, rounded to two
+decimal places**, and `accrual_fact_key` always names the **band**:
+
+| `accrual_fact_key` | Full-time rate | Applies to |
+|---|---|---|
+| `pto.accrual.ft_under_3y` | 1.25 d/mo | fewer than 36 months of service at the snapshot |
+| `pto.accrual.ft_3y_plus` | 1.50 d/mo | 36 months or more |
+
+`corpus/pto-and-holidays.md` ("Accrual > Part-Time and Prorated Accrual") makes proration a
+*multiplier* on the band, not a band of its own: *"Part-time employees scheduled at 0.5 FTE or
+more accrue PTO in proportion to their FTE."* So the three part-time records here read:
+
+| Id | FTE | Tenure | Band | Rate |
+|---|---|---|---|---|
+| `E1096` | 0.6 | 34 mo | `pto.accrual.ft_under_3y` | 0.6 x 1.25 = **0.75** |
+| `E1132` | 0.8 | 50 mo | `pto.accrual.ft_3y_plus` | 0.8 x 1.50 = **1.20** |
+| `E1175` | 0.8 | 41 mo | `pto.accrual.ft_3y_plus` | 0.8 x 1.50 = **1.20** |
+
+Full-time is the same rule at `fte` 1.0, so one assertion covers all 24 people. The **band** is
+what a tool may quote — it is the fact that carries a document, a section and a verbatim sentence
+in `corpus/facts.yml` — while the FTE factor is arithmetic over a field that already exists in
+`employees.json`. That is why `fte` is **not** copied onto the balance record: one copy of a number
+is the only copy that can never disagree with itself. `pto.accrual.part_time_prorated` (0.75) stays
+in `facts.yml` as the document's own worked example for a 0.6 FTE employee; no balance record
+names it.
+
 ---
 
 ## Synthetic conventions, and what is deliberately absent
