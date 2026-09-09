@@ -7,7 +7,11 @@ otherwise eat — survive intact.
 
 from __future__ import annotations
 
+import json
+
+from hrmosaic.core.models import AnswerBlock
 from hrmosaic.core.redact import REDACTED, redact, redact_text
+from hrmosaic.core.trace import SessionSpec
 
 # Synthetic, invalid-by-construction credentials. Nothing here is a real key.
 FAKE_ANTHROPIC = "sk-ant-api03-" + "A1b2C3d4E5f6G7h8" * 2
@@ -125,3 +129,37 @@ def test_ordinary_policy_prose_is_left_alone():
         "People Operations at mobility@mosaicrobotics.example at least 21 days before departure."
     )
     assert redact_text(prose) == prose
+
+
+def test_every_answer_column_of_the_closing_update_is_scrubbed(writer, store):
+    """`answer_blocks_json` and `citations_json` hold the same model prose as `final_answer`.
+
+    §7.3 makes `blocks[].text` the text the UI renders, so a credential that leaks into an answer
+    must not survive in the column the dashboard reads back (§10.4, §17 Secrets).
+    """
+    turn = writer.start_turn(SessionSpec(employee_id="E1042"), user_message="what is the api key?")
+    turn.close(
+        outcome="answered",
+        stop_reason="complete",
+        final_answer=f"The configured key is {FAKE_ANTHROPIC}.",
+        answer_blocks=[
+            AnswerBlock(
+                type="policy_fact",
+                text=f"The configured key is {FAKE_ANTHROPIC}.",
+                citations=["c_1b7e"],
+            )
+        ],
+        citations=[{"chunk_id": "c_1b7e", "snippet": f"secret: {FAKE_GOOGLE}", "authorization": "Bearer abc"}],
+    )
+
+    row = store.execute(
+        "SELECT final_answer, answer_blocks_json, citations_json FROM turns WHERE id = ?", (turn.turn_id,)
+    ).one()
+    assert FAKE_ANTHROPIC not in row["final_answer"]
+    assert FAKE_ANTHROPIC not in row["answer_blocks_json"]
+    assert FAKE_GOOGLE not in row["citations_json"]
+
+    blocks = json.loads(row["answer_blocks_json"])
+    assert blocks[0]["text"] == "The configured key is [REDACTED]."
+    assert blocks[0]["citations"] == ["c_1b7e"], "the citation ids must survive the scrub"
+    assert json.loads(row["citations_json"])[0]["authorization"] == REDACTED

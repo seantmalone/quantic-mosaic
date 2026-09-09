@@ -51,6 +51,8 @@ logger = logging.getLogger(__name__)
 MAX_PAYLOAD_BYTES = 32 * 1024
 MAX_LLM_PAYLOAD_BYTES = 128 * 1024
 MAX_STRING_BYTES = 8 * 1024
+#: The floor the per-string cap halves down to before the payload is replaced with a stub.
+MIN_STRING_BYTES = 64
 TRUNCATION_MARKER = "…[truncated]"
 
 #: A turn open for longer than this when the process boots was left behind by a hard kill (§10.3).
@@ -205,16 +207,42 @@ def _serialise(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
-def _longest_list_key(payload: dict[str, Any]) -> str | None:
-    lists = {key: value for key, value in payload.items() if isinstance(value, list) and value}
-    return max(lists, key=lambda key: len(lists[key])) if lists else None
+def _every_list(node: Any) -> Iterator[list[Any]]:
+    """Every list anywhere in the payload — a nested one counts as much as a top-level one."""
+    if isinstance(node, dict):
+        for value in node.values():
+            yield from _every_list(value)
+    elif isinstance(node, list):
+        yield node
+        for item in node:
+            yield from _every_list(item)
+
+
+def _shed_longest_list(body: dict[str, Any]) -> bool:
+    """Drop elements off the longest collection in `body`. False when there is nothing left to shed.
+
+    `body` is always a fresh structure built by `_cap_strings`, so mutating a list found inside it
+    never touches the caller's payload. Long lists shed a slice at a time rather than one element,
+    so a payload holding thousands of items still converges in a bounded number of passes.
+    """
+    candidates = [item for item in _every_list(body) if item]
+    if not candidates:
+        return False
+    longest = max(candidates, key=len)
+    del longest[-max(1, len(longest) // 16) :]
+    return True
 
 
 def prepare_payload(kind: str, payload: Any) -> tuple[str, int, bool]:
     """Redact, then size-control. Returns `(payload_json, payload_bytes, truncated)`.
 
     `payload_bytes` is the **pre-truncation** size, so the dashboard can badge a truncated
-    payload honestly (§10.5).
+    payload honestly (§10.5), and `truncated` is true whenever the stored JSON differs from the
+    redacted original — never a `break` that leaves an over-cap payload recorded as intact.
+
+    The loop only ever exits under the cap: shed the longest collection (nested ones included),
+    then halve the per-string cap down to `MIN_STRING_BYTES`, and if even that will not fit,
+    store the `payload_oversize` stub. §17 counts these caps as a denial-of-service control.
     """
     body = _as_dict(payload)
     body.setdefault("kind", kind)
@@ -223,21 +251,21 @@ def prepare_payload(kind: str, payload: Any) -> tuple[str, int, bool]:
     payload_bytes = len(original.encode("utf-8"))
 
     cap = MAX_LLM_PAYLOAD_BYTES if kind == "llm_call" else MAX_PAYLOAD_BYTES
-    body = _cap_strings(body, MAX_STRING_BYTES)
+    limit = MAX_STRING_BYTES
+    body = _cap_strings(body, limit)
     serialised = _serialise(body)
-    truncated = serialised != original
     while len(serialised.encode("utf-8")) > cap:
-        # Still over the cap with every string capped: shed the longest collection, element by
-        # element, and as a last resort cap the strings far harder.
-        key = _longest_list_key(body)
-        if key is None:
-            body = _cap_strings(body, 256)
-            serialised = _serialise(body)
-            break
-        body[key] = body[key][:-1]
+        if not _shed_longest_list(body):
+            if limit <= MIN_STRING_BYTES:
+                logger.warning("payload of %d bytes will not fit the %d byte cap; stored a stub", payload_bytes, cap)
+                stub = {"kind": kind, "error_kind": "payload_oversize", "payload_bytes": payload_bytes}
+                return _serialise(stub), payload_bytes, True
+            # Capping an already-capped string at a smaller limit slices the marker off first,
+            # so the result carries exactly one `…[truncated]`.
+            limit = max(MIN_STRING_BYTES, limit // 2)
+            body = _cap_strings(body, limit)
         serialised = _serialise(body)
-        truncated = True
-    return serialised, payload_bytes, truncated
+    return serialised, payload_bytes, serialised != original
 
 
 # --------------------------------------------------------------------------------------
@@ -566,8 +594,8 @@ class TurnBuffer:
                     ended_at,
                     duration_ms,
                     redact_text(final_answer) if final_answer else final_answer,
-                    _dump_json(answer_blocks),
-                    _dump_json(citations),
+                    _dump_redacted_json(answer_blocks),
+                    _dump_redacted_json(citations),
                     outcome,
                     stop_reason,
                     intent,
@@ -604,6 +632,20 @@ def _dump_json(value: Any) -> str | None:
     if isinstance(value, list) and value and isinstance(value[0], BaseModel):
         return json.dumps([item.model_dump(mode="json") for item in value], ensure_ascii=False)
     return json.dumps(value, ensure_ascii=False)
+
+
+def _dump_redacted_json(value: Any) -> str | None:
+    """Serialise, then redact — `answer_blocks_json` and `citations_json` hold the same
+    model-generated prose as `final_answer`, and §10.4 runs `redact()` over all of it. Scrubbing
+    one column and persisting the leak verbatim in the next is the failure §17 forbids."""
+    dumped = _dump_json(value)
+    if dumped is None:
+        return None
+    try:
+        structure = json.loads(dumped)
+    except json.JSONDecodeError:  # a caller handed us prose, not JSON
+        return redact_text(dumped)
+    return json.dumps(redact(structure), ensure_ascii=False)
 
 
 # --------------------------------------------------------------------------------------
