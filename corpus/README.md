@@ -275,9 +275,17 @@ matching, so the build fails before the corpus can contradict a gold answer.
 
 `check_policy_compliance` (spec §8.4 tool 4) is a deterministic pure function over seven scenarios:
 `international_remote`, `domestic_remote`, `pto_request`, `expense_claim`, `equipment_request`,
-`benefits_change`, `conduct_escalation`. Each requirement names a `fact_key`, a `doc_id` and a
-`heading_path`, plus a small closed-vocabulary `check` the engine evaluates — the grammar is documented in
-the header of `rules.yml` itself.
+`benefits_change`, `conduct_escalation`. Each requirement names an `id`, its `text`, a `fact_key`, a
+`doc_id` and a `heading_path` — those five keys and nothing else — and each scenario adds `title`,
+`topics`, `escalate_to`, `approvals_required` and `next_steps`.
+
+**How a requirement is evaluated is not decided in this file.** Spec §8.4 fixes the tool's input and
+output schemas and says the rules come from `rules.yml`, each requirement naming a `fact_key`, a `doc_id`
+and a `heading_path`; it does not say how `met`, `unmet`, the `verdict` (`compliant` / `conditional` /
+`non_compliant` / `insufficient_evidence`) or the applicable subset of `approvals_required` and
+`next_steps` are derived. Those are user-facing outputs, so **P5 owns them**; the P2 report §7.5 carries a
+non-binding proposal. `scripts/check_facts.py` asserts the requirement key vocabulary, so an evaluation
+field cannot reappear here without an explicit edit to `REQUIREMENT_KEYS` in the same commit.
 
 Requirements carry no `chunk_id`, because chunk ids are content hashes computed at ingest.
 `mcpserver/rules.py` resolves `(doc_id, heading_path)` to a real chunk at call time. A stale heading path

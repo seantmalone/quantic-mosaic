@@ -58,3 +58,22 @@ rather than assumed.
   comparison — the §6.2 "drop the boilerplate footer" cleaning, needed because a sentence spanning a
   page break otherwise has the footer spliced into it.
 - CI's `test` job gained one step, `python scripts/check_facts.py`, ahead of `pytest -q` (roadmap §3).
+- **`corpus/rules.yml` carries no evaluation semantics — that decision belongs to P5, and is open.**
+  P2 first shipped a documented evaluation grammar in the file (`check.subject` / `check.operator` /
+  `check.compare_to`, an `applies_when` guard, a `blocking` flag, and verdict-derivation rules). It was
+  removed at the P2 gate: §8.4 fixes the tool's input and output schemas and says only that each
+  requirement names a `fact_key`, a `doc_id` and a `heading_path`, and two of those operators decided
+  when `check_policy_compliance` answers `conditional` rather than `compliant` — a **user-facing
+  verdict**, which the standing brief says to report rather than resolve unilaterally. A requirement is
+  now exactly `id · text · fact_key · doc_id · heading_path`; a scenario is `title · topics ·
+  escalate_to · requirements · approvals_required · next_steps`, with `next_steps` a list of plain
+  strings, matching the §8.4 output schema. The removed grammar survives as a **non-binding proposal**
+  in the P2 report §7.5 for P5 to adopt, amend or ignore. `REQUIREMENT_KEYS` in
+  `scripts/check_facts.py` (asserted by `tests/unit/test_facts_quotes.py`) fails the build if an
+  evaluation field reappears in the data file, so putting one there is always a deliberate, reviewed act.
+- **Two subjects P5 will need that no employee record carries** (found while removing the grammar, and
+  worth writing down because P3 authors `mock_data/` in parallel): the benefits waiting period is 90
+  **days** but §8.4 tool 5 exposes only `tenure_months_at_as_of`, so P5 must derive tenure days from
+  `hire_date` against the `as_of: 2026-09-01` snapshot; and a PTO balance check needs `remaining_days`,
+  which is an output of `check_pto_balance` (§8.4 tool 6, `mock_data/pto_balances.json`), not a field of
+  the employee profile. Neither name may be read off `lookup_employee_profile`.

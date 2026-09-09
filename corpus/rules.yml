@@ -1,51 +1,39 @@
 # corpus/rules.yml — the requirements behind `check_policy_compliance`'s seven scenarios (spec §8.4).
 #
-# The tool is a deterministic, pure function with zero LLM calls. This file is its whole knowledge:
-# every requirement names a `fact_key` (resolved in `corpus/facts.yml`), a `doc_id` and a
-# `heading_path`, which `mcpserver/rules.py` turns into a real `chunk_id` at call time via
-# `core.corpusread.list_chunks(doc_id)` filtered on the exact `" > "`-joined path. Chunk ids are
-# content hashes computed at ingest, so they can never be written here.
+# The tool is a deterministic, pure function with zero LLM calls. This file is its knowledge: for each
+# of the seven scenarios it names the requirements that apply, and for each requirement the `fact_key`
+# (resolved in `corpus/facts.yml`), the `doc_id` and the `heading_path` that back it — exactly the three
+# anchors §8.4 asks for — plus the scenario's `approvals_required`, `next_steps` and `escalate_to`.
 #
-# `scripts/check_facts.py` asserts that every `fact_key` resolves and that every `heading_path` is a
-# real heading path in the document it names, so a corpus edit that renames a section fails the build
-# rather than silently producing an evidence-free requirement that guardrail G2 would strip.
+# `mcpserver/rules.py` turns each `(doc_id, heading_path)` pair into a real `chunk_id` at call time via
+# `core.corpusread.list_chunks(doc_id)` filtered on the exact `" > "`-joined path. Chunk ids are content
+# hashes computed at ingest, so they can never be written here.
+#
+# `scripts/check_facts.py` asserts that every `fact_key` resolves, that every `heading_path` is a real
+# heading path in the document it names, and that every requirement carries exactly these keys and no
+# others — so a corpus edit that renames a section fails the build rather than silently producing an
+# evidence-free requirement that guardrail G2 would strip.
+#
+#   requirement   id · text · fact_key · doc_id · heading_path
+#   scenario      title · topics · escalate_to · requirements · approvals_required · next_steps
 #
 # ---------------------------------------------------------------------------------------------------
-# Requirement grammar (a small, closed vocabulary — the engine implements exactly these)
+# HOW A REQUIREMENT IS EVALUATED IS NOT DECIDED HERE — P5 OWNS IT.
 #
-#   check.subject      parameters.<name>              a caller-supplied value
-#                      employee.<field>               a field of the mock-data employee record
-#                      computed.notice_business_days  business days from the mock-data `as_of` snapshot
-#                                                     to `parameters.start_date`, computed by the engine
-#                                                     and never taken from the caller (spec §8.4)
-#                      computed.notice_calendar_days  the same span in calendar days
-#                      computed.overlaps_blackout     true when the requested dates hit a blackout date
-#                      computed.claim_age_days        calendar days from `parameters.transaction_date`
-#                                                     to the snapshot
+# §8.4 fixes the tool's input and output schemas and says the rules come from this file, "each
+# requirement naming a `fact_key`, a `doc_id` and a `heading_path`". It does not say how `met`, `unmet`,
+# `verdict` (`compliant` | `conditional` | `non_compliant` | `insufficient_evidence`), the applicable
+# subset of `approvals_required` or the applicable subset of `next_steps` are derived. Those are
+# user-facing outputs, so P2 does not pre-commit them.
 #
-#   check.operator     lte | lt | gte | gt | eq        numeric or boolean comparison
-#                      in                              subject is a member of a comma-separated list
-#                      date_lte | date_gte             ISO-8601 date comparison
-#                      manual                          not verifiable from data: reported `met: false`
-#                                                      with a confirmation reason, so the verdict is
-#                                                      `conditional` rather than falsely `compliant`
-#                      informational                   a standing rule that always holds: reported
-#                                                      `met: true`, cited, never listed in `unmet`
+# While authoring these scenarios P2 wrote a candidate evaluation grammar into this file
+# (`check.subject` / `check.operator` / `check.compare_to`, an `applies_when` guard, a `blocking` flag)
+# and removed it again at the P2 gate. It survives as a **non-binding proposal** in the P2 report §7.5,
+# for P5 to adopt, amend or ignore — including the two subjects it needs that the employee record does
+# not carry (tenure in *days*, and `remaining_days`, which is a `check_pto_balance` output).
 #
-#   check.compare_to   fact (default)                  the `facts.yml` value named by `fact_key`
-#                      parameters.<name>               another caller-supplied value
-#                      literal:<value>                 a constant
-#
-#   applies_when       always (default)
-#                      unmet:<requirement id> | met:<requirement id>
-#                      parameter_eq:<name>:<value>
-#                      parameter_gte:<name>:<fact_key>
-#                      employee_eq:<field>:<value>
-#
-# A requirement whose `applies_when` is false is omitted from `requirements[]` entirely.
-# `verdict` is `compliant` when nothing is unmet, `conditional` when something unmet is satisfiable
-# before the action, `non_compliant` when a `blocking: true` requirement is unmet, and
-# `insufficient_evidence` when a required subject is absent.
+# If evaluation fields are ever added back, extend `REQUIREMENT_KEYS` in `scripts/check_facts.py` in the
+# same commit: the build fails until putting them here is a deliberate, reviewed act.
 # ---------------------------------------------------------------------------------------------------
 
 rules_version: "2026.1"
@@ -62,77 +50,59 @@ scenarios:
         fact_key: remote.international.eligibility_tenure_months
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Eligibility"
-        blocking: true
-        check: {subject: employee.tenure_months_at_as_of, operator: gte}
       - id: remote.intl.duration
         text: "Stays over 30 consecutive days require Tax & Legal review."
         fact_key: remote.international.threshold_days
         doc_id: tax-and-location-addendum
         heading_path: "Duration Thresholds > Stays Exceeding 30 Days"
-        check: {subject: parameters.duration_days, operator: lte}
       - id: remote.intl.annual_limit
         text: "No more than 90 days outside the home country in a rolling 12-month period."
         fact_key: remote.international.max_days_per_year
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Duration Limits"
-        blocking: true
-        check: {subject: parameters.duration_days, operator: lte}
       - id: remote.intl.destination
         text: "The destination must be on the approved-country list."
         fact_key: tax.approved_countries
         doc_id: tax-and-location-addendum
         heading_path: "Approved Countries"
-        check: {subject: parameters.destination_country, operator: in}
       - id: remote.intl.manager_notice
         text: "Written manager approval at least 21 calendar days before departure."
         fact_key: remote.international.manager_notice_days
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Approval"
-        check: {subject: computed.notice_calendar_days, operator: gte}
       - id: remote.intl.tax_review_lead
         text: "A Tax & Legal review request must be filed at least 21 calendar days before departure."
         fact_key: tax.review.lead_time_days
         doc_id: tax-and-location-addendum
         heading_path: "Duration Thresholds > Stays Exceeding 30 Days"
-        applies_when: "unmet:remote.intl.duration"
-        check: {subject: computed.notice_calendar_days, operator: gte}
       - id: remote.intl.device
         text: "A company-managed, full-disk-encrypted laptop with always-on VPN is mandatory."
         fact_key: remote.international.device_requirement
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Device and Connectivity Requirements"
-        check: {subject: parameters.device_is_company_managed, operator: manual}
       - id: remote.intl.no_contract_signing
         text: "No contracts may be signed or customer agreements negotiated while abroad."
         fact_key: tax.pe_risk.no_contract_signing
         doc_id: tax-and-location-addendum
         heading_path: "Permanent Establishment Risk"
-        check: {subject: parameters.activity_is_customer_facing, operator: informational}
     approvals_required:
       - role: "Direct manager"
         reason: "Every stay abroad needs written manager approval."
         doc_id: manager-approval-matrix
         heading_path: "Remote Work > International"
-        applies_when: always
       - role: "Director"
         reason: "A stay of more than 30 consecutive days is a director decision."
         doc_id: manager-approval-matrix
         heading_path: "Remote Work > International"
-        applies_when: "unmet:remote.intl.duration"
       - role: "Tax & Legal"
         reason: "A stay of more than 30 consecutive days requires Tax & Legal review before travel."
         doc_id: tax-and-location-addendum
         heading_path: "Duration Thresholds > Stays Exceeding 30 Days"
-        applies_when: "unmet:remote.intl.duration"
     next_steps:
-      - text: "Raise the request in MosaicOne under 'Work from another country' with the exact dates and workspace address."
-        applies_when: always
-      - text: "File a Tax & Legal review request at least 21 calendar days before departure."
-        applies_when: "unmet:remote.intl.duration"
-      - text: "Obtain written manager approval at least 21 calendar days before departure."
-        applies_when: "unmet:remote.intl.manager_notice"
-      - text: "Confirm with IT Security that the travel laptop is company-managed, encrypted and on always-on VPN."
-        applies_when: "unmet:remote.intl.device"
+      - "Raise the request in MosaicOne under 'Work from another country' with the exact dates and workspace address."
+      - "File a Tax & Legal review request at least 21 calendar days before departure."
+      - "Obtain written manager approval at least 21 calendar days before departure."
+      - "Confirm with IT Security that the travel laptop is company-managed, encrypted and on always-on VPN."
 
   domestic_remote:
     title: "Working from another location inside the home country"
@@ -144,36 +114,28 @@ scenarios:
         fact_key: remote.hybrid.onsite_days_per_week
         doc_id: remote-and-hybrid-work
         heading_path: "Hybrid Expectations > Required Onsite Days"
-        applies_when: "employee_eq:work_arrangement:hybrid"
-        check: {subject: parameters.onsite_days_per_week, operator: gte}
       - id: remote.domestic.other_state_notice
         text: "More than 10 business days in another US state requires notification to People Operations."
         fact_key: remote.domestic.other_state_notice_days
         doc_id: remote-and-hybrid-work
         heading_path: "Working From Another US State"
-        check: {subject: parameters.duration_days, operator: lte}
       - id: remote.domestic.vpn
         text: "Always-on VPN is required on any network Mosaic Robotics does not control."
         fact_key: security.vpn.untrusted_network_required
         doc_id: security-acceptable-use
         heading_path: "Working in Public Places"
-        check: {subject: parameters.network_is_company_controlled, operator: informational}
     approvals_required:
       - role: "Direct manager"
         reason: "A change of working location is agreed with the direct manager."
         doc_id: manager-approval-matrix
         heading_path: "Remote Work > Domestic"
-        applies_when: always
       - role: "People Operations"
         reason: "Work in another US state beyond the notification threshold has payroll consequences."
         doc_id: manager-approval-matrix
         heading_path: "Remote Work > Domestic"
-        applies_when: "unmet:remote.domestic.other_state_notice"
     next_steps:
-      - text: "Record the working location in MosaicOne so the payroll position stays accurate."
-        applies_when: always
-      - text: "Notify People Operations before the eleventh business day in the other state."
-        applies_when: "unmet:remote.domestic.other_state_notice"
+      - "Record the working location in MosaicOne so the payroll position stays accurate."
+      - "Notify People Operations before the eleventh business day in the other state."
 
   pto_request:
     title: "Requesting paid time off"
@@ -185,49 +147,38 @@ scenarios:
         fact_key: pto.notice.standard_days
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Notice Requirements"
-        check: {subject: computed.notice_business_days, operator: gte}
       - id: pto.request.extended_notice
         text: "Six or more consecutive business days need 15 business days of notice."
         fact_key: pto.notice.extended_days
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Notice Requirements"
-        applies_when: "parameter_gte:days:pto.notice.extended_threshold_days"
-        check: {subject: computed.notice_business_days, operator: gte}
       - id: pto.request.balance
         text: "The requested days must be covered by the balance accrued at the snapshot."
         fact_key: pto.accrual.ft_3y_plus
         doc_id: pto-and-holidays
         heading_path: "Accrual > Standard Accrual Rates"
-        blocking: true
-        check: {subject: employee.remaining_days, operator: gte, compare_to: parameters.days}
       - id: pto.request.blackout
         text: "Requests overlapping the 2026 year-end blackout need director approval."
         fact_key: pto.blackout.year_end_2026
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Blackout Periods"
-        check: {subject: computed.overlaps_blackout, operator: eq, compare_to: "literal:false"}
       - id: pto.request.manager_approval
         text: "Every PTO request needs written manager approval in MosaicOne."
         fact_key: pto.approval.manager_required
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Approval Chain"
-        check: {subject: parameters.manager_approval_recorded, operator: manual}
     approvals_required:
       - role: "Direct manager"
         reason: "PTO requests of any length are approved by the direct manager."
         doc_id: manager-approval-matrix
         heading_path: "Time Off"
-        applies_when: always
       - role: "Director"
         reason: "A request overlapping a declared blackout period is a director decision."
         doc_id: manager-approval-matrix
         heading_path: "Time Off"
-        applies_when: "unmet:pto.request.blackout"
     next_steps:
-      - text: "Submit the request in MosaicOne so the manager can approve it in writing."
-        applies_when: always
-      - text: "Move the requested dates or ask the manager to record a notice waiver with a reason."
-        applies_when: "unmet:pto.request.notice"
+      - "Submit the request in MosaicOne so the manager can approve it in writing."
+      - "Move the requested dates or ask the manager to record a notice waiver with a reason."
 
   expense_claim:
     title: "Claiming a business expense"
@@ -239,59 +190,44 @@ scenarios:
         fact_key: expenses.submission.deadline_days
         doc_id: expenses-and-reimbursement
         heading_path: "Submission and Deadlines"
-        check: {subject: computed.claim_age_days, operator: lte}
       - id: expense.receipt
         text: "An itemised receipt is required for every expense of USD 25 or more."
         fact_key: expenses.receipt.threshold_usd
         doc_id: expenses-and-reimbursement
         heading_path: "Receipt Requirements"
-        applies_when: "parameter_gte:amount_usd:expenses.receipt.threshold_usd"
-        check: {subject: parameters.has_itemised_receipt, operator: manual}
       - id: expense.manager_limit
         text: "A direct manager may approve expense reports up to USD 2,500."
         fact_key: expenses.approval.manager_limit_usd
         doc_id: expenses-and-reimbursement
         heading_path: "Approval Thresholds"
-        check: {subject: parameters.amount_usd, operator: lte}
       - id: expense.vp_limit
         text: "A vice president may approve expense reports up to USD 25,000."
         fact_key: approvals.expense.vp_limit_usd
         doc_id: manager-approval-matrix
         heading_path: "Expenses"
-        blocking: true
-        check: {subject: parameters.amount_usd, operator: lte}
       - id: expense.home_office_cap
         text: "The home office allowance is capped at USD 750 per plan year."
         fact_key: expenses.home_office.annual_cap_usd
         doc_id: expenses-and-reimbursement
         heading_path: "Home Office and Equipment Stipends > Annual Home Office Allowance"
-        applies_when: "parameter_eq:category:home_office"
-        check: {subject: parameters.amount_usd, operator: lte}
       - id: expense.lodging_cap
         text: "The standard lodging cap is USD 250 per night before taxes and fees."
         fact_key: travel.lodging.nightly_cap_usd
         doc_id: travel-policy
         heading_path: "Lodging"
-        applies_when: "parameter_eq:category:lodging"
-        check: {subject: parameters.nightly_rate_usd, operator: lte}
     approvals_required:
       - role: "Direct manager"
         reason: "Expense reports up to USD 2,500 are approved by the direct manager."
         doc_id: manager-approval-matrix
         heading_path: "Expenses"
-        applies_when: always
       - role: "Director"
         reason: "Reports above USD 2,500 need director approval and a Finance business partner review."
         doc_id: manager-approval-matrix
         heading_path: "Expenses"
-        applies_when: "unmet:expense.manager_limit"
     next_steps:
-      - text: "Submit the claim in MosaicOne Expenses with the business purpose written out."
-        applies_when: always
-      - text: "Attach an itemised receipt, or file a missing-receipt declaration for the manager to approve."
-        applies_when: "unmet:expense.receipt"
-      - text: "Ask a director to approve the report, with a written reason if it is past the 45-day deadline."
-        applies_when: "unmet:expense.submission_window"
+      - "Submit the claim in MosaicOne Expenses with the business purpose written out."
+      - "Attach an itemised receipt, or file a missing-receipt declaration for the manager to approve."
+      - "Ask a director to approve the report, with a written reason if it is past the 45-day deadline."
 
   equipment_request:
     title: "Requesting or returning company equipment"
@@ -303,37 +239,28 @@ scenarios:
         fact_key: equipment.request.director_threshold_usd
         doc_id: equipment-and-asset
         heading_path: "Requesting Additional Equipment"
-        check: {subject: parameters.amount_usd, operator: lte}
       - id: equipment.refresh_eligibility
         text: "Company laptops are refreshed on a 36-month cycle."
         fact_key: equipment.refresh_cycle_months
         doc_id: equipment-and-asset
         heading_path: "Refresh Cycle"
-        applies_when: "parameter_eq:request_type:refresh"
-        check: {subject: parameters.device_age_months, operator: gte}
       - id: equipment.return_window
         text: "All company equipment is returned within 5 business days of the final day of employment."
         fact_key: equipment.return.separation_days
         doc_id: equipment-and-asset
         heading_path: "Return at Separation"
-        applies_when: "parameter_eq:request_type:separation"
-        check: {subject: parameters.days_since_final_day, operator: lte}
     approvals_required:
       - role: "Direct manager"
         reason: "Catalogue items up to USD 500 are a direct-manager decision."
         doc_id: manager-approval-matrix
         heading_path: "Equipment"
-        applies_when: always
       - role: "Director"
         reason: "Catalogue items above USD 500 additionally need director approval."
         doc_id: manager-approval-matrix
         heading_path: "Equipment"
-        applies_when: "unmet:equipment.director_threshold"
     next_steps:
-      - text: "Raise the request through the MosaicOne equipment catalogue so it routes for approval automatically."
-        applies_when: always
-      - text: "Allow 15 business days for an off-catalogue item, which IT reviews before Procurement sources it."
-        applies_when: "unmet:equipment.director_threshold"
+      - "Raise the request through the MosaicOne equipment catalogue so it routes for approval automatically."
+      - "Allow 15 business days for an off-catalogue item, which IT reviews before Procurement sources it."
 
   benefits_change:
     title: "Changing a benefits election"
@@ -345,40 +272,29 @@ scenarios:
         fact_key: benefits.eligibility.waiting_period_days
         doc_id: benefits-and-open-enrollment
         heading_path: "Eligibility > Waiting Period"
-        blocking: true
-        check: {subject: employee.tenure_days_at_as_of, operator: gte}
       - id: benefits.window_open
         text: "Open enrollment opens on 1 November 2026."
         fact_key: benefits.open_enrollment.open_date
         doc_id: benefits-and-open-enrollment
         heading_path: "Open Enrollment > The 2026 Enrollment Window"
-        applies_when: "parameter_eq:reason:open_enrollment"
-        check: {subject: parameters.effective_date, operator: date_gte}
       - id: benefits.window_close
         text: "Open enrollment closes on 21 November 2026."
         fact_key: benefits.open_enrollment.close_date
         doc_id: benefits-and-open-enrollment
         heading_path: "Open Enrollment > The 2026 Enrollment Window"
-        applies_when: "parameter_eq:reason:open_enrollment"
-        check: {subject: parameters.effective_date, operator: date_lte}
       - id: benefits.qle_window
         text: "A qualifying life event must be reported within 30 days of the event."
         fact_key: benefits.qle.window_days
         doc_id: benefits-and-open-enrollment
         heading_path: "Qualifying Life Events"
-        applies_when: "parameter_eq:reason:qualifying_life_event"
-        check: {subject: parameters.days_since_event, operator: lte}
     approvals_required:
       - role: "People Operations"
         reason: "Benefit elections are administered by People Operations in MosaicOne Benefits."
         doc_id: benefits-and-open-enrollment
         heading_path: "Contacts"
-        applies_when: always
     next_steps:
-      - text: "Record the election in MosaicOne Benefits — it is the only place an election is valid."
-        applies_when: always
-      - text: "Supply the dependent or life-event documentation within 60 days or the change is reversed."
-        applies_when: "unmet:benefits.qle_window"
+      - "Record the election in MosaicOne Benefits — it is the only place an election is valid."
+      - "Supply the dependent or life-event documentation within 60 days or the change is reversed."
 
   conduct_escalation:
     title: "A conduct, harassment or discrimination concern"
@@ -390,29 +306,22 @@ scenarios:
         fact_key: escalation.sensitive_topics_never_automated
         doc_id: hr-escalation-and-case-handling
         heading_path: "What Must Be Escalated"
-        blocking: true
-        check: {subject: parameters.handled_by_named_partner, operator: manual}
       - id: conduct.acknowledgement
         text: "People Operations acknowledges every reported concern within 2 business days."
         fact_key: conduct.report.acknowledgement_days
         doc_id: workplace-conduct
         heading_path: "Investigation Process"
-        check: {subject: parameters.reported, operator: informational}
       - id: conduct.severity_response
         text: "Severity 1 cases receive a response within 4 business hours."
         fact_key: escalation.severity1.response_hours
         doc_id: hr-escalation-and-case-handling
         heading_path: "Case Severity and Response Times"
-        check: {subject: parameters.severity, operator: informational}
       - id: conduct.retaliation_protection
         text: "Retaliation against a person who reports a concern in good faith is itself a violation."
         fact_key: conduct.retaliation.prohibited
         doc_id: workplace-conduct
         heading_path: "Prohibited Conduct > Retaliation"
-        check: {subject: parameters.reported, operator: informational}
     approvals_required: []
     next_steps:
-      - text: "Contact Employee Relations at employee-relations@mosaicrobotics.example, or raise an HR case in MosaicOne."
-        applies_when: always
-      - text: "An anonymous report may be made through the third-party ethics line published in MosaicOne."
-        applies_when: always
+      - "Contact Employee Relations at employee-relations@mosaicrobotics.example, or raise an HR case in MosaicOne."
+      - "An anonymous report may be made through the third-party ethics line published in MosaicOne."
