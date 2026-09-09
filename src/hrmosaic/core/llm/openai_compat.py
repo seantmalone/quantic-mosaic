@@ -9,7 +9,10 @@ One adapter covers Gemini, OpenRouter, Cerebras and OpenAI, because they all spe
   true}` first; if the endpoint rejects strict mode — Gemini's compatibility layer is entitled to —
   the same schema is *prompted* instead, and if that answer will not parse, **one** repair round
   trip asks for the JSON alone. `structured_output_mode` records which of the three produced the
-  answer, so the dashboard never has to guess.
+  answer, so the dashboard never has to guess. **All three steps share one deadline** — the
+  logical call's, passed down from `RecordingAdapter` — because three unbounded 25 s round trips
+  would be 75 s on their own, more than the 52 s the whole call is allowed. Each request is capped
+  at what is left, and a step with nothing left is not sent at all.
 
 The sync client is called through `asyncio.to_thread` for the same reason the Anthropic adapter is
 (§2.1), and with `max_retries=0` so `RecordingAdapter` remains the single retry layer.
@@ -26,16 +29,19 @@ import openai
 
 from hrmosaic.core.db import Store
 from hrmosaic.core.llm.base import (
+    LOGICAL_CALL_BUDGET_S,
     REQUEST_TIMEOUT_S,
     ChatModel,
     Completion,
     CompletionRequest,
+    Deadline,
     Message,
     MissingCredentialError,
     ProviderError,
     RecordingAdapter,
     ToolCall,
     ToolSchema,
+    round_trip_timeout,
     status_error,
     strip_json_fences,
 )
@@ -77,6 +83,7 @@ class OpenAICompatAdapter(RecordingAdapter):
         fallback: ChatModel | None = None,
         daily_call_cap: int | None = None,
         store: Store | None = None,
+        call_budget_s: float = LOGICAL_CALL_BUDGET_S,
         http_client: httpx2.Client | None = None,
     ) -> None:
         super().__init__(
@@ -85,6 +92,7 @@ class OpenAICompatAdapter(RecordingAdapter):
             fallback=fallback,
             daily_call_cap=daily_call_cap,
             store=store,
+            call_budget_s=call_budget_s,
         )
         self._base_url = base_url
         self._api_key = api_key
@@ -113,13 +121,16 @@ class OpenAICompatAdapter(RecordingAdapter):
         return self._client
 
     # -- the round trip -----------------------------------------------------------------
-    async def invoke(self, request: CompletionRequest) -> Completion:
+    async def invoke(self, request: CompletionRequest, deadline: Deadline | None = None) -> Completion:
+        """The one-to-three round trips of the degradation ladder, all inside `deadline`."""
         if request.response_schema is None:
-            return await self._chat(request.messages, request)
+            return await self._chat(request.messages, request, deadline)
 
         schema = strict_json_schema(request.response_schema)
         try:
-            return await self._chat(request.messages, request, response_format=_strict_format(request, schema))
+            return await self._chat(
+                request.messages, request, deadline, response_format=_strict_format(request, schema)
+            )
         except ProviderError as exc:
             if not _rejects_strict_mode(exc):
                 raise
@@ -127,7 +138,7 @@ class OpenAICompatAdapter(RecordingAdapter):
         prompted = list(request.messages) + [
             Message(role="user", content=PROMPTED_JSON_INSTRUCTION.format(schema=json.dumps(schema)))
         ]
-        completion = await self._chat(prompted, request, mode=PROMPTED)
+        completion = await self._chat(prompted, request, deadline, mode=PROMPTED)
         try:
             json.loads(strip_json_fences(completion.text))
         except json.JSONDecodeError as exc:
@@ -135,21 +146,26 @@ class OpenAICompatAdapter(RecordingAdapter):
                 Message(role="assistant", content=completion.text),
                 Message(role="user", content=REPAIR_INSTRUCTION.format(error=exc)),
             ]
-            completion = await self._chat(repaired, request, mode=PROMPTED_REPAIR)
+            completion = await self._chat(repaired, request, deadline, mode=PROMPTED_REPAIR)
         return completion
 
     async def _chat(
         self,
         messages: Sequence[Message],
         request: CompletionRequest,
+        deadline: Deadline | None = None,
         *,
         response_format: dict[str, Any] | None = None,
         mode: str | None = None,
     ) -> Completion:
         client = self.client()
+        resolved_mode = STRICT if response_format is not None else mode
         kwargs = self.request_kwargs(messages, tools=request.tools, temperature=request.temperature)
         if response_format is not None:
             kwargs["response_format"] = response_format
+        # Raises before anything reaches the wire once the budget is spent, so the ladder degrades
+        # in however many steps it has time for and never one step more.
+        kwargs["timeout"] = round_trip_timeout(deadline, what=f"{self.model} {resolved_mode or 'chat'}")
         try:
             # The SDK client is synchronous; §2.1 forbids blocking the single worker's loop.
             response = await asyncio.to_thread(lambda: client.chat.completions.create(**kwargs))
@@ -157,7 +173,7 @@ class OpenAICompatAdapter(RecordingAdapter):
             raise ProviderError(f"{self.model} transport failure: {exc}", retryable=True) from exc
         except openai.APIStatusError as exc:
             raise status_error(exc.status_code, f"{self.model} {exc.status_code}: {exc}", exc.response.headers) from exc
-        return self._to_completion(response, mode=STRICT if response_format is not None else mode)
+        return self._to_completion(response, mode=resolved_mode)
 
     def request_kwargs(
         self,

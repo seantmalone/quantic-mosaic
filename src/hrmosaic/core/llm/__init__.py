@@ -20,9 +20,11 @@ from __future__ import annotations
 
 from hrmosaic.core.llm.anthropic import AnthropicAdapter
 from hrmosaic.core.llm.base import (
+    LOGICAL_CALL_BUDGET_S,
     ChatModel,
     Completion,
     CompletionRequest,
+    Deadline,
     Message,
     MissingCredentialError,
     ProviderError,
@@ -38,12 +40,14 @@ from hrmosaic.settings import Settings
 from hrmosaic.settings import settings as default_settings
 
 __all__ = [
+    "LOGICAL_CALL_BUDGET_S",
     "AnthropicAdapter",
     "CachedAdapter",
     "ChatModel",
     "Completion",
     "CompletionRequest",
     "DailyCapExceeded",
+    "Deadline",
     "Message",
     "MissingCredentialError",
     "OpenAICompatAdapter",

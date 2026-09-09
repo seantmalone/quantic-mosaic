@@ -8,23 +8,38 @@ two spans that would double-count the turn's rollups.
 
 The audit invariant `len(llm_messages rows) == payload.messages_ref.n_messages`
 (`tests/integration/test_audit_completeness.py`, §16.1) is asserted here at the source.
+
+The last section asserts the *other* invariant the one recording call path owns: a logical call —
+however many round trips, backoffs and degradation steps it took — is over inside its 52 s budget,
+which is what keeps it inside `AGENT_WALL_CLOCK_S` (§9.4).
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
+import httpx2
 import pytest
 
 from hrmosaic.core.llm.anthropic import AnthropicAdapter
-from hrmosaic.core.llm.base import Message, ProviderError, ToolCall, ToolSchema
+from hrmosaic.core.llm.base import (
+    LOGICAL_CALL_BUDGET_S,
+    CompletionRequest,
+    Deadline,
+    Message,
+    ProviderError,
+    ToolCall,
+    ToolSchema,
+)
 from hrmosaic.core.llm.limiter import DailyCapExceeded, count_calls_today
 from hrmosaic.core.llm.openai_compat import OpenAICompatAdapter
 from hrmosaic.core.llm.stub import StubAdapter, StubScriptError, load_script
-from hrmosaic.core.models import parse_payload
+from hrmosaic.core.models import Citation, parse_payload
 from hrmosaic.core.trace import SessionSpec
+from hrmosaic.settings import settings
 
 SCRIPT = "tests/fixtures/llm_scripts/adapter_smoke.json"
 
@@ -158,7 +173,9 @@ def test_failover_is_one_span_carrying_the_flag(writer, store, wire, anthropic_r
 
     assert completion.text == "the fallback answered"
     assert completion.provider_failover is True
-    assert len(primary_recorded) == 2, "one backoff retry on the primary, then failover"
+    # One bounded backoff, then the failover: **two** round trips, never three. Running the primary
+    # twice and then the fallback would be 25 + 2 + 25 + 25 = 77 s, past the 52 s the brief allows.
+    assert len(primary_recorded) == 1, "the primary is tried once, then the backoff, then the fallback"
     assert len(fallback_recorded) == 1
 
     rows = _spans(store, turn.turn_id)
@@ -202,7 +219,7 @@ def test_a_long_retry_after_fails_over_without_parking(wire, openai_response):
 
 def test_a_total_failure_still_records_the_attempt(writer, store, wire):
     overloaded = (503, {"type": "error", "error": {"type": "api_error", "message": "upstream down"}})
-    client, _ = wire([overloaded])
+    client, recorded = wire([overloaded])
     adapter = AnthropicAdapter(api_key="k", http_client=client)
     turn = writer.start_turn(SessionSpec(), user_message="hello")
 
@@ -210,6 +227,8 @@ def test_a_total_failure_still_records_the_attempt(writer, store, wire):
         asyncio.run(adapter.complete(MESSAGES, purpose="act", turn=turn))
     turn.close(outcome="error", stop_reason="error", error_kind="provider_error")
 
+    # No fallback configured, so the second of the two round trips is the primary again.
+    assert len(recorded) == 2
     rows = _spans(store, turn.turn_id)
     assert len(rows) == 1
     assert rows[0]["status"] == "error"
@@ -299,3 +318,96 @@ def test_both_providers_down_is_still_one_span_flagged_as_a_failover(writer, sto
     assert rows[0]["status"] == "error"
     payload = parse_payload(json.loads(rows[0]["payload_json"]))
     assert payload.provider_failover is True, "the record must show the failover was attempted"
+
+
+# --------------------------------------------------------------------------------------
+# The bound on a logical call (§9.4: ≈ 25 + 2 + 25 = 52 s inside `AGENT_WALL_CLOCK_S` = 90)
+# --------------------------------------------------------------------------------------
+#
+# The 52 s is a real deadline, not arithmetic over the round-trip count: an adapter whose
+# `invoke()` degrades in three steps, or a transport that ignores its own timeout, must still not
+# outlive the slot the agent loop allotted the call. These four assert the deadline itself.
+
+#: Small enough to keep the suite fast, and `_hangs` is always well clear of it.
+BUDGET_S = 0.25
+HANG_S = 0.8
+
+
+def _hangs(seconds: float, response: tuple[int, dict]):
+    """A wire handler that stalls past the budget — a provider that accepted and went quiet."""
+    status, payload = response
+
+    def handler(request):
+        time.sleep(seconds)
+        return httpx2.Response(status, json=payload)
+
+    return handler
+
+
+def test_the_call_budget_fits_inside_the_agent_wall_clock():
+    assert LOGICAL_CALL_BUDGET_S == pytest.approx(25.0 + 2.0 + 25.0), "one round trip, one backoff, one more"
+    assert LOGICAL_CALL_BUDGET_S < settings.agent_wall_clock_s
+
+
+def test_a_logical_call_never_outlives_its_budget(writer, store, wire, anthropic_response, openai_response):
+    """Primary and fallback both hang. The budget ends the call, and the span still records it."""
+    primary_client, _ = wire([_hangs(HANG_S, anthropic_response())])
+    fallback_client, _ = wire([_hangs(HANG_S, openai_response(content="too late"))])
+    adapter = AnthropicAdapter(
+        api_key="k",
+        http_client=primary_client,
+        fallback=OpenAICompatAdapter(base_url="https://example.test/v1/", api_key="k", http_client=fallback_client),
+        call_budget_s=BUDGET_S,
+    )
+    turn = writer.start_turn(SessionSpec(), user_message="hello")
+
+    async def scenario() -> float:
+        # Timed inside the loop: `asyncio.run` joins the stalled worker thread on the way out,
+        # which is the hanging provider's time, not the caller's.
+        started = time.monotonic()
+        with pytest.raises(ProviderError, match="budget"):
+            await adapter.complete(MESSAGES, purpose="act", turn=turn)
+        return time.monotonic() - started
+
+    elapsed = asyncio.run(scenario())
+    turn.close(outcome="error", stop_reason="error", error_kind="provider_error")
+
+    assert BUDGET_S <= elapsed < HANG_S, "the budget ended the call, not the transport"
+    rows = _spans(store, turn.turn_id)
+    assert len(rows) == 1, "a call cut short by its budget is still one span"
+    assert rows[0]["status"] == "error"
+    assert "budget" in rows[0]["error_message"]
+
+
+def test_the_structured_output_ladder_is_bounded_by_the_same_budget(wire, openai_response):
+    """strict → prompted → repair is three round trips; they share the call's budget, not 25 s each."""
+    rejected = (
+        400,
+        {"error": {"message": "response_format json_schema is not supported", "type": "invalid_request_error"}},
+    )
+    client, recorded = wire([rejected, _hangs(HANG_S, openai_response(content="not json"))])
+    adapter = OpenAICompatAdapter(
+        base_url="https://example.test/v1/", api_key="k", http_client=client, call_budget_s=BUDGET_S
+    )
+
+    async def scenario() -> float:
+        started = time.monotonic()
+        with pytest.raises(ProviderError, match="budget"):
+            await adapter.complete(MESSAGES, purpose="route", response_schema=Citation)
+        return time.monotonic() - started
+
+    elapsed = asyncio.run(scenario())
+
+    assert BUDGET_S <= elapsed < HANG_S
+    assert len(recorded) == 2, "strict, then prompted — the repair round trip had no budget left to spend"
+
+
+def test_an_expired_deadline_puts_nothing_on_the_wire(wire, openai_response):
+    client, recorded = wire([openai_response(content="never sent")])
+    adapter = OpenAICompatAdapter(base_url="https://example.test/v1/", api_key="k", http_client=client)
+    request = CompletionRequest(messages=MESSAGES, purpose="act")
+
+    with pytest.raises(ProviderError, match="budget is spent"):
+        asyncio.run(adapter.invoke(request, Deadline.after(0.0)))
+
+    assert recorded == [], "a round trip that cannot finish inside the budget is never started"

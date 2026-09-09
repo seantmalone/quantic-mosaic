@@ -6,7 +6,9 @@ Every choice here is the spec's, and several are corrections to what a 1.x-era p
   `await asyncio.to_thread(client.messages.create, …)`, because §2.1 forbids blocking the single
   worker's event loop and the SDK's sync client is what the type stubs actually describe;
 * `timeout=25` s with **`max_retries=0`**: the SDK's own retry layer is off, so `RecordingAdapter`'s
-  one backoff plus one failover is the single retry layer (§9.4's arithmetic depends on it);
+  one backoff plus one failover is the single retry layer (§9.4's arithmetic depends on it). Each
+  request is sent with `timeout=round_trip_timeout(deadline)`, so a second attempt gets what is
+  left of the logical call's 52 s budget rather than a fresh 25 s;
 * **`extra_body={"temperature": 0}`** — SDK 1.x removed the `temperature` keyword (passing it
   raises `TypeError`) while the API still honours the field on `claude-haiku-4-5`;
 * **no `strict` on the tool definitions.** The nine published `input_schema` blocks keep `default`
@@ -33,16 +35,19 @@ import anthropic
 
 from hrmosaic.core.db import Store
 from hrmosaic.core.llm.base import (
+    LOGICAL_CALL_BUDGET_S,
     REQUEST_TIMEOUT_S,
     ChatModel,
     Completion,
     CompletionRequest,
+    Deadline,
     Message,
     MissingCredentialError,
     ProviderError,
     RecordingAdapter,
     ToolCall,
     ToolSchema,
+    round_trip_timeout,
     status_error,
 )
 from hrmosaic.core.llm.limiter import TokenBucket
@@ -87,6 +92,7 @@ class AnthropicAdapter(RecordingAdapter):
         fallback: ChatModel | None = None,
         daily_call_cap: int | None = None,
         store: Store | None = None,
+        call_budget_s: float = LOGICAL_CALL_BUDGET_S,
         http_client: httpx2.Client | None = None,
     ) -> None:
         super().__init__(
@@ -95,6 +101,7 @@ class AnthropicAdapter(RecordingAdapter):
             fallback=fallback,
             daily_call_cap=daily_call_cap,
             store=store,
+            call_budget_s=call_budget_s,
         )
         self._api_key = api_key
         self._http_client = http_client
@@ -120,7 +127,7 @@ class AnthropicAdapter(RecordingAdapter):
         return self._client
 
     # -- the round trip -----------------------------------------------------------------
-    async def invoke(self, request: CompletionRequest) -> Completion:
+    async def invoke(self, request: CompletionRequest, deadline: Deadline | None = None) -> Completion:
         client = self.client()
         kwargs = self.request_kwargs(
             request.messages,
@@ -129,6 +136,9 @@ class AnthropicAdapter(RecordingAdapter):
             purpose=request.purpose,
             temperature=request.temperature,
         )
+        # One round trip, never longer than what is left of the logical call: the client's own
+        # `timeout=25` is the ceiling, the deadline lowers it when this is the second attempt.
+        kwargs["timeout"] = round_trip_timeout(deadline, what="anthropic")
         try:
             # The SDK client is synchronous; §2.1 forbids blocking the single worker's loop.
             response = await asyncio.to_thread(lambda: client.messages.create(**kwargs))

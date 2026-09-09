@@ -5,9 +5,10 @@ Everything a provider-specific adapter must not reinvent lives here:
 * **the types** — `Message`, `ToolSchema`, `ToolCall`, `Completion`. Tool-call arguments are
   normalised at this boundary: OpenAI-shaped endpoints deliver a JSON **string**, Anthropic a
   parsed **object**, and both arrive in `ToolCall.args` as the same dict (§3 row 5);
-* **the limiter, the spend guard, the one backoff and the failover** — an adapter implements
-  `invoke()` for one round trip and inherits the rest, so `retry_count` and `provider_failover`
-  can never mean different things in two adapters;
+* **the limiter, the spend guard, the one backoff, the failover and the call budget** — an adapter
+  implements `invoke()` for one attempt and inherits the rest, so `retry_count`,
+  `provider_failover` and the 52 s bound on a logical call can never mean different things in two
+  adapters;
 * **the record** — exactly one `llm_call` span per logical call plus its `llm_messages` rows,
   written through `core/trace.py` (the sole span writer, §16.3) from inside the adapter, so no
   caller can make a provider call that leaves no trace.
@@ -46,13 +47,24 @@ Role = Literal["system", "user", "assistant", "tool"]
 #: The single backoff before failover when the provider names no `Retry-After` (§9.8).
 DEFAULT_BACKOFF_S = 1.0
 
-#: `Retry-After` is honoured **up to** this cap; a longer one fails over immediately, which is
-#: what bounds a logical call at ≈ 25 + 2 + 25 = 52 s inside `AGENT_WALL_CLOCK_S` (§9.4).
+#: `Retry-After` is honoured **up to** this cap; a longer one goes straight to the second round
+#: trip rather than parking the turn.
 MAX_BACKOFF_S = 2.0
 
 #: One request may not outlive this, and the SDKs' own retry layers are off (`max_retries=0`), so
 #: the backoff-then-failover below is the single retry layer in the system.
 REQUEST_TIMEOUT_S = 25.0
+
+#: **The bound on one logical call**: 25 + 2 + 25 = 52 s, inside `AGENT_WALL_CLOCK_S` (= 90, §9.4).
+#:
+#: That arithmetic only holds if a logical call is **two** round trips with one bounded backoff
+#: between them — so the second attempt is the failover *or* a second try at the primary, never
+#: both — and if a multi-round-trip `invoke()` (the OpenAI-compatible adapter's strict → prompted →
+#: repair ladder, itself up to three round trips) cannot outlive its slot. Neither is left to
+#: arithmetic: every call carries a `Deadline`, each round trip is capped at what is left of it,
+#: and `complete()` wraps the whole thing in `asyncio.timeout`. The bound therefore survives an
+#: adapter that grows a fourth degradation step, or a transport that ignores its own timeout.
+LOGICAL_CALL_BUDGET_S = REQUEST_TIMEOUT_S + MAX_BACKOFF_S + REQUEST_TIMEOUT_S
 
 #: §9.8's failover triggers: 429, every 5xx, and timeouts. 408 is the server reporting a read
 #: timeout, so it belongs with the transport timeouts rather than with the client's own mistakes.
@@ -206,6 +218,51 @@ def strip_json_fences(text: str) -> str:
 
 
 # --------------------------------------------------------------------------------------
+# The budget
+# --------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Deadline:
+    """When this logical call must be over, on the monotonic clock.
+
+    One deadline is minted per `complete()` and handed down to every round trip, so an adapter with
+    a multi-step `invoke()` spends the *same* budget the retry layer is spending rather than a
+    fresh 25 s per step. `remaining_s` is what a round trip may take; at zero the adapter refuses
+    to put another request on the wire instead of starting one it cannot finish.
+    """
+
+    expires_at: float
+
+    @classmethod
+    def after(cls, budget_s: float) -> Deadline:
+        return cls(time.monotonic() + budget_s)
+
+    @property
+    def remaining_s(self) -> float:
+        return max(0.0, self.expires_at - time.monotonic())
+
+    @property
+    def expired(self) -> bool:
+        return self.remaining_s <= 0.0
+
+
+def round_trip_timeout(deadline: Deadline | None, *, what: str) -> float:
+    """The timeout for the next round trip: `min(25 s, what is left of the logical call)`.
+
+    Raises rather than returning a useless sliver, and non-retryably: with the budget gone there is
+    no time for a failover either, so the honest answer is to stop now and record the attempt.
+    With no deadline (the live probe, a bare unit test) it is the plain per-request timeout.
+    """
+    if deadline is None:
+        return REQUEST_TIMEOUT_S
+    remaining = deadline.remaining_s
+    if remaining <= 0.0:
+        raise ProviderError(f"{what}: the logical call's budget is spent", retryable=False)
+    return min(REQUEST_TIMEOUT_S, remaining)
+
+
+# --------------------------------------------------------------------------------------
 # The protocol
 # --------------------------------------------------------------------------------------
 
@@ -325,11 +382,12 @@ class _Attempts:
 
 
 class RecordingAdapter:
-    """The shared half of every adapter: cap, limiter, one backoff, failover, one span.
+    """The shared half of every adapter: cap, limiter, one backoff, one failover, one span.
 
-    A subclass implements `invoke(request)` — a single round trip returning a `Completion` with
-    `text`, `tool_calls`, the token counts and `structured_output_mode` filled in — and raises
-    `ProviderError` for anything the transport or the endpoint reported.
+    A subclass implements `invoke(request, deadline)` — the round trip(s) for one attempt,
+    returning a `Completion` with `text`, `tool_calls`, the token counts and
+    `structured_output_mode` filled in — and raises `ProviderError` for anything the transport or
+    the endpoint reported. It must cap each request it sends at `round_trip_timeout(deadline)`.
     """
 
     provider: str = ""
@@ -342,16 +400,18 @@ class RecordingAdapter:
         fallback: ChatModel | None = None,
         daily_call_cap: int | None = None,
         store: Store | None = None,
+        call_budget_s: float = LOGICAL_CALL_BUDGET_S,
     ) -> None:
         self.model = model
         self._limiter = limiter
         self._fallback = fallback
         self._daily_call_cap = daily_call_cap
         self._store = store
+        self.call_budget_s = call_budget_s
 
     # -- the subclass seam -------------------------------------------------------------
-    async def invoke(self, request: CompletionRequest) -> Completion:
-        """One round trip. Raises `ProviderError`; never retries, never records."""
+    async def invoke(self, request: CompletionRequest, deadline: Deadline | None = None) -> Completion:
+        """One attempt, inside `deadline`. Raises `ProviderError`; never retries, never records."""
         raise NotImplementedError
 
     # -- the public call ---------------------------------------------------------------
@@ -376,7 +436,18 @@ class RecordingAdapter:
         limiter_wait_ms = await self._limiter.acquire() if self._limiter is not None else 0
 
         started_at = now_micros()
-        result = await self._call_with_failover(request)
+        result = _Attempts()
+        try:
+            # The hard bound. `_call_with_failover` already spends the same budget round trip by
+            # round trip; this is the outer belt, so a transport that ignores its own timeout — or
+            # an adapter that grows another degradation step — still cannot outlive the slot the
+            # agent loop allotted it (§9.4: 52 s inside `AGENT_WALL_CLOCK_S` = 90).
+            async with asyncio.timeout(self.call_budget_s):
+                await self._call_with_failover(request, Deadline.after(self.call_budget_s), result)
+        except TimeoutError:
+            result.failure = ProviderError(
+                f"the logical call exceeded its {self.call_budget_s:g} s budget", retryable=False
+            )
 
         # Both providers failed: the span still records the attempt, with no tokens and no cost.
         completion = result.completion or Completion(provider=self.provider, model=self.model)
@@ -421,40 +492,47 @@ class RecordingAdapter:
         if used >= self._daily_call_cap:
             raise DailyCapExceeded(provider=self.provider, calls_today=used, cap=self._daily_call_cap)
 
-    async def _call_with_failover(self, request: CompletionRequest) -> _Attempts:
-        """At most one backoff retry on the primary, then `LLM_FALLBACK_*` (§9.8).
+    async def _call_with_failover(self, request: CompletionRequest, deadline: Deadline, result: _Attempts) -> None:
+        """One backoff, then failover: **two** round trips at most, which is what makes 52 s real.
 
-        `round_trip_ms` times the attempt that produced the answer, never the backoff sleep in
-        front of it — the span's own `duration_ms` already covers the whole logical call, so
-        `ttfb_ms` stays a provider-latency number the dashboard can compare across turns.
+        The primary is tried once. A retryable failure buys one bounded backoff and then exactly
+        one more attempt — the `LLM_FALLBACK_*` model when one is configured (§9.8), the primary
+        again when none is. Running the primary twice *and then* the fallback would be three round
+        trips, and 25 + 2 + 25 + 25 = 77 s is not the bound the brief specifies.
+
+        `result` is filled in place so the span still records a call the outer `asyncio.timeout`
+        cut short. `round_trip_ms` times the attempt that produced the answer, never the backoff
+        sleep in front of it — the span's own `duration_ms` already covers the whole logical call,
+        so `ttfb_ms` stays a provider-latency number the dashboard can compare across turns.
         """
-        result = _Attempts()
-        failure: ProviderError | None = None
-        for attempt in (0, 1):
-            try:
-                result.completion = await self._timed(self.invoke(request), result)
-                return result
-            except ProviderError as exc:
-                failure = exc
-                if attempt == 1 or not exc.retryable:
-                    break
-                delay = exc.retry_after if exc.retry_after is not None else DEFAULT_BACKOFF_S
-                if delay > MAX_BACKOFF_S:  # a long Retry-After: fail over now rather than park
-                    break
-                await asyncio.sleep(delay)
-                result.retry_count += 1
+        try:
+            result.completion = await self._timed(self.invoke(request, deadline), result)
+            return
+        except ProviderError as exc:
+            failure = exc
 
-        if failure is not None and failure.retryable and self._fallback is not None:
+        if not failure.retryable:
+            result.failure = failure
+            return
+
+        delay = failure.retry_after if failure.retry_after is not None else DEFAULT_BACKOFF_S
+        # A long `Retry-After` is not worth parking the turn for, and neither is a backoff that
+        # would eat the budget the second attempt needs.
+        if delay <= MAX_BACKOFF_S and delay < deadline.remaining_s:
+            await asyncio.sleep(delay)
+            result.retry_count += 1
+
+        if self._fallback is not None:
             result.failed_over = True
-            try:
-                result.completion = await self._timed(_invoke_fallback(self._fallback, request), result)
-                return result
-            except ProviderError as exc:
-                # Both providers are down. The span still says a failover was attempted, so the
-                # dashboard narrates a real outage rather than one provider having a bad day.
-                failure = exc
-        result.failure = failure
-        return result
+            second = _invoke_fallback(self._fallback, request, deadline)
+        else:
+            second = self.invoke(request, deadline)
+        try:
+            result.completion = await self._timed(second, result)
+        except ProviderError as exc:
+            # Both attempts failed. When a fallback was tried the span still says so, so the
+            # dashboard narrates a real outage rather than one provider having a bad day.
+            result.failure = exc
 
     @staticmethod
     async def _timed(awaitable: Awaitable[Completion], result: _Attempts) -> Completion:
@@ -465,14 +543,15 @@ class RecordingAdapter:
             result.round_trip_ms = max(0, round((time.monotonic() - clock) * 1000))
 
 
-async def _invoke_fallback(fallback: ChatModel, request: CompletionRequest) -> Completion:
-    """Run the fallback for one round trip.
+async def _invoke_fallback(fallback: ChatModel, request: CompletionRequest, deadline: Deadline) -> Completion:
+    """Run the fallback for one attempt, inside what is left of the same deadline.
 
-    Through `invoke()`, so it records no second span and takes no second limiter token: one logical
-    call is one span and one token, however many providers it took to answer.
+    Through `invoke()`, so it records no second span, takes no second limiter token and — the point
+    of passing the deadline down — spends the remainder of the logical call's budget rather than
+    starting a fresh 25 s (or, with its degradation ladder, a fresh 75 s) of its own.
     """
     if isinstance(fallback, RecordingAdapter):
-        return await fallback.invoke(request)
+        return await fallback.invoke(request, deadline)
     return await fallback.complete(
         request.messages,
         tools=request.tools,

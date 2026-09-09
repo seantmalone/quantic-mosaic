@@ -22,7 +22,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from hrmosaic.core.llm.base import Completion, CompletionRequest, RecordingAdapter, ToolCall
+from hrmosaic.core.llm.base import Completion, CompletionRequest, Deadline, RecordingAdapter, ToolCall
 
 #: Keys an entry may carry. `prompt_tokens` / `completion_tokens` are optional and default to 0:
 #: a stub must never invent token counts that a cost estimate would then treat as real.
@@ -60,7 +60,9 @@ class StubAdapter(RecordingAdapter):
         """Rewind to the first entry, so one adapter can drive two turns of the same scenario."""
         self._cursor = 0
 
-    async def invoke(self, request: CompletionRequest) -> Completion:
+    async def invoke(self, request: CompletionRequest, deadline: Deadline | None = None) -> Completion:
+        # `deadline` is accepted and ignored: a replay makes no round trip, so it can neither
+        # outlive the logical call's budget nor be cut short by it.
         if self._cursor >= len(self._entries):
             raise StubScriptError(
                 f"{self.script_path} has {len(self._entries)} entries and the loop asked for "
