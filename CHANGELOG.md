@@ -158,3 +158,40 @@ rather than assumed.
   2026-11-13. Anyone changing an accrual rate again should expect the same ripple — the alternative
   (a per-dataset or per-employee stream) would churn every sampled value once, which is why it was
   not done here.
+
+## 2026-09-09 — P4 `rag/` (parsing, chunking, embedding, hybrid index)
+
+- **The query-embedding branch is measured, not assumed (§6.4).** With **fastembed 0.8.0** and
+  `BAAI/bge-small-en-v1.5`, `TextEmbedding.query_embed()` returns a vector **identical** to
+  `.embed()` for the same string (`numpy.allclose` → `True`, cosine 1.0): the library delegates and
+  applies no instruction prefix. So `embed_query()` prepends the literal
+  `"Represent this sentence for searching relevant passages: "` itself, and `index_meta.query_convention`
+  records **`prefix:Represent this sentence for searching relevant passages: `**.
+  `tests/unit/test_query_embed_is_asymmetric.py` re-measures the delegation on every run and pins the
+  constant to whichever branch the installed library forces, so a fastembed bump cannot switch the
+  convention silently — and `open_index()`'s guard refuses to serve an index built under the other one.
+- **Chunk count: 204 over 14 documents**, below the `~240–320` the spec estimates in §6.3, with the four
+  chunk constants exactly as specified (1,400 max / 1,100 window / 150 overlap / 120 floor). The corpus
+  itself is the size §6.1 predicted — 30,840 words against the illustrative 31,500, per format
+  md 23,276 · html 2,515 · pdf 2,425 · txt 2,624 — so the difference is granularity, not missing prose:
+  the corpus's leaf sections average ~940 characters, and a leaf within `CHUNK_MAX_CHARS` is emitted
+  whole. Only 24 chunks come from windowing. Per-format chunks: md 153 · html 17 · pdf 15 · txt 19.
+- **Measured wall clock** (M-series laptop, `.venv`, warm model cache): a full
+  `python -m hrmosaic.rag.ingest` — parse, chunk, embed 204 chunks at `batch_size=8`, write the index —
+  takes **30.9 s**; the retrieval self-test embeds one query in **249 ms** and searches in **1.4 ms**.
+  That is the §6.1 argument for building at Docker build time rather than at boot, restated on this
+  corpus.
+- **`--verify-manifest` is the R1.4 gate and now runs in CI ahead of `pytest`.** It runs the whole
+  pipeline into `INDEX_PATH` and compares the manifest byte for byte, printing a unified diff on any
+  difference; the comparison is on chunking only, never vectors, so `EMBED_PROVIDER=fake` still
+  produces a valid manifest.
+- **A windowing defect the corpus found.** With the overlap subtracted from a cut that landed early —
+  a leaf whose only full stop is in its first sentence, e.g. `hr-escalation-and-case-handling`'s
+  "What Must Be Escalated" — the next window's cut search reached the *same* sentence boundary, so the
+  window crawled forward one character at a time and emitted colliding `chunk_id`s (the `chunks.chunk_id`
+  UNIQUE constraint caught it). The cut is now required to land past the previous window's end;
+  `tests/unit/test_chunking.py::test_a_leaf_whose_only_full_stop_is_early_still_advances` is the
+  regression, and it produced 35 pieces with 30 distinct offsets before the fix and 5 after.
+- **Self-test result:** `"How many consecutive days abroad require Tax & Legal review?"` → top-1
+  `tax-and-location-addendum`, `dense_score` **0.7640** (floor `SELFTEST_MIN_DENSE_SCORE` 0.25),
+  `index_meta.chunk_count` 204 = the committed manifest's line count, `index_version` `2026.1+920c`.

@@ -50,6 +50,9 @@ def test_only_trace_module_writes_spans():
 
 
 def test_fastembed_is_called_in_one_place():
+    # As with the trace writer, the grep has a real target from P4 on: `rag/embed.py` calls the
+    # model, so a vacuous pass (nothing embeds at all) can never be mistaken for the invariant.
+    assert EMBED_CALL.search(EMBED_MODULE.read_text(encoding="utf-8"))
     assert _offenders(EMBED_CALL, {EMBED_MODULE}) == []
 
 

@@ -7,6 +7,10 @@ stays in the repository so that the PDF's heading set has an authoritative refer
 
     python scripts/build_pdf.py && test -s corpus/workplace-conduct.pdf
 
+`--source` and `--target` render any other Markdown file the same way, which is how
+`tests/fixtures/corpus_mini/mini-pdf.pdf` is produced; the running footer names the target's stem, so
+the fixture and the corpus document share one renderer and one footer shape.
+
 Deliberate properties of the output:
 
 * **Core fonts only.** fpdf2's built-in Helvetica is Latin-1, so the source is written in Latin-1-safe
@@ -21,6 +25,7 @@ Deliberate properties of the output:
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from datetime import UTC, datetime
@@ -51,12 +56,23 @@ HEADING_STYLE = {
 class ConductPDF(FPDF):
     """A4 with a running footer that names the document and the page."""
 
+    doc_id: str = DOC_ID
+
     def footer(self) -> None:
         self.set_y(-14)
         self.set_font("helvetica", size=8)
         self.set_text_color(110)
-        self.cell(0, 5, f"Mosaic Robotics, Inc. · {DOC_ID} · Page {self.page_no()}", align="C")
+        self.cell(0, 5, f"Mosaic Robotics, Inc. · {self.doc_id} · Page {self.page_no()}", align="C")
         self.set_text_color(0)
+
+
+def _title(source: Path) -> str:
+    """The source's `#` heading — the PDF metadata title."""
+    for raw in source.read_text(encoding="utf-8").splitlines():
+        heading = ATX.match(raw.rstrip())
+        if heading and len(heading.group(1)) == 1:
+            return _plain(heading.group(2))
+    return source.stem
 
 
 def _plain(text: str) -> str:
@@ -66,11 +82,12 @@ def _plain(text: str) -> str:
 
 def build(source: Path = SOURCE, target: Path = TARGET) -> Path:
     pdf = ConductPDF(format="A4", unit="mm")
+    pdf.doc_id = target.stem
     pdf.set_margins(left=22, top=20, right=22)
     pdf.set_auto_page_break(auto=True, margin=22)
-    pdf.set_title("Workplace Conduct Policy")
+    pdf.set_title(_title(source))
     pdf.set_author("Mosaic Robotics, Inc. — People Operations")
-    pdf.set_subject("Policy corpus document: workplace-conduct")
+    pdf.set_subject(f"Policy corpus document: {target.stem}")
     pdf.set_creation_date(CREATION_DATE)
     pdf.add_page()
 
@@ -94,9 +111,13 @@ def build(source: Path = SOURCE, target: Path = TARGET) -> Path:
     return target
 
 
-def main() -> int:
-    target = build()
-    print(f"wrote {target.relative_to(REPO_ROOT)} ({target.stat().st_size:,} bytes)")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Render a corpus Markdown source to PDF.")
+    parser.add_argument("--source", type=Path, default=SOURCE)
+    parser.add_argument("--target", type=Path, default=TARGET)
+    args = parser.parse_args(argv)
+    target = build(args.source, args.target)
+    print(f"wrote {target} ({target.stat().st_size:,} bytes)")
     return 0
 
 

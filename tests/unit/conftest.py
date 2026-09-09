@@ -5,12 +5,16 @@ the exact bytes each adapter puts on the wire with no key and no network. Every 
 records the requests it served, because the shape of the request *is* what the adapter tests
 assert: no `strict` on the tool definitions, the `cache_control` breakpoint on the last system
 block, `temperature` in `extra_body`, the strict `response_format` on the OpenAI-compatible path.
+
+It also owns the retrieval fixtures (P4): one `corpus_mini` ingest per session, built with the fake
+embedder so the unit suite stays offline, and the connection and settings shims that read it.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx2
@@ -111,3 +115,51 @@ def openai_response() -> Callable[..., tuple[int, dict[str, Any]]]:
         }
 
     return build
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+#: One tiny document per format (spec §16.5) — never the real fourteen.
+CORPUS_MINI = REPO_ROOT / "tests" / "fixtures" / "corpus_mini"
+
+
+@pytest.fixture(scope="session")
+def mini_ingest(tmp_path_factory) -> Any:
+    """One `EMBED_PROVIDER=fake` ingest of `corpus_mini`, built once for the session.
+
+    The fake embedder keeps it offline and instant; `index_meta.embed_model` is then
+    `fake-hash-384`, which is exactly what `open_index()`'s mismatch guard rejects — so every test
+    that reads this index either opens it with `check=False` or declares `fake_embedder`.
+    """
+    from hrmosaic.rag import ingest as ingest_module
+    from hrmosaic.settings import settings
+
+    directory = tmp_path_factory.mktemp("mini_index")
+    previous = settings.embed_provider
+    settings.embed_provider = "fake"
+    try:
+        return ingest_module.ingest(
+            CORPUS_MINI,
+            index_path=directory / "mini.sqlite",
+            manifest_path=directory / "chunks.manifest.jsonl",
+            report_path=directory / "ingest_report.json",
+        )
+    finally:
+        settings.embed_provider = previous
+
+
+@pytest.fixture
+def mini_index(mini_ingest):
+    """A read-only connection to the mini index, guard bypassed (it is a fake-embedder index)."""
+    from hrmosaic.rag.index import open_index
+
+    connection = open_index(mini_ingest.index_path, check=False)
+    yield connection
+    connection.close()
+
+
+@pytest.fixture
+def fake_embedder(monkeypatch):
+    """Run the calling test against `EMBED_PROVIDER=fake`, so no ONNX model is loaded."""
+    from hrmosaic.settings import settings
+
+    monkeypatch.setattr(settings, "embed_provider", "fake")

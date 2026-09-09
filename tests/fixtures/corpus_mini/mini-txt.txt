@@ -1,0 +1,29 @@
+Mini Text Policy
+================
+
+Document ID: mini-txt · Owner: People Operations · Effective 2026-01-01 · Version 2026.1
+Topics: data_security
+
+This document uses a plain-text layout. A line underlined with equals signs is the document title. A
+line underlined with hyphens is a section. A line in capital letters on its own is a subsection.
+
+
+Purpose and Scope
+-----------------
+
+This miniature document exercises the plain-text parsing path, whose heading convention owes nothing
+to Markdown.
+
+
+Device Security
+---------------
+
+Devices in this fixture are imaginary and are encrypted anyway.
+
+FULL-DISK ENCRYPTION
+
+Every imaginary laptop in this fixture has full-disk encryption enabled before it is issued.
+
+SCREEN LOCK
+
+An imaginary screen locks after five imaginary minutes.
