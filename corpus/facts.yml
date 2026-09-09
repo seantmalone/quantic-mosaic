@@ -1,0 +1,442 @@
+# corpus/facts.yml — the fact index into the hand-authored policy corpus.
+#
+# Every entry names one checkable statement in one document. `quote` is reproduced VERBATIM from the
+# rendered text of `doc_id`; `section` is the " > "-joined heading path of the section it sits in, with
+# the document title excluded (the title travels separately as `doc_title` in every citation).
+#
+# `scripts/check_facts.py` and `tests/unit/test_facts_quotes.py` assert both properties for every entry.
+# Evaluation gold answers and `corpus/rules.yml` cite these keys, never prose, so a corpus edit that moves
+# a number fails the build before it can contradict a gold answer.
+
+facts_version: "2026.1"
+
+facts:
+
+  # --- pto-and-holidays ---------------------------------------------------------------------------
+
+  pto.accrual.ft_under_3y:
+    value: 1.25
+    unit: days_per_month
+    doc_id: pto-and-holidays
+    section: "Accrual > Standard Accrual Rates"
+    quote: "Full-time employees with fewer than three years of service accrue 1.25 days of PTO per month."
+
+  pto.accrual.ft_3y_plus:
+    value: 1.50
+    unit: days_per_month
+    doc_id: pto-and-holidays
+    section: "Accrual > Standard Accrual Rates"
+    quote: "Full-time employees with three or more years of service accrue 1.50 days of PTO per month."
+
+  pto.accrual.cap_days:
+    value: 30.0
+    unit: days
+    doc_id: pto-and-holidays
+    section: "Accrual > Accrual Caps"
+    quote: "PTO accrual stops once an employee's balance reaches 30.0 days."
+
+  pto.notice.standard_days:
+    value: 5
+    unit: business_days
+    doc_id: pto-and-holidays
+    section: "Requesting Time Off > Notice Requirements"
+    quote: "PTO requests must be submitted at least 5 business days in advance."
+
+  pto.notice.extended_days:
+    value: 15
+    unit: business_days
+    doc_id: pto-and-holidays
+    section: "Requesting Time Off > Notice Requirements"
+    quote: "A request of six or more consecutive business days requires 15 business days of advance notice."
+
+  pto.notice.extended_threshold_days:
+    value: 6
+    unit: business_days
+    doc_id: pto-and-holidays
+    section: "Requesting Time Off > Notice Requirements"
+    quote: "A request of six or more consecutive business days requires 15 business days of advance notice."
+
+  pto.approval.manager_required:
+    value: true
+    unit: boolean
+    doc_id: pto-and-holidays
+    section: "Requesting Time Off > Approval Chain"
+    quote: "Every PTO request requires written approval from the employee's direct manager in MosaicOne."
+
+  pto.blackout.year_end_2026:
+    value: "2026-12-22..2026-12-23"
+    unit: date_range
+    doc_id: pto-and-holidays
+    section: "Requesting Time Off > Blackout Periods"
+    quote: "The 2026 year-end production blackout runs from 22 December 2026 through 23 December 2026."
+
+  pto.carryover.max_days:
+    value: 5.0
+    unit: days
+    doc_id: pto-and-holidays
+    section: "Carryover and Expiry"
+    quote: "Employees may carry over a maximum of 5.0 days of unused PTO into the following plan year."
+
+
+  # --- remote-and-hybrid-work ---------------------------------------------------------------------
+
+  remote.hybrid.onsite_days_per_week:
+    value: 3
+    unit: days_per_week
+    doc_id: remote-and-hybrid-work
+    section: "Hybrid Expectations > Required Onsite Days"
+    quote: "Hybrid employees assigned to a hub office work on site at least 3 days each week."
+
+  remote.international.eligibility_tenure_months:
+    value: 12
+    unit: months
+    doc_id: remote-and-hybrid-work
+    section: "Working Outside Your Home Country > Eligibility"
+    quote: "Employees must have completed at least 12 months of continuous service to work outside their home country."
+
+  remote.international.max_days_per_year:
+    value: 90
+    unit: days
+    doc_id: remote-and-hybrid-work
+    section: "Working Outside Your Home Country > Duration Limits"
+    quote: "No employee may work outside their home country for more than 90 days in a rolling 12-month period."
+
+  remote.international.manager_notice_days:
+    value: 21
+    unit: calendar_days
+    doc_id: remote-and-hybrid-work
+    section: "Working Outside Your Home Country > Approval"
+    quote: "Written manager approval must be obtained at least 21 calendar days before departure."
+
+  remote.international.device_requirement:
+    value: "company_managed_encrypted_laptop_with_always_on_vpn"
+    unit: requirement
+    doc_id: remote-and-hybrid-work
+    section: "Working Outside Your Home Country > Device and Connectivity Requirements"
+    quote: "Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN."
+
+  remote.contact.mobility:
+    value: "mobility@mosaicrobotics.example"
+    unit: email
+    doc_id: remote-and-hybrid-work
+    section: "Working Outside Your Home Country > Approval"
+    quote: "International mobility questions go to People Operations at mobility@mosaicrobotics.example."
+
+  remote.domestic.other_state_notice_days:
+    value: 10
+    unit: business_days
+    doc_id: remote-and-hybrid-work
+    section: "Working From Another US State"
+    quote: "Working from a US state other than the assigned office state for more than 10 business days requires notification to People Operations."
+
+  # --- tax-and-location-addendum ------------------------------------------------------------------
+
+  remote.international.threshold_days:
+    value: 30
+    unit: consecutive_days
+    doc_id: tax-and-location-addendum
+    section: "Duration Thresholds > Stays Exceeding 30 Days"
+    quote: "A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins."
+
+  tax.review.lead_time_days:
+    value: 21
+    unit: calendar_days
+    doc_id: tax-and-location-addendum
+    section: "Duration Thresholds > Stays Exceeding 30 Days"
+    quote: "Tax & Legal review requests must be filed at least 21 calendar days before departure."
+
+  tax.approved_countries:
+    value: "DE,IE,NL,PT,ES,CA,MX"
+    unit: country_list
+    doc_id: tax-and-location-addendum
+    section: "Approved Countries"
+    quote: "Germany, Ireland, the Netherlands, Portugal, Spain, Canada and Mexico are approved destinations for temporary work abroad."
+
+  tax.permanent_relocation.notice_days:
+    value: 60
+    unit: calendar_days
+    doc_id: tax-and-location-addendum
+    section: "Duration Thresholds > Permanent Relocation"
+    quote: "A permanent relocation to another country requires 60 calendar days of notice and a new employment agreement."
+
+  tax.pe_risk.no_contract_signing:
+    value: false
+    unit: boolean
+    doc_id: tax-and-location-addendum
+    section: "Permanent Establishment Risk"
+    quote: "Employees working abroad may not sign contracts or negotiate customer agreements on behalf of Mosaic Robotics while outside their home country."
+
+  # --- expenses-and-reimbursement -----------------------------------------------------------------
+
+  expenses.home_office.annual_cap_usd:
+    value: 750
+    unit: usd
+    doc_id: expenses-and-reimbursement
+    section: "Home Office and Equipment Stipends > Annual Home Office Allowance"
+    quote: "Each employee may claim up to USD 750 per plan year for home office furniture and accessories."
+
+  expenses.connectivity.monthly_stipend_usd:
+    value: 60
+    unit: usd
+    doc_id: expenses-and-reimbursement
+    section: "Home Office and Equipment Stipends > Monthly Connectivity Stipend"
+    quote: "Fully remote employees receive a monthly connectivity stipend of USD 60."
+
+  expenses.receipt.threshold_usd:
+    value: 25
+    unit: usd
+    doc_id: expenses-and-reimbursement
+    section: "Receipt Requirements"
+    quote: "An itemised receipt is required for every expense of USD 25 or more."
+
+  expenses.submission.deadline_days:
+    value: 45
+    unit: calendar_days
+    doc_id: expenses-and-reimbursement
+    section: "Submission and Deadlines"
+    quote: "Expenses must be submitted within 45 calendar days of the transaction date."
+
+  expenses.approval.manager_limit_usd:
+    value: 2500
+    unit: usd
+    doc_id: expenses-and-reimbursement
+    section: "Approval Thresholds"
+    quote: "A direct manager may approve expense reports up to USD 2,500."
+
+
+  # --- travel-policy ------------------------------------------------------------------------------
+
+  travel.booking.advance_days:
+    value: 14
+    unit: calendar_days
+    doc_id: travel-policy
+    section: "Booking and Advance Purchase"
+    quote: "Flights must be booked at least 14 calendar days before departure whenever the itinerary is known."
+
+  travel.lodging.nightly_cap_usd:
+    value: 250
+    unit: usd
+    doc_id: travel-policy
+    section: "Lodging"
+    quote: "The standard lodging cap is USD 250 per night before taxes and fees."
+
+  # --- equipment-and-asset ------------------------------------------------------------------------
+
+  equipment.refresh_cycle_months:
+    value: 36
+    unit: months
+    doc_id: equipment-and-asset
+    section: "Refresh Cycle"
+    quote: "Company laptops are refreshed on a 36-month cycle."
+
+  equipment.request.director_threshold_usd:
+    value: 500
+    unit: usd
+    doc_id: equipment-and-asset
+    section: "Requesting Additional Equipment"
+    quote: "Equipment requests above USD 500 require director approval in addition to manager approval."
+
+
+  equipment.return.separation_days:
+    value: 5
+    unit: business_days
+    doc_id: equipment-and-asset
+    section: "Return at Separation"
+    quote: "All company equipment must be returned within 5 business days of the final day of employment."
+
+  # --- benefits-and-open-enrollment ---------------------------------------------------------------
+
+  benefits.eligibility.waiting_period_days:
+    value: 90
+    unit: days
+    doc_id: benefits-and-open-enrollment
+    section: "Eligibility > Waiting Period"
+    quote: "New hires become eligible for medical, dental and vision coverage 90 days after their hire date."
+
+
+  benefits.open_enrollment.open_date:
+    value: "2026-11-01"
+    unit: date
+    doc_id: benefits-and-open-enrollment
+    section: "Open Enrollment > The 2026 Enrollment Window"
+    quote: "Open enrollment opens on 1 November 2026."
+
+  benefits.open_enrollment.close_date:
+    value: "2026-11-21"
+    unit: date
+    doc_id: benefits-and-open-enrollment
+    section: "Open Enrollment > The 2026 Enrollment Window"
+    quote: "Open enrollment closes on 21 November 2026 at 23:59 US Central Time."
+
+  benefits.qle.window_days:
+    value: 30
+    unit: days
+    doc_id: benefits-and-open-enrollment
+    section: "Qualifying Life Events"
+    quote: "A qualifying life event must be reported within 30 days of the event to change elections outside open enrollment."
+
+
+  # --- leave-of-absence ---------------------------------------------------------------------------
+
+  leave.parental.paid_weeks:
+    value: 16
+    unit: weeks
+    doc_id: leave-of-absence
+    section: "Types of Leave > Parental Leave"
+    quote: "Mosaic Robotics provides 16 weeks of fully paid parental leave to every eligible new parent."
+
+  leave.medical.max_weeks:
+    value: 26
+    unit: weeks
+    doc_id: leave-of-absence
+    section: "Types of Leave > Medical Leave"
+    quote: "Continuous medical leave is available for up to 26 weeks in a rolling 12-month period."
+
+
+  leave.request.notice_days:
+    value: 30
+    unit: calendar_days
+    doc_id: leave-of-absence
+    section: "Requesting a Leave"
+    quote: "Foreseeable leave must be requested at least 30 calendar days in advance."
+
+  # --- onboarding-and-first-90-days ---------------------------------------------------------------
+
+  onboarding.security_training.deadline_days:
+    value: 14
+    unit: calendar_days
+    doc_id: onboarding-and-first-90-days
+    section: "Required Training"
+    quote: "Security and acceptable-use training must be completed within 14 calendar days of the start date."
+
+
+  # --- workplace-conduct --------------------------------------------------------------------------
+
+  conduct.report.acknowledgement_days:
+    value: 2
+    unit: business_days
+    doc_id: workplace-conduct
+    section: "Investigation Process"
+    quote: "People Operations acknowledges every reported concern within 2 business days."
+
+  conduct.investigation.target_days:
+    value: 30
+    unit: calendar_days
+    doc_id: workplace-conduct
+    section: "Investigation Process"
+    quote: "Investigations are targeted for completion within 30 calendar days of the report."
+
+  conduct.retaliation.prohibited:
+    value: true
+    unit: boolean
+    doc_id: workplace-conduct
+    section: "Prohibited Conduct > Retaliation"
+    quote: "Retaliation against a person who reports a concern in good faith is prohibited and is itself a violation of this policy."
+
+  conduct.coi.disclosure_days:
+    value: 10
+    unit: business_days
+    doc_id: workplace-conduct
+    section: "Conflicts of Interest"
+    quote: "A potential conflict of interest must be disclosed in writing within 10 business days of becoming aware of it."
+
+  # --- performance-and-compensation ---------------------------------------------------------------
+
+  performance.bonus.target_pct_l5:
+    value: 12
+    unit: percent_of_base_salary
+    doc_id: performance-and-compensation
+    section: "Bonus Plan"
+    quote: "The annual bonus target for level L5 is 12% of base salary."
+
+
+  # --- manager-approval-matrix --------------------------------------------------------------------
+
+  approvals.pto.role:
+    value: "direct_manager"
+    unit: role
+    doc_id: manager-approval-matrix
+    section: "Time Off"
+    quote: "PTO requests of any length are approved by the employee's direct manager."
+
+  approvals.expense.vp_limit_usd:
+    value: 25000
+    unit: usd
+    doc_id: manager-approval-matrix
+    section: "Expenses"
+    quote: "A vice president may approve expense reports up to USD 25,000."
+
+  approvals.remote.international.role:
+    value: "director_and_tax_legal"
+    unit: role
+    doc_id: manager-approval-matrix
+    section: "Remote Work > International"
+    quote: "International remote work of more than 30 days requires approval from the employee's director and from Tax & Legal."
+
+  approvals.escalation.unresponsive_days:
+    value: 3
+    unit: business_days
+    doc_id: manager-approval-matrix
+    section: "Escalation When an Approver Is Unavailable"
+    quote: "If an approver does not respond within 3 business days, the request escalates automatically to the skip-level manager."
+
+  # --- hr-escalation-and-case-handling ------------------------------------------------------------
+
+  escalation.sensitive_topics_never_automated:
+    value: true
+    unit: boolean
+    doc_id: hr-escalation-and-case-handling
+    section: "What Must Be Escalated"
+    quote: "Harassment, discrimination, legal threats, medical conditions and compensation disputes are never handled by an automated assistant and are routed to a named People Operations partner."
+
+  escalation.severity1.response_hours:
+    value: 4
+    unit: business_hours
+    doc_id: hr-escalation-and-case-handling
+    section: "Case Severity and Response Times"
+    quote: "Severity 1 cases receive a response within 4 business hours."
+
+  escalation.contact.people_ops:
+    value: "people-ops@mosaicrobotics.example"
+    unit: email
+    doc_id: hr-escalation-and-case-handling
+    section: "Contacts"
+    quote: "General People Operations cases go to people-ops@mosaicrobotics.example."
+
+  escalation.contact.employee_relations:
+    value: "employee-relations@mosaicrobotics.example"
+    unit: email
+    doc_id: hr-escalation-and-case-handling
+    section: "Contacts"
+    quote: "Harassment, discrimination and retaliation reports go to employee-relations@mosaicrobotics.example."
+
+  # --- security-acceptable-use --------------------------------------------------------------------
+
+  security.device.encryption_and_lock:
+    value: 10
+    unit: minutes
+    doc_id: security-acceptable-use
+    section: "Device Security"
+    quote: "Every company laptop must have full-disk encryption enabled and a screen lock of 10 minutes or less."
+
+  security.mfa.required:
+    value: true
+    unit: boolean
+    doc_id: security-acceptable-use
+    section: "Passwords and Multi-Factor Authentication"
+    quote: "Multi-factor authentication is required on every Mosaic Robotics account without exception."
+
+
+  security.vpn.untrusted_network_required:
+    value: true
+    unit: boolean
+    doc_id: security-acceptable-use
+    section: "Working in Public Places"
+    quote: "Always-on VPN is required whenever a company device connects to a network that Mosaic Robotics does not control."
+
+  security.incident.report_hours:
+    value: 1
+    unit: hours
+    doc_id: security-acceptable-use
+    section: "Reporting a Security Incident"
+    quote: "Suspected security incidents must be reported to IT Security within 1 hour of discovery."
