@@ -48,8 +48,9 @@ SELFTEST_DOC_ID = "tax-and-location-addendum"
 SELFTEST_MIN_DENSE_SCORE = 0.25
 
 #: FTS5 treats most punctuation as syntax, so a question mark or an `&` in a user's words would be a
-#: query error rather than a search. Words are extracted and OR-ed; bm25() does the ranking.
-_FTS_TOKEN = re.compile(r"[A-Za-z0-9]+")
+#: query error rather than a search. Words are extracted and OR-ed; bm25() does the ranking. The class
+#: is unicode-aware so an accented word stays one token rather than breaking into junk fragments.
+_FTS_TOKEN = re.compile(r"[^\W_]+")
 
 SCHEMA = """
 CREATE VIRTUAL TABLE vec_chunks USING vec0(
