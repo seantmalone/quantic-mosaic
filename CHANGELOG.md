@@ -15,3 +15,5 @@ rather than assumed.
   to **1.4.0**.
 - Frontend assets vendored at their pinned versions — htmx 2.0.9, Alpine.js 3.15.2, Chart.js 4.5.1 —
   with no substitution needed; the inventory is in `src/hrmosaic/web/static/vendor/LICENSES.md`.
+
+- 2026-09-09 — CI evidence: green `pull_request` run recorded on https://github.com/seantmalone/quantic-mosaic/pull/1 (run https://github.com/seantmalone/quantic-mosaic/actions/runs/34396802226) and green `push` run on main (https://github.com/seantmalone/quantic-mosaic/actions/runs/34396798026).
