@@ -1,0 +1,39 @@
+# gitleaks configuration — secret scanning for CI (`gitleaks/gitleaks-action@v2`,
+# `.github/workflows/ci.yml`, job `lint`). The action reads this file automatically
+# because it sits at the repository root.
+#
+# The default ruleset is kept whole: every provider rule, the `jwt` rule and the
+# high-entropy `generic-api-key` heuristic still apply to `src/`, `scripts/`, `mcp/`,
+# `evaluation/`, docs and `.env*` — nothing below narrows a rule or lowers an entropy
+# threshold. The only carve-out is by path, and only for the two places whose whole
+# purpose is to hold credential-shaped strings that are invalid by construction.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic, invalid-by-construction test material only. Never source, scripts or env files."
+paths = [
+  # Golden trace fixtures. These are recorded Session → Turn → Span traces replayed by the
+  # trace-store tests, and they carry fake confirmation tokens by design (e.g. the
+  # `token` / `confirmation_token` pair in `pto_request_confirmed_write.json`, which the
+  # `generic-api-key` rule flags on entropy alone). Regenerating them without those fields
+  # would stop the fixtures from exercising the confirm-then-write path they exist to cover.
+  '''^tests/fixtures/''',
+
+  # The G6 redaction test (spec §7.4 G6, §10.4). It asserts that `redact()` scrubs real
+  # credential shapes, so it MUST contain fake ones to have anything to scrub: a fake JWT,
+  # fake `sk-ant-`/`sk-`/`AIza` keys, and `monkeypatch.setenv` values for the `_KEY`/`_TOKEN`/
+  # `_SECRET` environment sweep. Every literal here is declared under an explicit
+  # "Nothing here is a real key" comment in the file itself.
+  '''^tests/unit/test_g6_redact\.py$''',
+]
+
+# `docs/.../hr-agentic-rag-design.md` documents the `pto_balances.json` schema, whose
+# `accrual_fact_key` field holds an HR accrual-policy slug; `generic-api-key` flags it on
+# entropy alone because the JSON key happens to end in `key`. Matched against the captured
+# secret and anchored, so this exempts that one literal value and nothing else — `docs/` as
+# a path stays fully scanned by every rule.
+regexes = [
+  '''^pto\.accrual\.ft_3y_plus$''',
+]
