@@ -42,3 +42,4 @@ jobs:
         with: { path: .cache/fastembed, key: fastembed-bge-small-en-v1.5-v1 }
       - run: python -m hrmosaic.rag.download_model   # a no-op on a cache hit
       - run: pytest -q                               # the WHOLE suite
+      - run: python scripts/pii_check.py             # no SSN shapes / non-.example addresses / non-555 numbers

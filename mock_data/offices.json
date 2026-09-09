@@ -1,0 +1,40 @@
+{
+  "_synthetic": true,
+  "_notice": "SYNTHETIC DATA — fictional persons, generated for the Quantic AI Engineering project. No real employee information.",
+  "_generator": "scripts/gen_mock_data.py seed=1729",
+  "as_of": "2026-09-01",
+  "records": [
+    {
+      "office_id": "bos",
+      "city": "Boston",
+      "country": "US",
+      "timezone": "America/New_York",
+      "entity": "Mosaic Robotics, Inc.",
+      "holiday_calendar_id": "us-2026"
+    },
+    {
+      "office_id": "atx",
+      "city": "Austin",
+      "country": "US",
+      "timezone": "America/Chicago",
+      "entity": "Mosaic Robotics, Inc.",
+      "holiday_calendar_id": "us-2026"
+    },
+    {
+      "office_id": "ber",
+      "city": "Berlin",
+      "country": "DE",
+      "timezone": "Europe/Berlin",
+      "entity": "Mosaic Robotics GmbH",
+      "holiday_calendar_id": "de-2026"
+    },
+    {
+      "office_id": "remote-us",
+      "city": "Remote — United States",
+      "country": "US",
+      "timezone": "America/Chicago",
+      "entity": "Mosaic Robotics, Inc.",
+      "holiday_calendar_id": "us-2026"
+    }
+  ]
+}

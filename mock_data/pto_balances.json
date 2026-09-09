@@ -1,0 +1,424 @@
+{
+  "_synthetic": true,
+  "_notice": "SYNTHETIC DATA — fictional persons, generated for the Quantic AI Engineering project. No real employee information.",
+  "_generator": "scripts/gen_mock_data.py seed=1729",
+  "as_of": "2026-09-01",
+  "records": [
+    {
+      "employee_id": "E1002",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 0.0,
+      "pending_days": 2.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 11.5,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1003",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 9.0,
+      "pending_days": 1.5,
+      "carryover_from_prior_year": 2.5,
+      "carryover_expires_on": "2026-12-31",
+      "remaining_days": 5.5,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1007",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 4.0,
+      "pending_days": 1.5,
+      "carryover_from_prior_year": 2.5,
+      "carryover_expires_on": "2026-03-31",
+      "remaining_days": 8.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1014",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 4.5,
+      "pending_days": 2.0,
+      "carryover_from_prior_year": 1.5,
+      "carryover_expires_on": "2026-03-31",
+      "remaining_days": 7.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1017",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 5.5,
+      "pending_days": 1.0,
+      "carryover_from_prior_year": 2.5,
+      "carryover_expires_on": "2026-12-31",
+      "remaining_days": 9.5,
+      "blackout_dates": [
+        "2026-06-29",
+        "2026-06-30",
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1042",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 0.0,
+      "pending_days": 0.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 13.5,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1043",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 8.0,
+      "pending_days": 2.5,
+      "carryover_from_prior_year": 2.0,
+      "carryover_expires_on": "2026-03-31",
+      "remaining_days": 3.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1047",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 0.5,
+      "pending_days": 1.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 12.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1050",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 2.5,
+      "pending_days": 2.5,
+      "carryover_from_prior_year": 1.5,
+      "carryover_expires_on": "2026-12-31",
+      "remaining_days": 10.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1057",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.25,
+      "accrual_fact_key": "pto.accrual.ft_under_3y",
+      "accrued_ytd": 11.25,
+      "used_ytd": 3.5,
+      "pending_days": 1.5,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 6.25,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1077",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 7.0,
+      "pending_days": 2.5,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 4.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1078",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 4.0,
+      "pending_days": 2.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 7.5,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1096",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 0.75,
+      "accrual_fact_key": "pto.accrual.part_time_prorated",
+      "accrued_ytd": 6.75,
+      "used_ytd": 5.0,
+      "pending_days": 0.0,
+      "carryover_from_prior_year": 3.0,
+      "carryover_expires_on": "2026-12-31",
+      "remaining_days": 4.75,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1108",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.25,
+      "accrual_fact_key": "pto.accrual.ft_under_3y",
+      "accrued_ytd": 1.25,
+      "used_ytd": 0.5,
+      "pending_days": 0.5,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 0.25,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1110",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 1.5,
+      "pending_days": 0.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 12.0,
+      "blackout_dates": [
+        "2026-06-29",
+        "2026-06-30",
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1122",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.25,
+      "accrual_fact_key": "pto.accrual.ft_under_3y",
+      "accrued_ytd": 11.25,
+      "used_ytd": 5.5,
+      "pending_days": 1.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 4.75,
+      "blackout_dates": [
+        "2026-06-29",
+        "2026-06-30",
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1132",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 0.75,
+      "accrual_fact_key": "pto.accrual.part_time_prorated",
+      "accrued_ytd": 6.75,
+      "used_ytd": 2.0,
+      "pending_days": 1.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 3.75,
+      "blackout_dates": [
+        "2026-06-29",
+        "2026-06-30",
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1133",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 2.5,
+      "pending_days": 2.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 9.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1138",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.25,
+      "accrual_fact_key": "pto.accrual.ft_under_3y",
+      "accrued_ytd": 11.25,
+      "used_ytd": 2.0,
+      "pending_days": 0.5,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 8.75,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1145",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.25,
+      "accrual_fact_key": "pto.accrual.ft_under_3y",
+      "accrued_ytd": 11.25,
+      "used_ytd": 2.0,
+      "pending_days": 2.5,
+      "carryover_from_prior_year": 1.0,
+      "carryover_expires_on": "2026-03-31",
+      "remaining_days": 6.75,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1162",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 4.0,
+      "pending_days": 1.5,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 8.0,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1172",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.25,
+      "accrual_fact_key": "pto.accrual.ft_under_3y",
+      "accrued_ytd": 11.25,
+      "used_ytd": 8.0,
+      "pending_days": 0.5,
+      "carryover_from_prior_year": 2.5,
+      "carryover_expires_on": "2026-12-31",
+      "remaining_days": 5.25,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1175",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 0.75,
+      "accrual_fact_key": "pto.accrual.part_time_prorated",
+      "accrued_ytd": 6.75,
+      "used_ytd": 0.5,
+      "pending_days": 1.0,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 5.25,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    },
+    {
+      "employee_id": "E1192",
+      "as_of": "2026-09-01",
+      "accrual_rate_days_per_month": 1.5,
+      "accrual_fact_key": "pto.accrual.ft_3y_plus",
+      "accrued_ytd": 13.5,
+      "used_ytd": 2.5,
+      "pending_days": 0.5,
+      "carryover_from_prior_year": 0.0,
+      "carryover_expires_on": null,
+      "remaining_days": 10.5,
+      "blackout_dates": [
+        "2026-12-22",
+        "2026-12-23"
+      ],
+      "next_accrual_date": "2026-10-01"
+    }
+  ]
+}

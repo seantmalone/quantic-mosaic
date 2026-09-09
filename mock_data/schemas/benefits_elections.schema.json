@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mosaicrobotics.example/schemas/mock_data/benefits_elections.schema.json",
+  "$defs": {
+    "BenefitsElections": {
+      "additionalProperties": false,
+      "description": "Benefits as of the snapshot. Eligibility is *derived* from `waiting_period_ends`.",
+      "properties": {
+        "employee_id": {
+          "pattern": "^E1[0-9]{3}$",
+          "title": "Employee Id",
+          "type": "string"
+        },
+        "plan_year": {
+          "title": "Plan Year",
+          "type": "integer"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "waiting_period_ends": {
+          "format": "date",
+          "title": "Waiting Period Ends",
+          "type": "string"
+        },
+        "eligibility_reason": {
+          "title": "Eligibility Reason",
+          "type": "string"
+        },
+        "elections": {
+          "items": {
+            "$ref": "#/$defs/Election"
+          },
+          "title": "Elections",
+          "type": "array"
+        },
+        "dependents": {
+          "minimum": 0,
+          "title": "Dependents",
+          "type": "integer"
+        },
+        "open_enrollment_window": {
+          "$ref": "#/$defs/EnrollmentWindow"
+        }
+      },
+      "required": [
+        "employee_id",
+        "plan_year",
+        "as_of",
+        "waiting_period_ends",
+        "eligibility_reason",
+        "elections",
+        "dependents",
+        "open_enrollment_window"
+      ],
+      "title": "BenefitsElections",
+      "type": "object"
+    },
+    "Election": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_type": {
+          "enum": [
+            "medical",
+            "dental",
+            "vision",
+            "retirement_401k",
+            "hsa",
+            "fsa",
+            "life"
+          ],
+          "title": "Plan Type",
+          "type": "string"
+        },
+        "plan_id": {
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "plan_name": {
+          "title": "Plan Name",
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "employee_only",
+            "employee_spouse",
+            "employee_children",
+            "family"
+          ],
+          "title": "Tier",
+          "type": "string"
+        },
+        "effective_date": {
+          "format": "date",
+          "title": "Effective Date",
+          "type": "string"
+        },
+        "employee_cost_monthly": {
+          "minimum": 0,
+          "title": "Employee Cost Monthly",
+          "type": "number"
+        }
+      },
+      "required": [
+        "plan_type",
+        "plan_id",
+        "plan_name",
+        "tier",
+        "effective_date",
+        "employee_cost_monthly"
+      ],
+      "title": "Election",
+      "type": "object"
+    },
+    "EnrollmentWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "format": "date",
+          "title": "Open",
+          "type": "string"
+        },
+        "close": {
+          "format": "date",
+          "title": "Close",
+          "type": "string"
+        }
+      },
+      "required": [
+        "open",
+        "close"
+      ],
+      "title": "EnrollmentWindow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "_synthetic": {
+      "const": true,
+      "description": "Always true; this file is fabricated.",
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "_notice": {
+      "description": "Human-readable synthetic-data notice.",
+      "title": "Notice",
+      "type": "string"
+    },
+    "_generator": {
+      "description": "The command that produced this file.",
+      "title": "Generator",
+      "type": "string"
+    },
+    "as_of": {
+      "description": "The snapshot date every date-bearing value is stated against.",
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/BenefitsElections"
+      },
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_synthetic",
+    "_notice",
+    "_generator",
+    "as_of",
+    "records"
+  ],
+  "title": "BenefitsElectionsFile",
+  "type": "object"
+}
