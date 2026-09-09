@@ -1,0 +1,33 @@
+{
+  "scenario": "adapter_smoke",
+  "_note": "P6's own fixture: the shortest route -> act -> synthesize sequence that exercises the StubAdapter, the llm_call span and its llm_messages rows. It is not a demo script and no demo target selects it.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question answerable from the corpus.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 812,
+      "completion_tokens": 74
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_smoke_1",
+          "name": "search_policy_documents",
+          "args": {"query": "paid time off accrual rate full time", "k": 5}
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 903,
+      "completion_tokens": 41
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time employees with three or more years of service accrue 1.50 days of PTO per month.\", \"citations\": [\"c_smoke_pto_accrual\"]}], \"next_steps\": [\"Check your current balance in the People portal.\"], \"rationale_summary\": \"Answered from the PTO policy accrual table.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1140,
+      "completion_tokens": 96
+    }
+  ]
+}
