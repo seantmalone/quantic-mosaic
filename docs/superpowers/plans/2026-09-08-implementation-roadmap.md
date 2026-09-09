@@ -57,7 +57,9 @@ no NOW_OVERRIDE; date-bearing data computes against the mock_data `as_of` snapsh
 Add tests to the existing suite under tests/; do NOT edit .github/workflows/ci.yml unless your
 deliverables say so (job `test` already runs the whole suite with `pytest -q`).
 Run the acceptance commands yourself and paste the real output; never claim green without it.
-If the spec is ambiguous or wrong, STOP and report — do not resolve it yourself.
+If the spec is ambiguous, take the simplest reading that satisfies the requirements and list the choice in your
+report. STOP and report only when the ambiguity would change a user-facing contract (/chat or /health JSON,
+an MCP tool schema, a dashboard route) or when a definition-of-done command cannot pass as written.
 Scratch work goes in the scratchpad directory, never in the repo.
 ```
 
