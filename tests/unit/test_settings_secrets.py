@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 from pydantic import SecretStr
 
-from hrmosaic.core.llm import build_agent_model, build_fallback_model, build_judge_model
+from hrmosaic.core.llm import AnthropicAdapter, build_agent_model, build_fallback_model, build_judge_model
 from hrmosaic.settings import Settings, secret_value
 
 FAKE_KEY = "sk-ant-fake-000-never-a-real-credential"
@@ -30,10 +30,21 @@ CREDENTIAL_FIELDS = (
 )
 
 
+#: The three provider fields, pinned on every instance below. `_env_file=None` stops pydantic
+#: reading the developer's `.env`, but **not** `os.environ` — and the CI test job exports
+#: `LLM_PROVIDER=stub`, which silently swapped `build_agent_model()` for a `StubAdapter` that has
+#: no `client()`. A test about credentials must not inherit the runner's provider choice, so the
+#: allocation these tests assert against is stated here rather than defaulted.
+PINNED_PROVIDERS = {
+    "llm_provider": "anthropic",
+    "llm_fallback_provider": "openai_compat",
+    "judge_provider": "openai_compat",
+}
+
+
 def _settings(**overrides) -> Settings:
-    # `_env_file=None`: a unit test never reads the developer's real `.env`.
     unset = dict.fromkeys(CREDENTIAL_FIELDS)
-    return Settings(_env_file=None, **{**unset, **overrides})
+    return Settings(_env_file=None, **{**unset, **PINNED_PROVIDERS, **overrides})
 
 
 def test_every_credential_field_is_a_secret_str():
@@ -82,7 +93,7 @@ def test_an_unset_or_empty_credential_reads_as_not_configured():
 
 def test_an_unset_credential_still_builds_an_adapter_that_reports_not_configured():
     """§12.3: boot always succeeds; the missing key surfaces through `configured`, not an import."""
-    settings = _settings(llm_provider="anthropic", judge_provider="openai_compat")
+    settings = _settings()
 
     assert build_agent_model(settings).configured is False
     assert build_judge_model(settings).configured is False
@@ -97,3 +108,26 @@ def test_a_configured_credential_reaches_the_adapter_as_plaintext():
     assert build_fallback_model(settings).configured is True
     # The plaintext, not the mask, is what the SDK client is built with.
     assert build_agent_model(settings).client().api_key == FAKE_KEY
+
+
+def test_these_settings_ignore_the_runners_provider_environment(monkeypatch):
+    """The CI regression: `LLM_PROVIDER=stub` in the environment must not reroute these tests."""
+    for name in ("LLM_PROVIDER", "LLM_FALLBACK_PROVIDER", "JUDGE_PROVIDER"):
+        monkeypatch.setenv(name, "stub")
+    settings = _settings(anthropic_api_key=FAKE_KEY, llm_api_key=FAKE_KEY, llm_fallback_api_key=FAKE_KEY)
+
+    assert (settings.llm_provider, settings.llm_fallback_provider, settings.judge_provider) == (
+        "anthropic",
+        "openai_compat",
+        "openai_compat",
+    )
+    assert isinstance(build_agent_model(settings), AnthropicAdapter)
+    assert build_agent_model(settings).client().api_key == FAKE_KEY
+
+
+def test_an_unset_credential_ignores_a_key_left_in_the_runners_environment(monkeypatch):
+    """`_settings()` names every credential, so an exported key cannot make "unset" mean "set"."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", FAKE_KEY)
+
+    assert secret_value(_settings().anthropic_api_key) is None
+    assert build_agent_model(_settings()).configured is False
