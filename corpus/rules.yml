@@ -83,8 +83,18 @@
 # STATUS: adopted at P5 and awaiting controller ratification — spec §8.4 fixes this tool's input and
 # output schemas but not its verdict semantics, and these six rules are a user-facing MCP contract
 # that P7's guardrails and P10's gold answers will be written against. See the fix round in
-# `.superpowers/sdd/2026-09-08-implementation-roadmap/P5-report.md` §9. If ratified they belong in
-# spec §8.4, not only here.
+# `.superpowers/sdd/2026-09-08-implementation-roadmap/P5-report.md` §9 and §10. If ratified they
+# belong in spec §8.4, not only here.
+#
+# Each of the six is pinned by a named test, so ratification is a decision about checked behaviour
+# rather than about this comment (`tests/unit/test_rules_engine.py`):
+#
+#   insufficient_evidence    test_no_parameters_at_all_is_insufficient_evidence
+#   non_compliant            test_a_blocking_requirement_makes_the_verdict_non_compliant
+#   conditional              test_the_worked_example_of_the_spec
+#   compliant                test_a_fully_satisfied_scenario_is_compliant
+#   manual never blocking    test_a_manual_requirement_is_unmet_but_never_blocking
+#   absent subject           test_an_absent_subject_is_unmet_but_cannot_prove_non_compliance
 #
 # Adding a key here means extending `REQUIREMENT_KEYS` in `scripts/check_facts.py` in the same commit:
 # the build fails until putting it here is a deliberate, reviewed act.

@@ -180,6 +180,48 @@ async def test_a_blocking_requirement_makes_the_verdict_non_compliant():
     assert body["verdict"] == "non_compliant"
 
 
+async def test_a_fully_satisfied_scenario_is_compliant():
+    """The bottom rung of the ladder, which nothing else asserted.
+
+    `domestic_remote` is the one scenario with no `manual` requirement, so it is the only one that
+    can reach `compliant` at all; every other scenario carries something a synthetic record cannot
+    verify. With all three subjects supplied and met the verdict is `compliant`, `unmet[]` is empty,
+    and the `applies_when` guards leave only the `always` approval and the `always` next step.
+    """
+    body = await compliance("domestic_remote", FIXTURES["domestic_remote"])
+    assert body["verdict"] == "compliant"
+    assert body["unmet"] == []
+    assert all(item["met"] for item in body["requirements"])
+    assert [approval["role"] for approval in body["approvals_required"]] == ["Direct manager"]
+    assert len(body["next_steps"]) == 1, "an unmet-guarded next step must not ride along on a clean verdict"
+
+
+async def test_an_absent_subject_is_unmet_but_cannot_prove_non_compliance():
+    """The one adopted verdict rule nothing else in the suite pinned.
+
+    `corpus/rules.yml`'s header states it: a requirement whose subject is **absent** is `met: false`
+    with a `"Not stated: …"` reason and lands in `unmet[]`, but is *not evaluable*, so it cannot
+    make the verdict `non_compliant`. `test_no_parameters_at_all_is_insufficient_evidence` does not
+    reach it — with nothing evaluable the first rung of the ladder answers first. This is the mixed
+    case, the only one that separates the two: one requirement evaluable and met, and a `blocking`
+    requirement whose subject was never supplied.
+
+    Without the `evaluable` guard in `rules._verdict`'s `non_compliant` clause, a caller who simply
+    omits `amount_usd` would be told the claim violates the VP approval limit.
+    """
+    body = await compliance("expense_claim", {"transaction_date": "2026-08-20"})
+    vp_limit = next(item for item in body["requirements"] if item["id"] == "expense.vp_limit")
+    assert next(r for r in RULE_SET.scenarios["expense_claim"]["requirements"] if r["id"] == "expense.vp_limit")[
+        "blocking"
+    ], "the fixture only bites while expense.vp_limit is blocking"
+    assert vp_limit["met"] is False
+    assert vp_limit["reason"].startswith("Not stated:")
+    assert "expense.vp_limit" in body["unmet"]
+    window = next(item for item in body["requirements"] if item["id"] == "expense.submission_window")
+    assert window["met"] is True, "something must be evaluable, or the verdict is insufficient_evidence"
+    assert body["verdict"] == "conditional", "an absent subject cannot prove a violation"
+
+
 async def test_notice_days_are_computed_and_a_supplied_value_is_ignored():
     """§8.4: the engine computes notice itself, so a verdict cannot swing on a model's guess."""
     honest = await compliance("pto_request", {**FIXTURES["pto_request"], "start_date": "2026-09-02"})
