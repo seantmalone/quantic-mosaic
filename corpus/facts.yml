@@ -28,6 +28,13 @@ facts:
     section: "Accrual > Standard Accrual Rates"
     quote: "Full-time employees with three or more years of service accrue 1.50 days of PTO per month."
 
+  pto.accrual.part_time_prorated:
+    value: 0.75
+    unit: days_per_month
+    doc_id: pto-and-holidays
+    section: "Accrual > Part-Time and Prorated Accrual"
+    quote: "A 0.6 FTE employee in the under-three-year band accrues 0.75 days per month, and the same employee in the three-year-plus band accrues 0.90 days per month."
+
   pto.accrual.cap_days:
     value: 30.0
     unit: days

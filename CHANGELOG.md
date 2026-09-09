@@ -127,3 +127,12 @@ rather than assumed.
 - `anthropic` 1.4.0 and `openai` 2.54.0 both ship **`httpx2`** (2.12.0, already pinned transitively)
   as their HTTP layer, not `httpx`: an `httpx.Client` is rejected outright with
   `Invalid http_client argument`. Every MockTransport fixture uses `httpx2.MockTransport`.
+
+## 2026-09-09 — P2/P3 merge fix (part-time PTO accrual)
+
+- `corpus/facts.yml` gains **`pto.accrual.part_time_prorated`** — 0.75 `days_per_month`, quoting the
+  existing `Accrual > Part-Time and Prorated Accrual` section of `pto-and-holidays.md`. P2 and P3 were
+  built in parallel: `mock_data/pto_balances.json` names three `accrual_fact_key` bands and the index
+  carried only the two full-time ones, so
+  `tests/unit/test_pto_balance_arithmetic.py::test_accrual_rate_matches_the_facts_yml_band` failed. No
+  policy prose changed — the document already stated the proration rule with a checkable number.
