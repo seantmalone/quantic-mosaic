@@ -95,8 +95,8 @@ Scopes: `skeleton`, `core`, `corpus`, `mockdata`, `rag`, `mcpserver`, `llm`, `ag
 | **L** | 5 h | P5, P7, P9, P10 |
 
 Per-phase estimates are spec Appendix A's and sum to **≈ 50 agent-hours** (2+4+4+2+4+5+3+5+4+5+5+3+4). ⚠ **"Agent-hours" means attention, not elapsed
-time**, and the two diverge in exactly one place: **P11 carries ≈ 2.5 h of additional *unattended* wall-clock** — ~710 sequential provider calls behind
-a 10 RPM token bucket, three `cold_probe` re-runs each preceded by `EVAL_COLD_IDLE_S = 1000 s` of idling, plus provisioning and two Docker gate runs.
+time**, and the two diverge in exactly one place: **P11 carries ≈ 2.5 h of additional *unattended* wall-clock** — ~560–710 sequential provider calls
+behind a 10 RPM token bucket, three `cold_probe` re-runs each preceded by `EVAL_COLD_IDLE_S = 1000 s` of idling, plus provisioning and two Docker gate runs.
 
 ---
 
@@ -310,7 +310,7 @@ pytest tests/unit/test_get_policy_section_selectors.py tests/unit/test_rules_eng
 pytest tests/architecture/test_conventions.py -q       # mcp/__init__.py absent
 ```
 
-### P6 — `core/llm/`: the provider abstraction · **M** (3 h) · deps P1 · ∥ P4 · key #1 for the probe only · commit `P6(llm): …`
+### P6 — `core/llm/`: the provider abstraction · **M** (3 h) · deps P1 · ∥ P4 · key #1 (supplied) for the probe only · commit `P6(llm): …`
 
 **Goal.** One `ChatModel` protocol with four implementations, so the agent loop is testable with zero secrets and a real provider is one env var away.
 
@@ -318,13 +318,21 @@ pytest tests/architecture/test_conventions.py -q       # mcp/__init__.py absent
 `tests/fixtures/llm_scripts/`.
 
 **Deliverables.**
-- `OpenAICompatAdapter` (Gemini/Groq/OpenRouter/Cerebras/OpenAI; tool-call arguments as a JSON string, always `json.loads`; strict `response_format`
-  with a prompted-JSON fallback plus one repair round-trip) and `AnthropicAdapter` (object-shaped arguments, structured output via a forced tool,
-  verified against an httpx `MockTransport`).
+- `OpenAICompatAdapter` (Gemini/OpenRouter/Cerebras/OpenAI — the judge, the failover and the free agent path; tool-call arguments as a JSON string,
+  always `json.loads`; strict `response_format` with a prompted-JSON fallback plus one repair round-trip) and **`AnthropicAdapter` — the agent's
+  adapter** (spec §9.8's allocation table): `anthropic` SDK 1.x **sync** client called as `await asyncio.to_thread(client.messages.create, …)` so it
+  never blocks the single worker's event loop (spec §2.1), `timeout=25` s with `max_retries=0` — the adapter's own one-backoff-then-failover is the
+  single retry layer, bounding a logical call at ≈ 52 s inside `AGENT_WALL_CLOCK_S` — `temperature=0`, **no `strict` on the tool definitions** (the
+  nine published schemas keep defaults, an open `parameters` sub-schema and a root `oneOf`; arguments are validated server-side instead — spec §8.4,
+  §9.8), `output_config.format` JSON schema for route/synthesize/repair (**no prompted-JSON fallback here**), dict-shaped tool inputs, no extended
+  thinking, `max_tokens` 1024/2048/512, and one `cache_control {type: ephemeral}` breakpoint on the **last system block**, so the cached prefix is
+  *tools → system*; verified against an httpx `MockTransport`.
 - `StubAdapter` replaying `tests/fixtures/llm_scripts/*.json`, selected by the test rather than by prompt matching — the keystone of key-free P0–P9.
 - `CachedAdapter` — optional, **off by default** (`LLM_CACHE_TTL_S=0`), for demo warm-up and cheap re-runs; no test asserts a cache hit and no
   committed artifact depends on one. The token-bucket limiter (capacity `LLM_BURST`, refill `LLM_RPM/60` per second), failover to `LLM_FALLBACK_*`
-  recorded as `provider_failover`, and exactly one `llm_call` span plus its `llm_messages` rows per call, emitted from inside the adapter.
+  (free Gemini) recorded as `provider_failover`, the `LLM_DAILY_CALL_CAP` spend guard counted from `llm_call` spans, and exactly one `llm_call` span
+  plus its `llm_messages` rows per call — carrying `cache_creation_input_tokens`, `cache_read_input_tokens` and `cost_usd_estimate` from
+  `MODEL_PRICES` — emitted from inside the adapter.
 
 **Definition of done.**
 ```bash
@@ -332,8 +340,12 @@ pytest tests/unit/test_adapter_tool_call_shapes.py -q  # string-args and object-
 pytest tests/unit/test_strict_schema_emission.py -q    # required == list(properties), additionalProperties false, at every level
 pytest tests/unit/test_limiter_burst.py -q             # 6 back-to-back calls < 50 ms of sleep; the 7th-11th pace
 pytest tests/unit/test_llm_span_emission.py -q         # one llm_call span + n llm_messages rows per call; failover flag recorded
-python scripts/probe_provider.py                       # WHEN key #1 exists: LLM_MODEL present, one call with tools + strict response_format;
-                                                       #   outcome and date -> CHANGELOG.md. Otherwise this runs at P10 step 0.
+python scripts/probe_provider.py                       # live: one Haiku call with the published tools (no strict) + an output_config JSON
+                                                       #   schema; a second identical call whose cache assertion
+                                                       #   (cache_creation > 0 then cache_read > 0) is armed only if the tools+system
+                                                       #   prefix clears Haiku 4.5's 4096-token minimum, else the measured prefix size is
+                                                       #   recorded and the probe passes; one Gemini judge JSON call.
+                                                       #   Outcome, measured prefix size and date -> CHANGELOG.md.
 ```
 
 ### P7 — `agent/`: orchestrator, guardrails, workflows · **L** (5 h) · deps P5 + P6 · ∥ none · no key · commit `P7(agent): …`
@@ -436,15 +448,15 @@ pytest tests/contract/test_dashboard_viewmodels.py -q  # every /api/* payload va
 # the bounded smoke-eval endpoint ships here, importing evaluation.runner lazily; its test is P10's (runner.py is a P10 deliverable)
 ```
 
-### P10 — `evaluation/`: dataset, scorers, judges, ablation · **L** (5 h) · deps P8 (+P9 for the views) · ∥ none · **key #1** (+#8, #9) · commit `P10(eval): …`
+### P10 — `evaluation/`: dataset, scorers, judges, ablation · **L** (5 h) · deps P8 (+P9 for the views) · ∥ none · **key #1** (supplied) · commit `P10(eval): …`
 
 **Goal.** A 26-item harness whose deterministic scorers run offline, whose judged metrics state their `n`, and whose three variants are proved locally
 before anything is published.
 
 **Scope.** `evaluation/`: `dataset.yaml`, `schema.py`, `deterministic.py`, `judges.py`, `runner.py`, `ablation.py`, `reference_labels.yaml`, `results/`,
-`REPORT.md`; `scripts/{chunk_size_sweep,gen_ablation_evidence}.py`. **Step 0:** read the live Gemini RPM/RPD/TPM (§3.1) and paste them with the date
-into `deployed.md`, and export `APP_ACCESS_TOKEN` — the runner sends `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin`, and every eval
-item's privileged `/chat` options fail closed outside the admin persona; if key #1 arrived late, run `scripts/probe_provider.py` here.
+`REPORT.md`; `scripts/{chunk_size_sweep,gen_ablation_evidence}.py`. **Step 0:** read the live Gemini judge RPM/RPD/TPM **and the Anthropic
+`claude-haiku-4-5` prices** (§3.1) and paste them with the date into `deployed.md`, and export `APP_ACCESS_TOKEN` — the runner sends
+`Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin`, and every eval item's privileged `/chat` options fail closed outside the admin persona.
 
 **Deliverables.**
 - `dataset.yaml` — 26 items in fixed file order (7 `simple_policy`, 5 `multi_doc`, 6 `tool_task`, 3 `ambiguous`, 3 `out_of_scope`, 1 `unsafe_action`,
@@ -476,7 +488,7 @@ ls evaluation/results/                                 # three <run_id>.json, co
 
 **Scope.** `Dockerfile`, `render.yaml`, the `docker` and `deploy` jobs in `ci.yml`, `scripts/{provision_render,provision_turso,wait_for_deploy,
 wait_for_health,smoke_deployed,assert_health,measure_cold_start,check_render_hours}.py`, `docs/evidence/*.png`, `deployed.md`. **Step 0:** re-read and
-date every §3.1 row naming a live source, and confirm the P10 and P11 sweeps fall on **different calendar days** (R-5).
+date every §3.1 row naming a live source (spec Appendix A, P11 step 0).
 
 **Deliverables.**
 - The Dockerfile of §14.2 (model baked, index built at build time, `sh -c` so `${PORT}` expands) and `render.yaml` with `autoDeploy: false`,
@@ -544,22 +556,23 @@ gh workflow run ci.yml -f deploy_only=true && curl -s "$DEPLOY_URL/health" | jq 
 
 ## 5. Gates requiring the user
 
-Seven tracked gates. **G1 is fully scripted and needs nothing from the user**, so six reach a human: five are a single paste or click under 10 minutes,
-and **G7 is the one substantial human task, budgeted at 60–90 minutes**. **Nothing in P0–P9 blocks on any of them** — the build never idles.
+Seven tracked gates, **two fully discharged — G1 is scripted and G4's keys were provided on 2026-09-09** — so **five reach a human**: three are a
+single paste or click under 10 minutes (G2 ~5 min, G3 ~3 min, G5 ~2 min), **G6 is ~20 minutes**, and **G7 is the one substantial human task, budgeted
+at 60–90 minutes**. **Nothing in P0–P9 blocks on any of them** — the build never idles.
 
 | Gate | Requested | Needed | What Sean does (time) | What Claude Code does meanwhile |
 |---|---|---|---|---|
 | **G1 — `quantic-grader` share** (§19.1 item 5) | **P0** | **P12** | **Nothing — scripted.** The repo was verified **already public** on 2026-09-08, so no visibility change is ever made. Claude Code sends the invite at P12 on the authenticated `gh` session. Accepting it is the grader's action; confirming it went out is folded into G7. | Re-asserts `gh api repos/seantmalone/quantic-mosaic --jq .private` → `false` at P0; sends the invite and reads back the permission at P12. |
 | **G2 — Render account + install the Render GitHub App** (item 2) | **P0** | **P11** | ~5 min: open `https://github.com/apps/render/installations/new`, sign in (no card), grant access to `seantmalone/quantic-mosaic`. Browser-only — **no API can install a GitHub App**. | P0–P10 in full. `make docker-run-512` proves the exact image locally with no host at all. |
 | **G3 — Turso account + Platform API token** (item 3) | **P0** | **P11** (usable any time after P1) | ~3 min: `https://turso.tech` → GitHub SSO (no card) → create a Platform API token → paste. | `scripts/provision_turso.py` then does database creation, scoped-token minting, `gh secret set` and Render env-var population unattended. Until then `SqliteStore` is the coded fallback. |
-| **G4 — Google AI Studio key → `LLM_API_KEY`** (item 1) | **P0** | **P6 gate** (deferrable) / hard at **P10** | ~2 min: `https://aistudio.google.com/apikey` → *Create API key* → paste. Free, no card. | P0–P9 build and pass CI on `LLM_PROVIDER=stub`. If it arrives late, P6 ships the prompted-JSON fallback and the probe runs at P10 step 0. ⚠ This key carries **both** sweeps, so P10's and P11's must fall on **different calendar days** (~710 calls each — spec §13.9, R-5). |
+| **G4 — Model API keys** (item 1) — **✅ PROVIDED 2026-09-09** | **P0** | **P6 probe** | **Nothing — already supplied.** An `ANTHROPIC_API_KEY` (agent, `claude-haiku-4-5`) plus two Google AI Studio keys from two different Cloud projects (`JUDGE_API_KEY`, `LLM_FALLBACK_API_KEY`), all three validated on 2026-09-09 and living only in the git-ignored `.env`. | P0–P9 build and pass CI on `LLM_PROVIDER=stub` regardless; the live probe runs at **P6**. The free Gemini keys carry the judge on both sweeps at ~260 calls each, comfortably inside the free RPD on a dedicated key (spec §13.9); the paid agent is bounded instead by `LLM_DAILY_CALL_CAP` and prompt caching. |
 | **G5 — Render API key** (item 4) | **P10** | **P11** | ~2 min: Render dashboard → Account Settings → API Keys → *Create* → paste. **The access gate adds no gate:** `provision_render.py` generates `APP_ACCESS_TOKEN` itself with `secrets.token_urlsafe(32)`. | `provision_render.py` creates the service, populates env vars, reads back the deploy hook and sets every GitHub secret. Fallback: ~15 min of manual Blueprint clicking per iteration. |
-| **G6 — Optional upgrades** (items 8–11) | **P10** | before P10's judged run (8–10); before P12 (11) | ~6 min total: #8 Groq key (~2 min, cross-family re-judge + demo failover) · #9 a second Gemini key from a different Cloud project (~2 min, **recommended**: removes judge/agent quota contention) · #10 Anthropic key (~$5, optional) · #11 **~20 min** adjudicating the 8 groundedness labels. | Each has a documented degradation: the judge stays in-family and the limitation is stated; judged metrics stay scoped to `baseline`; `AnthropicAdapter` stays MockTransport-tested; labels stay model-authored **and are named as such**. |
+| **G6 — Optional upgrade** (item 8) | **P10** | before **P12** | **~20 min** adjudicating the 8 reference groundedness labels (spec §19.2). The three key items that used to sit here are **provided** (G4). | The labels stay model-authored by an independent Opus subagent **and are named as such** — accurate and defensible, never described as human. Judge independence is unaffected: agent and judge are already different vendors and families (spec §13.7). |
 | **G7 — Record the demo + submit** (items 6, 7) | **P12** | after **P12** | **★ 60–90 min** — 7–10 min of footage plus setup, retakes, upload and submission. Follow `docs/demo-script.md` (webcam overlay throughout, ID held ≥ 3 s at ~0:15, both tasks one-click against the live URL). Accept/confirm the `quantic-grader` invite, paste the video link into README's `Demo video:` line, submit both links. | Pre-stages both link lines, warms both demo prompts, verifies the live URL, the dashboard and the eval pages, and walks the pre-submission checklist. |
 
-`NEEDS-FROM-USER.md` is created at P0 with the **minimum viable set at the top — one Google AI Studio key, a Render account, a Turso token, all free and
-card-free** — carries a time estimate per gate, marks G1 *scripted — no user action*, and is refreshed at every phase boundary. It is USER.1's
-mechanical artifact.
+`NEEDS-FROM-USER.md` is created at **P0** with the **minimum viable set at the top — the model keys (already provided), a Render account and a Turso
+token, the last two free and card-free** — carries a time estimate per gate, marks **G1** *scripted — no user action* and **G4** *provided 2026-09-09
+(Anthropic + two Google AI Studio keys)*, and is refreshed at every phase boundary. It is USER.1's mechanical artifact.
 
 ---
 
@@ -575,7 +588,7 @@ The push path is key-free and offline apart from the cached embedding model; not
 | P3 | Byte-idempotent generation; JSON-Schema validation; PII grep; the four anchors and 24 well-formed ids; the PTO identity at the snapshot with `E1042` → 13.5 |
 | P4 | Byte-identical manifest rebuild (`--verify-manifest`); `--selftest`; heading-path propagation and overlap; per-format ingest report summing to totals; the `query_embed` asymmetry branch recorded; exact-`k` filter-then-truncate; `min_dense_score` ≠ `rrf_score`; seven citation fields on every chunk; manifest genuinely tracked |
 | P5 | MCP 2.x API shape; `REQUIRED_TOOL_NAMES ⊆ tools/list`; discovery **and** a call on both transports; committed schemas equal a live `tools/list`; the three confirmation-gate cases; the rules engine's chunk ids resolving and all seven scenarios reachable |
-| P6 | Both wire shapes normalised to one dict; strict-schema emission; limiter burst then pacing; exactly one `llm_call` span plus its `llm_messages` per call; the live provider probe when the key exists |
+| P6 | Both wire shapes normalised to one dict; strict-schema emission; limiter burst then pacing; exactly one `llm_call` span plus its `llm_messages` per call carrying the cache-token and `cost_usd_estimate` fields; the live probe — Haiku tool call (no `strict`) + `output_config` JSON, a cache hit on the repeat call **when the prefix clears the 4096-token minimum** (otherwise the measured prefix size recorded), and a Gemini judge JSON call |
 | P7 | Six guardrail suites plus `test_g4_no_false_positives` over the committed manifest; both demo sequences under the stub against `required_tools` + `precedence_edges` + `forbidden_tools`, task 2 stopping at `awaiting_confirmation`; RAG-only makes zero people-tool calls; no chain-of-thought; the golden prompt snapshot |
 | P8 | `/chat` contract for RAG-only **and** tool-using; the four-row privileged-options matrix; the access gate (401 → `?access=` 302 + cookie → bearer, `/health` and `/ready` open, `access_token_missing` under `APP_ENV=render`) and the two personas; `trace[]` ≡ spans-of-turn plus the seven-row R4.3/R4.1 mapping; the four fault injections at HTTP 200; `/health` degradations vocabulary and the MCP-down flip; SSE live path and fallback; confirm-resume producing exactly one `mock_writes` row; audit completeness; action safety over the fixtures |
 | P9 | All 11 pages rendering committed fixture data with their key selectors **as admin**, and 403 `ADMIN_REQUIRED` without the admin persona; every view-model validating; page 11's `judged` / `n_scored` contract with deterministic metrics non-null; the three write controls wired and admin-only; the eval-row → trace deep link; the bounded smoke-eval endpoint |
@@ -599,7 +612,7 @@ Signed off at P12 before submission. Each row names an artifact a grader can ope
 | 8 | Excellent evaluation across all six metric families | 26 items; groundedness, citation accuracy, tool selection, workflow completion, escalation/safety, latency p50/p95 cold vs warm; three-variant ablation; judge agreement with its n | `evaluation/results/`, `evaluation/REPORT.md`, dashboard page 11 |
 | 9 | Excellent docs + demo meeting every DEMO.* item | `test_docs_completeness` green; video 7–10 min, on camera throughout, ID shown, both tasks live, design/deploy/CI/eval walkthroughs | `design-and-evaluation.md`, `README.md`, `ai-tooling.md`, `deployed.md`, the video link |
 | 10 | **USER.2 / USER.3 / USER.4** — full audit logs and evaluation in one dashboard, one trace model | Every record type present for a freshly executed chat; all six metric families, cold/warm p50/p95 and the ablation browsable; `/chat`'s trace, the dashboard and the eval report derive from one `trace_id` | `test_audit_completeness`, `test_dashboard_viewmodels`, `/dashboard/sessions/{id}` |
-| 11 | **USER.1** — autonomous buildability | `NEEDS-FROM-USER.md` lists only the seven gates, six reaching a human (the access token is generated by `provision_render.py`, never pasted); every other step is a scripted command; CI reproduces build → index → test with no manual step | `NEEDS-FROM-USER.md`, `.github/workflows/ci.yml` |
+| 11 | **USER.1** — autonomous buildability | `NEEDS-FROM-USER.md` lists only the seven gates, two fully discharged (G1 scripted, G4 keys provided 2026-09-09) and five reaching a human (the access token is generated by `provision_render.py`, never pasted); every other step is a scripted command; CI reproduces build → index → test with no manual step | `NEEDS-FROM-USER.md`, `.github/workflows/ci.yml` |
 
 ---
 
@@ -613,8 +626,8 @@ Severity and mitigation follow spec §20 (ids match). **Trigger** is the observa
 | R-2 | `mcp` 2.2.0 is a breaking rewrite; model priors target 1.x | High | `test_mcp_api_shape` red, or `ImportError: FastMCP` | `mcp==2.2.0` pinned; the P5 subagent reads `mcp/README.md`'s 1.x→2.x table **before** writing code; the shape test fails in seconds | P5 |
 | R-3 | fastembed footguns (default batch → 1,477 MB; `parallel=1` hangs) | High | RSS spike during ingest, or an ingest exceeding 600 s | One call site hard-coding `batch_size=8`, `threads=1`, never `parallel=`; two greps in `test_conventions.py` keep it true; ingestion runs at Docker build time, never at boot | P4 |
 | R-4 | Ephemeral disk vs "full audit logs for every session" | High | Turso credentials absent at P11, or `/health.trace_store.backend == "sqlite"` in production | `SqliteStore` is the coded fallback and committed eval results still populate the evaluation pages; the UI labels live sessions *"session-scoped on the free tier"* and `deployed.md` states exactly which part of USER.2 is unmet; `make demo1 && make demo2` refills the session pages in seconds | P1 / P11 |
-| R-5 | Free-tier quota exhaustion mid-sweep, or live on camera | High | HTTP 429 with `Retry-After`; 429s accumulating in `eval_runs.notes` | Judged metrics scoped to `baseline` (~710 calls per sweep); **a calendar-day boundary between the P10 `local` and P11 `deployed` sweeps**, confirmed at P11 step 0; `JUDGE_API_KEY` on a second project; sequential execution behind the token bucket; failover to Groq recorded as `provider_failover`; the optional cache warms the two demo prompts before recording, badged honestly | P10 / P11 |
-| R-6 | Judge credibility — agent and judge share the Gemini family | Medium | — (standing) | Six metric families are judge-free (citation resolvability, DocRecall, tool selection, argument correctness, workflow completion, action safety) and four are judged; 8 reference labels authored by an independent Opus subagent blind to the judge, published as an **agreement rate with its n**; `GROQ_API_KEY` adds a cross-family re-judge; optional item #11 upgrades to human adjudication | P10 |
+| R-5 | Overspend on the paid agent model, or free-tier quota exhaustion on the judge — mid-sweep or live on camera | High | `/health.llm.agent.calls_today` approaching `daily_call_cap`; HTTP 429 with `Retry-After`; 429s accumulating in `eval_runs.notes` | `LLM_DAILY_CALL_CAP` (1500/UTC day) with a graceful 200 `outcome: "error"` turn; prompt caching on the tools → system prefix, which is what holds a sweep to $2–4; judged metrics scoped to `baseline`, so a sweep spends only ~260 free judge calls (~560–710 provider calls in total); `JUDGE_API_KEY` and `LLM_FALLBACK_API_KEY` on two separate Cloud projects; sequential execution behind the token bucket; failover to free Gemini recorded as `provider_failover`; the optional cache warms the two demo prompts before recording, badged honestly | P10 / P11 |
+| R-6 | Judge credibility — the self-preference objection on the most heavily weighted rubric bullet | Medium | — (standing) | **Answered by construction:** the agent is Anthropic `claude-haiku-4-5` and the judge is Google `gemini-3.5-flash-lite`, so no model grades its own output; six metric families are judge-free (citation resolvability, DocRecall, tool selection, argument correctness, workflow completion, action safety) and four are judged; 8 reference labels authored by an independent Opus subagent — a third, independent model, and a different family from the Gemini judge its labels are compared against — blind to the judge, published as an **agreement rate with its n**; optional item #8 upgrades to human adjudication | P10 |
 | R-7 | AI-authored corpus drifts into vagueness or contradiction | High | `check_facts.py` red, or a gold answer contradicting a cited chunk | `corpus/facts.yml` pins the ~40 facts the system depends on, each with a verbatim quote; gold answers and `rules.yml` both cite fact ids, so a corpus edit that moves a number fails the test first; ≥ 6 checkable statements per document | P2 |
 | R-8 | Untyped Jinja/htmx boundary across 11 dashboard pages | Medium | A page rendering with a missing field while tests stay green | Every page renders from a typed view-model produced by the same `/api/*` endpoint; pages 2, 4–8 are thin configurations of one shared partial; **page 3 is built first** | P9 |
 | R-9 | Platform and provider facts partly unverified | Medium | A §3.1 row contradicted by the live dashboard at P10/P11 step 0 | §3.1 is the complete list with where and when to read each; P10 step 0 and P11 step 0 paste the observed values with dates into `deployed.md`; documented host fallbacks: a native Python service on Render, then Cloud Run with the same image | P10 / P11 |
