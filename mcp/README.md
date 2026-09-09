@@ -53,6 +53,15 @@ spawns one with no port and no uvicorn.
 2. `tools/list` → per tool `{name, description, input_schema, output_schema, annotations}`. The
    client validates each input schema is a well-formed JSON Schema object and sorts the catalog
    deterministically, which keeps the prompt prefix stable for caching.
+   `get_policy_section` is the one tool whose published `input_schema` carries a root
+   `oneOf` — spec §8.4 requires its exactly-one-selector rule *in the schema*, and `@server.tool`
+   derives the schema from the handler signature with no override hook, so `build_hr_server()`
+   amends that one registered tool after registration
+   (`tools/get_policy_section.publish_selector_one_of`). It is a **publication** only: the SDK still
+   validates arguments against the signature-derived model, and the selector rule is enforced in the
+   handler. The Anthropic Messages API rejects a root combinator, and that is handled on the wire by
+   `AnthropicAdapter`, which strips `oneOf` / `allOf` / `anyOf` from the top level of what it sends
+   and never rewrites what the server publishes (`core/llm/base.py::ToolSchema`).
 3. **Exactly one `mcp_discovery` span per turn.** The handshake is cached per process (re-run on
    first use or after a failure); the *span* is emitted every turn, carrying the cached catalog plus
    `{cached, handshake_ms, discovered_at, catalog_sha, tool_count, mcp_session_id}`. Without that,

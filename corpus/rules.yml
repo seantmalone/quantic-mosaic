@@ -62,10 +62,29 @@
 #                      employee_eq:<field>:<value>
 #
 # A requirement whose `applies_when` is false is omitted from `requirements[]` entirely, and the same
-# guard selects which `approvals_required` and `next_steps` entries the verdict carries. `verdict` is
-# `compliant` when nothing is unmet, `conditional` when something unmet is satisfiable before the
-# action, `non_compliant` when a `blocking: true` requirement is unmet, and `insufficient_evidence`
-# when every applicable requirement's subject is absent.
+# guard selects which `approvals_required` and `next_steps` entries the verdict carries.
+#
+# The four verdict rules, exactly as `mcpserver/rules.py::_verdict` implements them, in order:
+#
+#   insufficient_evidence  no applicable requirement was evaluable at all (every subject absent, or
+#                          no requirement applied)
+#   non_compliant          an *evaluable* requirement with `blocking: true` is unmet
+#   conditional            anything applicable is unmet
+#   compliant              otherwise
+#
+# and the two rules about what "unmet" means that those depend on:
+#
+#   * `manual` is `met: false` and **never** blocking, whatever the requirement's own `blocking`
+#     says: an unverifiable requirement cannot prove a violation, so it makes a verdict
+#     `conditional`, never `non_compliant`.
+#   * a requirement whose subject is **absent** is `met: false` with a `"Not stated: …"` reason and
+#     lands in `unmet[]`, but is not evaluable, so it too cannot make a verdict `non_compliant`.
+#
+# STATUS: adopted at P5 and awaiting controller ratification — spec §8.4 fixes this tool's input and
+# output schemas but not its verdict semantics, and these six rules are a user-facing MCP contract
+# that P7's guardrails and P10's gold answers will be written against. See the fix round in
+# `.superpowers/sdd/2026-09-08-implementation-roadmap/P5-report.md` §9. If ratified they belong in
+# spec §8.4, not only here.
 #
 # Adding a key here means extending `REQUIREMENT_KEYS` in `scripts/check_facts.py` in the same commit:
 # the build fails until putting it here is a deliberate, reviewed act.

@@ -45,7 +45,19 @@
       "doc_id"
     ],
     "title": "get_policy_sectionArguments",
-    "type": "object"
+    "type": "object",
+    "oneOf": [
+      {
+        "required": [
+          "heading_path"
+        ]
+      },
+      {
+        "required": [
+          "chunk_id"
+        ]
+      }
+    ]
   },
   "output_schema": {
     "description": "The §8.4 tool-2 result, or `{status: not_found}` when the selector resolves to nothing.",

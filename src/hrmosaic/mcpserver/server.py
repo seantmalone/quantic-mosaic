@@ -286,11 +286,19 @@ def build_hr_server(deps: ServerDeps | None = None) -> MCPServer:
 
     The tool modules are imported here rather than at module scope: each of them imports the result
     helpers above, so a top-level import would close a cycle for no gain.
+
+    One published schema needs an amendment the decorator cannot express: §8.4 requires
+    `get_policy_section` to carry the root `oneOf` over its two selectors *in the schema*, and
+    `@server.tool` derives `input_schema` from the handler signature with no override hook. So the
+    tool is registered like the other eight and its published schema is amended once, here, after
+    registration — see `tools/get_policy_section.publish_selector_one_of`.
     """
     from hrmosaic.mcpserver.tools import REGISTRARS
+    from hrmosaic.mcpserver.tools.get_policy_section import publish_selector_one_of
 
     deps = deps if deps is not None else ServerDeps()
     server: MCPServer = MCPServer(name=SERVER_NAME, version=SERVER_VERSION)
     for register in REGISTRARS:
         register(server, deps)
+    publish_selector_one_of(server)
     return server

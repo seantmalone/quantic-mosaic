@@ -1,11 +1,21 @@
 """Tool 2 — the verbatim text of one policy section (spec §8.4).
 
 `doc_id` is required and **exactly one** of `heading_path` / `chunk_id` selects the section. §8.4
-expresses that with a root `oneOf`, and this schema deliberately does not: the Anthropic Messages
-API returns 400 when a tool `input_schema` carries `oneOf` / `anyOf` / `allOf` at the **root** (P6's
-live probe; the `AnthropicAdapter` strips those three keys on the wire for exactly that reason). So
-the two selectors are published as optional properties, the exactly-one rule is stated in the
-description the model actually reads, and it is enforced *here*:
+requires that rule to be expressed **in the schema, not only in prose**, as the literal root
+`oneOf` reproduced in `SELECTOR_ONE_OF` below — and §22's `AnthropicAdapter` row leans on that root
+`oneOf` existing when it justifies not setting `strict: true`. So this tool publishes it.
+
+The Anthropic Messages API does answer 400 when a tool `input_schema` carries `oneOf` / `anyOf` /
+`allOf` at the **root** (verified live 2026-09-09; the message is quoted in
+`core/llm/anthropic.py`). That is handled where it arises, on the wire: `AnthropicAdapter` drops
+those three keys from the top level of a tool schema on the way out and changes nothing else, and
+`core/llm/base.py::ToolSchema` records the invariant — an adapter *never rewrites what the server
+publishes*. The committed schema stays the one the MCP server validates arguments against.
+
+A published `oneOf` is a *publication*, not a second enforcement point: `@server.tool` builds the
+argument model from the handler signature, so the SDK still validates only `properties` / required.
+The exactly-one rule is therefore stated three times over — in the schema for a client that reads
+JSON Schema, in the description a model actually reads, and enforced *here*:
 
 * neither → `isError` with `{"code": "INVALID_ARGUMENTS", "fields": ["heading_path", "chunk_id"]}`;
 * both → **not** an error. `chunk_id` wins and `resolved_by` records it, so a model that over-
@@ -31,6 +41,30 @@ SELECTOR_RULE = (
     "Supply exactly one of heading_path or chunk_id. Neither is an error; if both are given, "
     "chunk_id wins and resolved_by says so."
 )
+
+#: §8.4's literal root combinator, byte for byte:
+#: `"oneOf":[{"required":["heading_path"]},{"required":["chunk_id"]}]`.
+SELECTOR_ONE_OF: list[dict[str, list[str]]] = [{"required": ["heading_path"]}, {"required": ["chunk_id"]}]
+
+
+def publish_selector_one_of(server: MCPServer) -> None:
+    """Add §8.4's root `oneOf` to the published `input_schema`, after registration.
+
+    `@server.tool` in `mcp` 2.2.0 derives `Tool.parameters` from the handler signature and takes no
+    schema-override argument, so the only way to publish a keyword Pydantic cannot express is to
+    amend the registered tool. `MCPServer.list_tools()` hands `Tool.parameters` straight out as
+    `input_schema`, so this reaches every transport and `scripts/gen_tool_schemas.py` alike.
+
+    It touches nothing the SDK validates against (`fn_metadata.arg_model`), which is what keeps the
+    handler the single enforcement point for the selector rule.
+    """
+    # `MCPServer` exposes `add_tool` / `remove_tool` / `list_tools` but no accessor for a registered
+    # tool, so the manager is reached directly; `test_tool_schemas_committed` fails loudly if 2.x
+    # ever moves it.
+    tool = server._tool_manager.get_tool("get_policy_section")
+    if tool is None:  # pragma: no cover — registration precedes this call
+        raise RuntimeError("get_policy_section must be registered before its schema is amended")
+    tool.parameters["oneOf"] = [dict(branch) for branch in SELECTOR_ONE_OF]
 
 
 class SectionOutput(BaseModel):

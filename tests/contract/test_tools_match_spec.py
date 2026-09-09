@@ -16,7 +16,10 @@ from __future__ import annotations
 import pytest
 from mcp import Client
 
+from hrmosaic.core.llm.anthropic import _tool_payload
+from hrmosaic.core.llm.base import ToolSchema
 from hrmosaic.mcpserver.server import build_hr_server
+from hrmosaic.mcpserver.tools.get_policy_section import SELECTOR_ONE_OF
 
 pytestmark = pytest.mark.anyio
 
@@ -89,12 +92,30 @@ async def test_employee_id_uses_the_one_documented_pattern(catalog):
         assert tool.input_schema["properties"]["employee_id"]["pattern"] == EMPLOYEE_ID_PATTERN, tool.name
 
 
-async def test_no_input_schema_carries_a_root_combinator(catalog):
-    # The Anthropic Messages API answers 400 when a tool input_schema has oneOf/anyOf/allOf at the
-    # ROOT (P6's live probe), so `get_policy_section` states its exactly-one rule in prose and
-    # enforces it in the handler instead of publishing the `oneOf` of §8.4.
+async def test_get_policy_section_publishes_the_root_oneof_and_no_other_tool_does(catalog):
+    # §8.4 requires the exactly-one selector rule "in the schema, not only in prose", as this exact
+    # root `oneOf`; §22's AnthropicAdapter row cites it as one reason `strict: true` is not set.
+    # It is the only root combinator in the catalog — the other eight tools have nothing to express
+    # that a property list cannot.
+    assert catalog["get_policy_section"].input_schema["oneOf"] == SELECTOR_ONE_OF
     for name, tool in catalog.items():
+        if name == "get_policy_section":
+            continue
         assert not {"oneOf", "anyOf", "allOf"} & set(tool.input_schema), name
+
+
+async def test_the_anthropic_adapter_strips_that_oneof_from_the_live_published_schema(catalog):
+    # The Messages API answers 400 on a root combinator (verified live 2026-09-09), and the project
+    # answers that on the wire, not in the publication: `core/llm/base.py::ToolSchema` records that
+    # an adapter "never rewrites what it publishes". This runs the mitigation against the schema a
+    # client really receives, so it cannot rot behind a hand-written fixture.
+    published = catalog["get_policy_section"].input_schema
+    sent = _tool_payload(ToolSchema(name="get_policy_section", description="…", input_schema=published))["input_schema"]
+
+    assert "oneOf" not in sent
+    assert sent["required"] == published["required"]
+    assert sent["properties"] == published["properties"]
+    assert published["oneOf"] == SELECTOR_ONE_OF, "the published schema is untouched by the adapter"
 
 
 async def test_the_write_tools_accept_a_confirmation_token_and_never_require_it(catalog):

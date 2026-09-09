@@ -9,8 +9,9 @@
 
 The last row is the one worth stating twice. §8.4 makes over-specification succeed rather than fail,
 because the useful thing to do with a model that names both is answer the precise one, not spend a
-repair round-trip teaching it a rule the schema cannot express anyway (the root `oneOf` is dropped by
-the Anthropic Messages API, so it never reaches the model).
+repair round-trip teaching it a rule the model may never have seen: the schema *publishes* the root
+`oneOf` (§8.4), but `AnthropicAdapter` drops it on the wire, because the Messages API 400s on a root
+combinator — so on the agent's own provider the rule reaches the model only as prose.
 """
 
 from __future__ import annotations
