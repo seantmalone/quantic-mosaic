@@ -1,0 +1,73 @@
+{
+  "scenario": "demo_task_1",
+  "_note": "Demo task 1 — international remote-work eligibility (spec §18.1). Authored at P6 so `LLM_STUB_SCRIPT`'s default resolves and `make demo1` has something to replay; P7 fits it to the act loop's real step shape and P10 replaces it with one real recorded exchange (§16.2).",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"eligibility\", \"workflow\": \"remote_work_eligibility\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"search_policy_documents\", \"get_policy_section\", \"check_policy_compliance\"], \"rationale_summary\": \"An international remote-work question needing the employee record and multi-document policy evidence.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1180,
+      "completion_tokens": 118
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {"id": "toolu_d1_1", "name": "lookup_employee_profile", "args": {"employee_id": "E1042"}},
+        {
+          "id": "toolu_d1_2",
+          "name": "search_policy_documents",
+          "args": {"query": "international remote work eligibility duration approval", "k": 5}
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1402,
+      "completion_tokens": 96
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_d1_3",
+          "name": "get_policy_section",
+          "args": {
+            "doc_id": "remote-and-hybrid-work",
+            "heading_path": "Working Outside Your Home Country > Approval"
+          }
+        },
+        {
+          "id": "toolu_d1_4",
+          "name": "search_policy_documents",
+          "args": {"query": "data security working abroad device VPN encryption", "k": 5}
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 2610,
+      "completion_tokens": 104
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_d1_5",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "international_remote",
+            "employee_id": "E1042",
+            "parameters": {"duration_days": 42, "destination_country": "DE", "start_date": "2026-11-03"},
+            "policy_topics": ["remote_work", "tax_location", "data_security", "approvals"]
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 3418,
+      "completion_tokens": 132
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Working from Germany for 42 consecutive days exceeds the 30-day threshold, so Tax & Legal review is required before you travel.\", \"citations\": [\"c_demo1_duration\"]}, {\"type\": \"policy_fact\", \"text\": \"Germany is on the approved-country list, and you must use a company-managed, encrypted device with always-on VPN for the whole stay.\", \"citations\": [\"c_demo1_country\", \"c_demo1_security\"]}, {\"type\": \"recommendation\", \"text\": \"Request written manager approval at least 21 calendar days before departure.\", \"citations\": [\"c_demo1_approval\"]}, {\"type\": \"escalation\", \"text\": \"People Operations mobility can start the Tax & Legal review for you: mobility@mosaicrobotics.example.\", \"citations\": []}], \"next_steps\": [\"Submit a Tax & Legal review request before 13 October 2026.\", \"Send Dana Whitfield a written approval request for 3 November to 14 December 2026.\", \"Confirm your laptop is company-managed and encrypted before you travel.\"], \"rationale_summary\": \"Conditional: approved country, but the stay exceeds the 30-day tax threshold.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 4906,
+      "completion_tokens": 318
+    }
+  ]
+}
