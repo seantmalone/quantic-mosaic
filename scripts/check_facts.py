@@ -10,7 +10,8 @@ It asserts three things and prints one line per document:
    rendered text of its `doc_id`;
 2. every `facts.yml` `section` — and every `corpus/rules.yml` requirement `heading_path` — is a real
    `" > "`-joined heading path in the document it names;
-3. every `rules.yml` requirement's `fact_key` resolves to an entry in `facts.yml`.
+3. every `facts.yml` key a `rules.yml` requirement names — its `fact_key`, and any threshold read by a
+   `parameter_gte:` guard — resolves to an entry in `facts.yml`.
 
 Together those make the corpus, the rules engine and the evaluation gold answers agree: all three cite
 fact ids rather than prose, so a corpus edit that moves a number fails here before it can contradict a
@@ -259,6 +260,20 @@ def load_rules(path: Path = RULES_PATH) -> dict[str, dict]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))["scenarios"]
 
 
+def _fact_keys(requirement: dict) -> list[str]:
+    """Every `facts.yml` key a requirement names — its own, plus any in a `parameter_gte:` guard.
+
+    An `applies_when: "parameter_gte:<parameter>:<fact_key>"` guard reads a threshold out of
+    `facts.yml` exactly as `fact_key` does, so a typo there would silently switch the requirement off
+    rather than fail loudly. Both are resolved here.
+    """
+    keys = [requirement["fact_key"]]
+    guard = str(requirement.get("applies_when", "always"))
+    if guard.startswith("parameter_gte:"):
+        keys.append(guard.split(":", 2)[2])
+    return keys
+
+
 def check_corpus() -> list[str]:
     """Return a list of human-readable problems; an empty list means the corpus is consistent."""
     documents = load_documents()
@@ -280,8 +295,9 @@ def check_corpus() -> list[str]:
     for scenario, spec in sorted(load_rules().items()):
         for requirement in spec["requirements"]:
             rid = f"rules.yml: {scenario}.{requirement['id']}"
-            if requirement["fact_key"] not in facts:
-                problems.append(f"{rid}: fact_key {requirement['fact_key']!r} is not in facts.yml")
+            for key in _fact_keys(requirement):
+                if key not in facts:
+                    problems.append(f"{rid}: fact_key {key!r} is not in facts.yml")
             document = documents.get(requirement["doc_id"])
             if document is None:
                 problems.append(f"{rid}: unknown doc_id {requirement['doc_id']!r}")

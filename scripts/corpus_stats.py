@@ -20,6 +20,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from pypdf import PdfReader
+
 if __package__:
     from .check_facts import CORPUS_DIR, REPO_ROOT, Document, load_documents
 else:  # `python scripts/corpus_stats.py` puts this file's own directory on sys.path
@@ -39,8 +41,6 @@ class DocumentStats:
 
 
 def _pdf_pages(document: Document) -> int:
-    from pypdf import PdfReader
-
     return len(PdfReader(str(document.path)).pages)
 
 
