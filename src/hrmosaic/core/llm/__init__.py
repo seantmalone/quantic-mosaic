@@ -36,7 +36,7 @@ from hrmosaic.core.llm.cache import CachedAdapter
 from hrmosaic.core.llm.limiter import DailyCapExceeded, TokenBucket, count_calls_today
 from hrmosaic.core.llm.openai_compat import OpenAICompatAdapter
 from hrmosaic.core.llm.stub import StubAdapter, StubScriptError
-from hrmosaic.settings import Settings
+from hrmosaic.settings import Settings, secret_value
 from hrmosaic.settings import settings as default_settings
 
 __all__ = [
@@ -94,7 +94,7 @@ def build_fallback_model(settings: Settings | None = None) -> ChatModel | None:
     return OpenAICompatAdapter(
         model=settings.llm_fallback_model,
         base_url=settings.llm_fallback_base_url,
-        api_key=settings.llm_fallback_api_key,
+        api_key=secret_value(settings.llm_fallback_api_key),
         api_key_variable="LLM_FALLBACK_API_KEY",
         limiter=shared_limiter(settings),
     )
@@ -110,7 +110,7 @@ def build_agent_model(settings: Settings | None = None) -> ChatModel:
     elif settings.llm_provider == "anthropic":
         model = AnthropicAdapter(
             model=settings.llm_model,
-            api_key=settings.anthropic_api_key,
+            api_key=secret_value(settings.anthropic_api_key),
             limiter=limiter,
             fallback=build_fallback_model(settings),
             daily_call_cap=settings.llm_daily_call_cap,
@@ -119,7 +119,7 @@ def build_agent_model(settings: Settings | None = None) -> ChatModel:
         model = OpenAICompatAdapter(
             model=settings.llm_model,
             base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
+            api_key=secret_value(settings.llm_api_key),
             api_key_variable="LLM_API_KEY",
             limiter=limiter,
             fallback=build_fallback_model(settings),
@@ -138,7 +138,7 @@ def build_judge_model(settings: Settings | None = None) -> ChatModel:
     settings = settings or default_settings
     if settings.judge_provider == "stub":
         return StubAdapter(script_path=settings.llm_stub_script)
-    api_key = settings.judge_api_key or settings.llm_api_key
+    api_key = secret_value(settings.judge_api_key) or secret_value(settings.llm_api_key)
     return OpenAICompatAdapter(
         model=settings.judge_model,
         base_url=settings.judge_base_url,

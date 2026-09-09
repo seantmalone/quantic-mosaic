@@ -5,6 +5,11 @@ shapes, numeric ranges) and fails fast, because those are programmer errors. **C
 validated lazily, at the point of use, so boot always succeeds**: a missing key degrades the
 surface that needs it and never raises at import.
 
+Credentials are typed `SecretStr`, so a `Settings` instance can be printed, logged or dumped
+without disclosing a key: `repr()`, `str()` and `model_dump()` all render `**********`, and the
+plaintext is reachable only through `secret_value()` at the point of use. That matters most in
+pytest, where a failing assertion whose expression mentions `settings` prints the whole repr.
+
 `.env.example` mirrors this module field for field; `tests/contract/test_env_example_covers_settings.py`
 asserts the bijection in both directions.
 """
@@ -17,7 +22,7 @@ import warnings
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, PrivateAttr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TARGET_PYTHON = (3, 12)
@@ -57,10 +62,10 @@ class Settings(BaseSettings):
 
     # --- agent provider ------------------------------------------------------------------
     llm_provider: Provider = "anthropic"
-    anthropic_api_key: str | None = None
+    anthropic_api_key: SecretStr | None = None
     llm_model: str = "claude-haiku-4-5"
     llm_base_url: str = GEMINI_OPENAI_BASE_URL
-    llm_api_key: str | None = None
+    llm_api_key: SecretStr | None = None
     llm_daily_call_cap: int = Field(default=1500, ge=1)
     llm_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     llm_stub_script: Path = Path("tests/fixtures/llm_scripts/demo_task_1.json")
@@ -71,13 +76,13 @@ class Settings(BaseSettings):
     llm_fallback_provider: Provider = "openai_compat"
     llm_fallback_base_url: str = GEMINI_OPENAI_BASE_URL
     llm_fallback_model: str = "gemini-3.5-flash-lite"
-    llm_fallback_api_key: str | None = None
+    llm_fallback_api_key: SecretStr | None = None
 
     # --- judge provider ------------------------------------------------------------------
     judge_provider: Provider = "openai_compat"
     judge_base_url: str = GEMINI_OPENAI_BASE_URL
     judge_model: str = "gemini-3.5-flash-lite"
-    judge_api_key: str | None = None
+    judge_api_key: SecretStr | None = None
 
     # --- embeddings ----------------------------------------------------------------------
     embed_provider: Literal["fastembed", "fake"] = "fastembed"
@@ -111,13 +116,13 @@ class Settings(BaseSettings):
 
     # --- persistence -----------------------------------------------------------------------
     turso_database_url: str | None = None
-    turso_auth_token: str | None = None
+    turso_auth_token: SecretStr | None = None
     persist_backend: Literal["auto", "sqlite", "turso"] = "auto"
     trace_db_path: Path = Path("data/runtime/traces.sqlite")
     trace_retention_sessions: int = Field(default=300, ge=1)
 
     # --- access ------------------------------------------------------------------------------
-    app_access_token: str | None = None
+    app_access_token: SecretStr | None = None
     access_rate_limit_per_min: int = Field(default=30, ge=1)
 
     # --- evaluation ---------------------------------------------------------------------------
@@ -169,6 +174,19 @@ class Settings(BaseSettings):
         if self.mcp_transport == "stdio":
             return "stdio"
         return "http"
+
+
+def secret_value(secret: SecretStr | None) -> str | None:
+    """The plaintext behind a credential field — the one place a `SecretStr` is opened.
+
+    Callers read it at the point of use, never at import, so the "credential validation is
+    deferred to first use" rule of §12.3 is unchanged. An **empty** credential reads exactly like
+    an absent one: an untouched `.env.example` line leaves `KEY=` behind, and the empty string is
+    not a configured key.
+    """
+    if secret is None:
+        return None
+    return secret.get_secret_value() or None
 
 
 #: Structural validation happens here, at import. Credentials are not touched.

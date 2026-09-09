@@ -31,7 +31,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from hrmosaic.settings import Settings
+from hrmosaic.settings import Settings, secret_value
 from hrmosaic.settings import settings as default_settings
 
 logger = logging.getLogger(__name__)
@@ -314,10 +314,11 @@ def migrate(store: Store) -> list[str]:
 def build_store(settings: Settings | None = None) -> Store:
     """The §12.1 selection table, in code. Never raises: boot always succeeds."""
     settings = settings or default_settings
-    turso_configured = bool(settings.turso_database_url and settings.turso_auth_token)
+    auth_token = secret_value(settings.turso_auth_token)
+    turso_configured = bool(settings.turso_database_url and auth_token)
     wants_turso = settings.persist_backend == "turso" or (settings.persist_backend == "auto" and turso_configured)
     if wants_turso and turso_configured:
-        return TursoHTTPStore(str(settings.turso_database_url), str(settings.turso_auth_token))
+        return TursoHTTPStore(str(settings.turso_database_url), str(auth_token))
     if wants_turso:
         logger.warning("PERSIST_BACKEND=turso but TURSO_DATABASE_URL/TURSO_AUTH_TOKEN are unset; using SQLite")
     return SqliteStore(settings.trace_db_path)

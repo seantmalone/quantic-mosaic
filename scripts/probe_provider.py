@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict
 from hrmosaic.core.llm.anthropic import MIN_CACHEABLE_PREFIX_TOKENS, AnthropicAdapter
 from hrmosaic.core.llm.base import Completion, Message, ToolSchema
 from hrmosaic.core.llm.openai_compat import OpenAICompatAdapter
-from hrmosaic.settings import settings
+from hrmosaic.settings import secret_value, settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 #: P5 generates these from the live MCP server; until then the probe carries the §8.4 shapes itself,
@@ -329,7 +329,7 @@ def _describe(label: str, completion: Completion) -> None:
 
 
 async def probe_anthropic(*, tools: list[ToolSchema]) -> tuple[bool, str]:
-    adapter = AnthropicAdapter(model=settings.llm_model, api_key=settings.anthropic_api_key)
+    adapter = AnthropicAdapter(model=settings.llm_model, api_key=secret_value(settings.anthropic_api_key))
     messages = [Message(role="system", content=SYSTEM_PROMPT), Message(role="user", content=PROBE_QUESTION)]
 
     prefix_tokens = adapter.count_prefix_tokens(system=SYSTEM_PROMPT, tools=tools)
@@ -382,7 +382,7 @@ async def probe_judge() -> bool:
     adapter = OpenAICompatAdapter(
         model=settings.judge_model,
         base_url=settings.judge_base_url,
-        api_key=settings.judge_api_key or settings.llm_api_key,
+        api_key=secret_value(settings.judge_api_key) or secret_value(settings.llm_api_key),
         api_key_variable="JUDGE_API_KEY",
     )
     print(f"\nJudge {settings.judge_model} at {settings.judge_base_url}")

@@ -195,3 +195,21 @@ rather than assumed.
 - **Self-test result:** `"How many consecutive days abroad require Tax & Legal review?"` → top-1
   `tax-and-location-addendum`, `dense_score` **0.7640** (floor `SELFTEST_MIN_DENSE_SCORE` 0.25),
   `index_meta.chunk_count` 204 = the committed manifest's line count, `index_version` `2026.1+920c`.
+
+## 2026-09-09 — P1 core (credential hygiene) + P0 `download_model.py`
+
+- **Every §12.3 credential field is now `pydantic.SecretStr`** — `ANTHROPIC_API_KEY`, `LLM_API_KEY`,
+  `LLM_FALLBACK_API_KEY`, `JUDGE_API_KEY`, `TURSO_AUTH_TOKEN`, `APP_ACCESS_TOKEN` (the complete set of
+  fields whose name ends `_api_key`, `_token` or `_secret`; `tests/unit/test_settings_secrets.py`
+  asserts the set is complete, so a new credential field cannot be added as a plain `str`). Found in
+  the P4 review: a failing pytest assertion whose expression mentions `settings` prints the whole
+  `Settings` repr into the report, and a CI log is a public artifact. `repr()`, `str()` and
+  `model_dump()` now render `**********`. Defaults and optionality are unchanged, and so is the
+  §12.3 rule that credentials are validated **lazily**: `settings.secret_value()` opens a
+  `SecretStr` at the point of use — in the three `core/llm/` factories, in `build_store()` and in
+  `scripts/probe_provider.py` — and an unset key still builds an adapter that reports
+  `configured is False`. `secret_value()` maps an **empty** credential to `None`, so `KEY=` in an
+  untouched `.env` reads as "not configured" exactly as the plain-`str` version did.
+- `rag/download_model.py` constructs `TextEmbedding` with **`threads=1`**, matching `rag/embed.py`:
+  every construction in the repository now pins the ONNX thread count, so the single-core container
+  of §14.3 cannot have a thread pool spawned behind its back on the cache-warming path either.

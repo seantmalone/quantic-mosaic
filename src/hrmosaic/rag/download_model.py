@@ -23,7 +23,9 @@ def main() -> int:
     cache.mkdir(parents=True, exist_ok=True)
     for attempt in range(1, ATTEMPTS + 1):
         try:
-            TextEmbedding(model_name=settings.embed_model, cache_dir=str(cache))
+            # `threads=1` on every construction, as `rag/embed.py` does: the single-core
+            # container of §14.3 must not have ONNX spawn a thread pool behind its back.
+            TextEmbedding(model_name=settings.embed_model, cache_dir=str(cache), threads=1)
         except Exception as error:  # any transport or filesystem failure here is retryable
             print(f"attempt {attempt}/{ATTEMPTS} failed: {error}", file=sys.stderr)
             if attempt == ATTEMPTS:
