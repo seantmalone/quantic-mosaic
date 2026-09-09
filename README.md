@@ -23,6 +23,7 @@ pinned dependencies:
 ```bash
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/pip install -e .   # puts `hrmosaic` on the import path for `python -m hrmosaic...`
 cp .env.example .env      # optional: no credential is needed to boot, lint or test
 ```
 

@@ -10,14 +10,13 @@ GIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo dev)
 IMAGE ?= mosaic-hr
 BASE_URL ?= http://$(HOST):$(PORT)
 
-export PYTHONPATH := src
-
 .PHONY: setup run run-stdio lint test ingest eval ablation demo1 demo2 docker docker-run-512
 
 setup:
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/pip install --upgrade pip
 	$(BIN)/pip install -r requirements.txt -r requirements-dev.txt
+	$(BIN)/pip install -e .
 
 run:
 	$(BIN)/uvicorn hrmosaic.web.main:app --host $(HOST) --port $(PORT) --workers 1
