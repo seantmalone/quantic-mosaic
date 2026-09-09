@@ -43,6 +43,9 @@ def _offenders(pattern: re.Pattern[str], allowed: set[Path], suffixes: tuple[str
 
 
 def test_only_trace_module_writes_spans():
+    # The grep has a real target from P1 on: `core/trace.py` is the writer, so a vacuous pass
+    # (nobody writes spans at all) can never be mistaken for the invariant holding.
+    assert SPAN_WRITE.search(TRACE_WRITER.read_text(encoding="utf-8"))
     assert _offenders(SPAN_WRITE, {TRACE_WRITER}, (".py", ".sql")) == []
 
 

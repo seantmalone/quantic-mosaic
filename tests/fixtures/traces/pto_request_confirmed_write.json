@@ -1,0 +1,593 @@
+{
+  "fixture_id": "pto_request_confirmed_write",
+  "description": "Demo task 2 (§18.2) — the complete confirmed-write chain: a CONFIRMATION_REQUIRED tool_call, a `confirmation` span, the reopened turn, the gated write, plus the `confirmations` row and the `mock_writes` row it authorised. Hand-authored (§16.5).",
+  "session": {
+    "id": "c0de4a719f2c1b7ec0de4a719f2c1b7e",
+    "created_at": 1788880320000000,
+    "last_activity_at": 1788880352400000,
+    "employee_id": "E1042",
+    "auth_mode": "bearer",
+    "actor_role": "employee",
+    "client_label": "demo",
+    "eval_run_id": null,
+    "user_agent_hash": "3f8a1c9d5e2b7046",
+    "app_version": "0a1b2c3d4e5f60718293a4b5c6d7e8f900112233",
+    "deploy_mode": "local",
+    "mcp_transport": "http",
+    "cold_start": 0
+  },
+  "turn": {
+    "id": "7e4a71c0de9f2c1b7e4a71c0de9f2c1b",
+    "session_id": "c0de4a719f2c1b7ec0de4a719f2c1b7e",
+    "seq": 1,
+    "started_at": 1788880320000000,
+    "ended_at": 1788880352400000,
+    "duration_ms": 7400,
+    "user_message": "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 — and can you open the request for me?",
+    "final_answer": "Yes — you have 13.5 PTO days available as of 1 September 2026, which covers the three days from 15 to 17 September. The five-business-day notice requirement is met and your manager (Dana Whitfield) must approve. I have opened request MOCK-HR-000123 in hr-timeoff.",
+    "answer_blocks_json": [
+      {
+        "type": "policy_fact",
+        "text": "PTO requests require at least five business days' notice and manager approval.",
+        "citations": ["c_9a13ef04"]
+      },
+      {
+        "type": "recommendation",
+        "text": "Your balance of 13.5 days as of 1 September 2026 covers the three requested days.",
+        "citations": ["c_9a13ef04"]
+      }
+    ],
+    "citations_json": [
+      {
+        "chunk_id": "c_9a13ef04",
+        "doc_id": "pto-and-leave-policy",
+        "doc_title": "PTO and Leave Policy",
+        "heading_path": "Requesting Time Off > Notice and Approval",
+        "section": "Notice and Approval",
+        "snippet": "Requests must be submitted at least five business days in advance and approved by the employee's manager.",
+        "score": 0.79,
+        "quarantined": false,
+        "source_url": "/dashboard/corpus/pto-and-leave-policy#c_9a13ef04"
+      }
+    ],
+    "outcome": "answered",
+    "stop_reason": "complete",
+    "intent": "workflow",
+    "workflow": "pto_request",
+    "error_kind": null,
+    "total_tokens_in": 9218,
+    "total_tokens_out": 1104,
+    "llm_calls": 2,
+    "tool_calls": 5,
+    "retrievals": 1,
+    "guardrail_hits": 0,
+    "llm_ms": 5120,
+    "retrieval_ms": 17,
+    "tool_ms": 62,
+    "store_ms": 51,
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5",
+    "provider_failover": 0,
+    "process_uptime_ms": 902000,
+    "rss_mb_at_end": 298.7,
+    "resumed_count": 1,
+    "awaiting_ms": 25000
+  },
+  "spans": [
+    {
+      "id": "aa11bb22cc33dd44",
+      "parent_span_id": null,
+      "seq": 1,
+      "kind": "mcp_discovery",
+      "name": "hr-mcp",
+      "started_at": 1788880320010000,
+      "ended_at": 1788880320011000,
+      "duration_ms": 1,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "mcp_discovery",
+        "server": "hr-mcp",
+        "transport": "streamable_http",
+        "url": "http://127.0.0.1:8000/mcp-server/mcp",
+        "protocol_version": "2026-03-26",
+        "server_info": {"name": "hr-mcp", "version": "0.1.0"},
+        "tools": [
+          {
+            "name": "check_pto_balance",
+            "description": "Return an employee's PTO balance at the mock-data snapshot.",
+            "input_schema": {
+              "type": "object",
+              "required": ["employee_id"],
+              "properties": {"employee_id": {"type": "string"}, "as_of": {"type": "string"}}
+            }
+          },
+          {
+            "name": "create_mock_hr_ticket",
+            "description": "Create a mock HR ticket. Requires a one-time confirmation token.",
+            "input_schema": {
+              "type": "object",
+              "required": ["employee_id", "queue", "summary"],
+              "properties": {"employee_id": {"type": "string"}, "queue": {"type": "string"}, "summary": {"type": "string"}}
+            }
+          }
+        ],
+        "tool_count": 9,
+        "catalog_sha": "8b1d0f5c2a94e7d3",
+        "mcp_session_id": "mcp_1d4b7e20",
+        "cached": true,
+        "handshake_ms": 1,
+        "discovered_at": 1788880320011000
+      },
+      "payload_bytes": 856,
+      "truncated": 0
+    },
+    {
+      "id": "bb22cc33dd44ee55",
+      "parent_span_id": null,
+      "seq": 2,
+      "kind": "llm_call",
+      "name": "anthropic:claude-haiku-4-5",
+      "started_at": 1788880320020000,
+      "ended_at": 1788880320410000,
+      "duration_ms": 390,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "llm_call",
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5",
+        "purpose": "route",
+        "messages_ref": {"span_id": "bb22cc33dd44ee55", "n_messages": 2, "total_chars": 468},
+        "tools_offered": [],
+        "response_text": "{\"intent\":\"workflow\",\"workflow\":\"pto_request\",\"needs_employee_data\":true,\"write_requested\":true}",
+        "tool_calls": [],
+        "finish_reason": "end_turn",
+        "prompt_tokens": 1604,
+        "completion_tokens": 142,
+        "total_tokens": 1746,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 4608,
+        "cost_usd_estimate": 0.002571,
+        "temperature": 0.0,
+        "retry_count": 0,
+        "cache_hit": false,
+        "limiter_wait_ms": 0,
+        "provider_failover": false,
+        "structured_output_mode": "output_config_json_schema",
+        "ttfb_ms": 172
+      },
+      "payload_bytes": 618,
+      "truncated": 0
+    },
+    {
+      "id": "cc33dd44ee55ff66",
+      "parent_span_id": null,
+      "seq": 3,
+      "kind": "plan",
+      "name": "router",
+      "started_at": 1788880320411000,
+      "ended_at": 1788880320413000,
+      "duration_ms": 2,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "plan",
+        "intent": "workflow",
+        "workflow": "pto_request",
+        "step_summaries": [
+          "resolve the acting employee's profile",
+          "read the PTO balance at the snapshot",
+          "retrieve notice and approval policy",
+          "evaluate the PTO rules, then offer the gated write"
+        ],
+        "selected_tools": [
+          "lookup_employee_profile",
+          "check_pto_balance",
+          "search_policy_documents",
+          "check_policy_compliance",
+          "create_mock_hr_ticket"
+        ],
+        "rationale_summary": "Balance-aware request that also asks for a ticket; the write is gated behind human confirmation.",
+        "step_index": 1,
+        "catalog_reopened": false
+      },
+      "payload_bytes": 604,
+      "truncated": 0
+    },
+    {
+      "id": "dd44ee55ff667700",
+      "parent_span_id": "cc33dd44ee55ff66",
+      "seq": 4,
+      "kind": "tool_call",
+      "name": "lookup_employee_profile",
+      "started_at": 1788880320420000,
+      "ended_at": 1788880320423000,
+      "duration_ms": 3,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "tool_call",
+        "server": "hr-mcp",
+        "transport": "streamable_http",
+        "tool_name": "lookup_employee_profile",
+        "arguments": {"employee_id": "E1042"},
+        "result_json": "{\"employee_id\":\"E1042\",\"name\":\"Priya Raghavan\",\"manager_id\":\"E1007\",\"employment_type\":\"full_time\",\"as_of\":\"2026-09-01\"}",
+        "structured_content": {
+          "employee_id": "E1042",
+          "name": "Priya Raghavan",
+          "manager_id": "E1007",
+          "employment_type": "full_time",
+          "as_of": "2026-09-01"
+        },
+        "is_error": false,
+        "error_code": null,
+        "duration_ms": 3,
+        "server_timing_ms": 2,
+        "discovery_source": "tools/list",
+        "actor_employee_id": "E1042",
+        "actor_source": "explicit"
+      },
+      "payload_bytes": 624,
+      "truncated": 0
+    },
+    {
+      "id": "ee55ff6677008811",
+      "parent_span_id": "cc33dd44ee55ff66",
+      "seq": 5,
+      "kind": "tool_call",
+      "name": "check_pto_balance",
+      "started_at": 1788880320430000,
+      "ended_at": 1788880320434000,
+      "duration_ms": 4,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "tool_call",
+        "server": "hr-mcp",
+        "transport": "streamable_http",
+        "tool_name": "check_pto_balance",
+        "arguments": {"employee_id": "E1042", "as_of": "2026-09-15"},
+        "result_json": "{\"employee_id\":\"E1042\",\"balance_days\":13.5,\"accrual_rate_days_per_month\":1.5,\"as_of\":\"2026-09-01\"}",
+        "structured_content": {
+          "employee_id": "E1042",
+          "balance_days": 13.5,
+          "accrual_rate_days_per_month": 1.5,
+          "as_of": "2026-09-01"
+        },
+        "is_error": false,
+        "error_code": null,
+        "duration_ms": 4,
+        "server_timing_ms": 3,
+        "discovery_source": "tools/list",
+        "actor_employee_id": "E1042",
+        "actor_source": "explicit"
+      },
+      "payload_bytes": 596,
+      "truncated": 0
+    },
+    {
+      "id": "ff66770088119922",
+      "parent_span_id": "cc33dd44ee55ff66",
+      "seq": 6,
+      "kind": "retrieval",
+      "name": "hybrid_rrf",
+      "started_at": 1788880320440000,
+      "ended_at": 1788880320457000,
+      "duration_ms": 17,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "retrieval",
+        "query": "PTO request advance notice manager approval blackout",
+        "k": 5,
+        "k_source": "default",
+        "filters": {},
+        "strategy": "hybrid_rrf",
+        "min_dense_score": 0.26,
+        "chunks": [
+          {
+            "chunk_id": "c_9a13ef04",
+            "doc_id": "pto-and-leave-policy",
+            "doc_title": "PTO and Leave Policy",
+            "heading_path": "Requesting Time Off > Notice and Approval",
+            "section": "Notice and Approval",
+            "rank": 1,
+            "dense_score": 0.79,
+            "bm25_rank": 1,
+            "rrf_score": 0.0328,
+            "snippet": "Requests must be submitted at least five business days in advance and approved by the employee's manager.",
+            "quarantined": false
+          },
+          {
+            "chunk_id": "c_2c58bb31",
+            "doc_id": "manager-approval-matrix",
+            "doc_title": "Manager Approval Matrix",
+            "heading_path": "Time Off > Approval Authority",
+            "section": "Approval Authority",
+            "rank": 2,
+            "dense_score": 0.63,
+            "bm25_rank": 3,
+            "rrf_score": 0.0304,
+            "snippet": "Absences of five days or fewer are approved by the direct manager.",
+            "quarantined": false
+          }
+        ],
+        "max_dense_score": 0.79,
+        "embed_ms": 7,
+        "search_ms": 10,
+        "index_version": "2026.1"
+      },
+      "payload_bytes": 1386,
+      "truncated": 0
+    },
+    {
+      "id": "0077881199223344",
+      "parent_span_id": "cc33dd44ee55ff66",
+      "seq": 7,
+      "kind": "tool_call",
+      "name": "check_policy_compliance",
+      "started_at": 1788880320460000,
+      "ended_at": 1788880320482000,
+      "duration_ms": 22,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "tool_call",
+        "server": "hr-mcp",
+        "transport": "streamable_http",
+        "tool_name": "check_policy_compliance",
+        "arguments": {
+          "scenario": "pto_request",
+          "employee_id": "E1042",
+          "parameters": {"days": 3, "start_date": "2026-09-15"}
+        },
+        "result_json": "{\"verdict\":\"compliant\",\"requirements\":[{\"rule_id\":\"pto.notice.5bd\",\"met\":true,\"evidence\":{\"chunk_id\":\"c_9a13ef04\"}},{\"rule_id\":\"pto.balance.sufficient\",\"met\":true,\"evidence\":{\"chunk_id\":\"c_9a13ef04\"}}]}",
+        "structured_content": {
+          "verdict": "compliant",
+          "requirements": [
+            {"rule_id": "pto.notice.5bd", "met": true, "evidence": {"chunk_id": "c_9a13ef04"}},
+            {"rule_id": "pto.balance.sufficient", "met": true, "evidence": {"chunk_id": "c_9a13ef04"}}
+          ]
+        },
+        "is_error": false,
+        "error_code": null,
+        "duration_ms": 22,
+        "server_timing_ms": 20,
+        "discovery_source": "tools/list",
+        "actor_employee_id": "E1042",
+        "actor_source": "explicit"
+      },
+      "payload_bytes": 1024,
+      "truncated": 0
+    },
+    {
+      "id": "1188992233445566",
+      "parent_span_id": "cc33dd44ee55ff66",
+      "seq": 8,
+      "kind": "tool_call",
+      "name": "create_mock_hr_ticket",
+      "started_at": 1788880320490000,
+      "ended_at": 1788880320495000,
+      "duration_ms": 5,
+      "status": "error",
+      "error_message": "CONFIRMATION_REQUIRED",
+      "payload_json": {
+        "kind": "tool_call",
+        "server": "hr-mcp",
+        "transport": "streamable_http",
+        "tool_name": "create_mock_hr_ticket",
+        "arguments": {
+          "employee_id": "E1042",
+          "queue": "hr-timeoff",
+          "summary": "PTO request 15–17 Sep 2026 (3 days)",
+          "details": "Requested by Priya Raghavan; manager E1007 to approve."
+        },
+        "result_json": "{\"status\":\"needs_confirmation\",\"code\":\"CONFIRMATION_REQUIRED\",\"action\":\"create_mock_hr_ticket\",\"human_summary\":\"Open a PTO request for 15–17 September 2026 (3 days) in hr-timeoff\",\"arguments_preview\":{\"queue\":\"hr-timeoff\",\"summary\":\"PTO request 15–17 Sep 2026 (3 days)\"}}",
+        "structured_content": {
+          "status": "needs_confirmation",
+          "code": "CONFIRMATION_REQUIRED",
+          "action": "create_mock_hr_ticket",
+          "human_summary": "Open a PTO request for 15–17 September 2026 (3 days) in hr-timeoff",
+          "arguments_preview": {"queue": "hr-timeoff", "summary": "PTO request 15–17 Sep 2026 (3 days)"}
+        },
+        "is_error": true,
+        "error_code": "CONFIRMATION_REQUIRED",
+        "duration_ms": 5,
+        "server_timing_ms": 4,
+        "discovery_source": "tools/list",
+        "actor_employee_id": "E1042",
+        "actor_source": "explicit"
+      },
+      "payload_bytes": 1312,
+      "truncated": 0
+    },
+    {
+      "id": "2299334455667788",
+      "parent_span_id": "1188992233445566",
+      "seq": 9,
+      "kind": "confirmation",
+      "name": "create_mock_hr_ticket",
+      "started_at": 1788880320500000,
+      "ended_at": 1788880345500000,
+      "duration_ms": 25000,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "confirmation",
+        "action": "create_mock_hr_ticket",
+        "arguments_preview": {"queue": "hr-timeoff", "summary": "PTO request 15–17 Sep 2026 (3 days)"},
+        "human_summary": "Open a PTO request for 15–17 September 2026 (3 days) in hr-timeoff",
+        "prompt_shown": "Create this HR ticket? Nothing is written until you confirm.",
+        "expires_at": 1788880920000000,
+        "user_response": "confirmed",
+        "resolved_at": 1788880345500000
+      },
+      "payload_bytes": 486,
+      "truncated": 0
+    },
+    {
+      "id": "3344556677889900",
+      "parent_span_id": "2299334455667788",
+      "seq": 10,
+      "kind": "tool_call",
+      "name": "create_mock_hr_ticket",
+      "started_at": 1788880345600000,
+      "ended_at": 1788880345628000,
+      "duration_ms": 28,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "tool_call",
+        "server": "hr-mcp",
+        "transport": "streamable_http",
+        "tool_name": "create_mock_hr_ticket",
+        "arguments": {
+          "employee_id": "E1042",
+          "queue": "hr-timeoff",
+          "summary": "PTO request 15–17 Sep 2026 (3 days)",
+          "details": "Requested by Priya Raghavan; manager E1007 to approve.",
+          "confirmation_token": "[REDACTED]"
+        },
+        "result_json": "{\"ticket_id\":\"MOCK-HR-000123\",\"queue\":\"hr-timeoff\",\"status\":\"open\",\"created_at\":\"2026-09-08T15:12:25Z\"}",
+        "structured_content": {
+          "ticket_id": "MOCK-HR-000123",
+          "queue": "hr-timeoff",
+          "status": "open",
+          "created_at": "2026-09-08T15:12:25Z"
+        },
+        "is_error": false,
+        "error_code": null,
+        "duration_ms": 28,
+        "server_timing_ms": 26,
+        "discovery_source": "tools/list",
+        "actor_employee_id": "E1042",
+        "actor_source": "explicit"
+      },
+      "payload_bytes": 942,
+      "truncated": 0
+    },
+    {
+      "id": "4455667788990011",
+      "parent_span_id": null,
+      "seq": 11,
+      "kind": "llm_call",
+      "name": "anthropic:claude-haiku-4-5",
+      "started_at": 1788880345700000,
+      "ended_at": 1788880350430000,
+      "duration_ms": 4730,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "llm_call",
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5",
+        "purpose": "synthesize",
+        "messages_ref": {"span_id": "4455667788990011", "n_messages": 3, "total_chars": 4380},
+        "tools_offered": ["search_policy_documents", "check_pto_balance", "check_policy_compliance"],
+        "response_text": "{\"blocks\":[{\"type\":\"policy_fact\",\"text\":\"PTO requests require at least five business days' notice and manager approval.\",\"citations\":[\"c_9a13ef04\"]}],\"next_steps\":[\"Dana Whitfield approves request MOCK-HR-000123 in hr-timeoff.\"],\"rationale_summary\":\"Balance and notice both satisfied; ticket opened after confirmation.\"}",
+        "tool_calls": [],
+        "finish_reason": "end_turn",
+        "prompt_tokens": 7614,
+        "completion_tokens": 962,
+        "total_tokens": 8576,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 4608,
+        "cost_usd_estimate": 0.012885,
+        "temperature": 0.0,
+        "retry_count": 0,
+        "cache_hit": false,
+        "limiter_wait_ms": 0,
+        "provider_failover": false,
+        "structured_output_mode": "output_config_json_schema",
+        "ttfb_ms": 610
+      },
+      "payload_bytes": 1188,
+      "truncated": 0
+    },
+    {
+      "id": "5566778899001122",
+      "parent_span_id": "4455667788990011",
+      "seq": 12,
+      "kind": "guardrail",
+      "name": "G2_citation_resolvability",
+      "started_at": 1788880350440000,
+      "ended_at": 1788880350441000,
+      "duration_ms": 1,
+      "status": "ok",
+      "error_message": null,
+      "payload_json": {
+        "kind": "guardrail",
+        "rule_id": "G2",
+        "rule_name": "citation_resolvability",
+        "verdict": "allow",
+        "reason": "1/1 citations resolved against the index",
+        "evidence_span_ids": ["4455667788990011", "ff66770088119922"],
+        "matched_pattern": null,
+        "details": {"cited": 1, "resolved": 1, "stripped": 0}
+      },
+      "payload_bytes": 368,
+      "truncated": 0
+    }
+  ],
+  "llm_messages": [
+    {
+      "span_id": "bb22cc33dd44ee55",
+      "seq": 1,
+      "role": "system",
+      "content": "You are Mosaic HR Copilot's router. Classify the request and choose a workflow. Answer with the given JSON schema only."
+    },
+    {
+      "span_id": "bb22cc33dd44ee55",
+      "seq": 2,
+      "role": "user",
+      "content": "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 — and can you open the request for me?"
+    },
+    {
+      "span_id": "4455667788990011",
+      "seq": 1,
+      "role": "system",
+      "content": "You are Mosaic HR Copilot. Answer only from the supplied policy evidence. Every policy_fact block must cite at least one chunk_id. A write tool is never called without a confirmation token minted after a human decision."
+    },
+    {
+      "span_id": "4455667788990011",
+      "seq": 2,
+      "role": "user",
+      "content": "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 — and can you open the request for me?"
+    },
+    {
+      "span_id": "4455667788990011",
+      "seq": 3,
+      "role": "tool",
+      "content": "check_pto_balance → {\"balance_days\":13.5,\"as_of\":\"2026-09-01\"}\n<document trust=\"data\" chunk_id=\"c_9a13ef04\" doc_id=\"pto-and-leave-policy\">Requests must be submitted at least five business days in advance and approved by the employee's manager.</document>\ncreate_mock_hr_ticket → {\"ticket_id\":\"MOCK-HR-000123\",\"status\":\"open\"}"
+    }
+  ],
+  "confirmations": [
+    {
+      "token": "cf_l7QzR2mXbN4vT8pK1sW9yG3hJ6dA5eU0",
+      "session_id": "c0de4a719f2c1b7ec0de4a719f2c1b7e",
+      "turn_id": "7e4a71c0de9f2c1b7e4a71c0de9f2c1b",
+      "span_id": "1188992233445566",
+      "tool_name": "create_mock_hr_ticket",
+      "arguments_json": "{\"details\":\"Requested by Priya Raghavan; manager E1007 to approve.\",\"employee_id\":\"E1042\",\"queue\":\"hr-timeoff\",\"summary\":\"PTO request 15–17 Sep 2026 (3 days)\"}",
+      "human_summary": "Open a PTO request for 15–17 September 2026 (3 days) in hr-timeoff",
+      "created_at": 1788880320500000,
+      "expires_at": 1788880920500000,
+      "used_at": 1788880345600000,
+      "user_response": "confirmed"
+    }
+  ],
+  "mock_writes": [
+    {
+      "id": "MOCK-HR-000123",
+      "kind": "hr_ticket",
+      "created_at": 1788880345620000,
+      "session_id": "c0de4a719f2c1b7ec0de4a719f2c1b7e",
+      "turn_id": "7e4a71c0de9f2c1b7e4a71c0de9f2c1b",
+      "span_id": "3344556677889900",
+      "employee_id": "E1042",
+      "payload_json": "{\"queue\":\"hr-timeoff\",\"status\":\"open\",\"summary\":\"PTO request 15–17 Sep 2026 (3 days)\"}",
+      "confirmation_token": "cf_l7QzR2mXbN4vT8pK1sW9yG3hJ6dA5eU0"
+    }
+  ]
+}
