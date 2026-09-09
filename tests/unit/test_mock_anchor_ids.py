@@ -33,7 +33,7 @@ def employees() -> dict[str, dict]:
     return {record["employee_id"]: record for record in _records("employees")}
 
 
-def test_ids_are_unique_well_formed_and_non_contiguous(employees):
+def test_ids_are_unique_well_formed_and_non_contiguous():
     ids = [record["employee_id"] for record in _records("employees")]
     assert len(ids) == 24
     assert len(set(ids)) == 24
