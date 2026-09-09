@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    # Repo-root docs only — `*.md` does not cross a `/`, so `corpus/**` stays gated.
+    paths-ignore: ['evaluation/results/**', 'evaluation/REPORT.md', 'docs/**', '*.md']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_only:
+        description: 'Run the suite, then redeploy the dispatched ref'
+        default: 'false'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version-file: '.python-version' }
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . && ruff format --check .
+      - uses: gitleaks/gitleaks-action@v2            # full history
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LLM_PROVIDER: stub
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version-file: '.python-version' }
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - uses: actions/cache@v4                       # the ONLY network fetch on this path
+        with: { path: .cache/fastembed, key: fastembed-bge-small-en-v1.5-v1 }
+      - run: python -m hrmosaic.rag.download_model   # a no-op on a cache hit
+      - run: pytest -q                               # the WHOLE suite

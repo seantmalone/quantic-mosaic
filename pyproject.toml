@@ -1,0 +1,49 @@
+[project]
+name = "hrmosaic"
+version = "0.1.0"
+description = "Mosaic HR Copilot — an agentic HR assistant over RAG + MCP"
+readme = "README.md"
+requires-python = "==3.12.*"
+
+# Authoritative dependency list. `requirements.txt` and `requirements-dev.txt` are
+# compiled from this file with `uv pip compile` (see the `lock` recipe in the Makefile)
+# and committed with exact pins; the Docker image installs `requirements.txt` alone.
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
+    "jinja2==3.1.6",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.13.0",
+    "httpx==0.28.1",
+    "fastembed==0.8.0",
+    "sqlite-vec==0.1.9",
+    "mcp==2.2.0",
+    "anthropic==1.4.0",
+    "openai==2.54.0",
+    "pypdf==6.18.0",
+    "beautifulsoup4==4.15.0",
+    "markdownify==1.2.3",
+    "PyYAML==6.0.3",
+    "jsonschema==4.26.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.6",
+    "fpdf2==2.8.4",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+# ruff formats Python code blocks inside Markdown; the documents are hand-authored
+# deliverables, so they are linted by their own contract tests, never reformatted here.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]

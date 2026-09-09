@@ -19,14 +19,21 @@ node_modules/
 !.env.example
 
 # Data / indexes / logs (regenerated)
+# ⚠ the first line must be `data/index/*`, NOT `data/index/`: a trailing-slash exclusion
+#   kills the negation below and the chunk manifest becomes uncommittable.
+data/index/*
+!data/index/chunks.manifest.jsonl
+data/runtime/
+.cache/
 *.sqlite3
 *.db
 *.db-journal
-data/index/
-data/runtime/
 *.log
 
 # OS / editor
 .DS_Store
 .idea/
 .vscode/
+
+# SDD workspace (session scratch)
+.superpowers/

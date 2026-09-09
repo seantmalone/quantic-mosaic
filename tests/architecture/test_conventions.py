@@ -1,0 +1,72 @@
+"""The only structural test file in the repository (spec §16.3).
+
+Five greps over `src/`, each protecting an invariant that a later phase could
+otherwise break silently:
+
+1. only `core/trace.py` writes to the trace tables;
+2. `rag/embed.py` is the only fastembed call site;
+3. `parallel=` appears nowhere (it hung indefinitely in the probe);
+4. `agent/**` never imports `hrmosaic.mcpserver` — it reaches the server over the MCP wire;
+5. the top-level `mcp/` directory is not an importable package (§4.1).
+"""
+
+import re
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SRC = REPO_ROOT / "src"
+
+TRACE_WRITER = SRC / "hrmosaic" / "core" / "trace.py"
+MIGRATIONS = SRC / "hrmosaic" / "core" / "migrations"
+EMBED_MODULE = SRC / "hrmosaic" / "rag" / "embed.py"
+AGENT_PACKAGE = SRC / "hrmosaic" / "agent"
+
+SPAN_WRITE = re.compile(r"INSERT\s+INTO\s+(?:spans|turns|sessions)\b", re.IGNORECASE)
+EMBED_CALL = re.compile(r"\.(?:embed|query_embed)\(")
+PARALLEL_KWARG = "parallel="
+MCPSERVER_IMPORT = re.compile(r"^\s*(?:from|import)\s+hrmosaic\.mcpserver\b", re.MULTILINE)
+
+
+def _source_files(suffixes: tuple[str, ...] = (".py",)) -> list[Path]:
+    return sorted(path for path in SRC.rglob("*") if path.suffix in suffixes and path.is_file())
+
+
+def _offenders(pattern: re.Pattern[str], allowed: set[Path], suffixes: tuple[str, ...] = (".py",)) -> list[str]:
+    hits = []
+    for path in _source_files(suffixes):
+        is_migration = path.suffix == ".sql" and MIGRATIONS in path.parents
+        if path in allowed or is_migration:
+            continue
+        if pattern.search(path.read_text(encoding="utf-8")):
+            hits.append(str(path.relative_to(REPO_ROOT)))
+    return hits
+
+
+def test_only_trace_module_writes_spans():
+    assert _offenders(SPAN_WRITE, {TRACE_WRITER}, (".py", ".sql")) == []
+
+
+def test_fastembed_is_called_in_one_place():
+    assert _offenders(EMBED_CALL, {EMBED_MODULE}) == []
+
+
+def test_no_parallel_kwarg():
+    hits = [
+        str(path.relative_to(REPO_ROOT))
+        for path in _source_files()
+        if PARALLEL_KWARG in path.read_text(encoding="utf-8")
+    ]
+    assert hits == []
+
+
+def test_agent_does_not_import_mcpserver():
+    hits = [
+        str(path.relative_to(REPO_ROOT))
+        for path in sorted(AGENT_PACKAGE.rglob("*.py"))
+        if MCPSERVER_IMPORT.search(path.read_text(encoding="utf-8"))
+    ]
+    assert hits == []
+
+
+def test_mcp_dir_is_not_a_package():
+    assert not (REPO_ROOT / "mcp" / "__init__.py").exists()
