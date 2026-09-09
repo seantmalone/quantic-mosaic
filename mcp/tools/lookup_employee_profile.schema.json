@@ -1,0 +1,313 @@
+{
+  "name": "lookup_employee_profile",
+  "description": "Look up one employee's synthetic HR profile: role, office, work arrangement, tenure at the data snapshot, manager and skip level. An unknown id returns status='not_found'.",
+  "input_schema": {
+    "properties": {
+      "employee_id": {
+        "description": "An employee id, e.g. E1042.",
+        "pattern": "^E1[0-9]{3}$",
+        "title": "Employee Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "employee_id"
+    ],
+    "title": "lookup_employee_profileArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "$defs": {
+      "Office": {
+        "properties": {
+          "office_id": {
+            "title": "Office Id",
+            "type": "string"
+          },
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "entity": {
+            "title": "Entity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "office_id",
+          "city",
+          "country",
+          "timezone",
+          "entity"
+        ],
+        "title": "Office",
+        "type": "object"
+      },
+      "Person": {
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          },
+          "preferred_name": {
+            "title": "Preferred Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id",
+          "preferred_name",
+          "title"
+        ],
+        "title": "Person",
+        "type": "object"
+      }
+    },
+    "description": "The §8.4 tool-5 record, or `{status: not_found}` — every field is optional for that reason.",
+    "properties": {
+      "employee_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Employee Id"
+      },
+      "as_of": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "As Of"
+      },
+      "preferred_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Preferred Name"
+      },
+      "legal_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Legal Name"
+      },
+      "title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Title"
+      },
+      "department": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Department"
+      },
+      "employment_type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Employment Type"
+      },
+      "fte": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Fte"
+      },
+      "level": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Level"
+      },
+      "hire_date": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Hire Date"
+      },
+      "tenure_months_at_as_of": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tenure Months At As Of"
+      },
+      "work_arrangement": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Work Arrangement"
+      },
+      "work_country": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Work Country"
+      },
+      "office": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Office"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "manager": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Person"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "skip_level": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Person"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "status": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Status"
+      },
+      "code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Code"
+      },
+      "hint": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Hint"
+      }
+    },
+    "title": "ProfileOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": true,
+    "open_world_hint": false
+  }
+}

@@ -1,0 +1,236 @@
+{
+  "name": "search_policy_documents",
+  "description": "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with the ids and heading paths a citation needs. Use it to find the passage that answers a policy question; use get_policy_section to read one in full.",
+  "input_schema": {
+    "properties": {
+      "query": {
+        "description": "The question, in the user's words.",
+        "maxLength": 500,
+        "minLength": 3,
+        "title": "Query",
+        "type": "string"
+      },
+      "k": {
+        "default": 5,
+        "description": "How many chunks to return.",
+        "maximum": 10,
+        "minimum": 1,
+        "title": "K",
+        "type": "integer"
+      },
+      "doc_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Restrict the search to these doc_ids.",
+        "title": "Doc Ids"
+      },
+      "topic": {
+        "anyOf": [
+          {
+            "enum": [
+              "pto",
+              "holidays",
+              "remote_work",
+              "tax_location",
+              "expenses",
+              "travel",
+              "data_security",
+              "benefits",
+              "onboarding",
+              "equipment",
+              "leave",
+              "conduct",
+              "performance",
+              "compensation",
+              "approvals",
+              "escalation"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Restrict the search to one corpus topic.",
+        "title": "Topic"
+      },
+      "min_dense_score": {
+        "default": 0.26,
+        "description": "Minimum DENSE score (dense_score = 1 - cosine_distance). Applied to the full fused candidate list, then the top-k is taken from the survivors. Never applied to rrf_score, whose maximum is ~0.033.",
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Min Dense Score",
+        "type": "number"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "title": "search_policy_documentsArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "$defs": {
+      "SearchHit": {
+        "description": "One ranked chunk, carrying every field a citation needs (R2.5).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "doc_title": {
+            "title": "Doc Title",
+            "type": "string"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "dense_score": {
+            "title": "Dense Score",
+            "type": "number"
+          },
+          "bm25_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bm25 Rank"
+          },
+          "rrf_score": {
+            "title": "Rrf Score",
+            "type": "number"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "char_start": {
+            "title": "Char Start",
+            "type": "integer"
+          },
+          "char_end": {
+            "title": "Char End",
+            "type": "integer"
+          },
+          "quarantined": {
+            "default": false,
+            "title": "Quarantined",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "doc_id",
+          "doc_title",
+          "heading_path",
+          "section",
+          "rank",
+          "dense_score",
+          "rrf_score",
+          "snippet",
+          "char_start",
+          "char_end"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      }
+    },
+    "description": "The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.",
+    "properties": {
+      "hits": {
+        "items": {
+          "$ref": "#/$defs/SearchHit"
+        },
+        "title": "Hits",
+        "type": "array"
+      },
+      "query_used": {
+        "title": "Query Used",
+        "type": "string"
+      },
+      "k_effective": {
+        "title": "K Effective",
+        "type": "integer"
+      },
+      "k_source": {
+        "enum": [
+          "model",
+          "override",
+          "default"
+        ],
+        "title": "K Source",
+        "type": "string"
+      },
+      "strategy": {
+        "enum": [
+          "hybrid_rrf",
+          "dense_only"
+        ],
+        "title": "Strategy",
+        "type": "string"
+      },
+      "total_candidates": {
+        "title": "Total Candidates",
+        "type": "integer"
+      },
+      "embed_ms": {
+        "title": "Embed Ms",
+        "type": "integer"
+      },
+      "search_ms": {
+        "title": "Search Ms",
+        "type": "integer"
+      },
+      "index_version": {
+        "title": "Index Version",
+        "type": "string"
+      }
+    },
+    "required": [
+      "hits",
+      "query_used",
+      "k_effective",
+      "k_source",
+      "strategy",
+      "total_candidates",
+      "embed_ms",
+      "search_ms",
+      "index_version"
+    ],
+    "title": "SearchOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": true,
+    "open_world_hint": false
+  }
+}

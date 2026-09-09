@@ -1,0 +1,239 @@
+{
+  "name": "draft_hr_email",
+  "description": "Draft an HR email to the employee's manager, skip level or an HR team. Requires human confirmation: called without a valid one-time confirmation_token it returns status='confirmation_required' and writes nothing. Never invent a token.",
+  "input_schema": {
+    "properties": {
+      "employee_id": {
+        "description": "An employee id, e.g. E1042.",
+        "pattern": "^E1[0-9]{3}$",
+        "title": "Employee Id",
+        "type": "string"
+      },
+      "recipient_role": {
+        "description": "Who the draft is addressed to.",
+        "enum": [
+          "manager",
+          "skip_level",
+          "people_ops",
+          "it_security",
+          "payroll"
+        ],
+        "title": "Recipient Role",
+        "type": "string"
+      },
+      "purpose": {
+        "description": "What the email is for.",
+        "maxLength": 500,
+        "minLength": 5,
+        "title": "Purpose",
+        "type": "string"
+      },
+      "key_points": {
+        "description": "The points to make, one per bullet.",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 8,
+        "minItems": 1,
+        "title": "Key Points",
+        "type": "array"
+      },
+      "tone": {
+        "default": "neutral",
+        "description": "How the draft should read.",
+        "enum": [
+          "neutral",
+          "formal",
+          "warm"
+        ],
+        "title": "Tone",
+        "type": "string"
+      },
+      "confirmation_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Supplied by the application after the user clicks Confirm. Never by you.",
+        "title": "Confirmation Token"
+      }
+    },
+    "required": [
+      "employee_id",
+      "recipient_role",
+      "purpose",
+      "key_points"
+    ],
+    "title": "draft_hr_emailArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "description": "The §8.4 tool-9 result, or the five-key `CONFIRMATION_REQUIRED` rejection on `isError`.",
+    "properties": {
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "draft_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Draft Id"
+      },
+      "to_role": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "To Role"
+      },
+      "to_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "To Name"
+      },
+      "subject": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Subject"
+      },
+      "body": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Body"
+      },
+      "created_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Created At"
+      },
+      "sent": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Sent"
+      },
+      "mock": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Mock"
+      },
+      "code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Code"
+      },
+      "action": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Action"
+      },
+      "human_summary": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Human Summary"
+      },
+      "arguments_preview": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Arguments Preview"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "EmailOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": false,
+    "destructive_hint": false,
+    "idempotent_hint": false
+  }
+}

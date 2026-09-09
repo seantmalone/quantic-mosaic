@@ -1,0 +1,225 @@
+{
+  "name": "create_mock_hr_ticket",
+  "description": "Open a mock HR ticket in one of the HR queues. Requires human confirmation: called without a valid one-time confirmation_token it returns status='confirmation_required' with a human_summary to show the user, and writes nothing. Never invent a token.",
+  "input_schema": {
+    "properties": {
+      "employee_id": {
+        "description": "An employee id, e.g. E1042.",
+        "pattern": "^E1[0-9]{3}$",
+        "title": "Employee Id",
+        "type": "string"
+      },
+      "queue": {
+        "description": "Which HR queue the ticket belongs in.",
+        "enum": [
+          "hr-general",
+          "hr-timeoff",
+          "hr-benefits",
+          "hr-mobility",
+          "hr-relations",
+          "it-equipment"
+        ],
+        "title": "Queue",
+        "type": "string"
+      },
+      "summary": {
+        "description": "One-line ticket title.",
+        "maxLength": 200,
+        "minLength": 5,
+        "title": "Summary",
+        "type": "string"
+      },
+      "details": {
+        "description": "The full request.",
+        "maxLength": 4000,
+        "minLength": 10,
+        "title": "Details",
+        "type": "string"
+      },
+      "priority": {
+        "default": "normal",
+        "description": "Ticket priority.",
+        "enum": [
+          "low",
+          "normal",
+          "high"
+        ],
+        "title": "Priority",
+        "type": "string"
+      },
+      "confirmation_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Supplied by the application after the user clicks Confirm. Never by you.",
+        "title": "Confirmation Token"
+      }
+    },
+    "required": [
+      "employee_id",
+      "queue",
+      "summary",
+      "details"
+    ],
+    "title": "create_mock_hr_ticketArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "description": "The §8.4 tool-8 result, or the five-key `CONFIRMATION_REQUIRED` rejection on `isError`.",
+    "properties": {
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "ticket_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ticket Id"
+      },
+      "queue": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Queue"
+      },
+      "priority": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Priority"
+      },
+      "created_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Created At"
+      },
+      "employee_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Employee Id"
+      },
+      "mock": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Mock"
+      },
+      "url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Url"
+      },
+      "code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Code"
+      },
+      "action": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Action"
+      },
+      "human_summary": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Human Summary"
+      },
+      "arguments_preview": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Arguments Preview"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "TicketOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": false,
+    "destructive_hint": false,
+    "idempotent_hint": false
+  }
+}

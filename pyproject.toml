@@ -57,6 +57,12 @@ extend-exclude = ["*.md"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.isort]
+# The repository has a top-level `mcp/` directory (DOCS.8, spec §4.1). It is not a package — it has
+# no `__init__.py`, so `import mcp` resolves to the installed SDK — but isort classifies by directory
+# name, so without this it would sort the SDK into the first-party block.
+known-third-party = ["mcp", "mcp_types"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]

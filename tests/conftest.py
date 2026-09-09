@@ -30,3 +30,9 @@ def writer(store):
     yield writer
     trace_module.set_writer(None)
     trace_module.clear_span_listeners()
+
+
+@pytest.fixture(scope="session")
+def anyio_backend():
+    """asyncio only — the MCP tests are async and the project runs no trio anywhere."""
+    return "asyncio"

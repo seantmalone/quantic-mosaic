@@ -1,0 +1,139 @@
+{
+  "name": "list_policy_documents",
+  "description": "List the HR policy documents in the corpus with their topics, sizes and effective dates. Call it to find a doc_id, or to say honestly what the corpus does and does not cover.",
+  "input_schema": {
+    "properties": {
+      "topic": {
+        "anyOf": [
+          {
+            "enum": [
+              "pto",
+              "holidays",
+              "remote_work",
+              "tax_location",
+              "expenses",
+              "travel",
+              "data_security",
+              "benefits",
+              "onboarding",
+              "equipment",
+              "leave",
+              "conduct",
+              "performance",
+              "compensation",
+              "approvals",
+              "escalation"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Only documents carrying this topic.",
+        "title": "Topic"
+      }
+    },
+    "title": "list_policy_documentsArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "$defs": {
+      "DocumentSummary": {
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "doc_title": {
+            "title": "Doc Title",
+            "type": "string"
+          },
+          "source_format": {
+            "title": "Source Format",
+            "type": "string"
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "section_count": {
+            "title": "Section Count",
+            "type": "integer"
+          },
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "estimated_pages": {
+            "title": "Estimated Pages",
+            "type": "number"
+          },
+          "effective_date": {
+            "title": "Effective Date",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "doc_title",
+          "source_format",
+          "topics",
+          "section_count",
+          "chunk_count",
+          "estimated_pages",
+          "effective_date",
+          "version"
+        ],
+        "title": "DocumentSummary",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "documents": {
+        "items": {
+          "$ref": "#/$defs/DocumentSummary"
+        },
+        "title": "Documents",
+        "type": "array"
+      },
+      "corpus_version": {
+        "title": "Corpus Version",
+        "type": "string"
+      },
+      "total_documents": {
+        "title": "Total Documents",
+        "type": "integer"
+      },
+      "total_pages": {
+        "title": "Total Pages",
+        "type": "number"
+      },
+      "total_chunks": {
+        "title": "Total Chunks",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "documents",
+      "corpus_version",
+      "total_documents",
+      "total_pages",
+      "total_chunks"
+    ],
+    "title": "CatalogOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": true,
+    "open_world_hint": false
+  }
+}

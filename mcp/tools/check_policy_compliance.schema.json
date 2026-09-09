@@ -1,0 +1,375 @@
+{
+  "name": "check_policy_compliance",
+  "description": "Evaluate one HR scenario against the policy rules deterministically: which requirements apply, which are met, which approvals the request needs and what to do next, every requirement citing the policy section that backs it. No model judgement is involved.",
+  "input_schema": {
+    "properties": {
+      "scenario": {
+        "description": "Which of the seven scenarios to evaluate.",
+        "enum": [
+          "international_remote",
+          "domestic_remote",
+          "pto_request",
+          "expense_claim",
+          "equipment_request",
+          "benefits_change",
+          "conduct_escalation"
+        ],
+        "title": "Scenario",
+        "type": "string"
+      },
+      "employee_id": {
+        "description": "An employee id, e.g. E1042.",
+        "pattern": "^E1[0-9]{3}$",
+        "title": "Employee Id",
+        "type": "string"
+      },
+      "policy_topics": {
+        "default": [],
+        "description": "Advisory: topics the caller wants covered. Never changes a verdict.",
+        "items": {
+          "type": "string"
+        },
+        "title": "Policy Topics",
+        "type": "array"
+      },
+      "parameters": {
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "default": {},
+        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, duration_days, start_date, days, amount_usd, category, transaction_date. Notice days are always computed by the engine from start_date against the data snapshot and any supplied notice value is ignored.",
+        "title": "Parameters",
+        "type": "object"
+      }
+    },
+    "required": [
+      "scenario",
+      "employee_id"
+    ],
+    "title": "check_policy_complianceArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "$defs": {
+      "Approval": {
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "reason",
+          "doc_id",
+          "heading_path"
+        ],
+        "title": "Approval",
+        "type": "object"
+      },
+      "Citation": {
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "doc_id",
+          "heading_path"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "Evidence": {
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "doc_id",
+          "heading_path",
+          "snippet"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "Requirement": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "met": {
+            "title": "Met",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "fact_key": {
+            "title": "Fact Key",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Evidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "met",
+          "reason",
+          "fact_key"
+        ],
+        "title": "Requirement",
+        "type": "object"
+      }
+    },
+    "description": "The §8.4 tool-4 result, or `{status: not_found}` for an unknown employee id.",
+    "properties": {
+      "scenario": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Scenario"
+      },
+      "verdict": {
+        "anyOf": [
+          {
+            "enum": [
+              "compliant",
+              "conditional",
+              "non_compliant",
+              "insufficient_evidence"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Verdict"
+      },
+      "as_of": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "As Of"
+      },
+      "requirements": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/Requirement"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Requirements"
+      },
+      "unmet": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Unmet"
+      },
+      "approvals_required": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/Approval"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Approvals Required"
+      },
+      "next_steps": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Next Steps"
+      },
+      "escalate_to": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Escalate To"
+      },
+      "citations": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Citations"
+      },
+      "rules_version": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Rules Version"
+      },
+      "status": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Status"
+      },
+      "code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Code"
+      },
+      "hint": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Hint"
+      }
+    },
+    "title": "ComplianceOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": true,
+    "open_world_hint": false
+  }
+}

@@ -1,0 +1,274 @@
+{
+  "name": "lookup_benefits_status",
+  "description": "Benefits eligibility and current elections at the data snapshot, with the open-enrollment window. Eligibility is computed against the snapshot, not today's date.",
+  "input_schema": {
+    "properties": {
+      "employee_id": {
+        "description": "An employee id, e.g. E1042.",
+        "pattern": "^E1[0-9]{3}$",
+        "title": "Employee Id",
+        "type": "string"
+      },
+      "plan_type": {
+        "default": "all",
+        "description": "Filter the elections; 'all' returns them all.",
+        "enum": [
+          "medical",
+          "dental",
+          "vision",
+          "retirement_401k",
+          "hsa",
+          "fsa",
+          "life",
+          "all"
+        ],
+        "title": "Plan Type",
+        "type": "string"
+      }
+    },
+    "required": [
+      "employee_id"
+    ],
+    "title": "lookup_benefits_statusArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "$defs": {
+      "Election": {
+        "properties": {
+          "plan_type": {
+            "title": "Plan Type",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "plan_name": {
+            "title": "Plan Name",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "effective_date": {
+            "title": "Effective Date",
+            "type": "string"
+          },
+          "employee_cost_monthly": {
+            "title": "Employee Cost Monthly",
+            "type": "number"
+          }
+        },
+        "required": [
+          "plan_type",
+          "plan_id",
+          "plan_name",
+          "tier",
+          "effective_date",
+          "employee_cost_monthly"
+        ],
+        "title": "Election",
+        "type": "object"
+      },
+      "EnrollmentWindow": {
+        "properties": {
+          "open": {
+            "title": "Open",
+            "type": "string"
+          },
+          "close": {
+            "title": "Close",
+            "type": "string"
+          }
+        },
+        "required": [
+          "open",
+          "close"
+        ],
+        "title": "EnrollmentWindow",
+        "type": "object"
+      }
+    },
+    "description": "The §8.4 tool-7 result, or `{status: not_found}` — every field is optional for that reason.",
+    "properties": {
+      "employee_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Employee Id"
+      },
+      "plan_year": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Plan Year"
+      },
+      "as_of": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "As Of"
+      },
+      "eligible": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Eligible"
+      },
+      "eligibility_reason": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Eligibility Reason"
+      },
+      "waiting_period_ends": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Waiting Period Ends"
+      },
+      "elections": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/Election"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Elections"
+      },
+      "dependents": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Dependents"
+      },
+      "open_enrollment_window": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/EnrollmentWindow"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "qualifying_life_event_window_open": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Qualifying Life Event Window Open"
+      },
+      "policy_doc_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Policy Doc Id"
+      },
+      "status": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Status"
+      },
+      "code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Code"
+      },
+      "hint": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Hint"
+      }
+    },
+    "title": "BenefitsOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": true,
+    "open_world_hint": false
+  }
+}

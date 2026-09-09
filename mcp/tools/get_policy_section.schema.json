@@ -1,0 +1,259 @@
+{
+  "name": "get_policy_section",
+  "description": "Return the verbatim text of one section of a policy document, with its neighbours and siblings for context. Supply exactly one of heading_path or chunk_id. Neither is an error; if both are given, chunk_id wins and resolved_by says so.",
+  "input_schema": {
+    "properties": {
+      "doc_id": {
+        "description": "The document to read, e.g. 'pto-and-holidays'.",
+        "title": "Doc Id",
+        "type": "string"
+      },
+      "heading_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "The ' > '-joined heading path, e.g. 'Accrual > Standard Accrual Rates'.",
+        "title": "Heading Path"
+      },
+      "chunk_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "A chunk id from search_policy_documents.",
+        "title": "Chunk Id"
+      },
+      "include_neighbors": {
+        "default": false,
+        "description": "Also concatenate the previous and next sections into text.",
+        "title": "Include Neighbors",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "doc_id"
+    ],
+    "title": "get_policy_sectionArguments",
+    "type": "object"
+  },
+  "output_schema": {
+    "description": "The §8.4 tool-2 result, or `{status: not_found}` when the selector resolves to nothing.",
+    "properties": {
+      "doc_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Doc Id"
+      },
+      "doc_title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Doc Title"
+      },
+      "source_format": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Format"
+      },
+      "heading_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Heading Path"
+      },
+      "section": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Section"
+      },
+      "text": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Text"
+      },
+      "char_start": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Char Start"
+      },
+      "char_end": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Char End"
+      },
+      "chunk_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Chunk Ids"
+      },
+      "resolved_by": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Resolved By"
+      },
+      "prev_section": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Prev Section"
+      },
+      "next_section": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Next Section"
+      },
+      "sibling_sections": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Sibling Sections"
+      },
+      "status": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Status"
+      },
+      "code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Code"
+      },
+      "hint": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Hint"
+      }
+    },
+    "title": "SectionOutput",
+    "type": "object"
+  },
+  "annotations": {
+    "read_only_hint": true,
+    "open_world_hint": false
+  }
+}
