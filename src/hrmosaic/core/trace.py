@@ -436,6 +436,10 @@ class TurnBuffer:
         """Buffer an already-timed span. Returns its id."""
         if self.closed:
             raise RuntimeError(f"turn {self.turn_id} is closed; reopen it before writing spans")
+        if payload is None:
+            # The row is still written — losing a record is worse than writing a thin one — but a
+            # payload that cannot be parsed back into the §10.2 union is a bug in the caller.
+            logger.warning("span %s/%s was recorded with no payload", kind, name)
         span_id = span_id or new_span_id()
         started_at = started_at if started_at is not None else now_micros()
         ended_at = ended_at if ended_at is not None else now_micros()

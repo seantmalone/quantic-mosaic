@@ -121,3 +121,40 @@ def test_a_raising_span_body_is_recorded_as_an_error_span(turn, store):
     assert (row["kind"], row["name"], row["status"]) == ("error", "hybrid_rrf", "error")
     assert "boom" in row["error_message"]
     assert json.loads(row["payload_json"])["error_kind"] == "ZeroDivisionError"
+
+
+def test_reopening_a_turn_continues_the_span_sequence_and_the_live_rail(writer, store):
+    """§10.3 step 4 — `/chat/confirm` resumes a parked turn; the rail and `seq` carry on."""
+    turn = writer.start_turn(SessionSpec(), user_message="Open the PTO request for me.")
+    _emit_three_spans(turn)
+    turn.close(outcome="awaiting_confirmation", stop_reason="awaiting_confirmation")
+
+    seen = []
+    register_span_listener(seen.append)
+    resumed = writer.reopen_turn(turn.turn_id, awaiting_ms=25_000)
+
+    assert resumed.turn_id == turn.turn_id
+    assert store.execute("SELECT outcome, ended_at FROM turns").one() == {"outcome": None, "ended_at": None}
+
+    with resumed.span("tool_call", "create_mock_hr_ticket") as span:
+        span.set_payload(
+            ToolCallPayload(
+                server="hr-mcp",
+                transport="http",
+                tool_name="create_mock_hr_ticket",
+                arguments={"employee_id": "E1042", "confirmation_token": "cf_secret"},
+                result_json=json.dumps({"ticket_id": "MOCK-HR-000123"}),
+            )
+        )
+    resumed.close(outcome="answered", stop_reason="complete")
+
+    assert [event.seq for event in seen] == [4]
+    assert seen[0].payload["arguments"]["confirmation_token"] == "[REDACTED]"
+
+    spans = store.execute("SELECT seq, kind FROM spans ORDER BY seq").dicts()
+    assert [row["seq"] for row in spans] == [1, 2, 3, 4]
+    row = store.execute("SELECT * FROM turns").one()
+    assert (row["resumed_count"], row["awaiting_ms"]) == (1, 25_000)
+    assert row["outcome"] == "answered"
+    assert row["tool_calls"] == 2  # one from each half of the turn
+    assert row["duration_ms"] >= 0  # the parked time is excluded from every latency statistic

@@ -131,9 +131,12 @@ class SqliteStore:
             try:
                 for stmt in stmts:
                     results.append(_rows_from_cursor(self._connection.execute(stmt.sql, tuple(stmt.params))))
-            except sqlite3.Error as exc:
+            except BaseException as exc:
+                # Whatever went wrong, the connection must not be left inside a transaction.
                 self._connection.execute("ROLLBACK")
-                raise StoreError(f"{exc} [{stmt.sql.strip().splitlines()[0]}]") from exc
+                if isinstance(exc, sqlite3.Error):
+                    raise StoreError(f"{exc} [{stmt.sql.strip().splitlines()[0]}]") from exc
+                raise
             self._connection.execute("COMMIT")
             return results
 
