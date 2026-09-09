@@ -157,3 +157,41 @@ async def test_the_canonical_form_ignores_the_token_and_key_order():
         confirm.canonical_arguments(TICKET_ARGUMENTS)
     )
     assert "confirmation_token" not in confirm.canonical_arguments({**TICKET_ARGUMENTS, "confirmation_token": "x"})
+
+
+DRAFT_ARGUMENTS = {
+    "employee_id": "E1042",
+    "recipient_role": "manager",
+    "purpose": "PTO request: 15-17 September 2026",
+    "key_points": ["Three consecutive days", "Handover notes are written up"],
+    "tone": "neutral",
+}
+
+
+async def draft(arguments: dict) -> dict:
+    async with Client(build_hr_server()) as client:
+        result = await client.call_tool("draft_hr_email", arguments)
+    body = json.loads(result.content[0].text)
+    assert result.structured_content == body
+    return body
+
+
+async def test_the_second_write_tool_is_gated_by_the_same_mechanism(seeded):
+    rejected_body = await draft(DRAFT_ARGUMENTS)
+    assert rejected_body["code"] == "CONFIRMATION_REQUIRED"
+    assert rejected_body["action"] == "draft_hr_email"
+    assert "token" not in json.dumps(rejected_body).lower()
+    assert writes(seeded) == 0
+
+    token = mint(seeded, arguments=DRAFT_ARGUMENTS, tool_name="draft_hr_email")
+    body = await draft({**DRAFT_ARGUMENTS, "confirmation_token": token})
+    assert body["status"] == "drafted"
+    assert body["draft_id"].startswith("MOCK-EMAIL-")
+    assert body["to_name"] == "Dana Whitfield", "resolved from the synthetic org map, not invented"
+    assert body["sent"] is False and body["mock"] is True
+    assert "Three consecutive days" in body["body"]
+
+    row = seeded.execute("SELECT * FROM mock_writes").one()
+    assert row["kind"] == "hr_email"
+    assert row["id"] == body["draft_id"]
+    assert writes(seeded) == 1

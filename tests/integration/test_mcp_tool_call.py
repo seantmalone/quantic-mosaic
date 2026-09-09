@@ -154,3 +154,49 @@ async def test_the_returned_retrieval_span_persists_through_the_one_trace_writer
     assert persisted["k_source"] == "default"
     assert persisted["chunks"] and persisted["index_version"]
     assert writer.store.execute("SELECT retrievals FROM turns WHERE id = ?", (turn.turn_id,)).scalar() == 1
+
+
+async def test_lookup_employee_profile_carries_the_org_chain(open_session):
+    async with open_session() as session:
+        result = await session.call_tool("lookup_employee_profile", {"employee_id": "E1042"}, meta=BASE_META)
+    body = read_both_ways(result)
+    assert body["as_of"] == "2026-09-01"
+    assert body["tenure_months_at_as_of"] == 45
+    assert body["office"]["city"] == "Boston"
+    assert body["manager"]["employee_id"] == "E1007"
+    assert body["skip_level"]["employee_id"] == "E1002"
+
+
+async def test_lookup_benefits_status_is_eligible_against_the_snapshot(open_session):
+    async with open_session() as session:
+        waiting = await session.call_tool("lookup_benefits_status", {"employee_id": "E1108"}, meta=BASE_META)
+        enrolled = await session.call_tool(
+            "lookup_benefits_status", {"employee_id": "E1042", "plan_type": "medical"}, meta=BASE_META
+        )
+    not_yet = read_both_ways(waiting)
+    assert not_yet["eligible"] is False
+    assert not_yet["waiting_period_ends"] == "2026-11-13", "after the 2026-09-01 snapshot"
+    assert not_yet["elections"] == []
+    assert not_yet["open_enrollment_window"] == {"open": "2026-11-01", "close": "2026-11-21"}
+
+    covered = read_both_ways(enrolled)
+    assert covered["eligible"] is True
+    assert [election["plan_type"] for election in covered["elections"]] == ["medical"]
+    assert covered["policy_doc_id"] == "benefits-and-open-enrollment"
+
+
+async def test_list_policy_documents_computes_its_aggregates(open_session):
+    async with open_session() as session:
+        everything = await session.call_tool("list_policy_documents", {}, meta=BASE_META)
+        pto_only = await session.call_tool("list_policy_documents", {"topic": "pto"}, meta=BASE_META)
+    catalog = read_both_ways(everything)
+    assert catalog["total_documents"] == len(catalog["documents"]) == 14
+    assert catalog["total_chunks"] == sum(document["chunk_count"] for document in catalog["documents"])
+    assert catalog["total_pages"] == pytest.approx(
+        round(sum(document["estimated_pages"] for document in catalog["documents"]), 1)
+    )
+    assert catalog["corpus_version"]
+
+    filtered = read_both_ways(pto_only)
+    assert 0 < filtered["total_documents"] < catalog["total_documents"]
+    assert all("pto" in document["topics"] for document in filtered["documents"])

@@ -262,6 +262,6 @@ rather than assumed.
   directory (DOCS.8), so isort classified the SDK as first-party by directory name and moved
   `from mcp import Client` into the local block. `[tool.ruff.lint.isort] known-third-party = ["mcp",
   "mcp_types"]` is the fix — the linter's version of the §4.1 shadowing hazard.
-- **Suite after P5: 764 tests, `make lint` clean, `pytest -q` pristine** (from 590 at P6). The nine
+- **Suite after P5: 771 tests, `make lint` clean, `pytest -q` pristine** (from 590 at P6). The nine
   tool schemas are generated from a live `tools/list` and committed under `mcp/tools/`, and
   `python scripts/gen_tool_schemas.py && git diff --exit-code mcp/tools/` is clean.
