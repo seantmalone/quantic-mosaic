@@ -60,10 +60,13 @@ HEADING_SEPARATOR = " > "
 
 #: The only keys a `rules.yml` requirement may carry. Spec §8.4 fixes the tool's output schema and says
 #: each requirement names a `fact_key`, a `doc_id` and a `heading_path`; it does not say how a
-#: requirement is *evaluated*, and that is P5's decision to make (`corpus/rules.yml` says so in its own
-#: header). Asserting the vocabulary here means evaluation fields cannot arrive in the data file as an
-#: undiscussed inheritance — adding one is an edit to this line, in the same commit, on the record.
+#: requirement is *evaluated*. P5 owns that and adopted P2's proposed grammar, so `check`, `applies_when`
+#: and `blocking` joined the set here in the same commit as `mcpserver/rules.py` — the deliberate,
+#: reviewed act the header of `corpus/rules.yml` asks for. The grammar's own closed vocabulary is
+#: enforced by the engine and by `tests/unit/test_rules_engine.py`, not here.
 REQUIREMENT_KEYS = frozenset({"id", "text", "fact_key", "doc_id", "heading_path"})
+#: Keys a requirement may carry but need not: a requirement with no `check` is not evaluable.
+OPTIONAL_REQUIREMENT_KEYS = frozenset({"check", "applies_when", "blocking"})
 
 #: The running footer `scripts/build_pdf.py` stamps on every PDF page. Dropping it is the
 #: "drop the boilerplate footer" half of the uniform cleaning in spec §6.2.
@@ -288,12 +291,13 @@ def check_corpus() -> list[str]:
     for scenario, spec in sorted(load_rules().items()):
         for requirement in spec["requirements"]:
             rid = f"rules.yml: {scenario}.{requirement['id']}"
-            extra = sorted(set(requirement) - REQUIREMENT_KEYS)
+            extra = sorted(set(requirement) - REQUIREMENT_KEYS - OPTIONAL_REQUIREMENT_KEYS)
             if extra:
                 problems.append(
-                    f"{rid}: unexpected requirement key(s) {extra} — how a requirement is EVALUATED is "
-                    f"P5's to define (see the header of rules.yml); add the key to REQUIREMENT_KEYS in "
-                    f"scripts/check_facts.py in the same commit if that is a deliberate decision"
+                    f"{rid}: unexpected requirement key(s) {extra} — the requirement grammar is a closed "
+                    f"vocabulary (see the header of rules.yml); add the key to REQUIREMENT_KEYS or "
+                    f"OPTIONAL_REQUIREMENT_KEYS in scripts/check_facts.py in the same commit if that is a "
+                    f"deliberate decision"
                 )
             missing = sorted(REQUIREMENT_KEYS - set(requirement))
             if missing:

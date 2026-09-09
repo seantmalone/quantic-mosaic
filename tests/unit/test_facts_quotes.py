@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from scripts.check_facts import (
+    OPTIONAL_REQUIREMENT_KEYS,
     REQUIREMENT_KEYS,
     check_corpus,
     load_documents,
@@ -76,11 +77,11 @@ def test_every_rule_requirement_resolves(scenario, requirement):
 
 @pytest.mark.parametrize(("scenario", "requirement"), REQUIREMENTS, ids=REQUIREMENT_IDS)
 def test_requirement_carries_exactly_the_agreed_keys(scenario, requirement):
-    # `rules.yml` names requirements and their evidence anchors. How a requirement is *evaluated* —
-    # `met`, `unmet`, the `verdict`, which approvals and next steps apply — is a user-facing output
-    # spec §8.4 leaves to the rule engine, so P5 owns it and P2 does not pre-commit a vocabulary here.
-    # Adding an evaluation field to the data file must be a deliberate edit to `REQUIREMENT_KEYS`.
-    assert set(requirement) == set(REQUIREMENT_KEYS), scenario
+    # `rules.yml` names requirements and their evidence anchors; how a requirement is *evaluated* is a
+    # user-facing output spec §8.4 leaves to the rule engine, so P2 did not pre-commit a vocabulary and
+    # P5 adopted one deliberately (`check` / `applies_when` / `blocking`, see the header of rules.yml).
+    # Adding any further field to the data file must be a deliberate edit to these two frozensets.
+    assert REQUIREMENT_KEYS <= set(requirement) <= REQUIREMENT_KEYS | OPTIONAL_REQUIREMENT_KEYS, scenario
 
 
 @pytest.mark.parametrize("scenario", sorted(RULES), ids=sorted(RULES))
@@ -88,9 +89,11 @@ def test_scenario_carries_the_approvals_and_next_steps_of_the_output_schema(scen
     spec = RULES[scenario]
     assert set(spec) == {"title", "topics", "escalate_to", "requirements", "approvals_required", "next_steps"}
     for approval in spec["approvals_required"]:
-        assert set(approval) == {"role", "reason", "doc_id", "heading_path"}
+        assert set(approval) == {"role", "reason", "doc_id", "heading_path", "applies_when"}
         assert approval["heading_path"] in DOCUMENTS[approval["doc_id"]].heading_paths
-    assert all(isinstance(step, str) and step for step in spec["next_steps"])
+    for step in spec["next_steps"]:
+        assert set(step) == {"text", "applies_when"}
+        assert isinstance(step["text"], str) and step["text"]
 
 
 def test_check_facts_script_is_green():
