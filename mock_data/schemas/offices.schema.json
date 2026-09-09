@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mosaicrobotics.example/schemas/mock_data/offices.schema.json",
+  "$defs": {
+    "Office": {
+      "additionalProperties": false,
+      "properties": {
+        "office_id": {
+          "enum": [
+            "bos",
+            "atx",
+            "ber",
+            "remote-us"
+          ],
+          "title": "Office Id",
+          "type": "string"
+        },
+        "city": {
+          "title": "City",
+          "type": "string"
+        },
+        "country": {
+          "enum": [
+            "US",
+            "DE"
+          ],
+          "title": "Country",
+          "type": "string"
+        },
+        "timezone": {
+          "title": "Timezone",
+          "type": "string"
+        },
+        "entity": {
+          "title": "Entity",
+          "type": "string"
+        },
+        "holiday_calendar_id": {
+          "title": "Holiday Calendar Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "office_id",
+        "city",
+        "country",
+        "timezone",
+        "entity",
+        "holiday_calendar_id"
+      ],
+      "title": "Office",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "_synthetic": {
+      "const": true,
+      "description": "Always true; this file is fabricated.",
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "_notice": {
+      "description": "Human-readable synthetic-data notice.",
+      "title": "Notice",
+      "type": "string"
+    },
+    "_generator": {
+      "description": "The command that produced this file.",
+      "title": "Generator",
+      "type": "string"
+    },
+    "as_of": {
+      "description": "The snapshot date every date-bearing value is stated against.",
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/Office"
+      },
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_synthetic",
+    "_notice",
+    "_generator",
+    "as_of",
+    "records"
+  ],
+  "title": "OfficesFile",
+  "type": "object"
+}

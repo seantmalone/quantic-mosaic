@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mosaicrobotics.example/schemas/mock_data/holidays_2026.schema.json",
+  "$defs": {
+    "Holiday": {
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "description": "The calendar date of the holiday itself.",
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "observed": {
+          "description": "The date the company observes it; US weekend dates shift.",
+          "format": "date",
+          "title": "Observed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "name",
+        "observed"
+      ],
+      "title": "Holiday",
+      "type": "object"
+    },
+    "HolidayCalendar": {
+      "additionalProperties": false,
+      "properties": {
+        "holiday_calendar_id": {
+          "title": "Holiday Calendar Id",
+          "type": "string"
+        },
+        "country": {
+          "enum": [
+            "US",
+            "DE"
+          ],
+          "title": "Country",
+          "type": "string"
+        },
+        "holidays": {
+          "items": {
+            "$ref": "#/$defs/Holiday"
+          },
+          "title": "Holidays",
+          "type": "array"
+        }
+      },
+      "required": [
+        "holiday_calendar_id",
+        "country",
+        "holidays"
+      ],
+      "title": "HolidayCalendar",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "_synthetic": {
+      "const": true,
+      "description": "Always true; this file is fabricated.",
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "_notice": {
+      "description": "Human-readable synthetic-data notice.",
+      "title": "Notice",
+      "type": "string"
+    },
+    "_generator": {
+      "description": "The command that produced this file.",
+      "title": "Generator",
+      "type": "string"
+    },
+    "as_of": {
+      "description": "The snapshot date every date-bearing value is stated against.",
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/HolidayCalendar"
+      },
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_synthetic",
+    "_notice",
+    "_generator",
+    "as_of",
+    "records"
+  ],
+  "title": "Holidays2026File",
+  "type": "object"
+}

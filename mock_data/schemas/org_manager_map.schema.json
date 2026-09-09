@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mosaicrobotics.example/schemas/mock_data/org_manager_map.schema.json",
+  "$defs": {
+    "OrgNode": {
+      "additionalProperties": false,
+      "properties": {
+        "employee_id": {
+          "pattern": "^E1[0-9]{3}$",
+          "title": "Employee Id",
+          "type": "string"
+        },
+        "manager_id": {
+          "anyOf": [
+            {
+              "pattern": "^E1[0-9]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Manager Id"
+        },
+        "skip_level_id": {
+          "anyOf": [
+            {
+              "pattern": "^E1[0-9]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Skip Level Id"
+        },
+        "direct_reports": {
+          "items": {
+            "pattern": "^E1[0-9]{3}$",
+            "type": "string"
+          },
+          "title": "Direct Reports",
+          "type": "array"
+        }
+      },
+      "required": [
+        "employee_id",
+        "manager_id",
+        "skip_level_id",
+        "direct_reports"
+      ],
+      "title": "OrgNode",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "_synthetic": {
+      "const": true,
+      "description": "Always true; this file is fabricated.",
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "_notice": {
+      "description": "Human-readable synthetic-data notice.",
+      "title": "Notice",
+      "type": "string"
+    },
+    "_generator": {
+      "description": "The command that produced this file.",
+      "title": "Generator",
+      "type": "string"
+    },
+    "as_of": {
+      "description": "The snapshot date every date-bearing value is stated against.",
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/OrgNode"
+      },
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_synthetic",
+    "_notice",
+    "_generator",
+    "as_of",
+    "records"
+  ],
+  "title": "OrgManagerMapFile",
+  "type": "object"
+}

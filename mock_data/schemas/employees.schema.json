@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mosaicrobotics.example/schemas/mock_data/employees.schema.json",
+  "$defs": {
+    "Employee": {
+      "additionalProperties": false,
+      "description": "One synthetic employee. No SSN, no date of birth, no home address — by design.",
+      "properties": {
+        "employee_id": {
+          "pattern": "^E1[0-9]{3}$",
+          "title": "Employee Id",
+          "type": "string"
+        },
+        "preferred_name": {
+          "title": "Preferred Name",
+          "type": "string"
+        },
+        "legal_name": {
+          "title": "Legal Name",
+          "type": "string"
+        },
+        "email": {
+          "pattern": "^[a-z][a-z.\\-]*@mosaicrobotics\\.example$",
+          "title": "Email",
+          "type": "string"
+        },
+        "work_phone": {
+          "description": "Reserved fictional block (+1-555-01xx); never a real number.",
+          "pattern": "^\\+1-555-01[0-9]{2}$",
+          "title": "Work Phone",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "department": {
+          "title": "Department",
+          "type": "string"
+        },
+        "employment_type": {
+          "enum": [
+            "full_time",
+            "part_time",
+            "contractor",
+            "intern"
+          ],
+          "title": "Employment Type",
+          "type": "string"
+        },
+        "fte": {
+          "maximum": 1.0,
+          "minimum": 0.1,
+          "title": "Fte",
+          "type": "number"
+        },
+        "hire_date": {
+          "format": "date",
+          "title": "Hire Date",
+          "type": "string"
+        },
+        "tenure_months_at_as_of": {
+          "description": "Whole months of service completed at as_of.",
+          "minimum": 0,
+          "title": "Tenure Months At As Of",
+          "type": "integer"
+        },
+        "level": {
+          "title": "Level",
+          "type": "string"
+        },
+        "office_id": {
+          "enum": [
+            "bos",
+            "atx",
+            "ber",
+            "remote-us"
+          ],
+          "title": "Office Id",
+          "type": "string"
+        },
+        "work_country": {
+          "enum": [
+            "US",
+            "DE"
+          ],
+          "title": "Work Country",
+          "type": "string"
+        },
+        "work_arrangement": {
+          "enum": [
+            "onsite",
+            "hybrid",
+            "remote"
+          ],
+          "title": "Work Arrangement",
+          "type": "string"
+        },
+        "manager_id": {
+          "anyOf": [
+            {
+              "pattern": "^E1[0-9]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null for the one org root.",
+          "title": "Manager Id"
+        },
+        "cost_center": {
+          "pattern": "^CC-[0-9]{4}$",
+          "title": "Cost Center",
+          "type": "string"
+        }
+      },
+      "required": [
+        "employee_id",
+        "preferred_name",
+        "legal_name",
+        "email",
+        "work_phone",
+        "title",
+        "department",
+        "employment_type",
+        "fte",
+        "hire_date",
+        "tenure_months_at_as_of",
+        "level",
+        "office_id",
+        "work_country",
+        "work_arrangement",
+        "manager_id",
+        "cost_center"
+      ],
+      "title": "Employee",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "_synthetic": {
+      "const": true,
+      "description": "Always true; this file is fabricated.",
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "_notice": {
+      "description": "Human-readable synthetic-data notice.",
+      "title": "Notice",
+      "type": "string"
+    },
+    "_generator": {
+      "description": "The command that produced this file.",
+      "title": "Generator",
+      "type": "string"
+    },
+    "as_of": {
+      "description": "The snapshot date every date-bearing value is stated against.",
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/Employee"
+      },
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_synthetic",
+    "_notice",
+    "_generator",
+    "as_of",
+    "records"
+  ],
+  "title": "EmployeesFile",
+  "type": "object"
+}

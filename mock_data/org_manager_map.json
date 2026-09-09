@@ -1,0 +1,182 @@
+{
+  "_synthetic": true,
+  "_notice": "SYNTHETIC DATA — fictional persons, generated for the Quantic AI Engineering project. No real employee information.",
+  "_generator": "scripts/gen_mock_data.py seed=1729",
+  "as_of": "2026-09-01",
+  "records": [
+    {
+      "employee_id": "E1002",
+      "manager_id": "E1003",
+      "skip_level_id": null,
+      "direct_reports": [
+        "E1007",
+        "E1192"
+      ]
+    },
+    {
+      "employee_id": "E1003",
+      "manager_id": null,
+      "skip_level_id": null,
+      "direct_reports": [
+        "E1002",
+        "E1014",
+        "E1017",
+        "E1043",
+        "E1047",
+        "E1175"
+      ]
+    },
+    {
+      "employee_id": "E1007",
+      "manager_id": "E1002",
+      "skip_level_id": "E1003",
+      "direct_reports": [
+        "E1042",
+        "E1050",
+        "E1057",
+        "E1077",
+        "E1096",
+        "E1108"
+      ]
+    },
+    {
+      "employee_id": "E1014",
+      "manager_id": "E1003",
+      "skip_level_id": null,
+      "direct_reports": [
+        "E1162",
+        "E1172"
+      ]
+    },
+    {
+      "employee_id": "E1017",
+      "manager_id": "E1003",
+      "skip_level_id": null,
+      "direct_reports": [
+        "E1110",
+        "E1122",
+        "E1132"
+      ]
+    },
+    {
+      "employee_id": "E1042",
+      "manager_id": "E1007",
+      "skip_level_id": "E1002",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1043",
+      "manager_id": "E1003",
+      "skip_level_id": null,
+      "direct_reports": [
+        "E1133",
+        "E1138",
+        "E1145"
+      ]
+    },
+    {
+      "employee_id": "E1047",
+      "manager_id": "E1003",
+      "skip_level_id": null,
+      "direct_reports": [
+        "E1078"
+      ]
+    },
+    {
+      "employee_id": "E1050",
+      "manager_id": "E1007",
+      "skip_level_id": "E1002",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1057",
+      "manager_id": "E1007",
+      "skip_level_id": "E1002",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1077",
+      "manager_id": "E1007",
+      "skip_level_id": "E1002",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1078",
+      "manager_id": "E1047",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1096",
+      "manager_id": "E1007",
+      "skip_level_id": "E1002",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1108",
+      "manager_id": "E1007",
+      "skip_level_id": "E1002",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1110",
+      "manager_id": "E1017",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1122",
+      "manager_id": "E1017",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1132",
+      "manager_id": "E1017",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1133",
+      "manager_id": "E1043",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1138",
+      "manager_id": "E1043",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1145",
+      "manager_id": "E1043",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1162",
+      "manager_id": "E1014",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1172",
+      "manager_id": "E1014",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1175",
+      "manager_id": "E1003",
+      "skip_level_id": null,
+      "direct_reports": []
+    },
+    {
+      "employee_id": "E1192",
+      "manager_id": "E1002",
+      "skip_level_id": "E1003",
+      "direct_reports": []
+    }
+  ]
+}

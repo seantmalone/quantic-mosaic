@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mosaicrobotics.example/schemas/mock_data/pto_balances.schema.json",
+  "$defs": {
+    "PtoBalance": {
+      "additionalProperties": false,
+      "description": "A PTO balance stated at the snapshot.\n\n`remaining_days == accrued_ytd - used_ytd - pending_days + carryover_unexpired`, where\n`carryover_unexpired` is 0.0 once `carryover_expires_on` has passed at `as_of`.",
+      "properties": {
+        "employee_id": {
+          "pattern": "^E1[0-9]{3}$",
+          "title": "Employee Id",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "accrual_rate_days_per_month": {
+          "minimum": 0,
+          "title": "Accrual Rate Days Per Month",
+          "type": "number"
+        },
+        "accrual_fact_key": {
+          "description": "The corpus/facts.yml entry this rate comes from.",
+          "title": "Accrual Fact Key",
+          "type": "string"
+        },
+        "accrued_ytd": {
+          "minimum": 0,
+          "title": "Accrued Ytd",
+          "type": "number"
+        },
+        "used_ytd": {
+          "minimum": 0,
+          "title": "Used Ytd",
+          "type": "number"
+        },
+        "pending_days": {
+          "minimum": 0,
+          "title": "Pending Days",
+          "type": "number"
+        },
+        "carryover_from_prior_year": {
+          "minimum": 0,
+          "title": "Carryover From Prior Year",
+          "type": "number"
+        },
+        "carryover_expires_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Carryover Expires On"
+        },
+        "remaining_days": {
+          "minimum": 0,
+          "title": "Remaining Days",
+          "type": "number"
+        },
+        "blackout_dates": {
+          "items": {
+            "format": "date",
+            "type": "string"
+          },
+          "title": "Blackout Dates",
+          "type": "array"
+        },
+        "next_accrual_date": {
+          "format": "date",
+          "title": "Next Accrual Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "employee_id",
+        "as_of",
+        "accrual_rate_days_per_month",
+        "accrual_fact_key",
+        "accrued_ytd",
+        "used_ytd",
+        "pending_days",
+        "carryover_from_prior_year",
+        "carryover_expires_on",
+        "remaining_days",
+        "blackout_dates",
+        "next_accrual_date"
+      ],
+      "title": "PtoBalance",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "_synthetic": {
+      "const": true,
+      "description": "Always true; this file is fabricated.",
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "_notice": {
+      "description": "Human-readable synthetic-data notice.",
+      "title": "Notice",
+      "type": "string"
+    },
+    "_generator": {
+      "description": "The command that produced this file.",
+      "title": "Generator",
+      "type": "string"
+    },
+    "as_of": {
+      "description": "The snapshot date every date-bearing value is stated against.",
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/PtoBalance"
+      },
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_synthetic",
+    "_notice",
+    "_generator",
+    "as_of",
+    "records"
+  ],
+  "title": "PtoBalancesFile",
+  "type": "object"
+}

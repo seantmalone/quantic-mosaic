@@ -43,3 +43,4 @@ jobs:
       - run: python -m hrmosaic.rag.download_model   # a no-op on a cache hit
       - run: python scripts/check_facts.py           # corpus quotes verbatim, heading paths real (P2)
       - run: pytest -q                               # the WHOLE suite
+      - run: python scripts/pii_check.py             # no SSN shapes / non-.example addresses / non-555 numbers

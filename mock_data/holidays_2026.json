@@ -1,0 +1,125 @@
+{
+  "_synthetic": true,
+  "_notice": "SYNTHETIC DATA — fictional persons, generated for the Quantic AI Engineering project. No real employee information.",
+  "_generator": "scripts/gen_mock_data.py seed=1729",
+  "as_of": "2026-09-01",
+  "records": [
+    {
+      "holiday_calendar_id": "us-2026",
+      "country": "US",
+      "holidays": [
+        {
+          "date": "2026-01-01",
+          "name": "New Year's Day",
+          "observed": "2026-01-01"
+        },
+        {
+          "date": "2026-01-19",
+          "name": "Martin Luther King Jr. Day",
+          "observed": "2026-01-19"
+        },
+        {
+          "date": "2026-02-16",
+          "name": "Presidents' Day",
+          "observed": "2026-02-16"
+        },
+        {
+          "date": "2026-05-25",
+          "name": "Memorial Day",
+          "observed": "2026-05-25"
+        },
+        {
+          "date": "2026-06-19",
+          "name": "Juneteenth",
+          "observed": "2026-06-19"
+        },
+        {
+          "date": "2026-07-04",
+          "name": "Independence Day",
+          "observed": "2026-07-03"
+        },
+        {
+          "date": "2026-09-07",
+          "name": "Labor Day",
+          "observed": "2026-09-07"
+        },
+        {
+          "date": "2026-11-26",
+          "name": "Thanksgiving Day",
+          "observed": "2026-11-26"
+        },
+        {
+          "date": "2026-11-27",
+          "name": "Day after Thanksgiving",
+          "observed": "2026-11-27"
+        },
+        {
+          "date": "2026-12-24",
+          "name": "Christmas Eve",
+          "observed": "2026-12-24"
+        },
+        {
+          "date": "2026-12-25",
+          "name": "Christmas Day",
+          "observed": "2026-12-25"
+        }
+      ]
+    },
+    {
+      "holiday_calendar_id": "de-2026",
+      "country": "DE",
+      "holidays": [
+        {
+          "date": "2026-01-01",
+          "name": "Neujahrstag",
+          "observed": "2026-01-01"
+        },
+        {
+          "date": "2026-03-08",
+          "name": "Internationaler Frauentag",
+          "observed": "2026-03-08"
+        },
+        {
+          "date": "2026-04-03",
+          "name": "Karfreitag",
+          "observed": "2026-04-03"
+        },
+        {
+          "date": "2026-04-06",
+          "name": "Ostermontag",
+          "observed": "2026-04-06"
+        },
+        {
+          "date": "2026-05-01",
+          "name": "Tag der Arbeit",
+          "observed": "2026-05-01"
+        },
+        {
+          "date": "2026-05-14",
+          "name": "Christi Himmelfahrt",
+          "observed": "2026-05-14"
+        },
+        {
+          "date": "2026-05-25",
+          "name": "Pfingstmontag",
+          "observed": "2026-05-25"
+        },
+        {
+          "date": "2026-10-03",
+          "name": "Tag der Deutschen Einheit",
+          "observed": "2026-10-03"
+        },
+        {
+          "date": "2026-12-25",
+          "name": "Erster Weihnachtsfeiertag",
+          "observed": "2026-12-25"
+        },
+        {
+          "date": "2026-12-26",
+          "name": "Zweiter Weihnachtsfeiertag",
+          "observed": "2026-12-26"
+        }
+      ]
+    }
+  ]
+}
