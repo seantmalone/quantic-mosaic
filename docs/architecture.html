@@ -273,8 +273,9 @@ footer .mono{font-size:12px}
 
           <g class="node fam-web" data-id="f1-chatui" tabindex="0" aria-label="Chat UI">
             <rect class="tile" x="24" y="100" width="152" height="52" rx="2"/>
-            <text class="t-title" x="34" y="120">Chat UI</text>
-            <text class="t-sub" x="34" y="137">Jinja2 &middot; htmx &middot; Alpine</text>
+            <text class="t-title" x="34" y="118">Chat UI</text>
+            <text class="t-sub" x="34" y="132" style="font-size:9px">Jinja2 &middot; htmx &middot; Alpine</text>
+            <text class="t-sub" x="34" y="145" style="font-size:9px">act-as: 24 + HR admin</text>
           </g>
           <g class="node fam-web" data-id="f1-dash" tabindex="0" aria-label="Observability dashboard">
             <rect class="tile" x="24" y="162" width="152" height="52" rx="2"/>
@@ -287,9 +288,15 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="34" y="261">demo_task_1.sh &middot; _2.sh</text>
           </g>
 
-          <text class="gtitle" x="570" y="74" text-anchor="middle">RENDER FREE WEB SERVICE &mdash; ONE CONTAINER, ONE PROCESS, 0.1 CPU / 512 MB</text>
-          <rect class="boxfill" x="290" y="52" width="560" height="800" rx="4"/>
-          <rect class="box" x="290" y="52" width="560" height="800" rx="4"/>
+          <text class="gtitle" x="570" y="34" text-anchor="middle">RENDER FREE WEB SERVICE &mdash; ONE CONTAINER, ONE PROCESS, 0.1 CPU / 512 MB</text>
+          <rect class="boxfill" x="290" y="12" width="560" height="840" rx="4"/>
+          <rect class="box" x="290" y="12" width="560" height="840" rx="4"/>
+
+          <g class="node fam-web" data-id="f1-access" tabindex="0" aria-label="Access gate">
+            <rect class="tile" x="308" y="44" width="524" height="40" rx="2"/>
+            <text class="t-title" x="322" y="62">Access gate</text>
+            <text class="t-sub" x="322" y="78" style="font-size:9px">APP_ACCESS_TOKEN &middot; ?access= &rarr; cookie &middot; Bearer for API/MCP &middot; personas employee | admin</text>
+          </g>
 
           <g class="node fam-web" data-id="f1-fastapi" tabindex="0" aria-label="FastAPI web app">
             <rect class="tile" x="308" y="88" width="524" height="200" rx="2"/>
@@ -297,12 +304,13 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="322" y="132">GET  /                       (chat UI)</text>
             <text class="t-sub" x="322" y="148">POST /chat &middot; POST /chat/confirm</text>
             <text class="t-sub" x="322" y="164">GET  /chat/stream?turn_id=   (SSE spans)</text>
-            <text class="t-sub" x="322" y="180">GET  /health &middot; GET /ready</text>
-            <text class="t-sub" x="322" y="196">GET  /dashboard/*            (11 pages)</text>
-            <text class="t-sub" x="322" y="212">GET  /api/traces/* &middot; /api/eval/*</text>
-            <text class="t-sub" x="322" y="228">GET  /api/corpus/* &middot; /api/mcp/discovery</text>
-            <text class="t-sub" x="322" y="244">POST /api/mcp/rediscover &middot; /api/dev/reset-sandbox</text>
-            <text class="t-sub" x="322" y="260">GET  /static/*  (vendored htmx, Alpine, Chart.js)</text>
+            <text class="t-sub" x="322" y="180">GET  /access &middot; POST /access &middot; POST /access/logout   (key page, open)</text>
+            <text class="t-sub" x="322" y="196">POST /session/actor          (sets mosaic_actor)</text>
+            <text class="t-sub" x="322" y="212">GET  /health &middot; GET /ready    (open, never gated)</text>
+            <text class="t-sub" x="322" y="228">GET  /dashboard/*            (11 pages, admin persona)</text>
+            <text class="t-sub" x="322" y="244">GET  /api/traces/* &middot; /api/eval/* &middot; /api/corpus/* &middot; /api/mcp/*   (admin)</text>
+            <text class="t-sub" x="322" y="260">POST /api/mcp/rediscover &middot; /api/dev/reset-sandbox   (admin)</text>
+            <text class="t-sub" x="322" y="276">GET  /static/*  (vendored htmx, Alpine, Chart.js &mdash; open)</text>
           </g>
 
           <g class="node fam-agent" data-id="f1-orch" tabindex="0" aria-label="Agent Orchestrator">
@@ -410,11 +418,12 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="952" y="389">11 tables</text>
           </g>
           <g class="node fam-ext" data-id="f1-inspector" tabindex="0" aria-label="External MCP client">
-            <rect class="tile" x="940" y="480" width="228" height="88" rx="2"/>
+            <rect class="tile" x="940" y="480" width="228" height="104" rx="2"/>
             <text class="t-title" x="952" y="502">External MCP client</text>
             <text class="t-sub" x="952" y="521">MCP Inspector, etc.</text>
-            <text class="t-sub" x="952" y="537">reads synthetic data;</text>
-            <text class="t-sub" x="952" y="553">writes need a token</text>
+            <text class="t-sub" x="952" y="537">Authorization: Bearer</text>
+            <text class="t-sub" x="952" y="553">reads synthetic data;</text>
+            <text class="t-sub" x="952" y="569">writes need a token</text>
           </g>
           <g class="node fam-ext" data-id="f1-ci" tabindex="0" aria-label="GitHub Actions">
             <rect class="tile" x="290" y="878" width="320" height="48" rx="2"/>
@@ -531,9 +540,9 @@ footer .mono{font-size:12px}
             <text class="t-step" x="26" y="190">01</text>
             <text class="t-title" x="26" y="209">Request</text>
             <text class="t-sub" x="26" y="228">POST /chat</text>
-            <text class="t-sub" x="26" y="242">session upserted</text>
-            <text class="t-sub" x="26" y="256">turn row inserted</text>
-            <text class="t-sub" x="26" y="270">(synchronous)</text>
+            <text class="t-sub" x="26" y="242">gate + persona</text>
+            <text class="t-sub" x="26" y="256">session upserted</text>
+            <text class="t-sub" x="26" y="270">turn row inserted</text>
           </g>
           <g class="node fam-mcp" data-id="f2-s4" tabindex="0" aria-label="Step 2 MCP discovery">
             <rect class="tile" x="182" y="170" width="148" height="110" rx="2"/>
@@ -957,10 +966,11 @@ footer .mono{font-size:12px}
           <g class="node fam-trace" data-id="f4-sessions" tabindex="0" aria-label="sessions table">
             <rect class="tile" x="16" y="64" width="236" height="104" rx="2"/>
             <text class="t-title" x="28" y="86">sessions</text>
-            <text class="t-sub" x="28" y="106">id (32-hex, = trace_id)</text>
-            <text class="t-sub" x="28" y="122">employee_id &middot; client_label</text>
-            <text class="t-sub" x="28" y="138">eval_run_id &middot; app_version</text>
-            <text class="t-sub" x="28" y="154">deploy_mode &middot; mcp_transport</text>
+            <text class="t-sub" x="28" y="104">id (32-hex, = trace_id)</text>
+            <text class="t-sub" x="28" y="118">employee_id &middot; client_label</text>
+            <text class="t-sub" x="28" y="132">auth_mode &middot; actor_role</text>
+            <text class="t-sub" x="28" y="146">eval_run_id &middot; app_version</text>
+            <text class="t-sub" x="28" y="160">deploy_mode &middot; mcp_transport</text>
           </g>
           <g class="node fam-trace" data-id="f4-turns" tabindex="0" aria-label="turns table">
             <rect class="tile" x="16" y="196" width="236" height="140" rx="2"/>
@@ -1186,11 +1196,12 @@ footer .mono{font-size:12px}
             <rect class="tile" x="348" y="96" width="148" height="132" rx="2"/>
             <text class="t-step" x="358" y="116">03</text>
             <text class="t-title" x="358" y="136">POST /chat</text>
-            <text class="t-sub" x="358" y="156" style="font-size:9.5px">client_label: &quot;eval&quot;</text>
-            <text class="t-sub" x="358" y="170" style="font-size:9.5px">X-Eval-Token header</text>
-            <text class="t-sub" x="358" y="184" style="font-size:9.5px">options{k, strategy,</text>
-            <text class="t-sub" x="358" y="198" style="font-size:9.5px">tools_disabled,</text>
-            <text class="t-sub" x="358" y="212" style="font-size:9.5px">eval_run_id, variant}</text>
+            <text class="t-sub" x="358" y="154" style="font-size:9.5px">client_label: &quot;eval&quot;</text>
+            <text class="t-sub" x="358" y="167" style="font-size:9.5px">Authorization: Bearer</text>
+            <text class="t-sub" x="358" y="180" style="font-size:9.5px">X-Actor: admin</text>
+            <text class="t-sub" x="358" y="193" style="font-size:9.5px">options{k, strategy,</text>
+            <text class="t-sub" x="358" y="206" style="font-size:9.5px">tools_disabled,</text>
+            <text class="t-sub" x="358" y="219" style="font-size:9.5px">eval_run_id, variant}</text>
           </g>
           <g class="node fam-trace" data-id="f5-s4" tabindex="0" aria-label="trace records">
             <rect class="tile" x="514" y="96" width="148" height="132" rx="2"/>
@@ -1402,7 +1413,7 @@ footer .mono{font-size:12px}
             <text class="t-title" x="858" y="338">Live service</text>
             <text class="t-sub" x="858" y="358">healthCheckPath: /health, always 200</text>
             <text class="t-sub" x="858" y="374">/ready 503 until model and index resident</text>
-            <text class="t-sub" x="858" y="390">degradations[]: 4 possible strings</text>
+            <text class="t-sub" x="858" y="390">degradations[]: 5 possible strings</text>
             <text class="t-sub" x="858" y="404">plan free &middot; 0.1 CPU &middot; 512 MB &middot; no disk</text>
           </g>
           <g class="node fam-trace" data-id="f6-cold" tabindex="0" aria-label="cold start">
@@ -1427,7 +1438,7 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="422" y="484">plain: APP_ENV &middot; LLM_PROVIDER &middot; LLM_BASE_URL</text>
             <text class="t-sub" x="422" y="500">LLM_MODEL &middot; OMP_NUM_THREADS</text>
             <text class="t-sub" x="422" y="520" style="font-size:9px">sync: false &mdash; LLM_API_KEY &middot; JUDGE_API_KEY &middot; GROQ_API_KEY</text>
-            <text class="t-sub" x="422" y="534" style="font-size:9px">TURSO_DATABASE_URL &middot; _AUTH_TOKEN &middot; DASHBOARD_TOKEN &middot; EVAL_TOKEN</text>
+            <text class="t-sub" x="422" y="534" style="font-size:9px">TURSO_DATABASE_URL &middot; TURSO_AUTH_TOKEN &middot; APP_ACCESS_TOKEN</text>
           </g>
 
           <g class="edge" data-id="f6-e-t1" data-from="f6-t1" data-to="f6-lint f6-test f6-docker f6-deploy" tabindex="0" aria-label="push trigger">
@@ -1491,16 +1502,19 @@ var D={};
 
 /* ---------- Figure 1: system overview ---------- */
 D["f1-chatui"]={t:"Chat UI",f:"web",p:"The single Jinja page at / where a grader asks a question, watches the agent work and confirms a write. It generates its own turn_id, subscribes to the span stream first, then posts.",
- k:[["Stack","Jinja2 3.1.6 + htmx 2.0.9 + Alpine 3.15.2, vendored"],["Route","GET /"],["Controls","act-as selector over 24 personas, citation chips, live span rail, Confirm / Cancel card, cold-start banner, two demo buttons"],["Snapshot note","“Employee data as of 1 September 2026” under any answer whose tool results carry an as_of"]],
+ k:[["Stack","Jinja2 3.1.6 + htmx 2.0.9 + Alpine 3.15.2, vendored"],["Route","GET /"],["Controls","act-as selector listing the 24 employees plus HR admin, citation chips, live span rail, Confirm / Cancel card, cold-start banner, two demo buttons"],["Persona","the selector POSTs /session/actor {actor}, which sets the mosaic_actor cookie; absent, the actor is E1042"],["Access","the page itself is gated \u2014 the mosaic_access cookie, or the tokenized ?access= link a grader opens once"],["Snapshot note","“Employee data as of 1 September 2026” under any answer whose tool results carry an as_of"]],
  c:["Web App — FastAPI (HTTPS JSON)","Web App — FastAPI (SSE span events)"]};
-D["f1-dash"]={t:"Observability dashboard",f:"web",p:"Eleven server-rendered pages over the same trace rows the API returns. Reads are open by default because the data is entirely synthetic; the three write controls need a token.",
- k:[["Pages","/dashboard, sessions, sessions/{id}, turns, llm, retrieval, tools, safety, mcp, corpus, evals"],["Charts","Chart.js on pages 1, 8 and 11"],["Filters","htmx — date range, client_label, persona, outcome, intent, workflow, tool, rule, variant"],["Write controls","Reset sandbox, Re-discover now, Run smoke eval — all gated by DASHBOARD_TOKEN"]],
+D["f1-dash"]={t:"Observability dashboard",f:"web",p:"Eleven server-rendered pages over the same trace rows the API returns. Every page \u2014 reads included \u2014 requires the admin persona, enforced server-side; the nav link to it is only rendered for that persona, but the server check is the control.",
+ k:[["Pages","/dashboard, sessions, sessions/{id}, turns, llm, retrieval, tools, safety, mcp, corpus, evals"],["Charts","Chart.js on pages 1, 8 and 11"],["Filters","htmx — date range, client_label, persona, outcome, intent, workflow, tool, rule, variant"],["Write controls","Reset sandbox, Re-discover now, Run smoke eval — admin persona only"],["Authorisation","actor from X-Actor (wins) or the mosaic_actor cookie must be \"admin\"; anything else is 403 {\"code\": \"ADMIN_REQUIRED\"}"],["Also admin","/api/traces/*, /api/eval/*, /api/corpus/*, /api/mcp/*"]],
  c:["Web App — FastAPI (GET /dashboard/* and /api/*)"]};
 D["f1-curl"]={t:"curl / API client",f:"web",p:"Both demo tasks also run as plain curl scripts parameterised by BASE_URL, so reproducing the recording needs no browser.",
- k:[["Scripts","scripts/demo_task_1.sh, scripts/demo_task_2.sh"],["Prints","answer, citations, trace and dashboard_url"],["Polling","GET /api/traces/turns/{turn_id} when the 202 fallback is in play"]],
- c:["Web App — FastAPI (POST /chat)"]};
-D["f1-fastapi"]={t:"FastAPI web app",f:"web",p:"One uvicorn worker serving the chat UI, the JSON API, the dashboard, the SSE stream and the mounted MCP sub-app. It is a thin wrapper: validate, authorise privileged options, call the orchestrator, return.",
- k:[["Versions","FastAPI 0.141.1, uvicorn 0.52.4, --workers 1"],["UI","GET / — the chat page"],["Chat","POST /chat, POST /chat/confirm, GET /chat/stream?turn_id="],["Status","GET /health (always 200), GET /ready (503 until resident)"],["API","/api/traces/*, /api/eval/*, /api/corpus/*, /api/mcp/*"],["Mount","app.mount(\"/mcp-server\", server.streamable_http_app())"],["Lifespan","enters mcp.session_manager.run(), registers the SSE listener, applies migrations, imports committed eval results, starts the retention sweep"]],
+ k:[["Scripts","scripts/demo_task_1.sh, scripts/demo_task_2.sh"],["Prints","answer, citations, trace and dashboard_url"],["Polling","GET /api/traces/turns/{turn_id} when the 202 fallback is in play"],["Auth","every call sends Authorization: Bearer $APP_ACCESS_TOKEN; an admin-only call also sends X-Actor: admin"]],
+ c:["Access gate","Web App — FastAPI (POST /chat)"]};
+D["f1-access"]={t:"Access gate",f:"web",p:"One shared secret in front of the whole app. The requirements are silent on authentication, so this is a deliberate minimum: it keeps scanners and drive-by traffic off a public free-tier deployment with a finite quota, and it costs a grader one click on a tokenized link.",
+ k:[["Secret","APP_ACCESS_TOKEN \u2014 sync: false in render.yaml, generated by provision_render.py with secrets.token_urlsafe(32); unset locally means the gate is off"],["On when","APP_ACCESS_TOKEN is set, or APP_ENV != \"local\""],["Order of checks","?access=<token> on any gated GET \u2192 cookie mosaic_access \u2192 header Authorization: Bearer <token>, each compared with secrets.compare_digest"],["?access=","on a match it sets the cookie and 302s to the same URL with the parameter removed, so the token never lingers in the address bar, history, referers or a screen recording; on a mismatch, 401 and the key page"],["mosaic_access","HttpOnly; Secure when the request is https; SameSite=Lax; Path=/; Max-Age 30 days"],["Gated","GET /, POST /chat, POST /chat/confirm, GET /chat/stream, /dashboard/*, /api/*, and the MCP mount /mcp-server/mcp"],["Open","GET /health, GET /ready, GET /static/*, and the key page GET + POST /access; POST /access/logout clears both cookies"],["Fail closed","APP_ENV=render with the token unset \u2014 every gated route returns 403 with a one-line message naming the variable, and /health lists access_token_missing in degradations[]"],["Personas","cookie mosaic_actor, or header X-Actor which wins when present: an employee id matching ^E1[0-9]{3}$ or the literal \"admin\", default E1042. Admin is required server-side for /dashboard/*, /api/traces|eval|corpus|mcp/*, the three dashboard write controls and the privileged /chat options \u2014 otherwise 403 {\"code\": \"ADMIN_REQUIRED\"}"],["Rate limit","ACCESS_RATE_LIMIT_PER_MIN, default 30, per IP on POST /chat and on the MCP mount"],["Rotation","one environment change on Render after grading. The repo is public, so this is a speed bump against scanners and drive-by quota burn, not secrecy"]],
+ c:["Chat UI","Observability dashboard","curl / API client","External MCP client","Web App \u2014 FastAPI"]};
+D["f1-fastapi"]={t:"FastAPI web app",f:"web",p:"One uvicorn worker serving the chat UI, the JSON API, the dashboard, the SSE stream and the mounted MCP sub-app. It is a thin wrapper: check the access gate, resolve the persona, validate, authorise privileged options, call the orchestrator, return.",
+ k:[["Versions","FastAPI 0.141.1, uvicorn 0.52.4, --workers 1"],["UI","GET / — the chat page"],["Chat","POST /chat, POST /chat/confirm, GET /chat/stream?turn_id="],["Access","GET /access + POST /access (the key page) and POST /access/logout \u2014 with /health, /ready and /static/*, the only routes the gate lets through; POST /session/actor, which sets the persona, is itself gated"],["Status","GET /health (always 200), GET /ready (503 until resident) \u2014 both open"],["API","/api/traces/*, /api/eval/*, /api/corpus/*, /api/mcp/*"],["Mount","app.mount(\"/mcp-server\", server.streamable_http_app())"],["Lifespan","enters mcp.session_manager.run(), registers the SSE listener, applies migrations, imports committed eval results, starts the retention sweep"]],
  c:["Agent Orchestrator","Chat UI","Observability dashboard","curl / API client"]};
 D["f1-orch"]={t:"Agent Orchestrator",f:"agent",p:"Routes the turn, runs the act loop against the discovered catalog, applies the six guardrails and synthesises a constrained-JSON answer. It reaches the tools only over the MCP wire — agent code may not import the server package.",
  k:[["Interface","run_turn(req), resume_turn(session_id, turn_id, confirmation_token)"],["Sequence","ensure MCP session → pre-checks → route → act loop → gate → synthesize → flush"],["Budgets","AGENT_MAX_STEPS 6, AGENT_MAX_TOOL_CALLS 8, AGENT_WALL_CLOCK_S 90"],["Completion","the workflow spec decides when a turn is done, not the model"],["Safety","strips any model-supplied confirmation_token before every tools/call"]],
@@ -1512,7 +1526,7 @@ D["f1-guard"]={t:"Guardrails G1–G6",f:"agent",p:"Six pure functions applied in
  k:[["G1 evidence_gate","refuse and redirect when the retrieved evidence is too weak to answer"],["G2 citation_resolvability","every cited chunk_id is resolved against the real index; unresolvable citations are stripped"],["G3 fact_vs_recommendation","a policy_fact with zero citations is relabelled recommendation"],["G4 injection_shield","scans the user message and every piece of new evidence; a matched chunk is quarantined and can never be cited"],["G5 sensitive_escalation","harassment, discrimination, legal, medical and compensation topics escalate rather than answer"],["G6 pii_secret_redaction","runs over every trace payload before persistence"]],
  c:["Agent Orchestrator","Trace Writer (guardrail spans)"]};
 D["f1-mcpserver"]={t:"MCP server",f:"mcp",p:"A real MCP server built by one build_hr_server(deps) factory and mounted on the app that consumes it, so tools/call traffic is genuinely on the wire inside a single process.",
- k:[["SDK","mcp pinned to 2.2.0; from mcp.server.mcpserver import MCPServer"],["Endpoint","http://127.0.0.1:${PORT}/mcp-server/mcp, also publicly reachable"],["Tools","9, each with description, input_schema, output_schema and annotations"],["Concurrency","every handler is async def; CPU-bound work runs via await asyncio.to_thread(...)"],["Errors","schema violation → isError −32602; domain miss → a successful not_found result"]],
+ k:[["SDK","mcp pinned to 2.2.0; from mcp.server.mcpserver import MCPServer"],["Endpoint","http://127.0.0.1:${PORT}/mcp-server/mcp, also reachable from outside with the bearer header"],["Tools","9, each with description, input_schema, output_schema and annotations"],["Concurrency","every handler is async def; CPU-bound work runs via await asyncio.to_thread(...)"],["Errors","schema violation → isError −32602; domain miss → a successful not_found result"]],
  c:["MCP Client (loopback JSON-RPC)","Corpus / RAG tools 1–4","People-data tools 5–7","Gated write tools 8–9","External MCP client"]};
 D["f1-tools-rag"]={t:"Corpus / RAG tools (1–4)",f:"rag",p:"The four tools the router hands a pure policy question. Retrieval lives here, inside the MCP server, which is why per-request k and strategy travel as _meta on the call rather than as a module global.",
  k:[["search_policy_documents","query, k 1–10, doc_ids[], topic enum, min_dense_score default 0.26"],["get_policy_section","doc_id plus exactly one of heading_path or chunk_id, expressed in the schema"],["list_policy_documents","optional topic; every aggregate computed from the documents table at request time"],["check_policy_compliance","7 scenarios; verdict compliant | conditional | non_compliant | insufficient_evidence; zero LLM calls, and each requirement resolves to a real chunk_id"],["Restriction","for intent policy_qa the catalog is hard-restricted to exactly these four"],["Annotations","readOnlyHint: true, openWorldHint: false"]],
@@ -1547,9 +1561,9 @@ D["f1-llm"]={t:"LLM provider",f:"ext",p:"Reached through a ChatModel protocol wi
 D["f1-turso"]={t:"Audit / trace store",f:"trace",p:"Render free has no persistent disk — the filesystem is wiped on every redeploy, restart and spin-down — so the audit log lives in a hosted libSQL database reached over plain HTTP.",
  k:[["Production","TursoHTTPStore — POST &lt;db&gt;/v2/pipeline via httpx 0.28.1"],["Local and CI","SqliteStore → data/runtime/traces.sqlite"],["Interface","execute(sql, params) and batch(stmts); identical SQL and identical numbered migrations on both"],["Tables","sessions, turns, spans, llm_messages, confirmations, mock_writes, llm_cache, eval_runs, eval_results, import_state, schema_migrations"],["Retention","newest 300 sessions; never prunes an eval-linked session or one owning a mock_writes row"]],
  c:["Trace Writer (one batched flush per turn)"]};
-D["f1-inspector"]={t:"External MCP client",f:"ext",p:"The mounted endpoint is publicly reachable on purpose, so a grader can attach MCP Inspector and see the catalog for themselves.",
- k:[["Endpoint","ALL /mcp-server/mcp"],["Exposure","every read tool returns only synthetic data"],["Writes","need a token an external caller cannot obtain, and the rejection leaks nothing"],["Limit","a per-IP rate limit is FastAPI middleware on the mount"]],
- c:["MCP server"]};
+D["f1-inspector"]={t:"External MCP client",f:"ext",p:"The mounted endpoint stays reachable on purpose, so a grader can attach MCP Inspector and see the catalog for themselves \u2014 now with the bearer header, which Inspector supports as a custom header.",
+ k:[["Endpoint","ALL /mcp-server/mcp"],["Auth","Authorization: Bearer $APP_ACCESS_TOKEN; the mount is gated like every other non-open route"],["Exposure","every read tool returns only synthetic data"],["Writes","need a one-time confirmation token an external caller cannot obtain, and the rejection leaks nothing"],["Limit","a per-IP rate limit is FastAPI middleware on the mount, ACCESS_RATE_LIMIT_PER_MIN (default 30)"]],
+ c:["Access gate","MCP server"]};
 D["f1-ci"]={t:"GitHub Actions — ci.yml",f:"ext",p:"One workflow with four jobs. Deployment is a job that needs test and docker, so a red suite skips it rather than racing it.",
  k:[["Jobs","lint, test, docker, deploy"],["Gate","deploy needs: [test, docker]"],["Hook","curl -fsS -X POST $RENDER_DEPLOY_HOOK_URL"],["Platform","Render Auto-Deploy is off, so the hook is the only path from a commit to the service"]],
  c:["Render web service (deploy hook)"]};
@@ -1559,17 +1573,17 @@ D["f1-e-guard"]={t:"Guardrails, applied in-line",f:"edge",p:"The guardrails are 
 D["f1-e-mcpc"]={t:"Tool requests",f:"edge",p:"The orchestrator never touches the wire itself. It hands the client the tool name and arguments the model asked for, and the client turns that into exactly one tools/call.",
  k:[["Stripping","any model-supplied confirmation_token is removed before the call leaves the orchestrator"],["Filtering","the intent filter is applied here, in the schema conversion — never as a global remove_tool on the shared server"]],c:["Agent Orchestrator","MCP Client"]};
 D["f1-e-http"]={t:"HTTPS JSON",f:"edge",p:"The browser posts a chat message and gets the whole turn back in one response — answer, citations, snippets and the concise trace.",
- k:[["Request","POST /chat {message, session_id?, turn_id?, employee_id, client_label, options}"],["Response","200 with answer, answer_blocks[], citations[], trace[], usage, timings, dashboard_url"],["Ids","client-supplied session_id and turn_id are validated and rejected with 409 if reused"]],c:["Chat UI","Web App — FastAPI"]};
+ k:[["Request","POST /chat {message, session_id?, turn_id?, employee_id, client_label, options}"],["Response","200 with answer, answer_blocks[], citations[], trace[], usage, timings, dashboard_url"],["Ids","client-supplied session_id and turn_id are validated and rejected with 409 if reused"],["Through the gate","the request must present the mosaic_access cookie (or Authorization: Bearer for an API client); the persona comes from X-Actor or the mosaic_actor cookie, default E1042"],["Rate limit","per-IP on POST /chat, ACCESS_RATE_LIMIT_PER_MIN, default 30"]],c:["Chat UI","Access gate","Web App — FastAPI"]};
 D["f1-e-sse"]={t:"SSE span events",f:"edge",p:"Spans, not tokens. On 0.1 CPU token streaming buys cosmetics, while a span rail makes the agentic layer visible on camera.",
- k:[["Route","GET /chat/stream?turn_id="],["Events","turn_started, span, turn_completed"],["Order","the UI subscribes before it posts, because POST /chat does not return until the turn is over"],["Fallback","if the browser subscribes late or drops, the UI renders trace[] from the POST response"],["Keepalive","a 15-second heartbeat"]],c:["Web App — FastAPI","Chat UI"]};
-D["f1-e-dash"]={t:"Dashboard reads",f:"edge",p:"Every page renders from a typed view-model produced by the same /api/* endpoint that serves its JSON, so the page and the export cannot disagree.",
- k:[["Pages","GET /dashboard/*"],["JSON","GET /api/traces/*, /api/eval/*, /api/corpus/*, /api/mcp/discovery"],["Export","every page has an Export JSON button hitting its own endpoint"]],c:["Observability dashboard","Web App — FastAPI"]};
+ k:[["Route","GET /chat/stream?turn_id="],["Events","turn_started, span, turn_completed"],["Order","the UI subscribes before it posts, because POST /chat does not return until the turn is over"],["Fallback","if the browser subscribes late or drops, the UI renders trace[] from the POST response"],["Keepalive","a 15-second heartbeat"],["Through the gate","GET /chat/stream is gated like the rest; the EventSource carries the mosaic_access cookie automatically"]],c:["Web App — FastAPI","Access gate","Chat UI"]};
+D["f1-e-dash"]={t:"Dashboard reads",f:"edge",p:"Every page renders from a typed view-model produced by the same /api/* endpoint that serves its JSON, so the page and the export cannot disagree. Both halves need the admin persona, and the check is server-side on every route \u2014 hiding the nav link is presentation, not access control.",
+ k:[["Pages","GET /dashboard/* \u2014 admin persona required, reads included"],["JSON","GET /api/traces/*, /api/eval/*, /api/corpus/*, /api/mcp/* \u2014 same requirement"],["Refusal","403 {\"code\": \"ADMIN_REQUIRED\"} when the resolved actor is not \"admin\""],["Export","every page has an Export JSON button hitting its own endpoint"]],c:["Observability dashboard","Access gate","Web App — FastAPI"]};
 D["f1-e-curl"]={t:"curl scripts",f:"edge",p:"The same contract endpoint, driven from a shell so the demo is reproducible without the UI.",
- k:[["Body","client_label: \"demo\""],["Privileged options","refused unless client_label is \"eval\" and a valid X-Eval-Token is present"]],c:["curl / API client","Web App — FastAPI"]};
+ k:[["Body","client_label: \"demo\""],["Headers","Authorization: Bearer $APP_ACCESS_TOKEN, and X-Actor when the script needs a persona other than E1042"],["Privileged options","refused unless client_label is \"eval\" and the resolved persona is admin \u2014 on the deployed service that implies a valid access token"]],c:["curl / API client","Access gate","Web App — FastAPI"]};
 D["f1-e-run"]={t:"run_turn() · resume_turn()",f:"edge",p:"The web layer stays thin. resume_turn rehydrates from the store, because the act loop's state was in-process and is gone once /chat returned.",
  k:[["Rehydrated from","that turn's llm_messages rows, retrieval spans, tool_call spans and the count of act-purpose llm_calls"],["Asserted","the resumed synthesis prompt contains the pre-confirmation evidence — a resume that silently re-retrieved fails the test"]],c:["Web App — FastAPI","Agent Orchestrator"]};
 D["f1-e-rpc"]={t:"Loopback JSON-RPC",f:"edge",p:"The one architectural bet the whole MCP story rests on: real JSON-RPC over real HTTP to 127.0.0.1, in one process, so nothing is a disguised function call.",
- k:[["Methods","initialize, tools/list, tools/call"],["Cost","roughly 1–3 ms against a multi-second provider call"],["Constraint","the single uvicorn worker serving POST /chat is the same worker servicing the loopback request, so every handler is async and every CPU-bound call runs in a thread"],["Span","exactly one mcp_discovery span per turn, carrying the cached catalog, catalog_sha and handshake_ms"]],c:["MCP Client","MCP server"]};
+ k:[["Methods","initialize, tools/list, tools/call"],["Cost","roughly 1–3 ms against a multi-second provider call"],["Constraint","the single uvicorn worker serving POST /chat is the same worker servicing the loopback request, so every handler is async and every CPU-bound call runs in a thread"],["Auth","the mount is gated, so every loopback tools/list and tools/call carries Authorization: Bearer $APP_ACCESS_TOKEN when the gate is on"],["Span","exactly one mcp_discovery span per turn, carrying the cached catalog, catalog_sha and handshake_ms"]],c:["MCP Client","Access gate","MCP server"]};
 D["f1-e-sql"]={t:"vec0 KNN + FTS5 bm25",f:"edge",p:"Both arms run against one read-only file, are filtered before fusion, and are combined with reciprocal rank fusion so no score normalisation is needed.",
  k:[["Dense","embed_query → vec0 KNN k=20; dense_score = 1 − cosine_distance"],["Lexical","chunks_fts MATCH bm25(), top 20"],["Fusion","RRF with k₀ = 60, then the cut on min_dense_score, then top k (default 5)"],["Fill","BM25-only candidates are scored from their stored embeddings, so dense_score is never null"],["Never","the threshold filters dense_score, never rrf_score, whose maximum is about 0.033"]],c:["Corpus / RAG tools 1–4","RAG Index"]};
 D["f1-e-embed"]={t:"embed_query()",f:"edge",p:"Exactly one query embed per retrieval, asserted by a unit test. The fill step reuses that vector rather than re-embedding chunk text.",
@@ -1584,14 +1598,14 @@ D["f1-e-llm"]={t:"Chat completions with tools",f:"edge",p:"The tool array handed
  k:[["Purposes","route, act, synthesize, repair, judge, decompose"],["Recorded","provider, model, tokens, ttfb_ms, finish_reason, retry_count, cache_hit, limiter_wait_ms, provider_failover, structured_output_mode"],["Prompt bytes","stored verbatim in llm_messages, outside payload_json so the 32 KB cap can never truncate them"]],c:["Agent Orchestrator","LLM Provider"]};
 D["f1-e-store"]={t:"One batched flush per turn",f:"edge",p:"All spans, all llm_messages rows and the closing UPDATE on turns go in one round trip — two writes per turn rather than per span.",
  k:[["Turso","one /v2/pipeline request"],["Reopen","a confirm sets ended_at NULL, clears outcome, increments resumed_count and continues seq; a second flush closes the turn again"],["Caps","32 KB per span payload, 128 KB for llm_call, 8 KB per string; truncated=1 and payload_bytes record the truth"]],c:["Trace Writer","Audit / trace store"]};
-D["f1-e-inspect"]={t:"Public MCP endpoint",f:"edge",p:"Deliberately reachable from outside so the MCP claim can be verified independently of this app's own UI.",
- k:[["Path","/mcp-server/mcp"],["Reads","synthetic data only"],["Writes","refused without a token, and the refusal carries no token"]],c:["External MCP client","MCP server"]};
+D["f1-e-inspect"]={t:"Public MCP endpoint",f:"edge",p:"Deliberately reachable from outside so the MCP claim can be verified independently of this app's own UI \u2014 with the bearer header, which MCP Inspector supports as a custom header.",
+ k:[["Path","/mcp-server/mcp"],["Header","Authorization: Bearer $APP_ACCESS_TOKEN"],["Reads","synthetic data only"],["Writes","refused without a one-time confirmation token, and the refusal carries no token"],["Limit","per-IP rate limit on the mount, ACCESS_RATE_LIMIT_PER_MIN"]],c:["External MCP client","Access gate","MCP server"]};
 D["f1-e-deploy"]={t:"Render deploy hook",f:"edge",p:"The single path from a commit to the running service, curled by a job that cannot run unless test and docker are green.",
  k:[["Secret","RENDER_DEPLOY_HOOK_URL"],["Then","wait_for_deploy.py --timeout 900, then smoke_deployed.py"],["Platform","autoDeploy: false in render.yaml"]],c:["GitHub Actions — ci.yml","Web App — FastAPI"]};
 
 /* ---------- Figure 2: one chat turn ---------- */
-D["f2-s1"]={t:"01 · Request",f:"web",p:"The session row is upserted and the turn row inserted synchronously, before anything else, so the stream and the dashboard can see a turn in flight.",
- k:[["Body","message, session_id?, turn_id?, employee_id (default E1042), client_label, options"],["Unprivileged","only options.k, bounded ge=1 le=10"],["Privileged","retrieval_strategy, tools_disabled, eval_run_id, variant — 403 without client_label \"eval\" and a valid X-Eval-Token"],["Recorded","app_version, deploy_mode, mcp_transport, cold_start, process_uptime_ms"]],c:["02 · MCP discovery"]};
+D["f2-s1"]={t:"01 · Request",f:"web",p:"The access gate runs first \u2014 cookie or bearer \u2014 then the persona is resolved, and only then is the session row upserted and the turn row inserted synchronously, so the stream and the dashboard can see a turn in flight.",
+ k:[["Gate","mosaic_access cookie or Authorization: Bearer, compared with secrets.compare_digest; no match is 401 and the key page"],["Persona","X-Actor header (wins) or the mosaic_actor cookie \u2014 an id matching ^E1[0-9]{3}$ or \"admin\"; default E1042"],["Body","message, session_id?, turn_id?, employee_id (default E1042), client_label, options"],["Unprivileged","only options.k, bounded ge=1 le=10"],["Privileged","retrieval_strategy, tools_disabled, eval_run_id, variant \u2014 accepted only with client_label == \"eval\" in the admin persona: 403 {\"code\": \"ADMIN_REQUIRED\"} when the persona is not admin, 403 {\"code\": \"PRIVILEGED_OPTION_REFUSED\", \"field\": \u2026} when it is admin but the label is not \"eval\""],["Recorded","app_version, deploy_mode, mcp_transport, cold_start, process_uptime_ms"]],c:["02 · MCP discovery"]};
 D["f2-s2"]={t:"03 · Pre-checks",f:"agent",p:"Three deterministic checks before any model call, which saves free-tier quota on the cases that never needed a model.",
  k:[["Checks","employee-id regex, out-of-corpus keyword list, G4 injection scan of the user message"],["Cost","zero LLM calls"]],c:["04 · Route"]};
 D["f2-s3"]={t:"04 · Route",f:"agent",p:"The decision to answer from retrieval alone, to use tools, to clarify or to refuse is taken here, once, and written down as a plan span.",
@@ -1694,7 +1708,7 @@ D["f3-eb67"]={t:"Then",f:"edge",p:"The turn closes with both the answer and the 
 
 /* ---------- Figure 4: trace and audit model ---------- */
 D["f4-sessions"]={t:"sessions",f:"trace",p:"One row per conversation. The id doubles as the root trace_id, so a session id is all you need to find everything that happened.",
- k:[["id","32-hex, secrets.token_hex(16), deliberately not seeded"],["client_label","web | api | eval | demo, client-suppliable; eval_judge | maintenance, server-only"],["eval_run_id","non-null exactly when the session came from an eval run"],["Environment","app_version (git sha), deploy_mode, mcp_transport, cold_start"],["Privacy","user_agent_hash is sha256[:16]; raw IPs and User-Agent strings are never stored"]],c:["turns"]};
+ k:[["id","32-hex, secrets.token_hex(16), deliberately not seeded"],["client_label","web | api | eval | demo, client-suppliable; eval_judge | maintenance, server-only"],["eval_run_id","non-null exactly when the session came from an eval run"],["auth_mode","cookie | bearer | open, NOT NULL with a CHECK \u2014 how the session got past the access gate"],["actor_role","employee | admin, NOT NULL with a CHECK; both columns are shown on the session rows and filters of dashboard pages 1 and 2"],["Environment","app_version (git sha), deploy_mode, mcp_transport, cold_start"],["Privacy","user_agent_hash is sha256[:16]; raw IPs and User-Agent strings are never stored"]],c:["turns"]};
 D["f4-turns"]={t:"turns",f:"trace",p:"One row per exchange, carrying the rollups the dashboard and the latency statistics read without touching the span table.",
  k:[["Outcome","answered | clarify | refused | escalated | awaiting_confirmation | partial | error | configuration_required | maintenance"],["stop_reason","11 values, including max_steps, max_tool_calls, timeout and guardrail"],["Rollups","llm_calls, tool_calls, retrievals, guardrail_hits, tokens in/out"],["Decomposition","llm_ms, retrieval_ms, tool_ms, store_ms"],["Cold classification","process_uptime_ms &lt; 60000 means cold"],["Confirmation","resumed_count, and awaiting_ms excluded from every latency statistic"]],c:["sessions","spans"]};
 D["f4-spans"]={t:"spans",f:"trace",p:"The atom of the audit trail. OTel-shaped naming was borrowed so a later exporter would be a small adapter, but no OTel SDK is shipped.",
@@ -1722,7 +1736,7 @@ D["f4-k-err"]={t:"kind: error",f:"agent",p:"Errors are records, not exceptions e
 D["f4-conf"]={t:"confirmations",f:"data",p:"The whole write gate is this table plus about sixty lines of validation inside the MCP server. There is no HMAC, no action digest and no separate used-token table.",
  k:[["token","secrets.token_urlsafe(32), primary key, minted only in web/"],["arguments_json","the exact proposed arguments, canonically serialised"],["Lifetime","10-minute expires_at; used_at non-null once consumed"],["user_response","confirmed | declined — a declined row is never returned to any client"],["Validation","token exists, unused, unexpired, confirmed, tool_name matches, and canonical arguments equal"]],c:["mock_writes","confirmation spans"]};
 D["f4-mockw"]={t:"mock_writes",f:"data",p:"The mock-action sandbox, written only by the MCP server package. The foreign key is what makes “no write without a confirmation” a schema fact rather than a promise.",
- k:[["id","MOCK-HR-000123 or MOCK-EMAIL-000045, allocated by the store"],["Columns","kind, created_at, session_id, turn_id, span_id, employee_id, payload_json"],["Constraint","confirmation_token NOT NULL REFERENCES confirmations(token)"],["Durability","retention never prunes a session owning a mock_writes row, nor a confirmations row one references"],["Reset","POST /api/dev/reset-sandbox, token-gated"]],c:["confirmations"]};
+ k:[["id","MOCK-HR-000123 or MOCK-EMAIL-000045, allocated by the store"],["Columns","kind, created_at, session_id, turn_id, span_id, employee_id, payload_json"],["Constraint","confirmation_token NOT NULL REFERENCES confirmations(token)"],["Durability","retention never prunes a session owning a mock_writes row, nor a confirmations row one references"],["Reset","POST /api/dev/reset-sandbox \u2014 admin persona only; 403 {\"code\": \"ADMIN_REQUIRED\"} otherwise"]],c:["confirmations"]};
 D["f4-c1"]={t:"Reader 1 — POST /chat trace[]",f:"web",p:"The concise trace the contract endpoint returns is a projection of every span of the turn, with no kind filtered out.",
  k:[["Entry","{seq, kind, name, duration_ms, status, summary, args_preview?, result_preview?, detail_url}"],["Asserted","the set of seq values equals the set of the turn's span seq values — the concise trace and the dashboard are provably the same records"],["Selected tools","the plan span's selected_tools, then one tool_call entry each"],["Escalation","the guardrail entry with rule_id G5, verdict escalate"],["Gated turns","the first response's trace[] is a documented strict prefix; equality holds again on the resumed response"]],c:["spans"]};
 D["f4-c2"]={t:"Reader 2 — the SSE stream",f:"web",p:"Each closed span is fanned out to the subscribers of that turn as it happens, so the rail is real time without a second logging path.",
@@ -1749,7 +1763,7 @@ D["f5-s1"]={t:"01 · dataset.yaml",f:"ext",p:"Twenty-six items in a fixed order 
 D["f5-s2"]={t:"02 · Runner",f:"ext",p:"About four hundred lines of pydantic, httpx and stdlib statistics. Items run strictly sequentially behind the token-bucket limiter.",
  k:[["Commands","make eval, make ablation"],["Target","EVAL_TARGET_BASE_URL — local for calibration, the live Render URL for the published run"],["Warm-up","a discarded /health, one throwaway /chat, then polling until uptime ≥ 60 s, so all 26 scored turns are warm by construction"],["Local runs","timing fields are stored but rendered greyed out and labelled “local runner — not representative”"],["Judge spans","written into a synthetic eval_judge session; the runner asserts its store backend matches the target's"]],c:["03 · POST /chat","the three variants"]};
 D["f5-s3"]={t:"03 · POST /chat",f:"web",p:"Evaluation goes through the front door. That is the only configuration channel — no process restart and no environment mutation between variants.",
- k:[["Headers","X-Eval-Token"],["Body","client_label: \"eval\" plus options {k, retrieval_strategy, tools_disabled, eval_run_id, variant}"],["Fail closed","when the resolved token is empty, privileged options are always refused, so a misconfigured run fails loudly instead of quietly measuring baseline three times"],["Refusal","403 {\"code\": \"PRIVILEGED_OPTION_REFUSED\", \"field\": …} — never a silent ignore"]],c:["04 · Trace records"]};
+ k:[["Headers","Authorization: Bearer $APP_ACCESS_TOKEN and X-Actor: admin"],["Body","client_label: \"eval\" plus options {k, retrieval_strategy, tools_disabled, eval_run_id, variant}"],["Fail closed","privileged options require the admin persona \u2014 on the graded deployment that implies a valid access token \u2014 so a misconfigured run fails loudly instead of quietly measuring baseline three times"],["Refusal","403 {\"code\": \"ADMIN_REQUIRED\"} outside the admin persona; 403 {\"code\": \"PRIVILEGED_OPTION_REFUSED\", \"field\": …} as admin with client_label != \"eval\" — never a silent ignore"]],c:["04 · Trace records"]};
 D["f5-s4"]={t:"04 · Trace records",f:"trace",p:"Each item produces a real session and a real turn, indistinguishable in structure from a grader's own, which is what makes the score-to-trace link work in both local and deployed mode.",
  k:[["Stamped","sessions.eval_run_id"],["Linked","eval_results.session_id and eval_results.turn_id"],["Phase","run_phase 'scored' or 'cold_probe'; every quality denominator filters on 'scored'"],["Imported","committed results are upserted at boot by core/archive.py, idempotently and by sha256, so a cold database still renders full evaluation pages"]],c:["05 · Deterministic scorers"]};
 D["f5-s5"]={t:"05 · Deterministic scorers",f:"rag",p:"Most metric families are assertions over our own records that no library implements. They need no model and no network.",
@@ -1801,13 +1815,13 @@ D["f6-hook"]={t:"Render deploy hook",f:"ext",p:"Belt and braces: the CI gate mak
 D["f6-build"]={t:"Render build",f:"ext",p:"The index is built on the two-CPU builder and ships inside the image, so a cold start opens a file instead of indexing ~280 chunks.",
  k:[["Base","python:3.12-slim; onnxruntime and numpy wheels are manylinux"],["Model","baked with a build step, about 64 MB — a cold start must never download it"],["Verify","python -m hrmosaic.rag.ingest --verify-manifest &amp;&amp; python -m hrmosaic.rag.index --selftest"],["Selftest","a fixed query must return tax-and-location-addendum at rank 1 with a real dense score, and the index chunk count must equal the committed manifest's line count"],["Start","sh -c so ${PORT} is expanded at run time, because Render injects it"]],c:["Live service"]};
 D["f6-live"]={t:"Live service",f:"web",p:"Degradation is a status string, never a 5xx, so a provider hiccup or a slow model load never makes the platform restart-loop the instance.",
- k:[["healthCheckPath","/health, always 200 while the process is up"],["/ready","503 until the ONNX model and the index are resident; warm-up issues one loopback tools/call, not a direct import"],["degradations[]","llm_api_key_missing, index_model_mismatch, mcp_disconnected, trace_store_unreachable — exactly four possible strings"],["Reports","live rss_mb and rss_peak_mb; the dashboard plots turns.rss_mb_at_end"],["Budgets","750 instance-hours per workspace per month and 500 build minutes; a script warns above 600 and 400"]],c:["Cold start"]};
+ k:[["healthCheckPath","/health, always 200 while the process is up"],["/ready","503 until the ONNX model and the index are resident; warm-up issues one loopback tools/call, not a direct import"],["degradations[]","llm_api_key_missing, index_model_mismatch, mcp_disconnected, trace_store_unreachable, access_token_missing \u2014 exactly five possible strings"],["Reports","live rss_mb and rss_peak_mb; the dashboard plots turns.rss_mb_at_end"],["Budgets","750 instance-hours per workspace per month and 500 build minutes; a script warns above 600 and 400"]],c:["Cold start"]};
 D["f6-cold"]={t:"Cold start",f:"trace",p:"Documented rather than hidden. There is no keep-alive cron: pinging around the clock would consume about 744 of the 750 monthly hours.",
  k:[["Spin-up","approximately one minute after 15 minutes idle"],["Container to /health 200","1–3 s, because the model is lazy-loaded"],["Model mmap","0.06–0.40 s from the baked cache, against 16–63 s if it downloaded"],["First request total","about 35–70 s"],["Warm turn","about 1.5–5 s, at least 90 % of it provider time"],["Mitigations","a /health preflight banner with an elapsed counter, and cold versus warm reported separately"]],c:["Live service"]};
 D["f6-ghsec"]={t:"GitHub repository secrets",f:"data",p:"Three, and none of them is an LLM key — which is why the deploy path is fast, offline and free of rate-limit failures.",
  k:[["RENDER_DEPLOY_HOOK_URL","used by the deploy job"],["DEPLOY_URL","used by wait_for_deploy.py and smoke_deployed.py"],["RENDER_API_KEY","used by check_render_hours.py, which warns and never fails"],["Set by","scripts/provision_render.py and provision_turso.py via gh secret set"],["Repo","public, which removes the private-repo Actions minute cap"]],c:["deploy job"]};
 D["f6-renv"]={t:"Render environment",f:"data",p:"Every variable appears in .env.example with a default, a REQUIRED or OPTIONAL marker and a signup URL — and that parity is itself a test in both directions.",
- k:[["Plain values","APP_ENV=render, LLM_PROVIDER=openai_compat, LLM_BASE_URL, LLM_MODEL, OMP_NUM_THREADS=1"],["sync: false","LLM_API_KEY, JUDGE_API_KEY, GROQ_API_KEY, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, DASHBOARD_TOKEN, EVAL_TOKEN"],["Validation","structural checks at import fail fast; credentials are validated lazily at the point of use, so boot always succeeds"],["Missing key","the app boots, /health is 200 degraded, the dashboard is browsable, and /chat returns 200 with outcome configuration_required naming the variable"],["Deliberately absent","no SEED, no NOW_OVERRIDE, no EVAL_FIXED_NOW, no OTEL exporter endpoint"]],c:["Live service"]};
+ k:[["Plain values","APP_ENV=render, LLM_PROVIDER=openai_compat, LLM_BASE_URL, LLM_MODEL, OMP_NUM_THREADS=1"],["sync: false","LLM_API_KEY, JUDGE_API_KEY, GROQ_API_KEY, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, APP_ACCESS_TOKEN"],["APP_ACCESS_TOKEN","required on the graded deployment; provision_render.py generates it with secrets.token_urlsafe(32) and sets it on Render, so there is no user step. Unset with APP_ENV=render, every gated route 403s and /health reports access_token_missing"],["ACCESS_RATE_LIMIT_PER_MIN","default 30, applied per IP on POST /chat and on the /mcp-server/mcp mount"],["Validation","structural checks at import fail fast; credentials are validated lazily at the point of use, so boot always succeeds"],["Missing key","the app boots, /health is 200 degraded, the dashboard is browsable, and /chat returns 200 with outcome configuration_required naming the variable"],["Deliberately absent","no SEED, no NOW_OVERRIDE, no EVAL_FIXED_NOW, no OTEL exporter endpoint"]],c:["Live service"]};
 D["f6-e-t1"]={t:"on: push",f:"edge",p:"Branches [main], with a paths-ignore list that keeps documentation commits off the build budget.",k:[["Runs","lint, test, docker, and then deploy"]],c:["Push to main","all four ci.yml jobs"]};
 D["f6-e-t2"]={t:"on: pull_request",f:"edge",p:"The same jobs, minus the deploy — the if-condition restricts deploys to main pushes and deliberate dispatches.",k:[["Effect","a pull request can never deploy"]],c:["Pull request","lint, test and docker"]};
 D["f6-e-t3"]={t:"workflow_dispatch",f:"edge",p:"Reaches the deploy job only after the suite it still depends on.",k:[["Input","deploy_only: true"],["Use","carrying a committed eval results set into the live image, verified by /health.trace_store.eval_runs_imported"]],c:["workflow_dispatch","lint, test and docker — deploy is reached only through needs"]};

@@ -55,7 +55,8 @@ dashboard covers evaluation: runs, per-item results, all six metric families, la
 - **A vector service** (Chroma / FAISS / LanceDB / pgvector) and **torch / sentence-transformers** — 161 MB and 519 MB respectively against a 512 MB
   cap, where sqlite-vec is 42 MB and shares the trace store's dialect (§3 rows 8–9).
 - **Node anywhere in the build.** No SPA, no bundler, no `npm ci`.
-- **Auth, real PII, production HRIS integration.** Everything is synthetic; the rubric asks for no authorization model.
+- **User accounts, real PII, production HRIS integration.** Everything is synthetic and the requirements are silent on auth, so the deployment carries
+  one shared access token plus two personas (§11, §17) and nothing more — no sign-up, no directory, no per-record permissions.
 - **A keep-alive cron.** 24/7 pinging consumes ~744 of 750 monthly workspace instance-hours; documenting the cold start scores better than hiding it.
 - **A frozen clock.** v1's process-wide freeze entangled latency measurement, mock-data arithmetic and gold answers and generated contradictions in
   every review round; v2 uses the real wall clock and makes date-bearing data explicit instead (§5.4, §13.6, §22).
@@ -368,7 +369,7 @@ dates of birth; no street addresses. The check greps `mock_data/` for SSN shapes
 
 **Read/write split.** The JSON files are **immutable**; mock *writes* append a row to `mock_writes` in the durable trace store, never to the ephemeral
 filesystem and never back to the JSON, so a ticket created live on camera is still visible to a grader days later. `POST /api/dev/reset-sandbox`
-(behind `DASHBOARD_TOKEN`) clears `mock_writes` for a clean demo.
+(admin persona only, §11) clears `mock_writes` for a clean demo.
 
 ## 6. Ingestion, chunking, embedding, vector store
 
@@ -1194,6 +1195,8 @@ CREATE TABLE sessions (
   created_at INTEGER NOT NULL,         -- epoch micros
   last_activity_at INTEGER NOT NULL,
   employee_id TEXT,                    -- the acting persona chosen in the UI
+  auth_mode TEXT NOT NULL CHECK (auth_mode IN ('cookie','bearer','open')),   -- how the access gate was satisfied (§11)
+  actor_role TEXT NOT NULL CHECK (actor_role IN ('employee','admin')),       -- the persona's privilege level (§11)
   client_label TEXT NOT NULL,          -- web|api|eval|demo (client-suppliable);
                                        -- eval_judge|maintenance (server-only)
   eval_run_id TEXT,                    -- non-null iff produced by an eval run
@@ -1385,6 +1388,33 @@ created live on camera is still resolvable days later. `tests/unit/test_retentio
 
 ## 11. Web application
 
+**Access gate.** One shared secret, `APP_ACCESS_TOKEN` (`sync: false` in `render.yaml`; **REQUIRED on the graded deployment**). The gate is **on**
+whenever `APP_ACCESS_TOKEN` is set **or** `APP_ENV != "local"`; unset locally it is off. If `APP_ENV == "render"` and the token is unset, every gated
+route returns **403** with a one-line message naming the variable and `/health` lists `access_token_missing` in `degradations[]` (§11.4). A request is
+accepted on the first of three presentations, each compared with `secrets.compare_digest`:
+
+1. **`?access=<token>`** on any gated `GET` — on a match the app sets cookie `mosaic_access` (HttpOnly; `Secure` when the request is https;
+   SameSite=Lax; Path=/; Max-Age 30 days) and answers **302** to the same URL with the `access` parameter removed, so the token never lingers in the
+   address bar, browser history, referers or a screen recording. On a mismatch: **401** and the key page.
+2. **Cookie `mosaic_access`.**
+3. **Header `Authorization: Bearer <token>`** — what `scripts/demo_task_*.sh` and the other curl scripts, the eval runner, the in-process MCP client
+   (on every loopback `tools/list` and `tools/call`), the CI smoke tests and MCP Inspector send.
+
+**Gated:** `GET /`, `POST /chat`, `POST /chat/confirm`, `GET /chat/stream`, `/dashboard/*`, `/api/*` and the MCP mount `/mcp-server/mcp`.
+**Not gated:** `GET /health`, `GET /ready`, `GET /static/*`, and the key page `GET /access` + `POST /access` (a form that sets the cookie and redirects
+to `/`); `POST /access/logout` clears both cookies. The per-IP rate limit on the MCP mount is kept and the same limit applies to `POST /chat`
+(`ACCESS_RATE_LIMIT_PER_MIN`, default 30).
+
+**Personas — roles inside a trusted session.** Cookie `mosaic_actor` holds an employee id matching `^E1[0-9]{3}$` or the literal `admin`; absent, the
+actor is `E1042`. The chat UI's "act as" selector lists the 24 employees plus **HR admin** and sets it through `POST /session/actor {actor}`; API
+clients send header `X-Actor` instead, which wins over the cookie when present. **Admin only**, enforced server-side with **403**
+`{"code": "ADMIN_REQUIRED"}`: `/dashboard/*` (every page, reads included), `/api/traces/*`, `/api/eval/*`, `/api/corpus/*`, `/api/mcp/*`, the three
+dashboard write controls, and the privileged `POST /chat` options — which refuse a non-admin caller with that same `ADMIN_REQUIRED`, and an admin
+caller whose `client_label != "eval"` with **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}` (§11.1). The employee persona has chat only. The dashboard nav link is rendered only in the
+admin persona, but the server check is the control. The actor id still travels in `_meta.mosaic/actor` and remains **audit-only** inside the MCP tools
+(§8.7): the admin persona chats as actor `admin`, and the people-data tools take `employee_id` from their arguments exactly as before. Every session
+records `auth_mode` and `actor_role` (§10.1), both shown and filterable on dashboard pages 1–2.
+
 ### 11.1 `POST /chat` (R6.3)
 
 ```json
@@ -1406,12 +1436,18 @@ created live on camera is still resolvable days later. `tests/unit/test_retentio
 not already present for a new turn) and rejected with **409** if reused. The UI generates `turn_id` itself, opens `GET /chat/stream?turn_id=…` **first**
 and only then fires `POST /chat` — the POST does not return until the turn is over, so its body can never carry the id the client needs first.
 
-**Privileged options.** Every field except `k` is accepted only when `client_label == "eval"` **and** the request carries a valid `X-Eval-Token`
-matching the resolved eval token (`EVAL_TOKEN`, falling back to `DASHBOARD_TOKEN`); otherwise **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field":
-…}` — never silently ignored, so a misconfigured eval run fails loudly instead of quietly measuring the baseline three times. **When the resolved
-token is empty, privileged options are always refused** (fail closed), so `DASHBOARD_TOKEN` (or an explicit `EVAL_TOKEN`) is a prerequisite of **any**
-eval run, local or deployed, is listed in `render.yaml`, and is a P11 gate. `tests/contract/test_chat_privileged_options.py` asserts the four-row matrix:
-accepted with label + valid header; 403 with no/wrong header; 403 with a valid header but the wrong label; 403 when the token is empty.
+**Privileged options.** Every field except `k` is accepted only when `client_label == "eval"` **and** the caller is in the **admin persona**
+(`X-Actor: admin`, or the `mosaic_actor` cookie). **The refusal splits by cause, and both codes are contract-visible** — never a silent ignore, so a
+misconfigured eval run fails loudly instead of quietly measuring the baseline three times:
+
+* the resolved persona is **not admin** → **403** `{"code": "ADMIN_REQUIRED"}` (the same code every other admin-only surface returns, §11);
+* the persona **is admin** but `client_label != "eval"` → **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}`, naming the offending field.
+
+**Fail closed: privileged options require the admin persona**, and on the graded deployment reaching `POST /chat` at all already implies a valid
+`APP_ACCESS_TOKEN` — so the pair is a prerequisite of the deployed eval run and a P11 gate.
+`tests/contract/test_chat_privileged_options.py` asserts the four-row matrix, **naming the code per row**: accepted with `client_label="eval"` + admin
+persona; **403** `ADMIN_REQUIRED` in the employee persona; **403** `PRIVILEGED_OPTION_REFUSED` with its `field` in the admin persona with the wrong
+label; **401** at the gate when the gate is on and no token was presented.
 
 Response `200` — the four rubric-named fields (answer, citations, snippets, concise trace) are all top-level and contract-tested for both a RAG-only
 and a tool-using query:
@@ -1526,9 +1562,10 @@ never makes Render restart-loop the instance. `healthCheckPath: /health`.
   "degradations": [] }
 ```
 
-`degradations[]` has exactly four possible strings, and every `"degraded"` status carries at least one, so the field is never empty while `status !=
+`degradations[]` has exactly five possible strings, and every `"degraded"` status carries at least one, so the field is never empty while `status !=
 "ok"`: **`llm_api_key_missing`** (`LLM_PROVIDER != stub` and no key), **`index_model_mismatch`** (`open_index()` raised; the entry names both values),
-**`mcp_disconnected`**, **`trace_store_unreachable`**.
+**`mcp_disconnected`**, **`trace_store_unreachable`**, and **`access_token_missing`** (`APP_ENV == "render"` with `APP_ACCESS_TOKEN` unset — every
+gated route is then 403, so the deployment is unusable and says so).
 
 `GET /ready` returns **503** `{"ready": false, "reason": …}` until the ONNX model and index are resident, then 200. Warm-up is a startup task issuing
 **one loopback `tools/call`**, never a direct `rag.embed` import, so readiness exercises the same wire the agent uses; `EMBED_WARMUP=0` skips it, which
@@ -1537,8 +1574,9 @@ is what CI's health-only steps use. `tests/integration/test_health_mcp_down.py` 
 
 ### 11.5 Chat UI (R6.2, R6.5)
 
-A single Jinja page at `/`, with: an **"act as" selector** over the 24 mock employees setting the session's `employee_id` (which becomes
-`_meta.mosaic/actor`, audit only, default `E1042`); a **message list** rendering typed blocks — `policy_fact` plain, `recommendation` with a
+A single Jinja page at `/`, with: an **"act as" selector** over the 24 mock employees **plus "HR admin"**, setting cookie `mosaic_actor` through
+`POST /session/actor` (the employee id becomes `_meta.mosaic/actor`, audit only, default `E1042`; the admin persona additionally reveals the dashboard
+nav link and unlocks the admin-only surfaces of §11); a **message list** rendering typed blocks — `policy_fact` plain, `recommendation` with a
 **"Recommendation — not company policy"** badge, `escalation` with a contact chip; **citation chips** under every block, opening a drawer that
 highlights the snippet inside the full chunk and links into the corpus browser; a **snapshot note** (*"Employee data as of 1 September 2026"*) under
 any answer whose tool results carry an `as_of`; the **live agent-activity rail** (the SSE span stream, colour-coded by kind, collapsing into a
@@ -1552,7 +1590,9 @@ act-as `<select>`, both demo buttons and the span-rail container; then it posts 
 the chunk's `source_url`** deep link.
 
 **Demo reproducibility (R6.5):** the two buttons **and** `scripts/demo_task_1.sh` / `demo_task_2.sh` — plain `curl`, parameterised by `BASE_URL`,
-pretty-printing answer + citations + trace + `dashboard_url` — both documented in README.
+pretty-printing answer + citations + trace + `dashboard_url` — both documented in README. Every call they make sends
+`Authorization: Bearer $APP_ACCESS_TOKEN`; the chat calls stay in the **default employee persona**, and the `GET /api/traces/turns/{turn_id}` poll of
+the 202 fallback (§9.4) — the one admin-only route the scripts touch — additionally sends `X-Actor: admin`.
 
 ### 11.6 Observability dashboard — 11 pages
 
@@ -1563,8 +1603,8 @@ Each page is specified as **route · API · view-model · filters · charts** an
 
 | # | Route · API | View-model fields | Filters | Charts |
 |---|---|---|---|---|
-| **1** | `/dashboard` · `/api/traces/overview` | `kpis{sessions_24h, sessions_total, turns, tool_calls, guardrail_blocks, escalations, pending_confirmations, error_rate, p50_ms, p95_ms, tokens_in, tokens_out, est_cost_usd}`, `turns_per_hour[]`, `latest_sessions[]`, `health{mcp_up, tool_count, doc_count, chunk_count, store_backend, git_sha, uptime_ms, rss_mb, data_as_of}` | — | turns-per-hour sparkline |
-| **2** | `/dashboard/sessions` · `/api/traces/sessions` | `rows[{session_id, started_at, employee_id, client_label, n_turns, outcomes[], total_ms, tokens, has_error}]`, `page`, `total` | date range · `client_label` · persona · outcome · has-error · min duration · free text over user messages | — |
+| **1** | `/dashboard` · `/api/traces/overview` | `kpis{sessions_24h, sessions_total, turns, tool_calls, guardrail_blocks, escalations, pending_confirmations, error_rate, p50_ms, p95_ms, tokens_in, tokens_out, est_cost_usd}`, `turns_per_hour[]`, `latest_sessions[{…, auth_mode, actor_role}]`, `health{mcp_up, tool_count, doc_count, chunk_count, store_backend, git_sha, uptime_ms, rss_mb, data_as_of}` | — | turns-per-hour sparkline |
+| **2** | `/dashboard/sessions` · `/api/traces/sessions` | `rows[{session_id, started_at, employee_id, auth_mode, actor_role, client_label, n_turns, outcomes[], total_ms, tokens, has_error}]`, `page`, `total` | date range · `client_label` · persona · `auth_mode` · `actor_role` · outcome · has-error · min duration · free text over user messages | — |
 | **3** | `/dashboard/sessions/{id}` · `/api/traces/sessions/{id}` | `session{…}`, `turns[{turn_id, seq, user_message, final_answer, citations[], outcome, stop_reason, duration_ms, rollups{}, resumed_count, spans[{seq, kind, name, status, duration_ms, offset_ms, payload}]}]` | span-kind toggle | proportional CSS duration bars |
 | **4** | `/dashboard/turns` · `/api/traces/turns` | `rows[{turn_id, session_id, seq, started_at, user_message, outcome, intent, workflow, duration_ms, llm_calls, tool_calls, retrievals, guardrail_hits}]` | page 2's filter bar plus intent and workflow | — |
 | **5** | `/dashboard/llm` · `/api/traces/llm` | `rows[{span_id, turn_id, provider, model, purpose, prompt_tokens, completion_tokens, duration_ms, ttfb_ms, finish_reason, retry_count, cache_hit, limiter_wait_ms, provider_failover}]`, `by_model[{model, calls, tokens_in, tokens_out, est_cost_usd}]` | model · purpose · failover · date range | — |
@@ -1586,42 +1626,49 @@ Judged metrics are computed on `baseline` only (§13.9), so on the two ablation 
 page renders *"not judged on this variant"* rather than a zero and the ablation chart omits those series. The five deterministic aggregates are
 non-null on every run — the contract test asserts exactly that split.
 
-**Write controls.** Three, each on a stated page, each gated by `DASHBOARD_TOKEN` (header or cookie): **Reset sandbox** (clears `mock_writes`) on page
+**Write controls.** Three, each on a stated page, each **admin-only** and enforced server-side: **Reset sandbox** (clears `mock_writes`) on page
 8 → `POST /api/dev/reset-sandbox`; **Re-discover now** on page 9 → `POST /api/mcp/rediscover`; **Run smoke eval** on page 11 → `POST /api/eval/runs`.
-With no token configured all three render **visibly disabled** with the tooltip *"set `DASHBOARD_TOKEN` to enable"*. On the graded deployment the
-token is set.
+They are never rendered dead: a caller without the admin persona is already **403** `{"code": "ADMIN_REQUIRED"}` on the host page itself, so reaching
+the page means the controls work.
 
 **Out-of-turn re-discovery has a home:** `spans.turn_id` is `NOT NULL`, so `POST /api/mcp/rediscover` first opens a synthetic
 `client_label='maintenance'` session and a turn with `outcome='maintenance'` and writes the `mcp_discovery` span into it. That outcome is excluded
 from the eval escalation matrix (§13.4) and is never an eval item.
 
-**Access.** Reads are **open by default** so the grader browses freely — the data is entirely synthetic. Writes require `DASHBOARD_TOKEN`. Both facts
-are stated in `deployed.md`.
+**Access.** The whole dashboard — reads included — is **admin-only** (`X-Actor: admin`, or `mosaic_actor` set by the act-as selector), on top of the
+access gate of §11; a non-admin session gets **403** `{"code": "ADMIN_REQUIRED"}` and never sees the nav link. The data is entirely synthetic, so the
+grader browses freely by following the tokenized link and choosing **HR admin** in the selector. Both facts are stated in `deployed.md`.
 
 ### 11.7 Bounded eval launch from the dashboard
 
-Page 11 exposes `POST /api/eval/runs` behind `DASHBOARD_TOKEN`, restricted to a **smoke subset**: at most `EVAL_SMOKE_MAX_ITEMS` (default **6**) items,
+Page 11 exposes `POST /api/eval/runs` behind the **admin persona**, restricted to a **smoke subset**: at most `EVAL_SMOKE_MAX_ITEMS` (default **6**) items,
 one variant, deterministic scorers only by default, streamed over SSE. It drives the same `POST /chat` path with the same privileged `options` as the
 offline runner, so what the dashboard demonstrates is what `make eval` runs — evaluation made demonstrable live without a full sweep on a 0.1-CPU box.
 The endpoint hard-refuses any request exceeding the smoke bounds.
 
 ### 11.8 Complete endpoint list
 
+Every row marked **gated** requires the access token of §11 (`?access=` once, then the `mosaic_access` cookie, or `Authorization: Bearer`); every row
+marked **admin** additionally requires the admin persona (`X-Actor: admin` or `mosaic_actor`), returning **403** `{"code": "ADMIN_REQUIRED"}` otherwise.
+
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | Chat UI |
-| POST | `/chat` | The contract endpoint (R6.3); privileged `options` need `client_label="eval"` + `X-Eval-Token` |
-| POST | `/chat/confirm` | Resolve a pending mock write — **the only place a confirmation token is minted** |
-| GET | `/chat/stream?turn_id=` | SSE span stream — subscribe **before** POSTing |
-| GET | `/health` · `/ready` | Always-200 status (R6.4); 503 until the model and index are resident |
-| GET | `/dashboard/*` | The 11 pages above |
-| GET | `/api/traces/{overview,sessions,sessions/{id},turns,turns/{turn_id},tools,retrieval,llm,safety}` | Dashboard JSON. `turns/{turn_id}` returns the single-turn view-model page 3 renders, and is what the 202 fallback and `demo_task_*.sh` poll |
-| GET | `/api/eval/{runs,runs/{id},compare}` · POST `/api/eval/runs` | Eval JSON; the bounded smoke run (token-gated) |
-| GET | `/api/corpus/{documents,documents/{doc_id},chunks/{chunk_id}}` | Corpus browser JSON |
-| GET · POST | `/api/mcp/discovery` · `/api/mcp/rediscover` | Live MCP catalog (POST token-gated) |
-| POST | `/api/dev/reset-sandbox` | Clear `mock_writes` (token-gated) |
-| ALL | `/mcp-server/mcp` | The mounted MCP Streamable HTTP endpoint |
-| GET | `/static/*` | Vendored htmx / Alpine / Chart.js / CSS |
+| GET | `/` | Chat UI — gated |
+| POST | `/chat` | The contract endpoint (R6.3) — gated, per-IP limited; privileged `options` need `client_label="eval"` + **admin** |
+| POST | `/chat/confirm` | Resolve a pending mock write — gated; **the only place a confirmation token is minted** |
+| GET | `/chat/stream?turn_id=` | SSE span stream — gated; subscribe **before** POSTing |
+| GET | `/health` · `/ready` | Always-200 status (R6.4); 503 until the model and index are resident — **never gated** |
+| GET · POST | `/access` | The key page and its form: validates the token, sets `mosaic_access`, redirects to `/` — **never gated** |
+| POST | `/access/logout` | Clears `mosaic_access` and `mosaic_actor` |
+| POST | `/session/actor` | `{actor}` — an `^E1[0-9]{3}$` id or `admin`; sets the `mosaic_actor` cookie from the act-as selector (gated) |
+| GET | `/dashboard/*` | The 11 pages above — gated + **admin** |
+| GET | `/api/traces/{overview,sessions,sessions/{id},turns,turns/{turn_id},tools,retrieval,llm,safety}` | Dashboard JSON — gated + **admin**. `turns/{turn_id}` returns the single-turn view-model page 3 renders, and is what the 202 fallback and `demo_task_*.sh` poll |
+| GET | `/api/eval/{runs,runs/{id},compare}` · POST `/api/eval/runs` | Eval JSON; the bounded smoke run — gated + **admin** |
+| GET | `/api/corpus/{documents,documents/{doc_id},chunks/{chunk_id}}` | Corpus browser JSON — gated + **admin** |
+| GET · POST | `/api/mcp/discovery` · `/api/mcp/rediscover` | Live MCP catalog — gated + **admin** |
+| POST | `/api/dev/reset-sandbox` | Clear `mock_writes` — gated + **admin** |
+| ALL | `/mcp-server/mcp` | The mounted MCP Streamable HTTP endpoint — gated (bearer header) and per-IP limited |
+| GET | `/static/*` | Vendored htmx / Alpine / Chart.js / CSS — **never gated** |
 
 ## 12. Persistence and configuration
 
@@ -1689,8 +1736,8 @@ returns **HTTP 200** with `outcome: "configuration_required"` and a single escal
 | `PERSIST_BACKEND` | – | `auto` | `auto` \| `sqlite` \| `turso` |
 | `TRACE_DB_PATH` | – | `data/runtime/traces.sqlite` | Local store |
 | `TRACE_RETENTION_SESSIONS` | – | `300` | Retention cap |
-| `DASHBOARD_TOKEN` | **✅ on the graded deployment** | *(unset ⇒ write controls render disabled)* | Gates dashboard write actions |
-| `EVAL_TOKEN` | **✅ for any eval run, local or deployed** | falls back to `DASHBOARD_TOKEN` | Sent as `X-Eval-Token`; gates the privileged `/chat` options. **Fail-closed when empty** |
+| `APP_ACCESS_TOKEN` | **✅ on the graded deployment** | *(unset ⇒ the gate is off when `APP_ENV=local`; on `APP_ENV=render` every gated route 403s and `/health` reports `access_token_missing`)* | The one shared access secret (§11), presented as `?access=`, cookie `mosaic_access` or `Authorization: Bearer`. Generated by `scripts/provision_render.py` with `secrets.token_urlsafe(32)` |
+| `ACCESS_RATE_LIMIT_PER_MIN` | – | `30` | Per-IP request limit on `POST /chat` and on the `/mcp-server/mcp` mount |
 | `EVAL_TARGET_BASE_URL` | – | `http://127.0.0.1:8000` | Where `make eval` posts. The published run sets this to the live Render URL |
 | `EVAL_COLD_IDLE_S` | – | `1000` | Idle wait before each cold probe, so Render spins the instance down (§13.5) |
 | `EVAL_SMOKE_MAX_ITEMS` | – | `6` | Cap on a dashboard-launched eval |
@@ -1763,8 +1810,8 @@ correct outcome is `escalated`.
 Custom, ~400 lines in `evaluation/`, run by **`make eval`** (`python -m evaluation.runner --variant baseline`) and **`make ablation`** (`python -m
 evaluation.ablation`). Items run **strictly sequentially** behind the token-bucket limiter with exponential backoff honouring `Retry-After`.
 
-Every item is an HTTP `POST {EVAL_TARGET_BASE_URL}/chat` carrying `client_label: "eval"`, the `X-Eval-Token` header and `options: {k,
-retrieval_strategy, tools_disabled, eval_run_id, variant}`. That is the **only** configuration channel — no process restart, no env mutation between
+Every item is an HTTP `POST {EVAL_TARGET_BASE_URL}/chat` carrying `client_label: "eval"`, the headers `Authorization: Bearer $APP_ACCESS_TOKEN` and
+`X-Actor: admin`, and `options: {k, retrieval_strategy, tools_disabled, eval_run_id, variant}`. That is the **only** configuration channel — no process restart, no env mutation between
 variants, no `remove_tool` on the shared server. Each item therefore produces a real session and turn, `sessions.eval_run_id` is populated, and
 `eval_results.session_id`/`turn_id` link straight to the audit trace, so "one click from any eval row to its full trace" works in both modes.
 
@@ -2057,11 +2104,12 @@ services:
       - { key: GROQ_API_KEY,       sync: false }
       - { key: TURSO_DATABASE_URL, sync: false }   # REQUIRED (§19.1 item 3)
       - { key: TURSO_AUTH_TOKEN,   sync: false }   # REQUIRED (§19.1 item 3)
-      - { key: DASHBOARD_TOKEN,    sync: false }   # REQUIRED on the graded deployment
-      - { key: EVAL_TOKEN,         sync: false }   # REQUIRED for the deployed-mode eval run
+      - { key: APP_ACCESS_TOKEN,   sync: false }   # REQUIRED on the graded deployment; provision_render.py
+                                                   #   generates it with secrets.token_urlsafe(32)
 ```
 
-`deployed.md` carries five headings asserted by `test_docs_completeness.py`: `## Deployed URLs`, `## Cold start`, `## Environment variables`,
+`deployed.md` carries six headings asserted by `test_docs_completeness.py`: `## Deployed URLs`, `## Access` (the tokenized link, the cookie, the bearer
+header for API clients and MCP Inspector, the two personas and the post-grading rotation step), `## Cold start`, `## Environment variables`,
 `## MCP transport` (stating in prose that the MCP server was **not** deployed separately, that R7.2 permits single-service, that two free services
 would chain their spin-ups and share one 750 h budget, and that R7.3 is satisfied by `MCP_SERVER_URL` support plus the `test_mcp_remote_url` CI test
 and the stdio transport shown in the video) and `## Cost` ($0 Render Hobby, $0 Turso, no paid database, local embeddings, free-tier agent and judge,
@@ -2116,8 +2164,9 @@ Measured on macOS arm64; the Linux figure under a real cgroup is confirmed at **
 | **Headroom against 512 MB** | **~165 MB** |
 
 The full stack measured 342 MB steady-state on macOS arm64; Linux onnxruntime RSS typically runs lower. `/health` reports live `rss_mb` and the
-dashboard plots `turns.rss_mb_at_end`. **The memory gate is `make docker-run-512`** — `docker run -m 512m --memory-swap 512m`, poll `/ready`, serve one
-stubbed turn, assert `/health.app.rss_mb < 420` — run locally and as a **P11 acceptance gate**, not on every push, because it needs a full image build.
+dashboard plots `turns.rss_mb_at_end`. **The memory gate is `make docker-run-512`** — `docker run -m 512m --memory-swap 512m` with `LLM_PROVIDER=stub` and a throwaway
+`APP_ACCESS_TOKEN` (the target leaves `APP_ENV` at its `local` default, so the gate is on **only** because the token is set, exactly as in the CI
+`docker` job), poll `/ready`, serve one stubbed turn through `POST /chat` carrying `Authorization: Bearer`, assert `/health.app.rss_mb < 420` — run locally and as a **P11 acceptance gate**, not on every push, because it needs a full image build.
 
 ### 14.4 Cold start
 
@@ -2225,7 +2274,7 @@ jobs:
       - run: docker build -t mosaic-hr --build-arg GIT_SHA=${{ github.sha }} .
       - name: sqlite-vec loads on Debian     # enable_load_extension -> sqlite_vec.load -> vec_version()
         run: docker run --rm -v "$PWD":/w -w /w python:3.12-slim sh -c "pip install -q sqlite-vec && python scripts/probe_sqlite_vec.py"
-      - run: docker run -d --name app -p 8000:8000 -e LLM_PROVIDER=stub -e PORT=8000 mosaic-hr
+      - run: docker run -d --name app -p 8000:8000 -e LLM_PROVIDER=stub -e PORT=8000 -e APP_ACCESS_TOKEN=ci-access-token mosaic-hr
       - run: python scripts/wait_for_health.py --url http://127.0.0.1:8000 --timeout 120
       - run: python scripts/assert_health.py --url http://127.0.0.1:8000   # mcp.connected, tool_count==9,
                                                                           # index.loaded, doc_count==14
@@ -2248,8 +2297,10 @@ minutes; they still run on pull requests, where `test_docs_completeness.py` is t
 ### 15.2 Secrets, and how the R8 bullets map
 
 Three repository secrets, set by `scripts/provision_*.py` via `gh secret set` at P11: `RENDER_DEPLOY_HOOK_URL` (the `deploy` job), `DEPLOY_URL`
-(`wait_for_deploy.py`, `smoke_deployed.py`) and `RENDER_API_KEY` (`check_render_hours.py`, warn-only). **No LLM key is a CI secret** — the push path
-never calls a provider and `make eval` runs from the developer's machine — which is why the deploy path is fast, offline and free of 429 flakes.
+(`wait_for_deploy.py`, `smoke_deployed.py`) and `RENDER_API_KEY` (`check_render_hours.py`, warn-only). **No LLM key is a CI secret, and neither is the access
+token** — the push path never calls a provider, `make eval` runs from the developer's machine, and the `docker` job passes a throwaway
+`APP_ACCESS_TOKEN` inline, which proves only that the image boots with the gate on: the job makes **no gated call**, because `/health` and `/ready`
+stay open and `wait_for_health.py` / `assert_health.py` are all it runs. That is why the deploy path is fast, offline and free of 429 flakes.
 
 **R8 mapping.** R8.1 — `on: [push, pull_request]`. R8.2 — `test` installs from the committed manifests and runs the suite while `docker` builds the
 image and health-checks the running container, and `deploy` `needs: [test, docker]`. R8.3 — `tests/contract/test_app_starts.py` plus
@@ -2263,10 +2314,19 @@ and the recorded red run of §14.5.
 | Layer | Scope | Runs with |
 |---|---|---|
 | `tests/unit/` | parsers, chunker, embed wrapper, retrieval filters and RRF, redact, each guardrail, the confirmation gate, the rules engine, each eval scorer, dataset invariants, mock-data arithmetic, store parity | no network, no key |
-| `tests/contract/` | `/chat`, `/health`, `/ready` shapes; the `trace[]` projection; the privileged-options matrix; chat-page render; missing-key grace; MCP 2.x API shape; `tools/list` vs the committed schemas; docs headings; dashboard view-models | `LLM_PROVIDER=stub` |
+| `tests/contract/` | `/chat`, `/health`, `/ready` shapes; the `trace[]` projection; the privileged-options matrix; the access gate and the two personas; chat-page render; missing-key grace; MCP 2.x API shape; `tools/list` vs the committed schemas; docs headings; dashboard view-models | `LLM_PROVIDER=stub` |
 | `tests/integration/` | stdio MCP, HTTP MCP, remote `MCP_SERVER_URL`, the four faults, audit completeness, SSE, confirm-resume, results import, process exit mid-turn, the bounded smoke eval | `LLM_PROVIDER=stub`, real loopback HTTP |
 | `tests/e2e/` | both demo tasks end to end | `LLM_PROVIDER=stub` |
 | `tests/architecture/` | `test_conventions.py` — the only structural test file | — |
+
+**The access gate owns two contract files, both authored at P8 and both joining `pytest -q` with no new CI step.**
+`tests/contract/test_access_gate.py`: no token → **401** and the key page; `?access=<token>` → **302** with `Set-Cookie: mosaic_access` and the
+`access` parameter stripped from the redirect target; the cookie alone → 200; `Authorization: Bearer` alone → 200; `/health` and `/ready` open even
+with the token set; `APP_ENV=render` with the token unset → **403** on a gated route and `access_token_missing` in `/health.degradations`.
+`tests/contract/test_personas.py`: the `/dashboard/*` prefix **403** `ADMIN_REQUIRED` without the admin persona, and **200** with `X-Actor: admin` on
+`GET /api/traces/turns/{turn_id}` — the admin-only route P8 itself builds, because the dashboard pages only arrive at P9, where
+`test_dashboard_pages.py` already asserts the 200-as-admin case; the privileged `/chat` options **403** `ADMIN_REQUIRED` in the employee persona;
+`POST /session/actor` sets `mosaic_actor`; an absent cookie defaults to `E1042`.
 
 **`tests/integration/test_audit_completeness.py` is USER.2's own verification.** It drives one full tool-using turn through `POST /chat` with the stub,
 then asserts against the store: exactly one `mcp_discovery` span; ≥ 1 `plan`, `llm_call`, `retrieval`, `tool_call` and `guardrail` span; that every
@@ -2309,7 +2369,9 @@ Nothing else is enforced structurally (§22); the other boundaries of §4.2 are 
 `description` and an `input_schema` carrying `type` and `properties`, and `REQUIRED_TOOL_NAMES ⊆` the returned names. `test_mcp_tool_call.py` asserts
 both halves of R5.2 on both transports: `check_pto_balance("E1042")` returns `remaining_days == 13.5` with `as_of == "2026-09-01"`, and
 `search_policy_documents` returns a non-empty `hits[]` whose `chunk_id`s all resolve. `test_mcp_remote_url.py` boots a **second** uvicorn on another
-port, points `MCP_SERVER_URL` at it, and asserts discovery and a call succeed with `sessions.mcp_transport == 'remote'` — R7.3's evidence.
+port, points `MCP_SERVER_URL` at it, and asserts discovery and a call succeed with `sessions.mcp_transport == 'remote'` — R7.3's evidence. **P5's `test_mcp_discovery.py` is discovery only** — the access gate and the in-process client do not exist until P8 — so P5's definition of done runs
+it as written above. **P8 adds one assertion to its HTTP half**: with the gate on, the in-process client sends `Authorization: Bearer` on `tools/list`
+and on every `tools/call`.
 
 ### 16.5 Fixtures
 
@@ -2331,17 +2393,19 @@ principle 14).
 | **Prompt injection** | Defence in depth: (a) retrieved chunks and tool results are fenced in `<document trust="data">` / `<tool_result trust="data">` envelopes with a standing system rule that envelope content is data, never instruction; (b) guardrail **G4** marks matching chunks `quarantined` — displayed with a warning banner and **uncitable**; (c) the corpus carries a documented canary so the defence is demonstrable on camera and is its own eval item; (d) most importantly, **the agent has no capability a document could abuse** — the only state-changing tools need a one-time token that only a human click can mint. |
 | **PII** | The entire corpus and every dataset are synthetic. No SSN field in any schema; no dates of birth; no street addresses; emails at `.example`; phones in the 555 reserved block. `scripts/pii_check.py` fails the build on any real-PII-shaped string. Raw IPs and User-Agents are never stored — only `sha256[:16]`. Embedding vectors are never persisted to the trace store. |
 | **Irreversible actions (R4.5)** | Both write tools are **mock** (they append to `mock_writes`; nothing external is contacted) **and** gated by a one-time `confirmation_token` bound to the exact tool name and arguments, minted only in `web/` after a human clicks Confirm, single-use, 10-minute TTL, validated **inside the MCP server** (§8.6). The `CONFIRMATION_REQUIRED` rejection contains no token of any kind. A `mock_writes` row cannot exist without a `confirmation_token` resolving to a confirmed row. Three unit tests (missing / mismatched / reused) plus `test_action_safety.py`. |
-| **Identity** | The acting employee id travels in `_meta.mosaic/actor` and is recorded on every `tool_call` span for **audit** — who asked. It grants and denies nothing: the data is entirely synthetic and the rubric asks for no authorization model. A wrong or missing id yields a structured `not_found` and a clarification (§7.4). |
+| **Access** | The requirements are silent on authentication; the deployment carries one shared secret anyway. `APP_ACCESS_TOKEN` is presented as `?access=` (exchanged once for the HttpOnly `mosaic_access` cookie and stripped from the URL), as that cookie, or as `Authorization: Bearer`, compared with `secrets.compare_digest`. It gates `/`, `/chat*`, `/dashboard/*`, `/api/*` and `/mcp-server/mcp`; `/health`, `/ready`, `/static/*` and the key page `/access` stay open. A per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) covers `POST /chat` and the MCP mount. All data is synthetic, so this is a speed bump against scanners and drive-by quota burn on a public repo — not secrecy: the grader's link carries the token, and the token is rotated after grading with one env change. |
+| **Identity** | Two deliberate levels. *Authentication* is the shared access token above — **no user accounts, by design**. *Authorization* is the persona: cookie `mosaic_actor` (or header `X-Actor`) holds an employee id or `admin`, and the admin persona is required, server-side, for `/dashboard/*`, `/api/traces\|eval\|corpus\|mcp/*`, the three write controls and the privileged `/chat` options — **403** `{"code": "ADMIN_REQUIRED"}` otherwise; the privileged options additionally refuse an *admin* caller whose `client_label != "eval"` with **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}` (§11.1). Inside the MCP tools the acting employee id stays **audit-only**: it travels in `_meta.mosaic/actor`, is recorded on every `tool_call` span for *who asked*, and grants and denies nothing, because the data is entirely synthetic. A wrong or missing id yields a structured `not_found` and a clarification (§7.4). `sessions.auth_mode` and `sessions.actor_role` record both levels on every session. |
 | **Sensitive topics** | Guardrail **G5**: harassment, discrimination, legal threat, medical and compensation-dispute topics are never answered directly; the agent escalates to the named People Ops contact with the cited process and offers, behind confirmation, a mock HR case. |
-| **Dashboard exposure** | Read-only and entirely synthetic, so reads are open by default for the grader. The three write actions require `DASHBOARD_TOKEN`. Stated in `deployed.md`. |
-| **MCP endpoint exposure** | `/mcp-server/mcp` is publicly reachable, deliberately, so a grader can attach MCP Inspector. Protections in order of certainty: every read tool exposes only synthetic data; the write tools need a token an external caller cannot obtain and the rejection leaks nothing; a per-IP rate limit is FastAPI middleware on the mount. Whether `mcp` 2.2.0 exposes a native `Host`/`Origin` allowlist is checked by grepping the installed SDK before P5 and recorded in `mcp/README.md` with what was found — a control claimed in a design doc but absent from the SDK is worse than none. |
+| **Dashboard exposure** | Entirely synthetic, and **admin-only** — every page, reads included, plus `/api/traces\|eval\|corpus\|mcp/*` and the three write actions, enforced server-side behind the access gate. A grader reaches it by choosing *HR admin* in the act-as selector. Stated in `deployed.md`. |
+| **MCP endpoint exposure** | `/mcp-server/mcp` remains reachable, deliberately, so a grader can attach MCP Inspector — now **with the bearer header** (Inspector supports custom headers). Protections in order of certainty: every read tool exposes only synthetic data; the write tools need a token an external caller cannot obtain and the rejection leaks nothing; a per-IP rate limit is FastAPI middleware on the mount. Whether `mcp` 2.2.0 exposes a native `Host`/`Origin` allowlist is checked by grepping the installed SDK before P5 and recorded in `mcp/README.md` with what was found — a control claimed in a design doc but absent from the SDK is worse than none. |
 | **Supply chain** | Every dependency pinned to an exact version in `requirements.txt`, `mcp==2.2.0` with a CI shape test. No runtime CDN: frontend assets are vendored at pinned versions with their upstream URLs in `static/vendor/LICENSES.md` alongside the full licence texts. No `curl \| sh` in the Dockerfile. |
-| **Denial of service** | Hard per-turn budgets (6 steps, 8 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 8 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and token-gated. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |
+| **Denial of service** | Hard per-turn budgets (6 steps, 8 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 8 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and admin-only; a per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) on `POST /chat` and the MCP mount, with the access gate keeping anonymous traffic off both. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |
 
 ## 18. The two demo agentic tasks
 
-Both are one-click buttons in the UI, both have curl scripts, and both expected sequences are asserted by `tests/e2e/test_demo_tasks.py`, so R10.3
-cannot silently rot. **Two expectation records, not one shared predicate**, because task 1 performs no write and no confirmation and task 2 does.
+Both are one-click buttons in the UI, both have curl scripts (each sending `Authorization: Bearer $APP_ACCESS_TOKEN` on every call, chatting as the
+default employee persona and sending `X-Actor: admin` only on the `GET /api/traces/turns/{turn_id}` poll of the 202 fallback, §11.5), and both expected
+sequences are asserted by `tests/e2e/test_demo_tasks.py`, so R10.3 cannot silently rot. **Two expectation records, not one shared predicate**, because task 1 performs no write and no confirmation and task 2 does.
 
 ```python
 DEMO_EXPECTATIONS = [
@@ -2457,6 +2521,10 @@ top and tracks each item with a checkbox. Local embeddings remove the embedding 
 | 6 | **Record the 7–10 minute demo video** | DEMO.1–DEMO.7: on camera, audible narration, government ID shown, both agentic tasks executed live against the deployed URL, plus design / deployment / CI/CD / evaluation walkthroughs. Irreducibly human. | After **P12**, once the URL is live and the eval pages are populated. | Follow `docs/demo-script.md` (§18.3), which ticks every DEMO.* item per segment. Both tasks are one-click buttons. | Automatic fail on the demo bullets. |
 | 7 | **Submit the two links** via the Quantic dashboard | Only the enrolled student can submit. | Final step. | Both links are pre-staged at the top of `README.md`, so it is a copy-paste. | No submission. |
 
+**The access gate adds nothing to this list.** `scripts/provision_render.py` generates `APP_ACCESS_TOKEN` itself with `secrets.token_urlsafe(32)` and
+sets it on the service alongside the other `sync: false` variables, and P11 pastes the resulting `https://<app>.onrender.com/?access=<token>` link into
+`README.md` and `deployed.md` — no key to create, no value to paste, and one env change to rotate it after grading.
+
 ### 19.2 Optional, in priority order
 
 | # | Item | Why | When | If skipped |
@@ -2470,8 +2538,8 @@ top and tracks each item with a checkbox. Local embeddings remove the embedding 
 
 Corpus authoring · mock-data generation and schema emission · index build and determinism verification · the MCP server, tools and generated schemas ·
 the agent loop and guardrails · the web app and all 11 dashboard pages · the evaluation harness, runs and ablation · Dockerfile and `render.yaml` · the
-`quantic-grader` invite at P12 · Render service creation, env-var population, deploy-hook retrieval, deploy triggering and log polling via the REST
-API · Turso database creation and token minting · every `gh secret set` · the three evidence screenshots · all five documentation files · the demo
+`quantic-grader` invite at P12 · Render service creation, env-var population (including the generated `APP_ACCESS_TOKEN`), deploy-hook retrieval,
+deploy triggering and log polling via the REST API · Turso database creation and token minting · every `gh secret set` · the three evidence screenshots · all five documentation files · the demo
 script. No screenshot is a user step: each is named in the P11/P12 gates, so its absence fails the phase rather than surfacing during the recording.
 
 ## 20. Risks and mitigations
@@ -2489,7 +2557,7 @@ script. No screenshot is a user step: each is named in the P11/P12 gates, so its
 | **R-9** | **Platform and provider facts partly unverified** — Render's plan details and request timeout, the Gemini free-tier limits the eval-feasibility argument rests on, and the Turso free-tier figures. | Medium | §3.1 is the complete list, each with where to read it and when. P10 step 0 and P11 step 0 read them live and paste the observed values with dates into `deployed.md`. `eval_runs.notes` records observed 429/`Retry-After` behaviour. Deployment is deliberately late (P11) and `make docker-run-512` runs the exact image locally first. Documented fallbacks: the same stack as a native Python service on Render, then Cloud Run with the same image. |
 | **R-10** | **Two Render budgets: 750 instance-hours/workspace/month and 500 build minutes/month.** Exhausting the first suspends every free service for the rest of the month; exhausting the second blocks every rebuild, including the republish that gets committed eval results into the live image. | Medium | One service only; no keep-alive cron; idle time is free; `autoDeploy: false` plus `paths-ignore` on `evaluation/results/**` and `docs/**` mean a results or docs commit spends no build. `scripts/check_render_hours.py` warns above 600 of 750 hours and 400 of 500 build minutes. Both figures are re-read and dated at P11 step 0, and the measured per-build wall-clock goes into `deployed.md`'s `## Cost`. |
 | **R-11** | **Autonomous-build drift** across 13 phases and multiple subagents: a parallel logging path, docs falling out of sync, a prompt tweak silently invalidating the documented demo sequences. | High | The trace is built at **P1**, before anything that can log, with the conventions test in place from the same phase. Standing per-phase acceptance criterion from P4 onward: *"the expected spans were persisted, with the expected kinds and payload shapes."* `test_demo_tasks` compares the actual trace sequence against the documented one via two expectation records; `test_audit_completeness` proves the writer emits every span kind and field from a live turn; `test_chunking_deterministic` locks the manifest; `test_facts_quotes` locks the corpus; `test_tool_schemas_committed` locks the tool schemas. Docs are checked for **headings**, not diffed against a generator (§22). |
-| **R-12** | **Public `/mcp-server/mcp` endpoint**, deliberately exposed for MCP Inspector. | Low | Every read tool exposes only synthetic data; the write tools need a one-time token an external caller cannot obtain, and the rejection leaks nothing (`test_confirmation_gate`); a per-IP rate limit is FastAPI middleware on the mount. Whether the SDK offers a native host allowlist is checked before P5 and recorded with what was actually found. |
+| **R-12** | **Exposed `/mcp-server/mcp` endpoint**, deliberately reachable so a grader can attach MCP Inspector. | Low | The mount sits behind the access gate, so a caller needs `Authorization: Bearer $APP_ACCESS_TOKEN` (Inspector supports custom headers); beyond that, every read tool exposes only synthetic data; the write tools need a one-time token an external caller cannot obtain, and the rejection leaks nothing (`test_confirmation_gate`); a per-IP rate limit (`ACCESS_RATE_LIMIT_PER_MIN`) is FastAPI middleware on the mount. Whether the SDK offers a native host allowlist is checked before P5 and recorded with what was actually found. |
 | **R-13** | **Stub-vs-real divergence.** The `StubAdapter` could pass while real provider tool-call shapes differ, hiding a prompt regression. | Medium | At P10 one **real** exchange per demo task is recorded and committed as a stub script, so the stub is a recording rather than an invention (§16.2). A golden synthesis-prompt snapshot test fails on any prompt-shape change, forcing a deliberate re-review. Each `make eval` run exercises the real provider end to end. |
 | **R-14** | **Schedule risk in the late phases** (dashboard, eval, docs) — exactly the bullets that separate 4 from 5. | Medium | The smallest scope of the candidate approaches (~50 agent-hours; the per-phase estimates in Appendix A sum to 50 h). Every phase ends green and committed, so partial progress always ships. P9 is decomposed into three independently committable sub-phases, and its eval pages render committed fixture JSON so they can be built and tested **before** P10 finishes. P0–P9 need no credentials, so no phase ever blocks on the user. |
 | **R-15** | **Over-refusal** from a mis-tuned evidence threshold — penalised as hard as hallucination. | Medium | `MIN_EVIDENCE_SCORE` is calibrated at P10 from the observed score distribution rather than guessed; `OverRefusalRate` and `MissedRefusalRate` are first-class reported metrics alongside the full 5-class confusion matrix; the threshold is env-configurable so the ablation can move it. |
@@ -2514,14 +2582,14 @@ Every open question is resolved here rather than deferred. Rows are stable and r
 | 12 | Streaming | **SSE span events, no token streaming** | Makes the agentic layer visible on camera using records already written; token streaming buys cosmetics on 0.1 CPU |
 | 13 | Health semantics | **`/health` always 200 with a status string; `/ready` 503 until the model and index are resident** | Prevents Render restart-looping the instance during a provider hiccup or a slow model load |
 | 14 | Trace store default | **Turso, a required item**; `SqliteStore` is the coded fallback | "Full audit logs for every session" cannot hold for live sessions on an ephemeral disk, and Turso is free and card-free |
-| 15 | Dashboard | **11 pages; reads open by default, writes behind `DASHBOARD_TOKEN`**; a bounded (≤ 6-item, token-gated) eval launch | Every surface USER.3 named, each specified as route · view-model · filters · charts; the grader must browse freely and the data is synthetic; a live eval demo without a full sweep on a 0.1-CPU box |
+| 15 | Dashboard | **11 pages, every page and `/api/*` read admin-only**; a bounded (≤ 6-item, admin-only) eval launch | Every surface USER.3 named, each specified as route · view-model · filters · charts; the grader browses freely by picking *HR admin* in the act-as selector, and the data is synthetic; a live eval demo without a full sweep on a 0.1-CPU box |
 | 16 | Eval size and mix | **26 items**: 7 simple_policy, 5 multi_doc, 6 tool_task, 3 ambiguous, 3 out_of_scope, 1 unsafe_action, 1 sensitive | Mid-range of the required 20–30 with every required category ≥ 1, plus the two categories G4 and G5 need |
 | 17 | Citation metric | **One `cit_resolve_mean`, measured on the served answer, reported beside `blocks_dropped_by_g2`** | A pre/post pair with a 1.00 gate made G2 doing its job fail the build; two honest numbers say more and gate nothing |
 | 18 | Ablation variants | **baseline · dense_only_k2 · no_structured_tools**, plus a zero-LLM chunk-size comparison | The third is rhetorically decisive: it craters workflow completion while groundedness stays flat |
 | 19 | Guardrail count | **Six** — evidence gate, citation resolvability, fact-vs-recommendation, injection shield, sensitive escalation, redaction | Identity scoping was dropped: the data is synthetic and the rubric asks for no authorization model (§22) |
 | 20 | Where the write gate is enforced | **Inside the MCP server**, not in the orchestrator or a prompt | Survives a buggy or fully prompt-injected agent |
 | 21 | Confirmation mechanism | **A random one-time token in a `confirmations` table, bound to the exact tool name and arguments, 10-minute TTL, single-use; the orchestrator strips any model-supplied token** | ~60 lines and three tests replace HMAC signing, action digests, a shared secret and a second table (§22) |
-| 22 | Identity | **`_meta.mosaic/actor` recorded for audit only; no authorization** | Synthetic data, no rubric requirement, and it removes an entire class of cross-phase test splits |
+| 22 | Identity inside the MCP tools | **`_meta.mosaic/actor` recorded for audit only; no authorization there** | Synthetic data, no rubric requirement, and it removes an entire class of cross-phase test splits. Authorization lives at the web boundary instead, as the admin persona of row 45 |
 | 23 | Action safety | **A test that must pass in the ordinary suite** | The suite gates the deploy, so a violation blocks the deploy without a separate 1.0 threshold gate |
 | 24 | Deploy gating | **`needs: [test, docker]` on a push to `main` only, curling the Render deploy hook, with Render auto-deploy off**; **no branch protection** | The literal R8.4 requirement with repo-visible evidence and a second platform-side mechanism; a protection rule would deadlock a build that commits directly to `main` (§22) |
 | 25 | Where the evaluation runs, and how results reach the app | **`make eval` from the developer's machine, the published run targeting the deployed URL; results committed as JSON and imported idempotently at boot** | R9.4 asks for latency measured against the deployed URL; no CI workflow commits results, and the evaluation pages are populated on a cold database |
@@ -2537,12 +2605,14 @@ Every open question is resolved here rather than deferred. Rows are stable and r
 | 35 | Trace-context propagation | **`_meta` in, `_trace` spans out**, documented in `mcp/README.md` | Keeps the audit trail complete if the MCP server is ever split into its own service |
 | 36 | What `min_dense_score` filters on | **`dense_score` only, applied to the fused list before truncation; never `rrf_score`** | The default 0.26 exceeds RRF's maximum of ~0.033, so applying it to the fused score would make every query return zero hits, silently, at the default configuration |
 | 37 | How the ablation reaches the retriever | **`_meta["mosaic/retrieval"] = {strategy, k_override}` on every `tools/call`**, recorded as `k_source` on the span | Retrieval lives in the MCP server and `agent/**` may not import it, so this is the only implementable channel — and it avoids a module-level global |
-| 38 | Privileged options with an empty token | **Always 403 (fail closed)**, making `DASHBOARD_TOKEN`/`EVAL_TOKEN` a prerequisite of the deployed eval run | Fail-open would be an unauthenticated privileged channel on a public URL |
+| 38 | Privileged options outside the admin persona | **Always 403 (fail closed)**, making `X-Actor: admin` — and, on the graded deployment, a valid `APP_ACCESS_TOKEN` — a prerequisite of the deployed eval run | Fail-open would be an unauthenticated privileged channel on a public URL |
 | 39 | `mcp_discovery` span cardinality | **One span per turn** (the handshake is still cached per process; the cached span says so) | A once-per-process span would put the primary RUBRIC5.2 evidence only in the first turn after a boot |
 | 40 | Confirmation resume | **Reopens the same `turn_id`** (`ended_at = NULL`, `resumed_count += 1`, `seq` continued, a second flush) | The action-safety test requires the write span and its confirmation span in one turn |
 | 41 | Where `judge` spans live | **A synthetic `eval_judge` session, one per run, linked by `payload.scored_turn_id`** | Judging happens after the scored turn is closed and flushed; appending there would break `trace[] == spans-of-turn` |
 | 42 | Committed trace archive | **None.** Only eval results are committed | An archive of demo traces was a large committed artifact with an import path, an idempotency guard and a sha256 ledger, all to avoid an empty page that `make demo1` fills in seconds (§22) |
 | 43 | Phase definitions of done | **Each references only artifacts that exist at that phase**; a fixture is introduced by the phase that needs it | v1's cross-phase references made several phases unable to close green, which produced the "half a test file per phase" splits |
+| 44 | Access to the deployed app | **One shared secret, `APP_ACCESS_TOKEN`**, presented as `?access=` (exchanged once for the HttpOnly `mosaic_access` cookie, then stripped from the URL by a 302), as that cookie, or as `Authorization: Bearer`; the gate is on whenever the token is set or `APP_ENV != local`; `/health`, `/ready`, `/static/*` and the key page `/access` stay open | The requirements are silent on auth and all data is synthetic, so the goal is a speed bump against scanners and drive-by quota burn on a public repo, not secrecy. `README.md` and `deployed.md` carry the full tokenized link so the grader clicks once; rotation after grading is one env change |
+| 45 | Roles inside a trusted session | **Two personas** — an employee (default `E1042`, chat only) and **`admin`** — carried in cookie `mosaic_actor` or header `X-Actor`, with `/dashboard/*`, `/api/traces\|eval\|corpus\|mcp/*`, the three write controls and the privileged `/chat` options admin-only, server-enforced as `403 ADMIN_REQUIRED`, and the two ad-hoc dashboard/eval tokens are retired (§22 row 25) | One mechanism replaces two ad-hoc tokens: the selector that already chose the audit actor now also chooses privilege, `sessions.auth_mode` / `actor_role` make both visible on every session row, and the eval runner sends one header pair instead of carrying a second secret |
 
 ## 22. What v2 removed from v1 and why
 
@@ -2574,6 +2644,7 @@ One line per removed mechanism. Everything below existed in v1, generated review
 | 22 | **The seed-ticket / `tickets.seed.json` argument, `reset-sandbox` archive preservation, and the mock-write id as a hash of the signed token body** | All consequences of rows 4 and 12. `mock_writes.id` is now a readable sequence and `reset-sandbox` simply clears the table (§8.5). |
 | 23 | **`EVAL_SMOKE`/eval-run artifact triples** (`.deterministic.json` + `.env.json` + `.items.jsonl` per run, plus fixture triples in two directories) | One `<run_id>.json` per run carries metrics and per-item detail. Fixtures live in one directory (§13.10, §16.5). |
 | 24 | **The `process_exit` `stop_reason` value** (a twelfth entry in the `stop_reason` vocabulary) — the nine `turns.outcome` values are kept | The SIGTERM path writes `outcome='error'`, `stop_reason='error'`; the crash-recovery case needed no vocabulary of its own (§9.4 lists eleven). |
+| 25 | **`DASHBOARD_TOKEN` / `EVAL_TOKEN`** (the `X-Eval-Token` header, the dashboard write-control token gate, the disabled-with-tooltip rule, the two `sync: false` rows in `render.yaml` and their GitHub secrets) | **Replaced by `APP_ACCESS_TOKEN` + the admin persona** (§21 rows 44–45): one secret to reach the app at all, one role check for everything privileged, and two fewer variables to keep in sync across `render.yaml`, the env table, the eval harness and the docs |
 
 **What was kept, deliberately:** the whole architecture — single service; in-process mounted MCP over Streamable HTTP with a stdio entrypoint; 9 tools;
 native tool calling behind a `ChatModel` abstraction; fastembed + sqlite-vec + FTS5 + RRF; heading-aware deterministic chunking; the Session→Turn→Span
@@ -2590,18 +2661,18 @@ of done below references only artifacts that exist at that phase.**
 | # | Phase | Deliverable | Definition of done | Key? | Est. |
 |---|---|---|---|---|---|
 | **P0** | Skeleton | `pyproject.toml`, `requirements*.txt`, `.python-version`, `Makefile`, `settings.py`, `.env.example`, `.gitignore`, `README.md` with its five headings and the three link lines (`TBD-before-submission` placeholders accepted), `NEEDS-FROM-USER.md` seeded with items 2 and 3 requested, `CHANGELOG.md`, `.github/workflows/ci.yml` with jobs `lint` and `test` (green on the P0 suite; the `docker` and `deploy` jobs are added at P11 with the Dockerfile and `render.yaml`), `scripts/vendor_assets.py` + `static/vendor/` + hand-authored `LICENSES.md`, `src/hrmosaic/rag/download_model.py`, `tests/architecture/test_conventions.py` (all five assertions, trivially green) | `make lint && make test` green; `python -m hrmosaic.rag.download_model` populates `FASTEMBED_CACHE_PATH`; `test_env_example_covers_settings` green in both directions; `test_readme_headings` green; `test_conventions` green; a **recorded green `pull_request` run** (a throwaway branch, a no-op commit, `gh pr checks --watch`, the run URL pasted into `CHANGELOG.md`, then close the PR) — RUBRIC5.7's "green on both events" artifact | – | 2 h |
-| **P1** | `core/` — trace first | `db.py` (both stores), `core/migrations/00N_*.sql` (the complete §10.1 schema), `trace.py` (the writer, `register_span_listener()`, `reopen_turn()`, `install_shutdown_handlers()` / `flush_open_turns()` / `sweep_stale_turns()`, and the closing UPDATE that samples `rss_mb_at_end`), `models.py` (the span-payload union, view-models, `strict_json_schema()`, `MODEL_PRICES`), `redact.py`, `ids.py` (`SEED = 1729`; ids from `secrets`), `procstat.py`, `archive.py` (the eval-results importer), `retention.py`, plus `tests/fixtures/traces/` (≥ 2 hand-authored golden traces, one with a complete confirmed-write chain) | Store parity on both backends; `test_redact_preserves_token_counts`; `test_span_listener` (every closed span seen in `seq` order; a raising listener affects neither persistence nor its peers); `test_ids_unique` (10k ids from two interpreter runs disjoint); `test_rss_reader` (the CI/Linux output pasted into `CHANGELOG.md`); `test_retention` (zero orphaned `llm_messages`, eval-linked sessions survive); `test_results_import` (idempotent, re-imports a changed file, skips an unchanged one) against a hand-authored `tests/fixtures/eval_runs/` sample; `test_process_exit_mid_turn` in its **store-level** form (the subprocess form is P8's) | – | 4 h |
+| **P1** | `core/` — trace first | `db.py` (both stores), `core/migrations/00N_*.sql` (the complete §10.1 schema, including `sessions.auth_mode` and `sessions.actor_role`), `trace.py` (the writer, `register_span_listener()`, `reopen_turn()`, `install_shutdown_handlers()` / `flush_open_turns()` / `sweep_stale_turns()`, and the closing UPDATE that samples `rss_mb_at_end`), `models.py` (the span-payload union, view-models, `strict_json_schema()`, `MODEL_PRICES`), `redact.py`, `ids.py` (`SEED = 1729`; ids from `secrets`), `procstat.py`, `archive.py` (the eval-results importer), `retention.py`, plus `tests/fixtures/traces/` (≥ 2 hand-authored golden traces, one with a complete confirmed-write chain) | Store parity on both backends; `test_redact_preserves_token_counts`; `test_span_listener` (every closed span seen in `seq` order; a raising listener affects neither persistence nor its peers); `test_ids_unique` (10k ids from two interpreter runs disjoint); `test_rss_reader` (the CI/Linux output pasted into `CHANGELOG.md`); `test_retention` (zero orphaned `llm_messages`, eval-linked sessions survive); `test_results_import` (idempotent, re-imports a changed file, skips an unchanged one) against a hand-authored `tests/fixtures/eval_runs/` sample; `test_process_exit_mid_turn` in its **store-level** form (the subprocess form is P8's) | – | 4 h |
 | **P2** | Corpus | The **14 documents authored and committed** (4 formats), `corpus/facts.yml` (~40 entries with verbatim quotes), `corpus/rules.yml` (each requirement naming a `fact_key`, `doc_id` and `heading_path`), `corpus/README.md` (topic map + outlines), `scripts/build_pdf.py`, `scripts/corpus_stats.py`, `scripts/check_facts.py` | `python scripts/check_facts.py` green — every `facts.yml` quote appears verbatim in its document, every `section` matches a real heading path, every `rules.yml` requirement's `fact_key` exists; `test_corpus_stats` (5–20 files, 30–120 pages); `test_corpus_topics` (all 10 PD.2 topics mapped); the canary section is present and under `CHUNK_MAX_CHARS`; reviewer check: ≥ 6 concrete checkable statements per document | – | 4 h |
 | **P3** | Mock data | `scripts/gen_mock_data.py` (seed=1729) → 6 JSON datasets with `as_of: 2026-09-01` banners, Pydantic models, `scripts/gen_mock_schemas.py` → `mock_data/schemas/*.schema.json`, `scripts/pii_check.py`, `mock_data/README.md` | `test_mock_schemas` validates every file; `python scripts/pii_check.py` clean; re-running the generator is byte-idempotent; `test_pto_balance_arithmetic` (the identity holds for all 24 employees at the snapshot; `E1042` → 13.5; the accrual rate matches the `facts.yml` band); `test_mock_anchor_ids` (the four anchors present, 24 unique ids matching the pattern, `E1108`'s waiting period after the snapshot) | – | 2 h |
 | **P4** | `rag/` (+ `core/corpusread.py`) | 4 parsers, the heading-aware chunker (`" > "`-joined path before hashing, `chunker_version = "2026.1"`), `embed.py` (the sole call site, `batch_size=8`, `threads=1`, `_fake_embed()`, `QUERY_CONVENTION`), sqlite-vec + FTS5 index with the full `index_meta`, the RRF retriever with filter-then-truncate semantics, `ingest.py` (`--verify-manifest`, `ingest_report.json`), `core/corpusread.py` + `IndexMeta`, the committed `chunks.manifest.jsonl` | Manifest byte-identical across two runs (`test_chunking_deterministic`); `test_chunking` (heading-path propagation + overlap); `test_ingest_report` (four formats, non-zero, parts sum to totals, totals match table row counts); `test_fake_embedder` (unit norm, 384-dim, identical across two interpreter runs); `test_corpusread_contract`; `test_retrieval_filters` (a)(b)(c); `test_min_dense_score_is_not_rrf`; `test_chunk_citation_fields`; `test_gitignore_manifest_tracked` (`git check-ignore -q` exits non-zero); `python -m hrmosaic.rag.index --selftest`; **`test_query_embed_is_asymmetric`** — the branch taken and the fastembed version recorded in `CHANGELOG.md` | – | 4 h |
 | **P5** | `mcpserver/` | 9 tools with input and output schemas, `rules.py` (resolving `(doc_id, heading_path)` → a real `chunk_id` via `core.corpusread`), `confirm.py` (mint / validate / consume, ~60 lines), `asgi.py` (`mount_mcp` / `build_mounted_app`), the stdio and mounted-HTTP entrypoints, all three `_meta` keys and `_trace` propagation, `scripts/gen_tool_schemas.py` → `mcp/tools/*.schema.json`, `mcp/README.md` with the 1.x→2.x table and the `_meta` conventions | `test_mcp_api_shape` (all four 2.x differences); `test_tools_match_spec`; `test_tool_schemas_committed`; discovery ≥ 5 tools on **stdio and HTTP**; `test_mcp_tool_call` on both transports (`check_pto_balance("E1042") → 13.5` with `as_of`; `search_policy_documents` hits all resolve); **`test_confirmation_gate`** (missing / mismatched / reused, each writing nothing); `test_get_policy_section_selectors` (all four combinations); `test_rules_engine` (every `evidence.chunk_id` resolves; every `fact_key` exists; all seven scenarios reachable); `_meta.mosaic/retrieval.k_override` beats a model-supplied `k` | – | 5 h |
 | **P6** | `core/llm/` | The `ChatModel` protocol, `OpenAICompatAdapter`, `AnthropicAdapter` (MockTransport-tested), `StubAdapter`, the optional `CachedAdapter`, the token-bucket limiter, failover; the `llm_call` span and `llm_messages` rows emitted from inside the adapter; `scripts/probe_provider.py` | Tool-call argument normalisation green on both wire shapes; exactly one span per call; `test_strict_schema_emission`; `test_limiter_burst` (6 back-to-back calls < 50 ms of sleep; the 7th–11th pace); failover recorded as `provider_failover`. **When key #1 is available:** `probe_provider.py` confirms `LLM_MODEL` exists and one request carrying both `tools` and a strict `response_format` succeeds, with the outcome and date in `CHANGELOG.md` — otherwise the prompted-JSON fallback ships and this gate runs at the start of P10 | (#1 for the probe) | 3 h |
 | **P7** | `agent/` | The MCP client and discovery, the router, `orchestrator.run_turn()` / `resume_turn()`, the act loop with budgets, guardrails G1–G6, the confirmation flow, both workflow specs, and the three prompts (`DEMO_EXPECTATIONS` and `tests/e2e/test_demo_tasks.py` are **P8's** — the phase whose `/chat/confirm` can make demo 2's record pass) | `test_rag_only_makes_no_people_calls` is P7's e2e gate; `test_no_chain_of_thought`; `test_confirmation_token_stripped`; each guardrail's unit test incl. `test_g4_no_false_positives` over the committed manifest; `test_prompt_golden`; `test_conventions` still green (`agent/` imports no `mcpserver`) | – | 5 h |
-| **P8** | `web/` | `/chat`, `/chat/confirm` (minting the one-time token, calling `trace.reopen_turn`), `/chat/stream` (`web/sse.py`, one listener registered in the lifespan), `/health`, `/ready` (warm-up via one loopback `tools/call`), the minimal `GET /api/traces/turns/{turn_id}`, the chat UI (act-as selector, citation drawer, confirm card, snapshot note, demo buttons), `scripts/demo_task_*.sh`, `DEMO_EXPECTATIONS` and `tests/e2e/test_demo_tasks.py` | Contract tests for a RAG-only and a tool-using query; the four-row privileged-options matrix; `test_retrieval_options_reach_the_tool`; `test_app_starts`; `test_chat_page_renders`; `test_chat_trace_projection` (the R4.3 table row by row, and set equality with the turn's spans); `test_lifespan`; SSE live path and fallback; **the four fault tests, authored here in full** (each asserting HTTP 200 and its named span); `test_confirm_resume_lifecycle` (decline → re-ask → confirm; one turn row; exactly one `mock_writes` row); `test_action_safety` over the fixture traces; `test_missing_key_is_graceful` (all three surfaces); `test_process_exit_mid_turn` extended to its subprocess form; `test_audit_completeness`; **both demo sequences end to end** against `required_tools` + `precedence_edges` + `forbidden_tools`, demo 2 all the way through confirm→write | – | 4 h |
-| **P9** | Dashboard (**9a** the `/api/*` layer + the shared table/filter partials + **page 3 first**; **9b** pages 1, 2, 4–8; **9c** pages 9–11) | All 11 pages, every `/api/*` endpoint (incl. the full `GET /api/traces/turns/{turn_id}`), the Chart.js views, the corpus browser, the MCP page with its synthetic `maintenance` turn, the three token-gated write controls, the bounded smoke-eval endpoint, page 11's compare and metrics tabs. **Plus `tests/fixtures/eval_runs/` — one committed run JSON per variant** so pages 11's tabs can be built and tested before P10 exists | Every page renders committed fixture data (HTTP 200 + key selectors); `test_dashboard_viewmodels` incl. page 11's metric block, the `judged: bool` + `n_scored{}` contract for the four judged aggregates, and the assertion that the deterministic metrics are non-null on all three variants; the three write controls present, wired, and disabled-with-tooltip without a token; the eval-row → trace deep link resolves; the bounded smoke-eval endpoint ships, importing `evaluation.runner` **lazily inside the handler** and rendering disabled without a token (`tests/integration/test_smoke_eval_endpoint.py` is authored at P10, the phase that can run it) | – | 5 h |
-| **P10** | `evaluation/` | **Step 0: read the live Gemini quotas (§3.1) and paste them with the date into `deployed.md`, and export `EVAL_TOKEN` (or `DASHBOARD_TOKEN`) locally — every eval item sends privileged `/chat` options, which fail closed without it.** Then `dataset.yaml` (26 items, absolute dates, gold facts citing `facts.yml` keys), the deterministic scorers with every §13.3/§13.4 edge case, the four judge prompts, `runner.py` + the limiter + `EVAL_TARGET_BASE_URL`, `ablation.py`, `scripts/gen_ablation_evidence.py`, `scripts/chunk_size_sweep.py`, `evaluation/reference_labels.yaml` **authored by an independent Opus subagent** with its `protocol` block, the REPORT generator; the **first real runs** (`target: local`, all three variants); `MIN_EVIDENCE_SCORE` calibration from the observed score distribution; one real exchange per demo task recorded as a stub script | `test_dataset` (all the §13.1 clauses); `test_scorer_edge_cases`; `test_cold_probe_excluded`; deterministic scorers green on `tests/fixtures/traces/` with no network; all three local variants run and `ablation.py`'s same-target / same-dataset assertion passes on that trio; the `no_structured_tools` workflow-completion check passes **or** `REPORT.md` carries the explicit not-supported banner; `test_action_safety` passes over the real run traces; `judge_agreement_rate` computed and reported with its n; `test_smoke_eval_endpoint` (400 without a token; a 1-item bounded run with one); `tests/fixtures/eval_runs/` refreshed from the real runs and P9's view-model tests still green; live quotas recorded | **#1** (+#8, #9) | 5 h |
-| **P11** | Deployment | **Step 0: re-read and date every row of §3.1 that names a live source** (Render plan details, request timeout, build minutes, Turso limits) into `deployed.md`. Then the Dockerfile, `render.yaml`, `provision_render.py`, `provision_turso.py`, `wait_for_deploy.py`, `smoke_deployed.py`, `check_render_hours.py`, `measure_cold_start.py`; provisioning run so `TURSO_*`, `DASHBOARD_TOKEN` and `EVAL_TOKEN` are set on Render and as GitHub secrets; the **published eval run** — `make eval` with `EVAL_TARGET_BASE_URL` = the live URL, all three variants, `baseline` judged, including the three cold probes — committed with `latest.json` and `comparison.json`; the three evidence screenshots | `make docker-run-512` → `/health` 200 with `rss_mb < 420`; `docker run -e PORT=10000` → `mcp.connected: true`; live-URL smoke green incl. `git_sha != "dev"`; the deployed run produced rows with non-null `sessions.eval_run_id` (proving the eval token was configured); `latest.json` names a `target: deployed`, `variant: baseline` run; the two non-baseline variants re-run against the live URL, then `python -m evaluation.ablation` green with all three runs sharing `target: deployed`; the R8.4 evidence pair recorded with a job-graph screenshot whose `deploy` skip reason reads **"dependent job failed"**; all three `docs/evidence/*.png` committed; `test_smoke_eval_endpoint` re-run against the running image (`EVAL_TARGET_BASE_URL` pointed at it, `DASHBOARD_TOKEN` and `EVAL_TOKEN` set), proving `import evaluation.runner` resolves under the image's `PYTHONPATH`; the measured cold start, warm turn, per-build wall-clock and 0.1-CPU turn time recorded in `deployed.md` / `CHANGELOG.md` | **#2, #3, #4** | 3 h |
-| **P12** | Docs + demo prep | `README.md` (five headings, the deployed URL, third-party components), `design-and-evaluation.md` (mermaid + the ten R10.1 justification subsections + all eight DOCS.3 subjects, the generated tool schemas, both demo sequences, the judge methodology naming the labeller, the agreement rate, the rejected alternatives, and the evidence screenshots), `ai-tooling.md` (what worked / what did not / AI-use and ownership disclosure), `deployed.md` (all five headings), `NEEDS-FROM-USER.md` final, `docs/demo-script.md`, `docs/pre-submission-checklist.md`; `scripts/paste_eval_numbers.py` run to fill the results table from `latest.json`; the `quantic-grader` invite sent | `test_docs_completeness` green — the ten R10.1 `###` headings, which are **the ten choices named in requirement 10's first bullet** (orchestration approach · MCP server design · transport choice · tool schemas · embedding model · chunking strategy · retrieval k · vector store · deployment architecture · safety guardrails), all eight DOCS.3 `##` headings, which are **the eight subjects named in the submission bullet** (architecture · RAG design · MCP server design · agent orchestration · tool schemas · safety guardrails · deployment choices · evaluation questions, expected answers and results), README's five headings plus the three link lines with **no `TBD-before-submission` remaining**, `deployed.md`'s five headings with the MCP-transport and cost strings present, `ai-tooling.md`'s three sections; the three evidence screenshots exist and are referenced; `docs/pre-submission-checklist.md` carries a line for every DEMO.* and SUB.* id; both demo scripts pass against the live URL; a final `workflow_dispatch` with `deploy_only: true` verified `/health.trace_store.eval_runs_imported` matches the committed result count; every rubric bullet ticked | – | 4 h |
+| **P8** | `web/` | `/chat`, `/chat/confirm` (minting the one-time token, calling `trace.reopen_turn`), `/chat/stream` (`web/sse.py`, one listener registered in the lifespan), `/health`, `/ready` (warm-up via one loopback `tools/call`), the minimal `GET /api/traces/turns/{turn_id}`, **the access gate and the two personas** (`?access=` → cookie → bearer, `GET`/`POST /access`, `POST /access/logout`, `POST /session/actor`, the per-IP limit on `POST /chat`, `access_token_missing` in `/health`), the chat UI (act-as selector over the 24 employees plus HR admin, citation drawer, confirm card, snapshot note, demo buttons), `scripts/demo_task_*.sh` sending the bearer header on every call and `X-Actor: admin` on the `GET /api/traces/turns/{turn_id}` poll only, the bearer assertion added to the HTTP half of `tests/integration/test_mcp_discovery.py` (§16.4), `DEMO_EXPECTATIONS` and `tests/e2e/test_demo_tasks.py` | Contract tests for a RAG-only and a tool-using query; the four-row privileged-options matrix; `test_access_gate` and `test_personas` (§16.1); `test_retrieval_options_reach_the_tool`; `test_app_starts`; `test_chat_page_renders`; `test_chat_trace_projection` (the R4.3 table row by row, and set equality with the turn's spans); `test_lifespan`; SSE live path and fallback; **the four fault tests, authored here in full** (each asserting HTTP 200 and its named span); `test_confirm_resume_lifecycle` (decline → re-ask → confirm; one turn row; exactly one `mock_writes` row); `test_action_safety` over the fixture traces; `test_missing_key_is_graceful` (all three surfaces); `test_process_exit_mid_turn` extended to its subprocess form; `test_audit_completeness`; **both demo sequences end to end** against `required_tools` + `precedence_edges` + `forbidden_tools`, demo 2 all the way through confirm→write | – | 4 h |
+| **P9** | Dashboard (**9a** the `/api/*` layer + the shared table/filter partials + **page 3 first**; **9b** pages 1, 2, 4–8; **9c** pages 9–11) | All 11 pages, every `/api/*` endpoint (incl. the full `GET /api/traces/turns/{turn_id}`), the Chart.js views, the corpus browser, the MCP page with its synthetic `maintenance` turn, the three admin-only write controls, the bounded smoke-eval endpoint, page 11's compare and metrics tabs. **Plus `tests/fixtures/eval_runs/` — one committed run JSON per variant** so pages 11's tabs can be built and tested before P10 exists | Every page renders committed fixture data (HTTP 200 + key selectors); `test_dashboard_viewmodels` incl. page 11's metric block, the `judged: bool` + `n_scored{}` contract for the four judged aggregates, and the assertion that the deterministic metrics are non-null on all three variants; every page and every `/api/*` read returning **403** `ADMIN_REQUIRED` without the admin persona and 200 with it; the three write controls present and wired; the eval-row → trace deep link resolves; the bounded smoke-eval endpoint ships, importing `evaluation.runner` **lazily inside the handler** and refusing a non-admin caller (`tests/integration/test_smoke_eval_endpoint.py` is authored at P10, the phase that can run it) | – | 5 h |
+| **P10** | `evaluation/` | **Step 0: read the live Gemini quotas (§3.1) and paste them with the date into `deployed.md`, and export `APP_ACCESS_TOKEN` locally — the runner sends `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin`, and every eval item's privileged `/chat` options fail closed without the admin persona.** Then `dataset.yaml` (26 items, absolute dates, gold facts citing `facts.yml` keys), the deterministic scorers with every §13.3/§13.4 edge case, the four judge prompts, `runner.py` + the limiter + `EVAL_TARGET_BASE_URL`, `ablation.py`, `scripts/gen_ablation_evidence.py`, `scripts/chunk_size_sweep.py`, `evaluation/reference_labels.yaml` **authored by an independent Opus subagent** with its `protocol` block, the REPORT generator; the **first real runs** (`target: local`, all three variants); `MIN_EVIDENCE_SCORE` calibration from the observed score distribution; one real exchange per demo task recorded as a stub script | `test_dataset` (all the §13.1 clauses); `test_scorer_edge_cases`; `test_cold_probe_excluded`; deterministic scorers green on `tests/fixtures/traces/` with no network; all three local variants run and `ablation.py`'s same-target / same-dataset assertion passes on that trio; the `no_structured_tools` workflow-completion check passes **or** `REPORT.md` carries the explicit not-supported banner; `test_action_safety` passes over the real run traces; `judge_agreement_rate` computed and reported with its n; `test_smoke_eval_endpoint` (403 `ADMIN_REQUIRED` in the employee persona; a 1-item bounded run as admin); `tests/fixtures/eval_runs/` refreshed from the real runs and P9's view-model tests still green; live quotas recorded | **#1** (+#8, #9) | 5 h |
+| **P11** | Deployment | **Step 0: re-read and date every row of §3.1 that names a live source** (Render plan details, request timeout, build minutes, Turso limits) into `deployed.md`. Then the Dockerfile, `render.yaml`, `provision_render.py`, `provision_turso.py`, `wait_for_deploy.py`, `smoke_deployed.py`, `check_render_hours.py`, `measure_cold_start.py`; provisioning run so `TURSO_*` and a generated `APP_ACCESS_TOKEN` are set on Render and as GitHub secrets, with the tokenized `https://<app>.onrender.com/?access=<token>` link pasted into `README.md`'s `Deployed:` line and `deployed.md`; the **published eval run** — `make eval` with `EVAL_TARGET_BASE_URL` = the live URL, all three variants, `baseline` judged, including the three cold probes — committed with `latest.json` and `comparison.json`; the three evidence screenshots | `make docker-run-512` → `/health` 200 with `rss_mb < 420`; `docker run -e PORT=10000` → `mcp.connected: true`; live-URL smoke green incl. `git_sha != "dev"`; the deployed run produced rows with non-null `sessions.eval_run_id` and `sessions.actor_role = 'admin'` (proving the token and persona were configured); `latest.json` names a `target: deployed`, `variant: baseline` run; the two non-baseline variants re-run against the live URL, then `python -m evaluation.ablation` green with all three runs sharing `target: deployed`; the R8.4 evidence pair recorded with a job-graph screenshot whose `deploy` skip reason reads **"dependent job failed"**; all three `docs/evidence/*.png` committed; `test_smoke_eval_endpoint` re-run against the running image (`EVAL_TARGET_BASE_URL` pointed at it, `APP_ACCESS_TOKEN` set, `X-Actor: admin`), proving `import evaluation.runner` resolves under the image's `PYTHONPATH`; the measured cold start, warm turn, per-build wall-clock and 0.1-CPU turn time recorded in `deployed.md` / `CHANGELOG.md` | **#2, #3, #4** | 3 h |
+| **P12** | Docs + demo prep | `README.md` (five headings, the deployed URL, third-party components), `design-and-evaluation.md` (mermaid + the ten R10.1 justification subsections + all eight DOCS.3 subjects, the generated tool schemas, both demo sequences, the judge methodology naming the labeller, the agreement rate, the rejected alternatives, and the evidence screenshots), `ai-tooling.md` (what worked / what did not / AI-use and ownership disclosure), `deployed.md` (all six headings, `## Access` explaining the tokenized link, the cookie, the bearer header for API clients and MCP Inspector, the two personas and the rotation step), a `### Security posture` subsection of `design-and-evaluation.md` (no user accounts by design, the requirements are silent, the three controls — access token, persona roles, confirmation gate — and what production would add: SSO, employee-scoped data access, a retention policy), `NEEDS-FROM-USER.md` final, `docs/demo-script.md`, `docs/pre-submission-checklist.md`; `scripts/paste_eval_numbers.py` run to fill the results table from `latest.json`; the `quantic-grader` invite sent | `test_docs_completeness` green — the ten R10.1 `###` headings, which are **the ten choices named in requirement 10's first bullet** (orchestration approach · MCP server design · transport choice · tool schemas · embedding model · chunking strategy · retrieval k · vector store · deployment architecture · safety guardrails), all eight DOCS.3 `##` headings, which are **the eight subjects named in the submission bullet** (architecture · RAG design · MCP server design · agent orchestration · tool schemas · safety guardrails · deployment choices · evaluation questions, expected answers and results), README's five headings plus the three link lines with **no `TBD-before-submission` remaining**, `deployed.md`'s six headings with the MCP-transport, access and cost strings present, `design-and-evaluation.md`'s `### Security posture` subsection, `ai-tooling.md`'s three sections; the three evidence screenshots exist and are referenced; `docs/pre-submission-checklist.md` carries a line for every DEMO.* and SUB.* id; both demo scripts pass against the live URL; a final `workflow_dispatch` with `deploy_only: true` verified `/health.trace_store.eval_runs_imported` matches the committed result count; every rubric bullet ticked | – | 4 h |
 
 **Dependency graph:** P4 ← P2 · P5 ← P3 + P4 · P6 ← P1 · P7 ← P5 + P6 · P8 ← P7 · P9 ← P1 + P8 · P10 ← P8 (+ P9 for the eval pages) · P11 ← P9
 + P10 · P12 ← P11. P2 ∥ P3 and P4 ∥ P6 are parallelisable across subagents once P1 lands.

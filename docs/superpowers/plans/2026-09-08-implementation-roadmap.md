@@ -174,7 +174,8 @@ gh run list --limit 5                                         # green on BOTH pu
 **Goal.** The Session → Turn → Span audit model, its two backends and its readers' entry points exist before any component can emit a record.
 
 **Scope.** `src/hrmosaic/core/`: `db.py` (`SqliteStore` + `TursoHTTPStore` behind one `execute`/`batch` interface), `migrations/00N_*.sql` (the whole
-§10.1 schema), `trace.py`, `models.py`, `redact.py`, `ids.py`, `procstat.py`, `archive.py`, `retention.py`; `tests/fixtures/traces/`;
+§10.1 schema, `sessions.auth_mode` and `sessions.actor_role` included — both `NOT NULL` with their `CHECK` vocabularies, so P8 and P9 have the columns
+they render and filter on), `trace.py`, `models.py`, `redact.py`, `ids.py`, `procstat.py`, `archive.py`, `retention.py`; `tests/fixtures/traces/`;
 `tests/fixtures/eval_runs/sample_run.json`.
 
 **Deliverables.**
@@ -301,7 +302,8 @@ pytest tests/architecture/test_conventions.py -q       # sole embed call site; n
 pytest tests/contract/test_mcp_api_shape.py tests/contract/test_tools_match_spec.py -q   # the four 2.x differences; REQUIRED_TOOL_NAMES vs a LIVE tools/list
 python scripts/gen_tool_schemas.py && git diff --exit-code mcp/tools/
 pytest tests/contract/test_tool_schemas_committed.py -q
-pytest tests/integration/test_mcp_discovery.py -q      # initialize + tools/list >= 5 over stdio AND mounted HTTP
+pytest tests/integration/test_mcp_discovery.py -q      # discovery only: initialize + tools/list >= 5 over stdio AND mounted HTTP
+                                                       #   (P8 adds this file's Authorization: Bearer assertion — spec 16.4)
 pytest tests/integration/test_mcp_tool_call.py -q      # check_pto_balance(E1042) -> 13.5 with as_of; search hits all resolve — both transports
 pytest tests/unit/test_confirmation_gate.py -q         # missing / mismatched / reused: CONFIRMATION_REQUIRED, nothing written
 pytest tests/unit/test_get_policy_section_selectors.py tests/unit/test_rules_engine.py -q
@@ -366,23 +368,40 @@ pytest tests/architecture/test_conventions.py -q                      # agent/ i
 `tests/integration/test_fault_*.py` files; `tests/e2e/test_demo_tasks.py` with its two `DEMO_EXPECTATIONS` records.
 
 **Deliverables.**
-- `POST /chat` (client-suppliable ids, the privileged-`options` matrix failing closed on an empty token, the four rubric-named top-level fields, and
+- **The access gate and the two personas (spec §11).** `APP_ACCESS_TOKEN` presented as `?access=` (302 back to the same URL with the parameter
+  stripped, after setting the HttpOnly `mosaic_access` cookie), as that cookie, or as `Authorization: Bearer`, compared with `secrets.compare_digest`;
+  the key page `GET`/`POST /access` and `POST /access/logout`; `POST /session/actor` for the act-as selector; the admin persona (`mosaic_actor` /
+  `X-Actor`) required for the privileged `/chat` options; the per-IP `ACCESS_RATE_LIMIT_PER_MIN` on `POST /chat` and the MCP mount; the fifth
+  `degradations[]` string `access_token_missing`; `sessions.auth_mode` / `actor_role` written on every session.
+- `POST /chat` (client-suppliable ids, the privileged-`options` matrix failing closed outside the admin persona, the four rubric-named top-level fields, and
   `trace[]` as the projection of **all** the turn's spans); `POST /chat/confirm` — **the only place a token is minted** — then `trace.reopen_turn` →
-  `resume_turn`; `GET /chat/stream` with one listener registered in the lifespan; `GET /health` (always 200, the four-string `degradations[]`);
+  `resume_turn`; `GET /chat/stream` with one listener registered in the lifespan; `GET /health` (always 200, the five-string `degradations[]`);
   `GET /ready` (503 until the model and index are resident, warmed by one loopback `tools/call`); and `GET /api/traces/turns/{turn_id}`.
-- The chat UI: act-as selector (default `E1042`), typed answer blocks with the "Recommendation — not company policy" badge, citation chips linking to
+- The chat UI: act-as selector over the 24 employees **plus HR admin** (default `E1042`, setting `mosaic_actor`; the dashboard nav link appears only
+  in the admin persona), typed answer blocks with the "Recommendation — not company policy" badge, citation chips linking to
   `source_url`, the snapshot note under any `as_of`-bearing result, the live SSE rail, the Confirm/Cancel card, the cold-start banner, the two demo
-  buttons; plus `demo_task_{1,2}.sh` — plain `curl`, parameterised by `BASE_URL`.
+  buttons; plus `demo_task_{1,2}.sh` — plain `curl`, parameterised by `BASE_URL` and sending `Authorization: Bearer $APP_ACCESS_TOKEN` on
+  every call; their chat calls stay in the default employee persona, and the `GET /api/traces/turns/{turn_id}` poll of the 202 fallback — the one
+  admin-only route they touch — additionally sends `X-Actor: admin`.
 - **All four fault-injection files, authored once here**, each asserting the orchestrator behaviour *and* HTTP 200 — no phase owns half a file.
+- **The one assertion P8 adds to `tests/integration/test_mcp_discovery.py`** (P5's file, discovery only until now): with the gate on, the in-process
+  MCP client sends `Authorization: Bearer` on `tools/list` and on every `tools/call` (spec §16.4).
 
 **Definition of done.**
 ```bash
 pytest tests/contract/test_app_starts.py tests/contract/test_chat_page_renders.py tests/contract/test_health.py tests/contract/test_lifespan.py -q
 pytest tests/contract/test_chat_contract.py tests/contract/test_chat_trace_projection.py -q   # RAG-only AND tool-using; the 7-row R4.3/R4.1 table; trace == spans-of-turn
 pytest tests/contract/test_chat_privileged_options.py tests/contract/test_missing_key_is_graceful.py -q
+pytest tests/contract/test_access_gate.py tests/contract/test_personas.py -q   # 401 + key page; ?access= -> 302 + Set-Cookie + stripped URL; cookie
+                                                                              #   and bearer -> 200; /health + /ready open; APP_ENV=render with no
+                                                                              #   token -> 403 + access_token_missing; /dashboard/* 403
+                                                                              #   ADMIN_REQUIRED without admin, and 200 as X-Actor: admin on
+                                                                              #   GET /api/traces/turns/{turn_id} (the dashboard pages are P9's,
+                                                                              #   where test_dashboard_pages asserts 200-as-admin); /session/actor
 pytest tests/integration/test_fault_mcp_down.py tests/integration/test_fault_unknown_employee.py \
        tests/integration/test_fault_empty_retrieval.py tests/integration/test_fault_ambiguous.py -q
 pytest tests/integration/test_health_mcp_down.py tests/integration/test_sse.py tests/integration/test_mcp_remote_url.py -q
+pytest tests/integration/test_mcp_discovery.py -q       # re-run for P8's bearer assertion on tools/list and every tools/call
 pytest tests/integration/test_confirm_resume_lifecycle.py -q          # decline -> re-ask -> confirm; two turn rows (the declined turn, then the
                                                                       #   re-asked turn reopened on confirm); exactly one mock_writes row
 pytest tests/integration/test_audit_completeness.py tests/integration/test_process_exit_mid_turn.py tests/unit/test_action_safety.py -q
@@ -403,14 +422,16 @@ make demo1 && make demo2                               # each target starts its 
   Export JSON button; Chart.js on pages 1, 8 and 11.
 - Page 11's metric block, with the four judged aggregates typed `Optional[float]` beside `judged: bool` and `n_scored{}` — never fabricated zeros —
   and the deterministic metrics non-null on every variant.
-- The three token-gated write controls on their stated pages: **Reset sandbox** (8), **Re-discover now** (9, opening a synthetic `maintenance` session
-  for its span), **Run smoke eval** (11, bounded by `EVAL_SMOKE_MAX_ITEMS`). Without `DASHBOARD_TOKEN` they render visibly disabled with the tooltip,
-  never dead.
+- **The whole dashboard is admin-only**, reads included — every page and every `/api/traces\|eval\|corpus\|mcp/*` endpoint returns **403**
+  `{"code": "ADMIN_REQUIRED"}` outside the admin persona, on top of P8's access gate; pages 1 and 2 show and filter on `auth_mode` and `actor_role`.
+- The three admin-only write controls on their stated pages: **Reset sandbox** (8), **Re-discover now** (9, opening a synthetic `maintenance` session
+  for its span), **Run smoke eval** (11, bounded by `EVAL_SMOKE_MAX_ITEMS`). They are never dead: reaching the host page already proves the persona.
 - `tests/fixtures/eval_runs/` — one committed run JSON per variant, so page 11's tabs are built and tested before P10 has run anything.
 
 **Definition of done.**
 ```bash
-pytest tests/contract/test_dashboard_pages.py -q       # 11 pages 200 + key selectors; three write controls wired, disabled without a token
+pytest tests/contract/test_dashboard_pages.py -q       # 11 pages 200 + key selectors as admin; 403 ADMIN_REQUIRED without the admin persona;
+                                                       #   the three write controls wired; auth_mode / actor_role on the session rows
 pytest tests/contract/test_dashboard_viewmodels.py -q  # every /api/* payload validates; the judged/n_scored contract; deterministic metrics non-null
 # the bounded smoke-eval endpoint ships here, importing evaluation.runner lazily; its test is P10's (runner.py is a P10 deliverable)
 ```
@@ -422,8 +443,8 @@ before anything is published.
 
 **Scope.** `evaluation/`: `dataset.yaml`, `schema.py`, `deterministic.py`, `judges.py`, `runner.py`, `ablation.py`, `reference_labels.yaml`, `results/`,
 `REPORT.md`; `scripts/{chunk_size_sweep,gen_ablation_evidence}.py`. **Step 0:** read the live Gemini RPM/RPD/TPM (§3.1) and paste them with the date
-into `deployed.md`, and export `EVAL_TOKEN` (or `DASHBOARD_TOKEN`) — every eval item sends privileged `/chat` options and fails closed without
-one; if key #1 arrived late, run `scripts/probe_provider.py` here.
+into `deployed.md`, and export `APP_ACCESS_TOKEN` — the runner sends `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin`, and every eval
+item's privileged `/chat` options fail closed outside the admin persona; if key #1 arrived late, run `scripts/probe_provider.py` here.
 
 **Deliverables.**
 - `dataset.yaml` — 26 items in fixed file order (7 `simple_policy`, 5 `multi_doc`, 6 `tool_task`, 3 `ambiguous`, 3 `out_of_scope`, 1 `unsafe_action`,
@@ -443,7 +464,7 @@ pytest tests/unit/test_reference_subset_deterministic.py tests/unit/test_latest_
 make eval && python -m evaluation.runner --variant dense_only_k2 && python -m evaluation.runner --variant no_structured_tools
 make ablation                                          # same target + dataset_sha; the workflow-completion delta, or REPORT.md's not-supported banner
 python scripts/chunk_size_sweep.py && python scripts/gen_ablation_evidence.py
-pytest tests/integration/test_smoke_eval_endpoint.py -q # 400 without a token; a 1-item bounded run with one
+pytest tests/integration/test_smoke_eval_endpoint.py -q # 403 ADMIN_REQUIRED in the employee persona; a 1-item bounded run as admin
 pytest tests/unit/test_action_safety.py tests/contract/test_dashboard_viewmodels.py -q         # over the real traces; refreshed fixtures still validate
 grep -n 'judge_agreement_rate\|judge_agreement_n' evaluation/REPORT.md
 ls evaluation/results/                                 # three <run_id>.json, comparison.json, chunk_size_comparison.json — and NO latest.json yet
@@ -463,16 +484,19 @@ date every §3.1 row naming a live source, and confirm the P10 and P11 sweeps fa
 - The `docker` job (build → `probe_sqlite_vec.py` inside `python:3.12-slim` → run → `wait_for_health` → `assert_health`) and the `deploy` job
   (`needs: [test, docker]`, `if` push-to-`main`, curl the deploy hook → `wait_for_deploy` → `smoke_deployed`).
 - Unattended provisioning: the Turso database and scoped token, the Render service, every env var, the deploy hook, and `gh secret set` for
-  `RENDER_DEPLOY_HOOK_URL`, `DEPLOY_URL`, `RENDER_API_KEY`. `DASHBOARD_TOKEN` and `EVAL_TOKEN` are set on Render — the run fails closed without them.
+  `RENDER_DEPLOY_HOOK_URL`, `DEPLOY_URL`, `RENDER_API_KEY`. `provision_render.py` generates `APP_ACCESS_TOKEN` with `secrets.token_urlsafe(32)` and
+  sets it on Render — no user step — and the full tokenized link `https://<app>.onrender.com/?access=<token>` goes into `README.md`'s `Deployed:` line
+  and `deployed.md`'s `## Access`. The deployed eval run fails closed without the token and `X-Actor: admin`.
 - **The published run:** `make eval` and `make ablation` against the live URL, all three variants, `baseline` judged, the three cold probes included,
   committed by the main session with `latest.json`, `comparison.json` and `REPORT.md`; plus the three evidence screenshots and the R8.4 red-run pair.
 
 **Definition of done.**
 ```bash
-make docker-run-512                                    # docker run -m 512m: /ready green, one stubbed turn, /health.app.rss_mb < 420
+make docker-run-512                                    # docker run -m 512m with APP_ACCESS_TOKEN set (APP_ENV stays local): /ready green,
+                                                       #   one stubbed POST /chat over Authorization: Bearer, /health.app.rss_mb < 420
 docker run --rm -d -e PORT=10000 -e LLM_PROVIDER=stub -p 10000:10000 mosaic-hr && python scripts/assert_health.py --url http://127.0.0.1:10000
 python scripts/provision_turso.py && python scripts/provision_render.py
-python scripts/smoke_deployed.py --url "$DEPLOY_URL"   # 200; mcp.connected; git_sha != "dev"
+python scripts/smoke_deployed.py --url "$DEPLOY_URL"   # bearer header; 200; mcp.connected; git_sha != "dev"; /health lists no access_token_missing
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant dense_only_k2
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant no_structured_tools
@@ -496,8 +520,11 @@ ls docs/evidence/*.png                                 # three committed screens
   rejected alternative from spec §3), all eight DOCS.3 subjects, the generated tool schemas, both demo sequences matching `DEMO_EXPECTATIONS`, the judge
   methodology naming the labeller and the blinding, and the three evidence screenshots.
 - `README.md` final (five headings, the real deployed URL, third-party components); `ai-tooling.md` (`## What worked well`, `## What did not work`, the
-  AI-use and ownership disclosure); `deployed.md` final (five headings with the measured cold start and its ISO date, the MCP-transport rationale, and
-  `## Cost` with the dates observed).
+  AI-use and ownership disclosure); `deployed.md` final (six headings with the measured cold start and its ISO date, the MCP-transport rationale,
+  `## Access` — the tokenized link, the cookie, the bearer header for API clients and MCP Inspector, the two personas and the rotation step — and
+  `## Cost` with the dates observed); `design-and-evaluation.md`'s `### Security posture` subsection (no user accounts by design, the requirements are
+  silent, the three controls — access token, persona roles, confirmation gate — and what production would add: SSO, employee-scoped data access, a
+  retention policy).
 - `docs/demo-script.md` (the §18.3 segment table, the production note, a per-task five-element DEMO.6 sub-checklist) and
   `docs/pre-submission-checklist.md` with one line per DEMO.* and SUB.* id; `tests/contract/test_docs_completeness.py`, authored here in full because
   this is the phase where every asserted document exists; `scripts/paste_eval_numbers.py`. **No CI diff-check of documentation anywhere.**
@@ -505,10 +532,11 @@ ls docs/evidence/*.png                                 # three committed screens
 **Definition of done.**
 ```bash
 python scripts/paste_eval_numbers.py                   # the results table filled from evaluation/results/latest.json
-pytest tests/contract/test_docs_completeness.py -q     # ten ### + eight ## headings; README's five + three link lines; deployed.md's five;
+pytest tests/contract/test_docs_completeness.py -q     # ten ### + eight ## headings + ### Security posture; README's five + three link lines
+                                                       #   (Deployed: carrying ?access=); deployed.md's six;
                                                        #   ai-tooling.md's three; demo script and pre-submission checklist present and complete
 grep -c 'TBD-before-submission' README.md              # 0
-BASE_URL="$DEPLOY_URL" bash scripts/demo_task_1.sh && BASE_URL="$DEPLOY_URL" bash scripts/demo_task_2.sh
+BASE_URL="$DEPLOY_URL" bash scripts/demo_task_1.sh && BASE_URL="$DEPLOY_URL" bash scripts/demo_task_2.sh   # both send the bearer header
 gh api -X PUT repos/seantmalone/quantic-mosaic/collaborators/quantic-grader
 gh api repos/seantmalone/quantic-mosaic/collaborators/quantic-grader/permission
 gh workflow run ci.yml -f deploy_only=true && curl -s "$DEPLOY_URL/health" | jq '.trace_store.eval_runs_imported'   # matches the committed count
@@ -525,7 +553,7 @@ and **G7 is the one substantial human task, budgeted at 60–90 minutes**. **Not
 | **G2 — Render account + install the Render GitHub App** (item 2) | **P0** | **P11** | ~5 min: open `https://github.com/apps/render/installations/new`, sign in (no card), grant access to `seantmalone/quantic-mosaic`. Browser-only — **no API can install a GitHub App**. | P0–P10 in full. `make docker-run-512` proves the exact image locally with no host at all. |
 | **G3 — Turso account + Platform API token** (item 3) | **P0** | **P11** (usable any time after P1) | ~3 min: `https://turso.tech` → GitHub SSO (no card) → create a Platform API token → paste. | `scripts/provision_turso.py` then does database creation, scoped-token minting, `gh secret set` and Render env-var population unattended. Until then `SqliteStore` is the coded fallback. |
 | **G4 — Google AI Studio key → `LLM_API_KEY`** (item 1) | **P0** | **P6 gate** (deferrable) / hard at **P10** | ~2 min: `https://aistudio.google.com/apikey` → *Create API key* → paste. Free, no card. | P0–P9 build and pass CI on `LLM_PROVIDER=stub`. If it arrives late, P6 ships the prompted-JSON fallback and the probe runs at P10 step 0. ⚠ This key carries **both** sweeps, so P10's and P11's must fall on **different calendar days** (~710 calls each — spec §13.9, R-5). |
-| **G5 — Render API key** (item 4) | **P10** | **P11** | ~2 min: Render dashboard → Account Settings → API Keys → *Create* → paste. | `provision_render.py` creates the service, populates env vars, reads back the deploy hook and sets every GitHub secret. Fallback: ~15 min of manual Blueprint clicking per iteration. |
+| **G5 — Render API key** (item 4) | **P10** | **P11** | ~2 min: Render dashboard → Account Settings → API Keys → *Create* → paste. **The access gate adds no gate:** `provision_render.py` generates `APP_ACCESS_TOKEN` itself with `secrets.token_urlsafe(32)`. | `provision_render.py` creates the service, populates env vars, reads back the deploy hook and sets every GitHub secret. Fallback: ~15 min of manual Blueprint clicking per iteration. |
 | **G6 — Optional upgrades** (items 8–11) | **P10** | before P10's judged run (8–10); before P12 (11) | ~6 min total: #8 Groq key (~2 min, cross-family re-judge + demo failover) · #9 a second Gemini key from a different Cloud project (~2 min, **recommended**: removes judge/agent quota contention) · #10 Anthropic key (~$5, optional) · #11 **~20 min** adjudicating the 8 groundedness labels. | Each has a documented degradation: the judge stays in-family and the limitation is stated; judged metrics stay scoped to `baseline`; `AnthropicAdapter` stays MockTransport-tested; labels stay model-authored **and are named as such**. |
 | **G7 — Record the demo + submit** (items 6, 7) | **P12** | after **P12** | **★ 60–90 min** — 7–10 min of footage plus setup, retakes, upload and submission. Follow `docs/demo-script.md` (webcam overlay throughout, ID held ≥ 3 s at ~0:15, both tasks one-click against the live URL). Accept/confirm the `quantic-grader` invite, paste the video link into README's `Demo video:` line, submit both links. | Pre-stages both link lines, warms both demo prompts, verifies the live URL, the dashboard and the eval pages, and walks the pre-submission checklist. |
 
@@ -549,8 +577,8 @@ The push path is key-free and offline apart from the cached embedding model; not
 | P5 | MCP 2.x API shape; `REQUIRED_TOOL_NAMES ⊆ tools/list`; discovery **and** a call on both transports; committed schemas equal a live `tools/list`; the three confirmation-gate cases; the rules engine's chunk ids resolving and all seven scenarios reachable |
 | P6 | Both wire shapes normalised to one dict; strict-schema emission; limiter burst then pacing; exactly one `llm_call` span plus its `llm_messages` per call; the live provider probe when the key exists |
 | P7 | Six guardrail suites plus `test_g4_no_false_positives` over the committed manifest; both demo sequences under the stub against `required_tools` + `precedence_edges` + `forbidden_tools`, task 2 stopping at `awaiting_confirmation`; RAG-only makes zero people-tool calls; no chain-of-thought; the golden prompt snapshot |
-| P8 | `/chat` contract for RAG-only **and** tool-using; the four-row privileged-options matrix; `trace[]` ≡ spans-of-turn plus the seven-row R4.3/R4.1 mapping; the four fault injections at HTTP 200; `/health` degradations vocabulary and the MCP-down flip; SSE live path and fallback; confirm-resume producing exactly one `mock_writes` row; audit completeness; action safety over the fixtures |
-| P9 | All 11 pages rendering committed fixture data with their key selectors; every view-model validating; page 11's `judged` / `n_scored` contract with deterministic metrics non-null; the three write controls wired and disabled-with-tooltip without a token; the eval-row → trace deep link; the bounded smoke-eval endpoint |
+| P8 | `/chat` contract for RAG-only **and** tool-using; the four-row privileged-options matrix; the access gate (401 → `?access=` 302 + cookie → bearer, `/health` and `/ready` open, `access_token_missing` under `APP_ENV=render`) and the two personas; `trace[]` ≡ spans-of-turn plus the seven-row R4.3/R4.1 mapping; the four fault injections at HTTP 200; `/health` degradations vocabulary and the MCP-down flip; SSE live path and fallback; confirm-resume producing exactly one `mock_writes` row; audit completeness; action safety over the fixtures |
+| P9 | All 11 pages rendering committed fixture data with their key selectors **as admin**, and 403 `ADMIN_REQUIRED` without the admin persona; every view-model validating; page 11's `judged` / `n_scored` contract with deterministic metrics non-null; the three write controls wired and admin-only; the eval-row → trace deep link; the bounded smoke-eval endpoint |
 | P10 | Dataset shape and the no-relative-dates rule; every scorer edge case; cold probes excluded from quality means; `latest.json` never written for a `local` run; three local variants completing with the ablation's same-target/same-dataset assertions; action safety over real traces; `judge_agreement_rate` with its n |
 | P11 | `docker run -m 512m` with `rss_mb < 420`; injected-`PORT` health; live smoke with `git_sha != "dev"`; `latest.json` naming a `deployed` `baseline` run; `comparison.json` naming `deployed` three times; non-null `sessions.eval_run_id` on the published run; the red-run evidence pair; three committed screenshots; dated §3.1 values in `deployed.md` |
 | P12 | `test_docs_completeness` (ten `###`, eight `##`, README/`deployed.md`/`ai-tooling.md` headings, demo script and checklist); no `TBD-before-submission` left; both demo scripts against the live URL; the grader permission read back; `eval_runs_imported` matching the committed count |
@@ -571,7 +599,7 @@ Signed off at P12 before submission. Each row names an artifact a grader can ope
 | 8 | Excellent evaluation across all six metric families | 26 items; groundedness, citation accuracy, tool selection, workflow completion, escalation/safety, latency p50/p95 cold vs warm; three-variant ablation; judge agreement with its n | `evaluation/results/`, `evaluation/REPORT.md`, dashboard page 11 |
 | 9 | Excellent docs + demo meeting every DEMO.* item | `test_docs_completeness` green; video 7–10 min, on camera throughout, ID shown, both tasks live, design/deploy/CI/eval walkthroughs | `design-and-evaluation.md`, `README.md`, `ai-tooling.md`, `deployed.md`, the video link |
 | 10 | **USER.2 / USER.3 / USER.4** — full audit logs and evaluation in one dashboard, one trace model | Every record type present for a freshly executed chat; all six metric families, cold/warm p50/p95 and the ablation browsable; `/chat`'s trace, the dashboard and the eval report derive from one `trace_id` | `test_audit_completeness`, `test_dashboard_viewmodels`, `/dashboard/sessions/{id}` |
-| 11 | **USER.1** — autonomous buildability | `NEEDS-FROM-USER.md` lists only the seven gates, six reaching a human; every other step is a scripted command; CI reproduces build → index → test with no manual step | `NEEDS-FROM-USER.md`, `.github/workflows/ci.yml` |
+| 11 | **USER.1** — autonomous buildability | `NEEDS-FROM-USER.md` lists only the seven gates, six reaching a human (the access token is generated by `provision_render.py`, never pasted); every other step is a scripted command; CI reproduces build → index → test with no manual step | `NEEDS-FROM-USER.md`, `.github/workflows/ci.yml` |
 
 ---
 
@@ -594,8 +622,9 @@ Severity and mitigation follow spec §20 (ids match). **Trigger** is the observa
 | R-11 | Autonomous-build drift across 13 phases and many subagents | High | A second logging path appearing; a demo sequence silently changing; a corpus number moving under a gold answer | The trace is built at P1 with the conventions test in place from the same phase; the standing per-phase span criterion; `test_demo_tasks` compares actual traces against the documented sequences; `test_facts_quotes` locks the corpus; `test_tool_schemas_committed` locks the schemas; `test_chunking_deterministic` locks the manifest | all |
 | R-13 | Stub-vs-real divergence hiding a prompt regression | Medium | A real run failing on tool-call shape while `tests/e2e` is green | At P10 one **real** exchange per demo task is recorded and committed as a stub script, so the stub is a recording; the golden prompt snapshot forces a deliberate re-review on any prompt change; every `make eval` exercises the real provider end to end | P10 |
 
-Spec §20's remaining rows (R-12 public MCP endpoint, R-14 late-phase schedule, R-15 over-refusal) are standing conditions rather than plan triggers,
-mitigated by design: the write tools are unusable without a human-minted token, P9 splits into three sub-phases, `MIN_EVIDENCE_SCORE` is calibrated at
+Spec §20's remaining rows (R-12 the exposed MCP endpoint, R-14 late-phase schedule, R-15 over-refusal) are standing conditions rather than plan
+triggers, mitigated by design: the mount sits behind the access gate and MCP Inspector attaches with the bearer header, the write tools are unusable
+without a human-minted token, P9 splits into three sub-phases, `MIN_EVIDENCE_SCORE` is calibrated at
 P10 with over/missed-refusal reported, and the spec's design rule (§1) governs every review round.
 
 ---
