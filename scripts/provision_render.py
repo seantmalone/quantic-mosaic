@@ -46,9 +46,15 @@ from typing import Any
 import httpx
 import yaml
 
-from hrmosaic.settings import secret_value
-from hrmosaic.settings import settings as app_settings
-from scripts.provision_turso import fingerprint, read_handoff
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    # `python scripts/<name>.py` puts this file's own directory on sys.path, not the repository
+    # root, so the sibling `scripts.provision_turso` import below would not resolve.
+    sys.path.insert(0, str(REPO_ROOT))
+
+from hrmosaic.settings import secret_value  # noqa: E402
+from hrmosaic.settings import settings as app_settings  # noqa: E402
+from scripts.provision_turso import fingerprint, read_handoff  # noqa: E402
 
 RENDER_API_BASE = "https://api.render.com"
 

@@ -29,11 +29,18 @@ import argparse
 import os
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from scripts.provision_render import RenderApiError, RenderClient, load_blueprint
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    # `python scripts/<name>.py` puts this file's own directory on sys.path, not the repository
+    # root, so the sibling `scripts.provision_render` import below would not resolve.
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.provision_render import RenderApiError, RenderClient, load_blueprint  # noqa: E402
 
 #: The free-tier budgets of §14.1, and the thresholds at which this script speaks up.
 INSTANCE_HOURS_BUDGET = 750
