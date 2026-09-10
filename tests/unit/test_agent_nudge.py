@@ -47,6 +47,7 @@ from hrmosaic.agent.orchestrator import (
     _Turn,
 )
 from hrmosaic.agent.router import RouteDecision
+from hrmosaic.agent.workflows import LoopState
 from hrmosaic.agent.workflows import get as get_workflow
 from hrmosaic.core.models import DiscoveredTool, RetrievalPayload, RetrievedChunk
 
@@ -201,6 +202,7 @@ def test_the_reminder_names_the_workflow_and_every_unfilled_slot():
         workflow="pto_request",
         debts="; ".join(
             [
+                "no employee record is in state yet",
                 "no PTO balance for this employee is in state yet",
                 "no compliance verdict is in state yet",
                 "the turn holds fewer than 2 citable policy passages on notice and approval, and "
@@ -209,9 +211,10 @@ def test_the_reminder_names_the_workflow_and_every_unfilled_slot():
         ),
     )
     assert turn.step_summaries == [
-        "step 0: workflow incomplete — no PTO balance for this employee is in state yet; "
-        "no compliance verdict is in state yet; the turn holds fewer than 2 citable policy "
-        "passages on notice and approval, and an answer may state policy only from passages it can cite"
+        "step 0: workflow incomplete — no employee record is in state yet; no PTO balance for this "
+        "employee is in state yet; no compliance verdict is in state yet; the turn holds fewer than "
+        "2 citable policy passages on notice and approval, and an answer may state policy only from "
+        "passages it can cite"
     ]
 
 
@@ -247,6 +250,7 @@ def test_the_remote_work_reminder_states_the_three_document_floor():
 
 def test_a_complete_workflow_is_never_reminded():
     turn = a_turn()
+    turn.state.record("lookup_employee_profile", {"employee_id": "E1042"})
     turn.state.record("check_pto_balance", {"remaining_days": 12.0})
     turn.state.record("check_policy_compliance", {"verdict": "compliant"})
     turn.state.note_evidence("pto-and-holidays#0001", "pto-and-holidays")
@@ -542,9 +546,10 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
 
     summary = next(payload for kind, name, payload in records if name == "act_summary")
     assert summary["step_summaries"] == [
-        "step 1: workflow incomplete — no PTO balance for this employee is in state yet; "
-        "no compliance verdict is in state yet; the turn holds fewer than 2 citable policy "
-        "passages on notice and approval, and an answer may state policy only from passages it can cite",
+        "step 1: workflow incomplete — no employee record is in state yet; no PTO balance for this "
+        "employee is in state yet; no compliance verdict is in state yet; the turn holds fewer than "
+        "2 citable policy passages on notice and approval, and an answer may state policy only from "
+        "passages it can cite",
         "step 2: the requested action was still unproposed",
         "step 3: no tool call, the model answered",
     ]
@@ -581,3 +586,47 @@ async def test_a_turn_that_was_never_nudged_records_an_empty_nudges_list(run_age
 
     summary = next(payload for kind, name, payload in spans(response.turn_id) if name == "act_summary")
     assert summary["nudges"] == []
+
+
+# --------------------------------------------------------------------------------------
+# What `pto_request` requires in state (P13 R5)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_pto_workflow_is_incomplete_until_the_employee_record_is_in_state():
+    """R5: §9.3 lists the employee profile first among `pto_request`'s required slots.
+
+    `is_complete` did not read it, so a turn that never looked the employee up closed early —
+    `pto-003` and `unsafe-001` both ended on a balance and a verdict about an employee the turn
+    had never read. The predicate now requires the result, exactly as `remote_work_eligibility`
+    requires it, and the ablation that disables the people-data tools moves workflow completion
+    rather than only ToolSelection (§13.9).
+    """
+    state = LoopState()
+    state.record("check_pto_balance", {"remaining_days": 12.0})
+    state.record("check_policy_compliance", {"verdict": "compliant"})
+    state.note_evidence("pto-and-holidays#0001", "pto-and-holidays")
+    state.note_evidence("pto-and-holidays#0002", "pto-and-holidays")
+    assert PTO.is_complete(state) is False
+
+    state.record("lookup_employee_profile", {"employee_id": "E1042", "work_country": "US"})
+    assert PTO.is_complete(state) is True
+
+
+def test_the_pto_workflow_requires_all_three_tool_results():
+    assert PTO.requires_tool_results == (
+        "lookup_employee_profile",
+        "check_pto_balance",
+        "check_policy_compliance",
+    )
+    assert PTO.missing_tool_results(LoopState()) == list(PTO.requires_tool_results)
+
+
+def test_the_missing_employee_record_is_reported_as_a_debt_in_workflow_words():
+    """The same words `remote_work.py` uses — the debt, never the tool that would settle it."""
+    turn = a_turn()
+    orchestrator()._nudge(turn)
+
+    content = turn.messages[0].content or ""
+    assert "no employee record is in state yet" in content
+    assert PTO.slot_descriptions["lookup_employee_profile"] == REMOTE.slot_descriptions["lookup_employee_profile"]

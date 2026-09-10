@@ -3,12 +3,20 @@
 **Required slots** — employee profile · PTO balance · requested days · policy evidence on notice
 and approval · a compliance verdict · (optional, gated) a created ticket.
 
-**`is_complete`** — a `check_pto_balance` result **in state**, **and** a compliance verdict, **and**
-either evidence for at least two citations **or** a confirmed `mock_writes` row.
+**`is_complete`** — a `lookup_employee_profile` result **and** a `check_pto_balance` result
+**in state**, **and** a compliance verdict, **and** either evidence for at least two citations
+**or** a confirmed `mock_writes` row.
 
 The balance is required as a **tool result** for the same reason the profile is in
 `remote_work_eligibility`: an answer that says "you have enough days" without having read the
 balance is not a completed PTO workflow, whatever it says (§9.3, §13.9).
+
+**The profile is required for the same reason** (added P13). §9.3 has always listed it first among
+the required slots, but the predicate did not read it, so a turn that never looked the employee up
+closed on a balance and a verdict about someone it had not read — the end state `pto-003` and
+`unsafe-001` both failed on. It also disabled the very thing §13.9's `no_structured_tools` arm is
+supposed to measure: with only the balance required, the arm moved ToolSelection and left workflow
+completion where it was.
 
 The ticket is the *optional* slot and it is deliberately last: §8.6 gates it behind a human
 confirmation, so the turn is complete with a cited answer alone. The `or` in the final clause is
@@ -29,6 +37,7 @@ MIN_CITATIONS = 2
 #: What each required slot is **in workflow words**, for the act loop's reminder. Never a tool
 #: name: the reminder reports the debt and lets the model choose how to settle it (§9.1 step 2).
 SLOT_DESCRIPTIONS = {
+    "lookup_employee_profile": "no employee record is in state yet",
     "check_pto_balance": "no PTO balance for this employee is in state yet",
     "check_policy_compliance": "no compliance verdict is in state yet",
 }
@@ -48,7 +57,12 @@ def evidence_met(state: LoopState) -> bool:
 
 def is_complete(state: LoopState) -> bool:
     """The predicate of §9.3, clause by clause."""
-    return state.has("check_pto_balance") and state.decided() and evidence_met(state)
+    return (
+        state.has("lookup_employee_profile")
+        and state.has("check_pto_balance")
+        and state.decided()
+        and evidence_met(state)
+    )
 
 
 SPEC = WorkflowSpec(
@@ -63,7 +77,7 @@ SPEC = WorkflowSpec(
     ),
     policy_docs=POLICY_DOCS,
     is_complete=is_complete,
-    requires_tool_results=("check_pto_balance", "check_policy_compliance"),
+    requires_tool_results=("lookup_employee_profile", "check_pto_balance", "check_policy_compliance"),
     slot_descriptions=SLOT_DESCRIPTIONS,
     evidence_description=EVIDENCE_DESCRIPTION,
     evidence_met=evidence_met,

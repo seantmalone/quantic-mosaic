@@ -1155,11 +1155,13 @@ the turn is complete.
 | Workflow | Required slots | `is_complete` |
 |---|---|---|
 | `remote_work_eligibility` | employee profile · duration_days · destination_country · policy evidence from ≥ 3 of {remote-and-hybrid-work, tax-and-location-addendum, security-acceptable-use, manager-approval-matrix} · a compliance verdict | a **`lookup_employee_profile` result in state** **and** a `check_policy_compliance` result with `verdict != insufficient_evidence` **and** citations spanning ≥ 3 distinct `doc_id`s |
-| `pto_request` | employee profile · PTO balance · requested days · policy evidence on notice + approval · a compliance verdict · (optional, gated) a created ticket | a **`check_pto_balance` result in state** **and** a compliance verdict **and** either an answer with ≥ 2 citations or a confirmed `mock_writes` row |
+| `pto_request` | employee profile · PTO balance · requested days · policy evidence on notice + approval · a compliance verdict · (optional, gated) a created ticket | a **`lookup_employee_profile` result in state** **and** a **`check_pto_balance` result in state** **and** a compliance verdict **and** either an answer with ≥ 2 citations or a confirmed `mock_writes` row |
 
 **The structured-data slot is required, not merely listed.** An eligibility verdict reached without ever reading the employee's work country is not a
 complete workflow — and it is what makes the `no_structured_tools` ablation move Workflow completion rather than only ToolSelection (§13.9). The same
-reasoning puts `requires_tool_results` on every `tool_task` item's `expected_end_state`.
+reasoning puts `requires_tool_results` on every `tool_task` item's `expected_end_state`. The profile clause was added to `pto_request` at **P13**: the slot had always been
+listed first and the predicate had never read it, so a turn that answered from a balance and a verdict about an employee it had never looked up closed
+as complete.
 
 ### 9.4 Step budgets and stop reasons
 
@@ -2166,6 +2168,11 @@ against a deployed instance) and no global `remove_tool` (process-wide, so it wo
 would only test "an agent with no tools". The signal comes from §9.3's completion predicates, which require a `lookup_employee_profile` result and a
 `check_pto_balance` result in state, and from `requires_tool_results` on the `tool_task` items; without those clauses both predicates were satisfiable
 by RAG plus tool 4 alone.
+
+**Disclosure — what this arm measures changed at P13.** `pto_request.is_complete` now also requires a `lookup_employee_profile` result (§9.3), and
+`no_structured_tools` is one of the arms that disables that tool. The change was made after the baseline runs, for the answer-quality reason above and
+not for the ablation, so every `no_structured_tools` figure published from P13 onward is measured against a wider predicate than the P11 one and the
+two are not comparable arm-to-arm.
 
 **A null result is surfaced, never misreported.** `evaluation/ablation.py` checks `workflow_completion(no_structured_tools) <
 workflow_completion(baseline) − 0.25`; if it does not hold, `REPORT.md` carries an explicit *"the `no_structured_tools` variant did not move Workflow
