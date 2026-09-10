@@ -122,11 +122,13 @@ WRITE_FAILED_NOTE = (
     "Here is what I established; try again or contact the owning team."
 )
 
-#: The one deterministic reminder the loop is allowed to inject (§9.3, P8's live check). The
-#: workflow spec already knows what the turn still needs; before this, nothing told the **model**,
-#: so a run that reached a compliance verdict without ever searching stopped one step short of the
-#: evidence G1 requires and the turn refused. Sent at most once per turn, and it is an operational
-#: instruction — never reasoning, and never persisted anywhere but the verbatim `llm_messages` rows.
+#: The one deterministic reminder the act loop is allowed to inject (§9.1 step 2, P8's live check).
+#: It is a loop mechanism: §9.3 supplies the *gap* — its completion predicate — and says nothing
+#: about telling the model. The workflow spec already knows what the turn still needs; before this,
+#: nothing told the **model**, so a run that reached a compliance verdict without ever searching
+#: stopped one step short of the evidence G1 requires and the turn refused. Sent at most once per
+#: turn, and it is an operational instruction — never reasoning, and never persisted anywhere but
+#: the verbatim `llm_messages` rows.
 WORKFLOW_INCOMPLETE = (
     "Not yet. The {workflow} workflow still needs {needs}, and an answer with no retrieved policy "
     "text cannot be cited. Make ONE search_policy_documents call across {docs} — that is enough — "
@@ -415,7 +417,7 @@ class _Turn:
     tool_calls_made: int = 0
     steps_taken: int = 0
     reopened: bool = False
-    #: Each of the two reminders of §9.3 is sent at most once per turn.
+    #: Each of the two act-loop reminders (§9.1 step 2) is sent at most once per turn.
     nudged: bool = False
     action_reminded: bool = False
     stop_reason: str = "answered"
@@ -794,7 +796,10 @@ class Orchestrator:
                 return
 
     def _nudge(self, turn: _Turn) -> bool:
-        """Tell the model, at most once each, what the turn still owes (§9.3). Did it send one?
+        """Tell the model, at most once each, what the turn still owes. Did it send one?
+
+        A step of the act loop (§9.1 step 2); the debt it reports is §9.3's completion predicate
+        and, for the second reminder, the action the router recorded.
 
         The completion predicate is Python and cannot be talked out of its requirements — but a
         model that has stopped calling tools cannot read it either. Two reminders, each sent only
@@ -980,12 +985,13 @@ class Orchestrator:
                 turn.evidence[chunk.chunk_id] = evidence
                 fresh.append(evidence)
         # ⚠ Tools 2 and 4 also cite chunk ids, and those ids used to count towards the workflow's
-        # document spread. They no longer do (P8's live check, §9.3). They carry no dense score, so
-        # they never enter G1's candidate set — and a completion predicate that counted them while
-        # the evidence gate did not made `is_complete` true on a turn G1 was about to refuse. Live,
-        # the model reached `check_policy_compliance` without ever searching, the act loop closed
-        # because the workflow "was complete", and both demo tasks refused for want of evidence.
-        # One meaning of "evidence", shared by the predicate and the gate, is the whole fix.
+        # document spread. They no longer do (P8's live check: §9.3's predicate now reads evidence
+        # the same way §7.4's G1 does). They carry no dense score, so they never enter G1's candidate
+        # set — and a completion predicate that counted them while the evidence gate did not made
+        # `is_complete` true on a turn G1 was about to refuse. Live, the model reached
+        # `check_policy_compliance` without ever searching, the act loop closed because the workflow
+        # "was complete", and both demo tasks refused for want of evidence. One meaning of
+        # "evidence", shared by the predicate and the gate, is the whole fix.
         body = result.body
         if result.tool_name in WRITE_TOOLS:
             # §8.5's allocated ids: `MOCK-HR-…` from tool 8, `MOCK-EMAIL-…` from tool 9.
