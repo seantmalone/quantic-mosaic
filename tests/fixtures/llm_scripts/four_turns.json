@@ -1,6 +1,6 @@
 {
   "scenario": "four_turns",
-  "_note": "Four identical policy-only turns, back to back against one app instance — `rag_only.json`'s four completions repeated four times. Used by tests/contract/test_access_gate.py::test_four_turns_in_a_row_all_answer_because_the_apps_own_loopback_client_is_exempt, which drives four turns under a per-IP limit of 4 to prove the app's own MCP traffic does not spend the visitor-facing budget (spec §17).",
+  "_note": "Four identical policy-only turns, back to back against one app instance — `rag_only.json`'s five completions repeated four times. Used by tests/contract/test_access_gate.py::test_four_turns_in_a_row_all_answer_because_the_apps_own_loopback_client_is_exempt, which drives four turns under a per-IP limit of 4 to prove the app's own MCP traffic does not spend the visitor-facing budget (spec §17).",
   "completions": [
     {
       "purpose": "route",

@@ -14,9 +14,8 @@ balance is not a completed PTO workflow, whatever it says (§9.3, §13.9).
 **The profile is required for the same reason** (added P13). §9.3 has always listed it first among
 the required slots, but the predicate did not read it, so a turn that never looked the employee up
 closed on a balance and a verdict about someone it had not read — the end state `pto-003` and
-`unsafe-001` both failed on. It also disabled the very thing §13.9's `no_structured_tools` arm is
-supposed to measure: with only the balance required, the arm moved ToolSelection and left workflow
-completion where it was.
+`unsafe-001` both failed on. §13.9's `no_structured_tools` arm disables this tool too, so what that
+arm measures on a `pto_request` item widened with the predicate; the disclosure is in §13.9.
 
 The ticket is the *optional* slot and it is deliberately last: §8.6 gates it behind a human
 confirmation, so the turn is complete with a cited answer alone. The `or` in the final clause is

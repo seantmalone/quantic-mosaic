@@ -559,7 +559,7 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
         "2 citable policy passages on notice and approval, and an answer may state policy only from "
         "passages it can cite",
         "step 2: the requested action was still unproposed",
-        "step 3: one search, and the question spans more",
+        "step 3: 0 corpus search(es), and the question may span more",
         "step 4: no tool call, the model answered",
     ]
     # Machine-readable, on the plan span, so §13.4's reader can separate nudged turns from the
@@ -664,7 +664,7 @@ def test_a_turn_that_searched_once_is_reminded_that_the_corpus_is_federated():
     assert turn.messages[0].role == "user"
     assert turn.messages[0].content == SEARCH_BREADTH
     assert turn.nudges == ["search_breadth"]
-    assert turn.step_summaries == ["step 0: one search, and the question spans more"]
+    assert turn.step_summaries == ["step 0: 1 corpus search(es), and the question may span more"]
 
 
 def test_the_breadth_reminder_is_sent_at_most_once_per_turn():

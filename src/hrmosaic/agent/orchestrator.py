@@ -871,8 +871,8 @@ class Orchestrator:
     def _nudge(self, turn: _Turn) -> bool:
         """Tell the model, at most once each, what the turn still owes. Did it send one?
 
-        A step of the act loop (§9.1 step 2); the debt it reports is §9.3's completion predicate
-        and, for the second reminder, the action the router recorded.
+        A step of the act loop (§9.1 step 2); the debt it reports is §9.3's completion predicate,
+        the action the router recorded, or the breadth of the corpus the turn has read.
 
         The completion predicate is Python and cannot be talked out of its requirements — but a
         model that has stopped calling tools cannot read it either. Three reminders, each sent only
@@ -912,14 +912,13 @@ class Orchestrator:
             turn.messages.append(Message(role="user", content=ACTION_OUTSTANDING))
             turn.step_summaries.append(f"step {turn.steps_taken}: the requested action was still unproposed")
             return True
-        if (
-            "search_breadth" not in turn.nudges
-            and any(name in permitted for name in EVIDENCE_TOOLS)
-            and self._searches(turn) <= 1
-        ):
+        searches = self._searches(turn)
+        if "search_breadth" not in turn.nudges and searches <= 1 and any(name in permitted for name in EVIDENCE_TOOLS):
             turn.nudges.append("search_breadth")
             turn.messages.append(Message(role="user", content=SEARCH_BREADTH))
-            turn.step_summaries.append(f"step {turn.steps_taken}: one search, and the question spans more")
+            turn.step_summaries.append(
+                f"step {turn.steps_taken}: {searches} corpus search(es), and the question may span more"
+            )
             return True
         return False
 

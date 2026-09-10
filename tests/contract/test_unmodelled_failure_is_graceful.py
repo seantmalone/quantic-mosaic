@@ -11,9 +11,10 @@ not. The caller gets a typed 200 rather than a bare 500; and the turn that was i
 **closed**, with an `error` span recording what happened, instead of sitting `ended_at IS NULL`
 until the next boot's `sweep_stale_turns()` writes it off as a process exit that never occurred.
 
-The failure is injected by exhausting the committed stub script: `rag_only.json` has four
-completions, so the second turn asks for a fifth and `StubScriptError` — a plain `RuntimeError`,
-none of the modelled failures — is raised with the turn's first spans already buffered. That is
+The failure is injected by exhausting the committed stub script: `rag_only.json` has five
+completions, all spent by the first turn, so the second turn asks for a sixth and `StubScriptError` —
+a plain `RuntimeError`, none of the modelled failures — is raised with the turn's first spans
+already buffered. That is
 exactly the state an unmodelled crash leaves behind, and it takes no timing assumption at all.
 """
 

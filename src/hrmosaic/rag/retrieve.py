@@ -81,12 +81,7 @@ def rrf_score(ranks: list[int], k0: int = RRF_K0) -> float:
     return sum(1.0 / (k0 + rank) for rank in ranks)
 
 
-def score_chunk_ids(
-    chunk_ids: Sequence[str],
-    *,
-    query: str,
-    connection: sqlite3.Connection | None = None,
-) -> dict[str, float]:
+def score_chunk_ids(chunk_ids: Sequence[str], *, query: str) -> dict[str, float]:
     """The dense score chunks that are **already known** would have had, without searching for them.
 
     §7.4's G1 scores retrieved candidates. `check_policy_compliance` cites committed chunks it
@@ -103,8 +98,7 @@ def score_chunk_ids(
     """
     if not chunk_ids:
         return {}
-    owned = connection is None
-    connection = connection if connection is not None else index.open_index()
+    connection = index.open_index()
     try:
         placeholders = ", ".join("?" for _ in chunk_ids)
         rows = connection.execute(
@@ -112,8 +106,7 @@ def score_chunk_ids(
         ).fetchall()
         vectors = index.stored_vectors(connection, [row["rowid"] for row in rows])
     finally:
-        if owned:
-            connection.close()
+        connection.close()
     if not vectors:
         return {}
     vector = embed.embed_query(query)
