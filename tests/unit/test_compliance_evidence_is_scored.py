@@ -175,9 +175,12 @@ def test_the_engines_own_citation_list_is_still_not_evidence():
 # 0.6 s the process served nothing: not the SSE rail, not `/health`, not another turn. Every other
 # embed in the request path already runs under `asyncio.to_thread` (§2.1); this one did not.
 #
-# The unit call sites stay synchronous on purpose: `_absorb` is also called from the *rehydrate*
-# path, which has no loop to block. The async boundary does the scoring in a thread and hands the
-# result down, so there is still exactly one place that decides what engine evidence is worth.
+# The unit call sites stay synchronous on purpose: the async boundary does the scoring in a thread
+# and hands the result down through `scores=`, so there is still exactly one place that decides what
+# engine evidence is worth. The *rehydrate* path — `_engine_evidence` over a parked turn's
+# `tool_call` spans — runs on a loop too (`resume_turn` is awaited by `POST /chat/confirm`), and has
+# the same seam on the same terms: `_rehydrate_scores`, asserted by
+# `tests/integration/test_resume_rehydrates_from_the_store.py`.
 
 
 def test_the_compliance_embed_does_not_run_on_the_event_loop():

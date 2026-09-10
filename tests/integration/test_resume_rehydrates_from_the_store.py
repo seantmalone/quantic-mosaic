@@ -15,8 +15,11 @@ not exist yet.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
+import threading
+from unittest import mock
 
 import pytest
 
@@ -24,6 +27,7 @@ from hrmosaic.agent.client import McpClient
 from hrmosaic.agent.orchestrator import ChatRequest, Orchestrator
 from hrmosaic.core.llm.stub import StubAdapter
 from hrmosaic.mcpserver import confirm
+from hrmosaic.rag import retrieve
 from tests.conftest import LLM_SCRIPTS
 
 pytestmark = pytest.mark.anyio
@@ -264,14 +268,12 @@ async def test_the_failure_reaches_the_model_and_no_ticket_id_is_invented(write_
 ENGINE_QUESTION = QUESTION
 
 
-@pytest.fixture
-async def engine_grounded_then_confirmed(writer, store, mounted_mcp_url):
-    """A turn whose only evidence is the compliance engine's, parked at the gate and resumed.
+@contextlib.asynccontextmanager
+async def an_engine_grounded_park(store, writer, mounted_mcp_url):
+    """Park an engine-grounded turn at §8.6's gate; yield the orchestrator, the turn and the token.
 
-    Since R7 that evidence counts towards `is_complete` and towards G1 — but it is *scored*, not
-    retrieved, so it never reaches a `retrieval` span and `_rehydrate_retrieval` cannot bring it
-    back. `_rehydrate` therefore has to re-run the same scoring over the `tool_call` span, or the
-    evidence gate means two different things on the two sides of the park.
+    Split out of the fixture below so a test can wrap the **resume** itself — the P14 review's
+    finding needs the resume to happen under a patched `score_chunk_ids`, not before the test runs.
     """
     orchestrator = Orchestrator(
         client=McpClient(transport="http", url=mounted_mcp_url),
@@ -296,10 +298,22 @@ async def engine_grounded_then_confirmed(writer, store, mounted_mcp_url):
             human_summary="Open an HR ticket.",
         )
         writer.reopen_turn(parked.turn_id, awaiting_ms=0)
-        resumed = await orchestrator.resume_turn(parked.session_id, parked.turn_id, token)
-        return parked, resumed
+        yield orchestrator, parked, token
     finally:
         await orchestrator.aclose()
+
+
+@pytest.fixture
+async def engine_grounded_then_confirmed(writer, store, mounted_mcp_url):
+    """A turn whose only evidence is the compliance engine's, parked at the gate and resumed.
+
+    Since R7 that evidence counts towards `is_complete` and towards G1 — but it is *scored*, not
+    retrieved, so it never reaches a `retrieval` span and `_rehydrate_retrieval` cannot bring it
+    back. `_rehydrate` therefore has to re-run the same scoring over the `tool_call` span, or the
+    evidence gate means two different things on the two sides of the park.
+    """
+    async with an_engine_grounded_park(store, writer, mounted_mcp_url) as (orchestrator, parked, token):
+        return parked, await orchestrator.resume_turn(parked.session_id, parked.turn_id, token)
 
 
 def engine_chunk_ids(store, turn_id: str) -> set[str]:
@@ -373,3 +387,31 @@ async def test_the_resumed_synthesize_prompt_still_carries_the_engine_chunks(eng
 
     assert before
     assert all(chunk_id in prompt for chunk_id in before), "every engine chunk survived the park"
+
+
+async def test_the_resumed_engine_scoring_does_not_run_on_the_event_loop(store, writer, mounted_mcp_url):
+    """P14 review: the resume path embeds too, and `POST /chat/confirm` awaits it (P13 carry-forward p2).
+
+    `_rehydrate` re-runs `_engine_evidence` over the parked `tool_call` span, and that scoring
+    embeds the turn's question — ≈ 0.6 s of ONNX on the 0.1-CPU instance. `_rehydrate` is
+    synchronous, but `resume_turn` is a coroutine that `web/api.py` awaits, so the embed was on the
+    loop thread: for those 0.6 s the confirm path served nothing, exactly as the act loop used to
+    before `_absorb_async`. `_rehydrate_scores` is that path's async boundary.
+    """
+    scored_on: list[int] = []
+    real = retrieve.score_chunk_ids
+
+    def recording(chunk_ids, *, query):
+        scored_on.append(threading.get_ident())
+        return real(chunk_ids, query=query)
+
+    async with an_engine_grounded_park(store, writer, mounted_mcp_url) as (orchestrator, parked, token):
+        with mock.patch.object(retrieve, "score_chunk_ids", recording):
+            resumed = await orchestrator.resume_turn(parked.session_id, parked.turn_id, token)
+        loop_thread = threading.get_ident()
+
+    assert resumed.outcome == "answered", "the resumed turn still reaches an answer"
+    assert {citation.chunk_id for citation in resumed.citations} <= engine_chunk_ids(store, parked.turn_id)
+    assert scored_on, "the parked turn's engine evidence still has to be scored"
+    assert all(thread != loop_thread for thread in scored_on), "and never on the thread running the loop"
+    assert len(scored_on) == 1, "scored once, ahead of the walk — the walk is handed the result"

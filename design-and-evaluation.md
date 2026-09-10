@@ -472,8 +472,8 @@ the abstraction claim is real rather than asserted:
 | Role | Provider / model | Adapter |
 |---|---|---|
 | **Agent** — route, act, synthesize, repair | Anthropic **`claude-haiku-4-5`** | `AnthropicAdapter` (native SDK, sync client behind `asyncio.to_thread`, `max_retries=0`, `timeout=25`) |
-| **Judge** | Google **`gemini-3.5-flash-lite`**, free tier, its own key | `OpenAICompatAdapter` |
-| **Agent failover** on repeated 429 / 5xx / timeout | Google `gemini-3.5-flash-lite`, free, a *second* Cloud project | `OpenAICompatAdapter` |
+| **Judge** | Google **`gemini-3.5-flash-lite`**, its own key on its own Cloud project — on paid billing since 2026-09-10, $0.30 / $2.50 per MTok in / out, ≈ $0.16 per 264-call judge pass | `OpenAICompatAdapter` |
+| **Agent failover** on repeated 429 / 5xx / timeout | Google `gemini-3.5-flash-lite`, a *second* Cloud project | `OpenAICompatAdapter` |
 | **CI and tests** | scripted `StubAdapter`, zero secrets | — |
 
 Tool-call argument shapes are normalised at the adapter boundary — OpenAI-compatible endpoints
@@ -955,7 +955,8 @@ compared run shares `target` and `dataset_sha` before it writes anything.
 > harness exits non-zero on this and writes the banner rather than quietly passing.
 
 Judged metrics are computed on `baseline` only: judging all three arms would roughly triple judge
-volume against a free-tier daily cap, and DocRecall, ToolSelection and Workflow — the judge-free
+volume — quota while the judge project was on the free tier, cost and wall-clock now that it is
+billed — and DocRecall, ToolSelection and Workflow — the judge-free
 metrics — are precisely what the two arms move. A `null` on an arm means *not judged*, never zero,
 and the dashboard renders it as "not judged on this variant".
 

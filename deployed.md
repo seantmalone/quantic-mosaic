@@ -182,15 +182,17 @@ Dockerfile's `CMD` is proved to expand `${PORT}` at run time.
 ## Cost
 
 **$0 of infrastructure.** Render Hobby free, Turso free, no paid database, embeddings computed
-locally by a baked ONNX model, a free-tier judge and a free-tier failover provider, and free
-Actions minutes because the repository is public (verified public 2026-09-08).
+locally by a baked ONNX model, and free Actions minutes because the repository is public (verified
+public 2026-09-08). The models are the only spend: the agent's Anthropic calls, and — since paid
+billing was enabled on the judge Cloud project on 2026-09-10 — the Gemini judge, at ≈ $0.16 per
+264-call judge pass.
 
 | Line | Amount | Observed |
 |---|---|---|
 | Render Hobby web service | **$0** — the plan price, read from Render's pricing page 2026-09-10 | `pending: gate 2/4` — no service exists yet, so nothing has been billed to observe |
 | Turso database | **$0** — the free plan's price, read 2026-09-10 | `pending: gate 3` — no database exists yet |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
-| Judge + failover (Gemini `gemini-3.5-flash-lite`) | **$0** free tier | 2026-09-09 |
+| Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.16 per 264-call judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates, since paid billing was enabled on the judge project. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so this figure is stated from token counts (369k in / 20k out) | 2026-09-10 |
 | Agent (Anthropic `claude-haiku-4-5`) | **estimated under $10 all-in** (§9.8) | see `CHANGELOG.md` |
 | GitHub Actions | **$0** — public repository, no minute cap | 2026-09-08 |
 

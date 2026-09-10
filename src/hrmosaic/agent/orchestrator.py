@@ -101,6 +101,26 @@ WRITE_TOOLS = ("create_mock_hr_ticket", "draft_hr_email")
 #: committed chunks, which `_engine_evidence` scores so G1 can weigh them (§7.4, P13 R7).
 COMPLIANCE_TOOL = "check_policy_compliance"
 
+
+def _cited_evidence_ids(body: Mapping[str, Any]) -> list[str]:
+    """The chunk ids a `check_policy_compliance` body names in its per-requirement `evidence`.
+
+    One reader for the two callers that need them: `_engine_evidence_rows`, which resolves the ones
+    the turn does not already hold, and `_rehydrate_scores`, which scores a parked turn's ids off
+    the event loop before `_rehydrate` walks the spans again. The engine's top-level `citations[]`
+    is deliberately not read — see `_engine_evidence`.
+    """
+    ids: list[str] = []
+    for requirement in body.get("requirements") or []:
+        if not isinstance(requirement, dict):
+            continue
+        evidence = requirement.get("evidence") or {}
+        chunk_id = evidence.get("chunk_id") if isinstance(evidence, dict) else None
+        if chunk_id and str(chunk_id) not in ids:
+            ids.append(str(chunk_id))
+    return ids
+
+
 CAVEAT_TEXT = (
     "The HR tool server is unreachable, so I could not read the policy corpus or your employee "
     "record for this answer. Nothing below is a statement of Mosaic Robotics policy."
@@ -553,7 +573,8 @@ class Orchestrator:
 
     async def resume_turn(self, session_id: str, turn_id: str, confirmation_token: str) -> ChatResponse:
         """Pick a parked turn back up, re-issue **that one** `tools/call` with the token (§8.6 step 4)."""
-        turn = self._rehydrate(session_id, self._reopen(turn_id))
+        buffer = self._reopen(turn_id)
+        turn = self._rehydrate(session_id, buffer, scores=await self._rehydrate_scores(buffer.turn_id))
         return await self._resume(turn, confirmation_token)
 
     # ----------------------------------------------------------------------------------
@@ -1082,11 +1103,15 @@ class Orchestrator:
         not the SSE rail, not `/health`, not another turn. Every other embed on the request path
         already runs under `asyncio.to_thread` (§2.1). This one now does too.
 
-        The scoring moves; the rule does not. `_absorb` stays synchronous because the **rehydrate**
-        path calls it with no loop to block, and it still owns the decision about what engine
-        evidence is worth — this method only hands it a dict it would otherwise have computed
-        itself, which is why the resolution is repeated rather than passed: `corpusread.get_chunk`
-        is a handful of indexed reads, against 600 ms of ONNX.
+        The scoring moves; the rule does not. `_absorb` stays synchronous because it still owns the
+        decision about what engine evidence is worth — this method only hands it a dict it would
+        otherwise have computed itself, which is why the resolution is repeated rather than passed:
+        `corpusread.get_chunk` is a handful of indexed reads, against 600 ms of ONNX.
+
+        The act loop is not the only caller that runs on a loop: `_rehydrate` also calls
+        `_engine_evidence`, from the `await`ed `resume_turn` behind `POST /chat/confirm`. That path
+        has its own async boundary — `_rehydrate_scores` — for the same reason. The synchronous
+        signatures survive both, which is what keeps the unit call sites unchanged.
         """
         scores: dict[str, float] | None = None
         if result.tool_name == COMPLIANCE_TOOL:
@@ -1157,14 +1182,7 @@ class Orchestrator:
         scores back — see `_absorb_async`. It reads nothing but `body` and `turn.evidence`, so the
         two callers see the same set.
         """
-        ids: list[str] = []
-        for requirement in body.get("requirements") or []:
-            if not isinstance(requirement, dict):
-                continue
-            evidence = requirement.get("evidence") or {}
-            chunk_id = evidence.get("chunk_id") if isinstance(evidence, dict) else None
-            if chunk_id and chunk_id not in turn.evidence and chunk_id not in ids:
-                ids.append(str(chunk_id))
+        ids = [chunk_id for chunk_id in _cited_evidence_ids(body) if chunk_id not in turn.evidence]
         rows = {chunk_id: corpusread.get_chunk(chunk_id) for chunk_id in ids}
         return {chunk_id: row for chunk_id, row in rows.items() if row is not None}
 
@@ -1528,8 +1546,54 @@ class Orchestrator:
                 return buffer
         return writer.reopen_turn(turn_id, 0)
 
-    def _rehydrate(self, session_id: str, buffer: TurnBuffer) -> _Turn:
-        """Rebuild the in-process state from the turn's own spans — never by re-retrieving (§9.1)."""
+    async def _rehydrate_scores(self, turn_id: str) -> dict[str, float] | None:
+        """`_rehydrate`'s one blocking call, moved off the event loop (P13 p2, the resume path).
+
+        `_rehydrate` re-runs `_engine_evidence` over the parked turn's `tool_call` spans, and that
+        embeds the turn's question — ≈ 0.6 s of ONNX on the 0.1-CPU instance. `_rehydrate` is
+        synchronous, but it is called from `resume_turn`, which `POST /chat/confirm` awaits, so
+        that embed ran on the loop thread: the confirm path blocked exactly as the act loop used to.
+        This resolves the same candidate ids ahead of the walk, scores them in a thread, and hands
+        the result down as `scores=`, through the seam `_absorb_async` already opened.
+
+        The ids collected here are a **superset** of what `_engine_evidence_rows` will resolve
+        during the walk — it drops the ones the turn has already picked up from a `retrieval` span,
+        which this cannot know yet — and `score_chunk_ids` is a per-chunk cosine against the query
+        vector, so a wider input changes no chunk's score. `_engine_evidence` still admits only the
+        ids it resolves itself. The cost of getting there is one extra indexed read of the same
+        `spans` rows.
+        """
+        store = get_store()
+        ids: list[str] = []
+        for row in store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq", (turn_id,)
+        ).dicts():
+            payload = json.loads(row["payload_json"])
+            if payload.get("tool_name") != COMPLIANCE_TOOL:
+                continue
+            if payload.get("error_code") == "CONFIRMATION_REQUIRED":
+                # The gated span is `_rehydrate`'s `gated`; it is re-issued, not absorbed.
+                continue
+            for chunk_id in _cited_evidence_ids(payload.get("structured_content") or {}):
+                if chunk_id not in ids:
+                    ids.append(chunk_id)
+        if not ids:
+            # Nothing to score, so nothing for `_engine_evidence` to admit either: leave it `None`
+            # rather than an empty mapping, which would read as "scored, and none of them made it".
+            return None
+        message = store.execute("SELECT user_message FROM turns WHERE id = ?", (turn_id,)).scalar()
+
+        from hrmosaic.rag.retrieve import score_chunk_ids
+
+        return await asyncio.to_thread(score_chunk_ids, ids, query=str(message or ""))
+
+    def _rehydrate(self, session_id: str, buffer: TurnBuffer, *, scores: Mapping[str, float] | None = None) -> _Turn:
+        """Rebuild the in-process state from the turn's own spans — never by re-retrieving (§9.1).
+
+        `scores` is `_rehydrate_scores`' result on the awaited resume path, so the engine-evidence
+        embed happens in a thread; left `None` (the synchronous call sites) `_engine_evidence`
+        scores for itself, exactly as before.
+        """
         store = get_store()
         turn_row = store.execute(
             "SELECT t.user_message, s.employee_id FROM turns t JOIN sessions s ON s.id = t.session_id WHERE t.id = ?",
@@ -1585,9 +1649,10 @@ class Orchestrator:
                 # this, a turn that grounded itself on the engine, closed as complete and parked at
                 # §8.6's gate came back across the confirmation boundary with an empty citable set
                 # and was refused for want of evidence on a write that had already happened. The
-                # gate has to mean the same thing on both sides of the park (§9.1).
+                # gate has to mean the same thing on both sides of the park (§9.1). The embed that
+                # scoring costs is `_rehydrate_scores`', already spent in a thread.
                 if payload["tool_name"] == COMPLIANCE_TOOL:
-                    self._engine_evidence(turn, body)
+                    self._engine_evidence(turn, body, scores=scores)
                 turn.envelopes.append(
                     _ToolEnvelope(name=payload["tool_name"], result_json=payload.get("result_json") or "{}")
                 )

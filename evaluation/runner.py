@@ -1520,7 +1520,8 @@ def render_report(run: RunFile, *, ablation_section: str | None = None) -> str:
     )
     judged_note = (
         "Judged metrics are computed on `baseline` only (§13.9): judging all three arms would "
-        "roughly triple the judge volume against a free-tier daily cap, and DocRecall, "
+        "roughly triple the judge volume — quota while the judge project was on the free tier, "
+        "cost and wall-clock now that it is billed (§9.8) — and DocRecall, "
         "ToolSelection and Workflow — the judge-free metrics — are precisely what the two arms move."
     )
     if run.judge_status == "pending":
