@@ -1581,10 +1581,15 @@ Raw IPs and User-Agent strings are never stored; only `sha256[:16]` of the UA.
 | default span payload | 32 KB |
 | `retrieval` `chunks[].text` | not stored (snippets only; the full text is one click away in the corpus browser) |
 | `llm_call` payload | 128 KB (its `messages[]` live in `llm_messages`, which is uncapped) |
-| any single string field | 8 KB |
+| any single string field | 24 KB |
 
 A truncated payload sets `truncated = 1` and `payload_bytes` records the pre-truncation size, so the dashboard badges it honestly.
 
+The per-string cap is **24 KB**, raised from 8 KB when W2-C (performance plan §3) put the whole chunk beside the snippet in every
+`search_policy_documents` hit: a k=5 result serialises to ≈ 8.3 KB in the `tool_call` span's `result_json`, so at 8 KB *every* search on the dashboard
+showed a truncation marker and the span detail could not show the reader what the act loop was actually given. 24 KB clears that by 3× and still sits
+inside the 32 KB payload cap, which is the bound §17 counts as a denial-of-service control; the marker behaviour and the halving-then-stub ladder are
+unchanged.
 `core/retention.py` runs at boot and every 6 hours, cascading `spans` → `llm_messages` → `turns` → `confirmations` → `sessions`, keeping the newest
 `TRACE_RETENTION_SESSIONS` (default 300) sessions and **never pruning** a session with a non-null `eval_run_id`, a `client_label` of `eval_judge` or
 `maintenance`, **or a session that owns a `mock_writes` row** — and never deleting a `confirmations` row a `mock_writes` row references, so a ticket
@@ -2697,7 +2702,7 @@ principle 14).
 | **Dashboard exposure** | Entirely synthetic, and **admin-only** — every page, reads included, plus `/api/traces\|eval\|corpus\|mcp/*` and the three write actions, enforced server-side behind the access gate. A grader reaches it by choosing *HR admin* in the act-as selector. Stated in `deployed.md`. |
 | **MCP endpoint exposure** | `/mcp-server/mcp` remains reachable, deliberately, so a grader can attach MCP Inspector — now **with the bearer header** (Inspector supports custom headers). Protections in order of certainty: every read tool exposes only synthetic data; the write tools need a token an external caller cannot obtain and the rejection leaks nothing; a per-IP rate limit is FastAPI middleware on the mount. Whether `mcp` 2.2.0 exposes a native `Host`/`Origin` allowlist is checked by grepping the installed SDK before P5 and recorded in `mcp/README.md` with what was found — a control claimed in a design doc but absent from the SDK is worse than none. |
 | **Supply chain** | Every dependency pinned to an exact version in `requirements.txt`, `mcp==2.2.0` with a CI shape test. No runtime CDN: frontend assets are vendored at pinned versions with their upstream URLs in `static/vendor/LICENSES.md` alongside the full licence texts. No `curl \| sh` in the Dockerfile. |
-| **Denial of service** | Hard per-turn budgets (6 steps, 8 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 8 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and admin-only; a per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) on `POST /chat` and the MCP mount, with the access gate keeping anonymous traffic off both. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |
+| **Denial of service** | Hard per-turn budgets (6 steps, 8 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 24 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and admin-only; a per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) on `POST /chat` and the MCP mount, with the access gate keeping anonymous traffic off both. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |
 
 ## 18. The two demo agentic tasks
 

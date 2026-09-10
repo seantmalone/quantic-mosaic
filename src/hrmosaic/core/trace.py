@@ -50,7 +50,12 @@ logger = logging.getLogger(__name__)
 # --- size control (§10.5) --------------------------------------------------------------
 MAX_PAYLOAD_BYTES = 32 * 1024
 MAX_LLM_PAYLOAD_BYTES = 128 * 1024
-MAX_STRING_BYTES = 8 * 1024
+#: 24 KB, not the 8 KB the table named through W2-C. `search_policy_documents` now returns the
+#: whole chunk beside the snippet (performance plan §3 W2-C), so one k=5 result serialises to
+#: ≈ 8.3 KB in `result_json` — every search on the dashboard was badged truncated and the span
+#: detail could not show the act loop what it had actually been given. 24 KB clears that by 3×
+#: while staying well inside the 32 KB payload cap, which is the DoS control §17 counts.
+MAX_STRING_BYTES = 24 * 1024
 #: The floor the per-string cap halves down to before the payload is replaced with a stub.
 MIN_STRING_BYTES = 64
 TRUNCATION_MARKER = "…[truncated]"

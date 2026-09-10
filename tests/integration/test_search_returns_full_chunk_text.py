@@ -62,10 +62,9 @@ def canary_id() -> str:
 def search_hits(records) -> list[dict]:
     """Every hit of every `search_policy_documents` result, as the act loop received it.
 
-    Read from `structured_content` rather than from `result_json`: the two are the same body, but
-    §10.5's per-string cap is 8 KB and a k=5 search carrying whole chunks serialises to more than
-    that, so the string copy is stored with a truncation marker while the structured one — whose
-    individual strings are each well under the cap — survives intact.
+    Read from `structured_content` rather than from `result_json`: the two are the same body, and
+    the structured one is the shape a hit is asserted about. Both survive §10.5's per-string cap —
+    24 KB since P16, against the ≈ 8.3 KB a k=5 search carrying whole chunks serialises to.
     """
     return [
         hit

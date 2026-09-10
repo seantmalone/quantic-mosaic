@@ -1,6 +1,6 @@
 """§10.5 size control — the caps are enforced, and `truncated` is recorded honestly.
 
-The table is 8 KB per string, 32 KB per span payload and 128 KB for an `llm_call`; a truncated
+The table is 24 KB per string, 32 KB per span payload and 128 KB for an `llm_call`; a truncated
 payload sets `truncated = 1` while `payload_bytes` keeps the **pre-truncation** size, "so the
 dashboard badges it honestly". §17 lists the same caps as a denial-of-service control, which is
 why the shed loop must terminate *against the cap* rather than break out from under it — a payload
@@ -38,10 +38,60 @@ def stored_span(store, turn_id: str) -> dict:
     ).one()
 
 
-# --- the 8 KB per-string cap ------------------------------------------------------------
+# --- the 24 KB per-string cap -----------------------------------------------------------
+
+#: What W2-C's `search_policy_documents` result actually carries per hit: the whole chunk
+#: (`CHUNK_MAX_CHARS`) beside the snippet a citation shows.
+SEARCH_CHUNK_CHARS = 1_384
+SEARCH_SNIPPET_CHARS = 240
 
 
-def test_a_single_string_field_is_capped_at_8_kb():
+def search_result_json(hits: int = 5) -> str:
+    """One `result_json` string in the shape a k=5 search stores it (§10.5, W2-C)."""
+    return json.dumps(
+        {
+            "hits": [
+                {
+                    "chunk_id": f"pto-policy#{index}",
+                    "doc_id": "pto-policy",
+                    "doc_title": "Paid Time Off Policy",
+                    "heading_path": "Accrual > Monthly",
+                    "rank": index + 1,
+                    "text": prose(SEARCH_CHUNK_CHARS),
+                    "snippet": prose(SEARCH_SNIPPET_CHARS),
+                }
+                for index in range(hits)
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
+def test_a_k5_search_result_is_stored_whole():
+    """The cap has to hold what W2-C put in the span: five whole chunks in one JSON string.
+
+    At the 8 KB the table used to name, every single search on the dashboard showed a truncation
+    marker — the span detail could not show the result the act loop was actually given.
+    """
+    result_json = search_result_json()
+    assert len(result_json.encode("utf-8")) > 8 * 1024, "this test is about a string over the old cap"
+
+    serialised, payload_bytes, truncated = prepare_payload(
+        "tool_call",
+        {
+            "tool_name": "search_policy_documents",
+            "arguments": {"query": "pto accrual", "k": 5},
+            "result_json": result_json,
+        },
+    )
+
+    assert json.loads(serialised)["result_json"] == result_json
+    assert truncated is False
+    assert TRUNCATION_MARKER not in serialised
+    assert payload_bytes == len(serialised.encode("utf-8"))
+
+
+def test_a_single_string_field_is_capped_at_24_kb():
     payload = {"query": prose(40_000), "k": 5, "k_source": "default", "strategy": "hybrid_rrf"}
     serialised, payload_bytes, truncated = prepare_payload("retrieval", payload)
 
