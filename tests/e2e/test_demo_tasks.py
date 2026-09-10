@@ -194,6 +194,8 @@ async def test_demo_task_1_international_remote_work(web, store):
     # does not make here — it states the director approval and the Tax & Legal review as cited
     # policy facts instead, which is the substance the block was there to carry. So the substance
     # is asserted directly, and the block-type set asserts only what the workflow genuinely emits.
+    # The capability itself is not left unasserted: demo 2's recording does emit an `escalation`
+    # block, and `test_demo_task_2_pto_request_through_confirm_to_write` asserts it there.
     assert {block["type"] for block in body["answer_blocks"]} >= {"policy_fact", "recommendation"}
     assert "Tax & Legal" in body["answer"], "the human review the conditional verdict requires"
     assert body["dashboard_url"].startswith("/dashboard/sessions/")
@@ -246,6 +248,11 @@ async def test_demo_task_2_pto_request_through_confirm_to_write(web, store):
     assert body["outcome"] == "answered"
     assert body["turn_id"] == proposal["turn_id"], "the same turn, reopened"
     check(expectation, body, _spans(store, body["turn_id"]), store)
+
+    # The `escalation` block demo 1 does not label: the synthesis that follows the confirmed write
+    # hands MosaicOne back to the human ("I cannot open PTO requests … on your behalf"). It exists
+    # only on the reopened turn's answer, not on the gated proposal, so it is asserted here.
+    assert "escalation" in {block["type"] for block in body["answer_blocks"]}
 
     write = store.execute("SELECT id, kind, employee_id, payload_json FROM mock_writes").dicts()[0]
     assert write["id"].startswith("MOCK-HR-")

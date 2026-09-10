@@ -803,6 +803,11 @@ class TraceWriter:
             self.store.batch(statements)
         finally:
             with self._lock:
+                # The pop happens *before* `flush_open_turns()` re-arms the buffer, so the buffer a
+                # SIGTERM checkpointed is no longer open: the `atexit` hook that follows finds
+                # nothing, and spans a re-armed turn writes before the process really does vanish
+                # are lost. The `error`/`process_exit` row is already written and survives, which is
+                # the durability §10.3 guarantees — the later spans are not part of it.
                 self._open.pop(turn_id, None)
 
 

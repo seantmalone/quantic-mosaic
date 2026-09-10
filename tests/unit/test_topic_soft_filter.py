@@ -231,4 +231,7 @@ def test_the_span_payload_always_carries_both_fields(topic):
     dumped = payload.model_dump(mode="json")
     assert dumped["topic_backfilled"] in (True, False)
     assert dumped["backfill_reason"] in (None, "fewer_than_k", "single_document")
-    assert (dumped["backfill_reason"] is not None) or (dumped["topic_backfilled"] is False)
+    # The two fields move together. `backfill_reason` records why the result *was* widened, not why
+    # a widening was attempted: an attempt that added nothing leaves the hits exactly as the hard
+    # filter returned them, and a reason on that row would claim a widening the model never saw.
+    assert (dumped["backfill_reason"] is not None) == dumped["topic_backfilled"]

@@ -604,7 +604,9 @@ rather than assumed.
 
 - **Demo 1's answer carries no `escalation` block.** It states the Tax & Legal review and the
   director approval as cited `policy_fact`s instead. That is a labelling preference, not a missing
-  capability, so the block-type assertion moved to a demo-2 test that does produce one.
+  capability, so the block-type assertion was to move to a demo-2 test that does produce one.
+  (It did not: the assertion was dropped from demo 1 in this round and only *landed* on demo 2 in
+  the following fix round — see "P10 fix round 3" below.)
 
 - **`check_policy_compliance` normalises `destination_country` to an ISO 3166-1 alpha-2 code at the
   wire boundary.** `corpus/rules.yml`'s `remote.intl.destination` compares with `in` against the
@@ -725,3 +727,43 @@ rather than assumed.
 - **Live spend for this round: about $1.55** — three 26-item sweeps at $0.4355 / $0.4159 / $0.4650,
   five live demo recordings (three of demo 1, two halves of demo 2) at roughly $0.01 each, and one
   abandoned sweep stopped after 5 items. The judge is free.
+
+## 2026-09-10 — P10 fix round 3 (the demo-2 escalation assertion, judge-pass notes, a pending-safe flip list)
+
+- **The demo-2 `escalation` assertion actually landed this time.** Fix round 2's entry above, the
+  P10 report's §12 item 4 and the commit message all said the block-type assertion had "moved to
+  demo 2". Only half of that happened: demo 1 stopped asserting it and demo 2 never started, so a
+  capability three artifacts claimed was covered was covered by nothing. The recording does produce
+  the block — `tests/fixtures/llm_scripts/demo_task_2.json` synthesises an `escalation` reading *"I
+  cannot open PTO requests in MosaicOne on your behalf"* — and
+  `test_demo_task_2_pto_request_through_confirm_to_write` now asserts it, on the reopened turn's
+  answer where it exists rather than on the gated proposal. The round-2 CHANGELOG entry and the P10
+  report are corrected in place; the commit message cannot be, having been pushed.
+
+- **`--judge` no longer throws away the notes the judge pass produced.** `judge_run` restores the
+  drive pass's provenance onto the file it rebuilds, and notes were being *replaced* rather than
+  *unioned*: the `judge/reference disagreements: …` line that only a judged run can produce never
+  reached the file, leaving `--recompute-agreement` as the only route by which it ever appeared.
+  `_merge_notes()` keeps both halves and skips anything the file already carries, so the pass stays
+  idempotent — three applications are byte-identical, which `tests/unit/test_two_pass_judging.py`
+  now asserts, alongside a test that an aborted pass (`JUDGE_FAILURE_BUDGET + 1` lost verdicts)
+  writes neither the run file nor `REPORT.md`.
+
+- **REPORT.md's flip list is `not computable — judge pending` while the baseline is.** It was being
+  computed from the pending baseline's per-item `passed`, which is the same *vacuous* `strict_pass`
+  §13.8 withholds the composite over — every clause needing a judge is trivially true on an
+  unjudged item. Six items were listed as flipping against a baseline whose pass state had not been
+  measured. `evaluation/ablation.py::_flips()` now returns `null` in that state and
+  `render_section()` says so and names the recipe. Regenerated with `make ablation`; the only
+  changes are that list and `comparison.json`'s `generated_at`.
+
+- **`backfill_reason` is set only when the widening added a hit.** `search_policy_documents` emitted
+  it whenever a widening was *attempted*, while `topic_backfilled` reported whether anything was
+  actually added — so a search whose unfiltered pool had nothing new claimed a widening the model
+  never saw. The two fields now move together, in the tool result and in the `retrieval` span;
+  `mcp/tools/search_policy_documents.schema.json` is regenerated for the changed description.
+
+- **`core/trace.py::_flush()` says why it pops before `rearm()`.** The buffer is removed from
+  `_open` before `flush_open_turns()` re-arms it, so the `atexit` hook after a SIGTERM finds no open
+  turn: spans written after the checkpoint on a turn that then dies are lost, while the
+  `error`/`process_exit` row §10.3 guarantees is already written and survives.

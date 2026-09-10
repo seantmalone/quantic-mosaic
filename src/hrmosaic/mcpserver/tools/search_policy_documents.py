@@ -110,8 +110,9 @@ class SearchOutput(BaseModel):
     """The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.
 
     `topic_backfilled` is `true` when at least one returned hit came from the unfiltered search the
-    soft `topic` filter runs underneath itself, and `backfill_reason` says what triggered it. Both
-    are `false`/`null` on every search that passed no `topic`.
+    soft `topic` filter runs underneath itself, and `backfill_reason` says what triggered it. They
+    move together: a widening that added nothing reports `false`/`null`, exactly as a search that
+    passed no `topic` does.
     """
 
     hits: list[SearchHit]
@@ -270,6 +271,12 @@ def _search(
         index_version = read_index_meta(connection).index_version
 
     topic_backfilled = bool({hit.chunk_id for hit in ranked} - {hit.chunk_id for hit in retrieval.hits})
+    # `backfill_reason` records why the result *was* widened, not why a widening was attempted. The
+    # unfiltered pool can have nothing to add — a corpus small enough that the topic already held
+    # every hit — and the merge then returns exactly what the hard filter returned. A reason left on
+    # such a row would claim a widening the model never saw, so the two fields move together.
+    if not topic_backfilled:
+        backfill_reason = None
 
     # `rank` is renumbered over the merged list, not carried from whichever retrieval produced the
     # hit: two searches each number their own hits from 1, and a citation's rank has to mean its

@@ -129,7 +129,7 @@ above is what tells you how many turns were pushed back into the loop at all.
 > (delta **-0.192**). Read the table as a measurement, not as evidence that the agentic layer
 > does the work.
 
-Items whose strict pass flips against `baseline`: `expenses-002` (dense_only_k2), `onboarding-001` (dense_only_k2), `conduct-001` (dense_only_k2), `pto-002` (dense_only_k2), `profile-001` (no_structured_tools), `benefits-002` (no_structured_tools)
+Items whose strict pass flips against `baseline`: **not computable — judge pending.** Every clause of `strict_pass` that needs a judge is vacuously true on an unjudged item, so the baseline's per-item `passed` cannot be compared against yet (§13.8). Run `python -m evaluation.runner --judge <baseline run_id>`, then `make ablation` again.
 
 All three runs share `target: local` and `dataset_sha: a501f288a6589730…`, which `evaluation/ablation.py` asserts before it writes anything. Judged metrics are computed on `baseline` only (§13.9); a `null` on an ablation arm means not judged, never zero.
 <!-- ABLATION:END -->

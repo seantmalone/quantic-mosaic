@@ -182,11 +182,20 @@ def workflow_check(runs: dict[str, RunFile]) -> dict[str, Any]:
     }
 
 
-def _flips(runs: dict[str, RunFile]) -> list[dict[str, Any]]:
-    """Every scored item whose pass flips against `baseline` — what the compare tab lists."""
+def _flips(runs: dict[str, RunFile]) -> list[dict[str, Any]] | None:
+    """Every scored item whose pass flips against `baseline` — what the compare tab lists.
+
+    `None`, not `[]`, while the baseline is `judge_status: pending`. A pending item's `passed` is
+    the same vacuous `strict_pass` §13.8 withholds the composite over — every clause that needs a
+    judge is trivially true on it — so the flips computed against it are an artefact of what was
+    never scored, not a measurement. `render_section` prints "not computable — judge pending"
+    instead of a list that would read as one.
+    """
     baseline = runs.get("baseline")
     if baseline is None:
         return []
+    if baseline.judge_status == "pending":
+        return None
     before = {item.item_id: bool(item.passed) for item in baseline.items if item.run_phase == "scored"}
     flips: list[dict[str, Any]] = []
     for name in VARIANT_ORDER:
@@ -237,12 +246,20 @@ def render_section(comparison: dict[str, Any]) -> str:
         threshold=check["threshold"],
     )
     flips = comparison["flips"]
-    flip_lines = (
-        "\n\nItems whose strict pass flips against `baseline`: "
-        + ", ".join(f"`{flip['item_id']}` ({flip['variant']})" for flip in flips)
-        if flips
-        else "\n\nNo item's strict pass flipped against `baseline`."
-    )
+    if flips is None:
+        flip_lines = (
+            "\n\nItems whose strict pass flips against `baseline`: **not computable — judge "
+            "pending.** Every clause of `strict_pass` that needs a judge is vacuously true on an "
+            "unjudged item, so the baseline's per-item `passed` cannot be compared against yet "
+            "(§13.8). Run `python -m evaluation.runner --judge <baseline run_id>`, then "
+            "`make ablation` again."
+        )
+    elif flips:
+        flip_lines = "\n\nItems whose strict pass flips against `baseline`: " + ", ".join(
+            f"`{flip['item_id']}` ({flip['variant']})" for flip in flips
+        )
+    else:
+        flip_lines = "\n\nNo item's strict pass flipped against `baseline`."
     footnote = (
         "\n\nAll three runs share `target: "
         f"{comparison['target']}` and `dataset_sha: {str(comparison['dataset_sha'])[:16]}…`, which "

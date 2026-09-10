@@ -227,3 +227,92 @@ async def test_the_judge_pass_refuses_a_run_driven_against_a_different_dataset(t
         await runner.judge_run(run.run_id, results_dir=tmp_path)
 
     assert "different questions" in str(raised.value)
+
+
+# --------------------------------------------------------------------------------------------
+# What the pass writes, and what an aborted pass does not
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_judge_passs_own_notes_survive_the_rewrite():
+    """§13.7's disagreement list is produced by the judge pass, so only the pass can record it.
+
+    `judge_run` rebuilds the run file from the pass and then restores the drive pass's provenance
+    onto it. Notes are the one field where restoring means *union*: the drive pass's notes are
+    still true and the pass has just written its own, and replacing one with the other used to drop
+    `judge/reference disagreements:` on the floor — leaving `--recompute-agreement` as the only way
+    it ever reached the file.
+    """
+    disagreement = "judge/reference disagreements: pto-002 (reference grounded, judge ungrounded)"
+
+    merged = runner._merge_notes("the drive pass's own note.", [disagreement])
+
+    assert merged == f"the drive pass's own note. {disagreement}"
+
+
+def test_the_judge_pass_note_is_byte_identical_across_three_applications():
+    """The pass is idempotent (§13.2), so its note has to be too — including the merged notes."""
+    judged = _run(variant="baseline", judge_status="judged", judged=True, strict=0.73)
+    judged.judge_model = "gemini-3.5-flash-lite"
+    judged.judge_calls = 252
+    produced = ["judge/reference disagreements: pto-002 (reference grounded, judge ungrounded)"]
+
+    once = runner._judge_pass_note(runner._merge_notes("the drive pass's own note.", produced), judged)
+    twice = runner._judge_pass_note(runner._merge_notes(once, produced), judged)
+    thrice = runner._judge_pass_note(runner._merge_notes(twice, produced), judged)
+
+    assert once == twice == thrice
+    assert once.startswith("the drive pass's own note.")
+    assert once.count(produced[0]) == 1, "the pass's own note is not stacked on a second application"
+    assert once.count("Judged in a second pass") == 1, "nor is the pass sentence"
+
+
+@pytest.mark.anyio
+async def test_a_pass_that_blows_the_failure_budget_writes_nothing(tmp_path, writer, monkeypatch):
+    """`JUDGE_FAILURE_BUDGET + 1` lost verdicts abort the pass, and the run file is untouched.
+
+    A judged 26-item baseline costs ~252 provider calls against a 500/day cap, so a pass that
+    grinds on while the provider flaps spends the day's only other attempt. Aborting is only safe
+    if it leaves the clean `pending` state the drive pass gave the file — not a half-judged one.
+    """
+    dataset = runner.load_dataset()
+    first = dataset.items[0]
+    run = _run(variant="baseline", judge_status="pending", judged=False, strict=None)
+    run.dataset_sha = dataset.sha256
+    run.notes = "the drive pass's own note."
+    run.items = [
+        runner.ItemResult(
+            id="er_1", item_id=first.id, category=first.category, session_id="s_1", turn_id="t_1", answer="…"
+        )
+    ]
+    path = tmp_path / f"{run.run_id}.json"
+    before = run.model_dump_json(indent=1)
+    path.write_text(before, encoding="utf-8")
+
+    class _FlappingJudge:
+        model_name = "gemini-3.5-flash-lite"
+        calls = 9
+        failures = runner.JUDGE_FAILURE_BUDGET + 1
+        run_id = ""
+
+    async def ready(*args, **kwargs):
+        return None
+
+    async def score(self, item, response, turn, *, run_phase):
+        return object()
+
+    wrote: list[str] = []
+    monkeypatch.setattr(runner, "judge_provider_ready", ready)
+    monkeypatch.setattr(runner, "Judge", lambda **kwargs: _FlappingJudge())
+    monkeypatch.setattr(runner.det, "read_turn", lambda store, turn_id: object())
+    monkeypatch.setattr(runner.Runner, "_score", score)
+    monkeypatch.setattr(runner, "write_report", lambda *args, **kwargs: wrote.append("REPORT.md"))
+    monkeypatch.setattr(runner.Runner, "write_artifacts", lambda self, run: wrote.append("run file"))
+
+    with pytest.raises(SystemExit) as raised:
+        await runner.judge_run(run.run_id, results_dir=tmp_path)
+
+    assert "NOTHING was written" in str(raised.value)
+    assert "judge_status: pending" in str(raised.value)
+    assert wrote == [], "an aborted pass writes no artifact at all"
+    assert path.read_text(encoding="utf-8") == before, "the run file is byte-identical"

@@ -1641,10 +1641,28 @@ async def judge_run(run_id: str, *, results_dir: Path = RESULTS_DIR, settings: S
     judged.git_sha = run.git_sha
     judged.label = run.label
     judged.duration_s = run.duration_s
-    judged.notes = _judge_pass_note(run.notes, judged)
+    # The pass produces notes of its own — §13.7's `judge/reference disagreements:` line above all,
+    # which only a judged run can produce. Union them with the drive pass's rather than replacing
+    # them with it, or the disagreement list would never reach the file and `--recompute-agreement`
+    # would be the only way to see it.
+    judged.notes = _judge_pass_note(_merge_notes(run.notes, runner.notes), judged)
     runner.write_artifacts(judged)
     write_report(judged, results_dir=Path(results_dir))
     return judged
+
+
+def _merge_notes(previous: str | None, produced: Sequence[str]) -> str:
+    """The previous file's notes, plus whichever of this pass's notes it does not already carry.
+
+    The judge pass is idempotent (§13.2) and so is this: on a second pass every produced note is
+    already in `previous` — the first pass appended it there — so nothing is added and the file
+    comes back byte-identical.
+    """
+    merged = (previous or "").strip()
+    for note in produced:
+        if note and note not in merged:
+            merged = f"{merged} {note}".strip()
+    return merged
 
 
 def _judge_pass_note(previous: str | None, judged: RunFile) -> str:

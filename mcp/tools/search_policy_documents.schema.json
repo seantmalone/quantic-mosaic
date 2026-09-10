@@ -164,7 +164,7 @@
         "type": "object"
       }
     },
-    "description": "The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.\n\n`topic_backfilled` is `true` when at least one returned hit came from the unfiltered search the\nsoft `topic` filter runs underneath itself, and `backfill_reason` says what triggered it. Both\nare `false`/`null` on every search that passed no `topic`.",
+    "description": "The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.\n\n`topic_backfilled` is `true` when at least one returned hit came from the unfiltered search the\nsoft `topic` filter runs underneath itself, and `backfill_reason` says what triggered it. They\nmove together: a widening that added nothing reports `false`/`null`, exactly as a search that\npassed no `topic` does.",
     "properties": {
       "hits": {
         "items": {
