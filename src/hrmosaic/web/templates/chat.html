@@ -14,7 +14,10 @@
     <p class="tagline">Policy answers with citations, tools over MCP, and a full audit trail.</p>
   </div>
   <nav class="masthead-nav">
-    <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select">
+    <!-- The persona decides what the page shows (the dashboard link) as well as what the server
+         allows, so the page reloads once the cookie is set. -->
+    <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select"
+          hx-on::after-request="window.location.reload()">
       <label for="actor-select">Act as</label>
       <select id="actor-select" name="actor" aria-label="Act as">
         {% for employee in employees %}

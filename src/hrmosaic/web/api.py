@@ -461,12 +461,15 @@ def snapshot_as_of(spans: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def _publish_turn_started(store: Store, session_id: str, turn_id: str) -> None:
-    seq = store.execute("SELECT COUNT(*) AS n FROM turns WHERE session_id = ?", (session_id,)).scalar() or 0
+def _publish_turn_started(store: Store, session_id: str, turn_id: str, *, seq: int | None = None) -> None:
+    """§11.3's first frame. A resumed turn keeps its own `seq`; a new one is the session's next."""
+    if seq is None:
+        existing = store.execute("SELECT COUNT(*) AS n FROM turns WHERE session_id = ?", (session_id,)).scalar() or 0
+        seq = int(existing) + 1
     broker.publish(
         turn_id,
         "turn_started",
-        {"turn_id": turn_id, "session_id": session_id, "seq": int(seq) + 1, "started_at": now_micros()},
+        {"turn_id": turn_id, "session_id": session_id, "seq": seq, "started_at": now_micros()},
     )
 
 
@@ -613,7 +616,7 @@ async def chat_confirm(request: Request) -> Response:
     """
     body = await _parse_body(request, ConfirmBody)
     store = _store(request)
-    turn = store.execute("SELECT id, session_id FROM turns WHERE id = ?", (body.turn_id,)).one()
+    turn = store.execute("SELECT id, session_id, seq FROM turns WHERE id = ?", (body.turn_id,)).one()
     if turn is None or turn["session_id"] != body.session_id:
         raise HTTPException(status_code=404, detail={"code": "UNKNOWN_TURN", "turn_id": body.turn_id})
 
@@ -651,7 +654,7 @@ async def chat_confirm(request: Request) -> Response:
 
     awaiting_ms = max(0, (now_micros() - int(pending["ended_at"] or pending["started_at"])) // 1000)
     buffer = trace_module.reopen_turn(body.turn_id, awaiting_ms)
-    _publish_turn_started(store, body.session_id, body.turn_id)
+    _publish_turn_started(store, body.session_id, body.turn_id, seq=int(turn["seq"]))
 
     if body.decision == "confirmed":
         response = await agent.resume_turn(body.session_id, body.turn_id, token)
