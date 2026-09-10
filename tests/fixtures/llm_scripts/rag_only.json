@@ -1,6 +1,6 @@
 {
   "scenario": "rag_only",
-  "_note": "A pure policy question routed `policy_qa`, where the model ALSO asks for a people-data tool it was never offered. The router gate of spec §9.2 restricts the catalog to tools 1-4 and the orchestrator refuses the un-offered call at the boundary, so the turn makes zero non-RAG tool calls. Used by tests/e2e/test_rag_only_makes_no_people_calls.py.",
+  "_note": "A pure policy question routed `policy_qa`, where the model ALSO asks for a people-data tool it was never offered. The router gate of spec §9.2 restricts the catalog to tools 1-4 and the orchestrator refuses the un-offered call at the boundary, so the turn makes zero non-RAG tool calls. The THIRD act entry is the model declining the breadth reminder of §9.1 step 2: one search answers a one-part question, and the loop lets it stop. Used by tests/e2e/test_rag_only_makes_no_people_calls.py.",
   "completions": [
     {
       "purpose": "route",
@@ -12,11 +12,20 @@
     {
       "purpose": "act",
       "tool_calls": [
-        {"id": "toolu_rag_1", "name": "lookup_employee_profile", "args": {"employee_id": "E1042"}},
+        {
+          "id": "toolu_rag_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
         {
           "id": "toolu_rag_2",
           "name": "search_policy_documents",
-          "args": {"query": "PTO accrual rate for full-time employees per month", "k": 5}
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
         }
       ],
       "finish_reason": "tool_use",
@@ -29,6 +38,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 2480,
       "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "There is nothing further to look up: the accrual table is the whole answer.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2530,
+      "completion_tokens": 18
     },
     {
       "purpose": "synthesize",

@@ -39,6 +39,7 @@ from hrmosaic.agent.client import DiscoveredCatalog, ToolResult
 from hrmosaic.agent.guardrails import g1
 from hrmosaic.agent.orchestrator import (
     ACTION_OUTSTANDING,
+    SEARCH_BREADTH,
     WORKFLOW_INCOMPLETE,
     ChatOptions,
     ChatRequest,
@@ -110,14 +111,18 @@ def decision(intent: str, workflow: str | None) -> RouteDecision:
     )
 
 
-def a_turn(*, intent: str = "workflow", workflow=PTO, disabled: list[str] | None = None) -> _Turn:
+def a_turn(*, intent: str = "workflow", workflow=PTO, disabled: list[str] | None = None, searches: int = 2) -> _Turn:
     """A turn carrying only what `_nudge` and `_absorb` read.
 
     `buffer` is `None` on purpose: neither method touches it, and a reminder that ever reached the
     span writer would fail here with an `AttributeError` rather than pass quietly. The catalog is
     real, because `_nudge` now reads the same allowed-tool list the act step calls through.
+
+    `searches` is how many corpus searches the turn has already made, and it defaults to **two** so
+    the breadth reminder (P13 R3) is out of the way: every test that does not name it is about one
+    of the other two reminders, and the breadth tests set it themselves.
     """
-    return _Turn(
+    turn = _Turn(
         request=ChatRequest(
             message="Can I take five days off next month?",
             employee_id="E1042",
@@ -129,6 +134,9 @@ def a_turn(*, intent: str = "workflow", workflow=PTO, disabled: list[str] | None
         decision=decision(intent, workflow.name if workflow is not None else None),
         workflow=workflow,
     )
+    for _ in range(searches):
+        turn.state.record("search_policy_documents", {"chunks": []})
+    return turn
 
 
 def orchestrator() -> Orchestrator:
@@ -478,7 +486,7 @@ def test_a_quarantined_chunk_is_not_evidence_and_does_not_satisfy_a_predicate():
 
 def test_a_compliance_verdict_without_retrieval_does_not_complete_the_pto_workflow():
     """The live defect, offline: a verdict reached without ever searching is not a complete turn."""
-    turn = a_turn()
+    turn = a_turn(searches=0)
     agent = orchestrator()
     agent._absorb(turn, result("check_pto_balance", {"remaining_days": 12.0}))
     agent._absorb(
@@ -500,7 +508,7 @@ def test_a_compliance_verdict_without_retrieval_does_not_complete_the_pto_workfl
 
 
 def test_a_compliance_verdict_without_retrieval_does_not_complete_the_remote_work_workflow():
-    turn = a_turn(workflow=REMOTE)
+    turn = a_turn(workflow=REMOTE, searches=0)
     agent = orchestrator()
     agent._absorb(turn, result("lookup_employee_profile", {"employee_id": "E1042", "work_country": "US"}))
     agent._absorb(
@@ -531,7 +539,7 @@ def test_a_compliance_verdict_without_retrieval_does_not_complete_the_remote_wor
 async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_agent, spans, store):
     """End to end under the stub: the model answers with no tool call and the loop says "not yet".
 
-    `nudge_probe.json` scripts three prose-only act completions. Without the reminders the loop
+    `nudge_probe.json` scripts four prose-only act completions. Without the reminders the loop
     would close on the first one after a single act call — which is the shape the live provider
     produced and the stub could not, until this script.
     """
@@ -542,7 +550,7 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
     records = spans(response.turn_id)
 
     act_calls = [payload for kind, _, payload in records if kind == "llm_call" and payload["purpose"] == "act"]
-    assert len(act_calls) == 3, "one reminder each, then the loop lets the model stop"
+    assert len(act_calls) == 4, "one reminder each, then the loop lets the model stop"
 
     summary = next(payload for kind, name, payload in records if name == "act_summary")
     assert summary["step_summaries"] == [
@@ -551,11 +559,12 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
         "2 citable policy passages on notice and approval, and an answer may state policy only from "
         "passages it can cite",
         "step 2: the requested action was still unproposed",
-        "step 3: no tool call, the model answered",
+        "step 3: one search, and the question spans more",
+        "step 4: no tool call, the model answered",
     ]
     # Machine-readable, on the plan span, so §13.4's reader can separate nudged turns from the
     # rest and P10 can report a `nudge_rate` (P7 review, I1b).
-    assert summary["nudges"] == ["workflow_incomplete", "action_outstanding"]
+    assert summary["nudges"] == ["workflow_incomplete", "action_outstanding", "search_breadth"]
 
     # The reminders reached the model verbatim, and live nowhere but the `llm_messages` rows.
     rows = store.execute(
@@ -570,6 +579,7 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
     ]
     assert reminders[0].startswith("Not yet — this turn is not finished. The pto_request workflow is incomplete")
     assert ACTION_OUTSTANDING in reminders
+    assert SEARCH_BREADTH in reminders
 
     # And they manufactured nothing: no tool ran, so G1 still refuses.
     assert response.outcome == "refused"
@@ -578,7 +588,12 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
 
 @pytest.mark.anyio
 async def test_a_turn_that_was_never_nudged_records_an_empty_nudges_list(run_agent, spans):
-    """The other half of the `nudge_rate`: a clean turn says so, rather than saying nothing."""
+    """The other half of the `nudge_rate`: a clean turn says so, rather than saying nothing.
+
+    `injection_probe.json` searches twice in its one act step, so none of the three reminders has
+    anything to report: no workflow, no requested action, and a corpus the turn read more than one
+    query's worth of.
+    """
     response = await run_agent(
         "injection_probe.json",
         ChatRequest(message="What should I do about a suspicious phishing email?", employee_id="E1042"),
@@ -630,3 +645,79 @@ def test_the_missing_employee_record_is_reported_as_a_debt_in_workflow_words():
     content = turn.messages[0].content or ""
     assert "no employee record is in state yet" in content
     assert PTO.slot_descriptions["lookup_employee_profile"] == REMOTE.slot_descriptions["lookup_employee_profile"]
+
+
+# --------------------------------------------------------------------------------------
+# The breadth reminder (P13 R3)
+# --------------------------------------------------------------------------------------
+
+
+def test_a_turn_that_searched_once_is_reminded_that_the_corpus_is_federated():
+    """R3: `remote-002` and `expenses-002` cited two documents where three were required.
+
+    Neither other reminder fires there — the workflow's debts are settled and no action is
+    outstanding — so the turn stopped one query short of the document the end state wanted.
+    """
+    turn = a_turn(intent="policy_qa", workflow=None, searches=1)
+
+    assert orchestrator()._nudge(turn) is True
+    assert turn.messages[0].role == "user"
+    assert turn.messages[0].content == SEARCH_BREADTH
+    assert turn.nudges == ["search_breadth"]
+    assert turn.step_summaries == ["step 0: one search, and the question spans more"]
+
+
+def test_the_breadth_reminder_is_sent_at_most_once_per_turn():
+    turn = a_turn(intent="policy_qa", workflow=None, searches=1)
+    agent = orchestrator()
+
+    assert agent._nudge(turn) is True
+    assert agent._nudge(turn) is False
+    assert len(turn.messages) == 1
+    assert turn.nudges == ["search_breadth"]
+
+
+def test_the_breadth_reminder_is_not_sent_on_a_step_another_reminder_took():
+    """One reminder per step: the loop gets a step back between them (§9.1 step 2)."""
+    turn = a_turn(intent="action", workflow=PTO, searches=1)
+    agent = orchestrator()
+
+    assert agent._nudge(turn) is True
+    assert turn.nudges == ["workflow_incomplete"]
+    assert agent._nudge(turn) is True
+    assert turn.nudges == ["workflow_incomplete", "action_outstanding"]
+    assert agent._nudge(turn) is True
+    assert turn.nudges == ["workflow_incomplete", "action_outstanding", "search_breadth"]
+    assert [message.content for message in turn.messages][-1] == SEARCH_BREADTH
+
+
+def test_a_turn_that_has_already_searched_twice_is_not_reminded():
+    """The reminder is about breadth, not about searching more forever."""
+    turn = a_turn(intent="policy_qa", workflow=None, searches=2)
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == [] and turn.nudges == []
+
+
+def test_the_breadth_reminder_is_silent_when_retrieval_is_disabled():
+    """Asking for another search a turn may not make would only invite a refused call."""
+    turn = a_turn(intent="policy_qa", workflow=None, disabled=["search_policy_documents"], searches=1)
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == [] and turn.nudges == []
+
+
+def test_the_breadth_reminder_is_silent_when_no_tool_may_be_called_at_all():
+    turn = a_turn(intent="policy_qa", workflow=None, searches=1)
+    turn.catalog = None
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == [] and turn.nudges == []
+
+
+def test_the_breadth_reminder_names_no_tool_and_no_document_count():
+    """The ledger's non-negotiable: the debt, never the tool, and never how many documents."""
+    for name in TOOL_NAMES:
+        assert name not in SEARCH_BREADTH
+    assert "three" not in SEARCH_BREADTH and "3 " not in SEARCH_BREADTH
+    assert "k=" not in SEARCH_BREADTH

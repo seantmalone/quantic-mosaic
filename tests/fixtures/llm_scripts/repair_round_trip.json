@@ -1,6 +1,6 @@
 {
   "scenario": "repair_round_trip",
-  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. Used by tests/integration/test_repair_round_trip.py.",
+  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. The fourth and fifth act entries are prose: the second is the model declining the breadth reminder of §9.1 step 2. Used by tests/integration/test_repair_round_trip.py.",
   "completions": [
     {
       "purpose": "route",
@@ -15,12 +15,17 @@
         {
           "id": "toolu_rep_1",
           "name": "check_pto_balance",
-          "args": { "employee_id": "me" }
+          "args": {
+            "employee_id": "me"
+          }
         },
         {
           "id": "toolu_rep_2",
           "name": "search_policy_documents",
-          "args": { "query": "PTO accrual rate for full-time employees per month", "k": 5 }
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
         }
       ],
       "finish_reason": "tool_use",
@@ -40,6 +45,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 2480,
       "completion_tokens": 18
+    },
+    {
+      "purpose": "act",
+      "response_text": "I have the balance and the accrual rule; there is nothing further to search for.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2560,
+      "completion_tokens": 19
     },
     {
       "purpose": "synthesize",

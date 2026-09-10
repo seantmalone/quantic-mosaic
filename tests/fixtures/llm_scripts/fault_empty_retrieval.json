@@ -1,52 +1,60 @@
 {
- "scenario": "fault_empty_retrieval",
- "_note": "§9.5 row 3 — retrieval that returns nothing usable. The test raises MIN_SUPPORT_SCORE so the real hits are all below the support bar; G1 refuses and redirects, naming what the corpus covers, and the guardrail span carries the observed scores. Four completions: route, one act step with the search, the act step that ends the loop, and the single extra act step §9.2's one-step catalog recovery buys.",
- "completions": [
-  {
-   "purpose": "route",
-   "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus should answer from documents alone.\"}",
-   "finish_reason": "stop",
-   "prompt_tokens": 1090,
-   "completion_tokens": 88
-  },
-  {
-   "purpose": "act",
-   "tool_calls": [
+  "scenario": "fault_empty_retrieval",
+  "_note": "§9.5 row 3 — retrieval that returns nothing usable. The test raises MIN_SUPPORT_SCORE so the real hits are all below the support bar; G1 refuses and redirects, naming what the corpus covers, and the guardrail span carries the observed scores. Four completions: route, one act step with the search, the act step that ends the loop, and the single extra act step §9.2's one-step catalog recovery buys. Both halves of the two-part question are searched in the one act step, so the breadth reminder of §9.1 step 2 has nothing to report and the turn's shape is the G1 refusal itself.",
+  "completions": [
     {
-     "id": "toolu_fer_1",
-     "name": "search_policy_documents",
-     "args": {
-      "query": "sabbatical eligibility after seven years",
-      "k": 5
-     }
-    }
-   ],
-   "finish_reason": "tool_use",
-   "prompt_tokens": 1310,
-   "completion_tokens": 70
-  },
-  {
-   "purpose": "act",
-   "response_text": "I could not find policy evidence for that.",
-   "finish_reason": "stop",
-   "prompt_tokens": 1720,
-   "completion_tokens": 24
-  },
-  {
-   "purpose": "act",
-   "tool_calls": [
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus should answer from documents alone.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1090,
+      "completion_tokens": 88
+    },
     {
-     "id": "toolu_fer_2",
-     "name": "search_policy_documents",
-     "args": {
-      "query": "sabbatical leave unpaid extended absence",
-      "k": 5
-     }
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_fer_1",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "sabbatical eligibility after seven years",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_empty_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "how long is a sabbatical and who approves it",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1310,
+      "completion_tokens": 110
+    },
+    {
+      "purpose": "act",
+      "response_text": "I could not find policy evidence for that.",
+      "finish_reason": "stop",
+      "prompt_tokens": 1720,
+      "completion_tokens": 24
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_fer_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "sabbatical leave unpaid extended absence",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1810,
+      "completion_tokens": 68
     }
-   ],
-   "finish_reason": "tool_use",
-   "prompt_tokens": 1810,
-   "completion_tokens": 68
-  }
- ]
+  ]
 }

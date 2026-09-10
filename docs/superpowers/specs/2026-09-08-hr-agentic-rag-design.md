@@ -1117,6 +1117,15 @@ POST /chat  (or /chat/confirm)
  └─ 7. ONE batched flush of the turn's spans + llm_messages + the closing UPDATE
 ```
 
+**Three reminders, at most one per act step.** When the model stops calling tools while the turn still owes something, the loop appends one
+deterministic `user` message and takes another step: `workflow_incomplete` (§9.3's predicate is unmet), `action_outstanding` (the user asked for
+something to be created and nothing has been proposed) and, added at P13, `search_breadth` — the turn has searched the federated corpus at most once
+while the question spans more of it than one query reaches, which is how the judged baseline lost `remote-002` and `expenses-002` with two cited
+documents where three were required. Each is sent at most once per turn, only on a step where no other reminder fired, and only while a permitted tool
+could still settle it. **A reminder names the debt and never a tool, a document count or a `k`** — a reminder that listed the remaining calls would make
+the harness the author of the tool sequence, and §13.4's ToolSelection would be scoring the hint. The turn publishes which fired as `PlanPayload.nudges`,
+so `nudge_rate` is reported beside those scores; the breadth reminder raises it by design.
+
 **The orchestrator's public interface**, named because `web/api.py` (P8) is written by a different subagent than `agent/orchestrator.py` (P7):
 
 ```python
@@ -1139,7 +1148,10 @@ and write tools are not offered. This is chosen over a soft bias because it is d
 `tests/e2e/test_rag_only_makes_no_people_calls.py` asserts **zero** non-RAG tool calls on a pure policy question.
 
 **Recovery path.** If the act loop's first synthesis fails G1 while `intent == "policy_qa"`, the orchestrator reopens the **full** catalog for **one**
-additional step, records a `plan` span with `catalog_reopened: true`, and re-runs the act step. The step counts against `AGENT_MAX_STEPS`. Any tool
+additional step, records a `plan` span with `catalog_reopened: true`, appends **one deterministic `user` message saying why the answer was refused** —
+that a compliance verdict is a computation rather than a policy passage, and that only a passage returned by searching the corpus can be cited (added
+P13; the reopen used to append nothing, so the extra step re-sent the conversation that had just produced the ungrounded answer and got it back) — and
+re-runs the act step. The message is recorded in `nudges` as `g1_recovery`. The step counts against `AGENT_MAX_STEPS`. Any tool
 reachable only after a reopen is listed in the dataset as `allowed_extra_tools`, never `expected_tools`, so a reopen never inflates `ToolRecall`. The
 router confusion matrix is computed from the *first* `plan` span's intent, with `catalog_reopened_rate` reported alongside.
 

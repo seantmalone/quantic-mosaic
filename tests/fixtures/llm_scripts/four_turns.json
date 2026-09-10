@@ -13,14 +13,14 @@
       "purpose": "act",
       "tool_calls": [
         {
-          "id": "toolu_t1_1",
+          "id": "toolu_rag_1",
           "name": "lookup_employee_profile",
           "args": {
             "employee_id": "E1042"
           }
         },
         {
-          "id": "toolu_t1_2",
+          "id": "toolu_rag_2",
           "name": "search_policy_documents",
           "args": {
             "query": "PTO accrual rate for full-time employees per month",
@@ -38,6 +38,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 2480,
       "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "There is nothing further to look up: the accrual table is the whole answer.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2530,
+      "completion_tokens": 18
     },
     {
       "purpose": "synthesize",
@@ -57,14 +64,14 @@
       "purpose": "act",
       "tool_calls": [
         {
-          "id": "toolu_t2_1",
+          "id": "toolu_rag_1",
           "name": "lookup_employee_profile",
           "args": {
             "employee_id": "E1042"
           }
         },
         {
-          "id": "toolu_t2_2",
+          "id": "toolu_rag_2",
           "name": "search_policy_documents",
           "args": {
             "query": "PTO accrual rate for full-time employees per month",
@@ -82,6 +89,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 2480,
       "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "There is nothing further to look up: the accrual table is the whole answer.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2530,
+      "completion_tokens": 18
     },
     {
       "purpose": "synthesize",
@@ -101,14 +115,14 @@
       "purpose": "act",
       "tool_calls": [
         {
-          "id": "toolu_t3_1",
+          "id": "toolu_rag_1",
           "name": "lookup_employee_profile",
           "args": {
             "employee_id": "E1042"
           }
         },
         {
-          "id": "toolu_t3_2",
+          "id": "toolu_rag_2",
           "name": "search_policy_documents",
           "args": {
             "query": "PTO accrual rate for full-time employees per month",
@@ -126,6 +140,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 2480,
       "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "There is nothing further to look up: the accrual table is the whole answer.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2530,
+      "completion_tokens": 18
     },
     {
       "purpose": "synthesize",
@@ -145,14 +166,14 @@
       "purpose": "act",
       "tool_calls": [
         {
-          "id": "toolu_t4_1",
+          "id": "toolu_rag_1",
           "name": "lookup_employee_profile",
           "args": {
             "employee_id": "E1042"
           }
         },
         {
-          "id": "toolu_t4_2",
+          "id": "toolu_rag_2",
           "name": "search_policy_documents",
           "args": {
             "query": "PTO accrual rate for full-time employees per month",
@@ -170,6 +191,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 2480,
       "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "There is nothing further to look up: the accrual table is the whole answer.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2530,
+      "completion_tokens": 18
     },
     {
       "purpose": "synthesize",

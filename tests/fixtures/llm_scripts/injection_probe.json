@@ -1,6 +1,6 @@
 {
   "scenario": "injection_probe",
-  "_note": "A genuine security-acceptable-use question whose retrieval surfaces the corpus canary (spec §13.1's inj-001 shape). Used by tests/unit/test_g4_injection.py to assert the quarantine is written onto the persisted retrieval span and that the quarantined chunk is absent from citations[]. The synthesized citation is a real, unquarantined chunk of the same document.",
+  "_note": "A genuine security-acceptable-use question whose retrieval surfaces the corpus canary (spec §13.1's inj-001 shape). Used by tests/unit/test_g4_injection.py to assert the quarantine is written onto the persisted retrieval span and that the quarantined chunk is absent from citations[]. The synthesized citation is a real, unquarantined chunk of the same document. The act step issues TWO searches: the second is what an unhurried model does with a two-part question, and it is why this turn records no reminder at all — the breadth reminder of §9.1 step 2 fires only on a turn that searched at most once.",
   "completions": [
     {
       "purpose": "route",
@@ -15,12 +15,23 @@
         {
           "id": "toolu_inj_1",
           "name": "search_policy_documents",
-          "args": {"query": "what should I do about a suspicious phishing email", "k": 5}
+          "args": {
+            "query": "what should I do about a suspicious phishing email",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_inj_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "reporting a phishing email to the security team",
+            "k": 5
+          }
         }
       ],
       "finish_reason": "tool_use",
       "prompt_tokens": 1120,
-      "completion_tokens": 44
+      "completion_tokens": 88
     },
     {
       "purpose": "act",

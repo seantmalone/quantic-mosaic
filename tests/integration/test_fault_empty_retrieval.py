@@ -75,7 +75,7 @@ async def test_the_refusal_makes_no_extra_tool_call_of_its_own(refused, store):
             "SELECT name FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq", (refused["turn_id"],)
         ).dicts()
     ]
-    assert called == ["search_policy_documents", "search_policy_documents"]
+    assert called == ["search_policy_documents"] * 3, "two in the first act step, one in the reopen"
     assert "list_policy_documents" not in called
 
 
@@ -94,3 +94,35 @@ async def test_no_synthesis_call_was_made_over_evidence_that_did_not_qualify(ref
 async def test_the_turn_row_records_the_refusal(refused, store):
     row = store.execute("SELECT outcome, stop_reason FROM turns WHERE id = ?", (refused["turn_id"],)).one()
     assert (row["outcome"], row["stop_reason"]) == ("refused", "refused")
+
+
+async def test_the_reopened_step_is_told_why_the_first_answer_was_refused(refused, store):
+    """§9.2's recovery step used to be spent blind (P13 R4).
+
+    The reopen appended nothing to the conversation, so the model saw the same messages that had
+    just produced an ungrounded answer and reproduced it — `remote-003`'s shape. One deterministic
+    user message now says what happened and what would ground the answer, and the turn records it
+    in `nudges` so the plan span shows the recovery was informed.
+    """
+    from hrmosaic.agent.orchestrator import G1_RECOVERY
+
+    rows = store.execute(
+        "SELECT s.seq, s.kind, s.name, s.payload_json, m.role, m.content "
+        "FROM spans s LEFT JOIN llm_messages m ON m.span_id = s.id "
+        "WHERE s.turn_id = ? ORDER BY s.seq, m.seq",
+        (refused["turn_id"],),
+    ).dicts()
+
+    act_calls: dict[int, list[str]] = {}
+    for row in rows:
+        if row["kind"] == "llm_call" and json.loads(row["payload_json"])["purpose"] == "act":
+            act_calls.setdefault(row["seq"], []).append(row["content"] or "")
+    assert len(act_calls) >= 2, "the turn reopened the catalog for one more act step"
+
+    steps = [messages for _, messages in sorted(act_calls.items())]
+    assert [messages.count(G1_RECOVERY) for messages in steps] == [0] * (len(steps) - 1) + [1]
+
+    summaries = [
+        json.loads(row["payload_json"]) for row in rows if row["kind"] == "plan" and row["name"] == "act_summary"
+    ]
+    assert [summary["nudges"] for summary in summaries] == [[], ["g1_recovery"]]

@@ -53,7 +53,7 @@ from hrmosaic.agent import prompts
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
 from hrmosaic.agent.guardrails import g1, g2, g3, g4, g5, g6
 from hrmosaic.agent.router import RouteDecision, allowed_tools, clamp_rationale, fallback_decision, normalise, offered
-from hrmosaic.agent.workflows import LoopState, WorkflowSpec
+from hrmosaic.agent.workflows import EVIDENCE_TOOLS, LoopState, WorkflowSpec
 from hrmosaic.agent.workflows import get as get_workflow
 from hrmosaic.core import corpusread, trace
 from hrmosaic.core.db import Store, get_store, now_micros
@@ -152,6 +152,34 @@ ACTION_OUTSTANDING = (
     "The user asked for something to be created and this turn has not proposed it yet — no "
     "proposed action is in state. Propose it now, with the exact details it needs. Proposing is "
     "safe: the action is gated, and nothing is created until a human confirms it."
+)
+
+#: The third reminder (P13 R3), for the failure the other two cannot see: a turn that searched,
+#: got a plausible passage and stopped, while the question had three parts written in three
+#: different documents. The judged baseline lost `remote-002` and `expenses-002` that way — two
+#: cited documents where the end state required three — and neither existing reminder fires there,
+#: because the workflow's debts were settled and no action was outstanding.
+#:
+#: Same rule as the other two: it names the **debt** — the corpus is federated and one query
+#: reaches one or two documents — and never a tool, never a document count, and never a `k`. It is
+#: sent at most once per turn and only on a step where neither other reminder fired, so a nudged
+#: turn still costs at most one extra act step.
+SEARCH_BREADTH = (
+    "Not yet — you have searched the corpus once. This corpus is federated on purpose: duration "
+    "thresholds, approved-country lists, approval authority and device/security rules are each "
+    "written in a different document, and a single query reaches only one or two of them. Re-read "
+    "the question, and for every distinct thing it asks that your evidence does not yet cover, "
+    "search again. Then conclude."
+)
+
+#: The one message §9.2's G1 recovery step sends (P13 R4). The reopen used to append nothing, so
+#: the extra step was spent blind: the model saw the same conversation that had just produced an
+#: ungrounded answer and reproduced it. It says why the answer was refused and what would ground
+#: it — the debt, not the tool — and the turn records it in `nudges` as `g1_recovery`.
+G1_RECOVERY = (
+    "Your answer was refused: nothing you retrieved can ground it. A compliance verdict is a "
+    "computation, not a policy passage — only a passage returned by SEARCHING the corpus can be "
+    "cited. Search now for the policy text behind each requirement you relied on, then conclude."
 )
 
 BUDGET_NOTE = {
@@ -593,6 +621,10 @@ class Orchestrator:
             # that says so. The step counts against AGENT_MAX_STEPS.
             turn.reopened = True
             self._plan(turn, step_index=turn.steps_taken, catalog_reopened=True)
+            # The recovery step is spent blind unless the model is told what happened: the same
+            # conversation that produced the refused answer, re-sent, produces it again (P13 R4).
+            turn.nudges.append("g1_recovery")
+            turn.messages.append(Message(role="user", content=G1_RECOVERY))
             try:
                 await self._run_act(turn)
             except McpUnavailable as exc:
@@ -839,11 +871,14 @@ class Orchestrator:
         and, for the second reminder, the action the router recorded.
 
         The completion predicate is Python and cannot be talked out of its requirements — but a
-        model that has stopped calling tools cannot read it either. Two reminders, each sent only
+        model that has stopped calling tools cannot read it either. Three reminders, each sent only
         on the step where the model tried to stop and only while the gap is real: the workflow has
-        no citable evidence yet, or the user asked for something to be created and nothing has been
-        proposed. Both were live failures under the real provider, and both closed a turn that had
-        not done what it was asked.
+        no citable evidence yet, the user asked for something to be created and nothing has been
+        proposed, or the turn searched the federated corpus once and the question spans more of it
+        than one query reaches. The first two were live failures under the real provider; the third
+        is the judged baseline's `remote-002` / `expenses-002`, which cited two documents where the
+        end state required three. At most one reminder per step, so a nudged turn costs one extra
+        act step and not three.
 
         **A reminder reports the debt in workflow words and stops there.** Naming the tools that
         would settle it would make the harness, not the model, the author of the rest of the tool
@@ -873,7 +908,25 @@ class Orchestrator:
             turn.messages.append(Message(role="user", content=ACTION_OUTSTANDING))
             turn.step_summaries.append(f"step {turn.steps_taken}: the requested action was still unproposed")
             return True
+        if (
+            "search_breadth" not in turn.nudges
+            and any(name in permitted for name in EVIDENCE_TOOLS)
+            and self._searches(turn) <= 1
+        ):
+            turn.nudges.append("search_breadth")
+            turn.messages.append(Message(role="user", content=SEARCH_BREADTH))
+            turn.step_summaries.append(f"step {turn.steps_taken}: one search, and the question spans more")
+            return True
         return False
+
+    def _searches(self, turn: _Turn) -> int:
+        """How many corpus searches this turn has already made.
+
+        `EVIDENCE_TOOLS` is the same list the workflow debts read: the tools whose results carry
+        scored, citable evidence. Only successful results are in state, so a search that errored
+        does not count as one the model has already spent.
+        """
+        return sum(len(turn.state.results.get(name, ())) for name in EVIDENCE_TOOLS)
 
     def _action_outstanding(self, turn: _Turn) -> bool:
         """The user asked for something to be **created** and nothing has been proposed yet.

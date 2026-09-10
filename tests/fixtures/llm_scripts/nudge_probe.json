@@ -1,6 +1,6 @@
 {
   "scenario": "nudge_probe",
-  "_note": "A model that stops calling tools while the turn still owes something (spec §9.3, the reminders added at P8 after the live-provider check). The router picks `action` + `pto_request`; every act entry then answers with prose and no tool call. The loop must not accept the first one: it owes the workflow's two structured-data results, and it owes the write the user asked for. Three act entries, so the loop stops on its own after both reminders are spent — a fourth would prove nothing and the stub would raise on a fifth.",
+  "_note": "A model that stops calling tools while the turn still owes something (spec §9.3, the reminders of §9.1 step 2). The router picks `action` + `pto_request`; every act entry then answers with prose and no tool call. The loop must not accept the first one: it owes the workflow's three structured-data results, it owes the write the user asked for, and it has never searched the corpus. FOUR act entries, so the loop stops on its own after all three reminders are spent — a fifth would prove nothing and the stub would raise on a sixth.",
   "completions": [
     {
       "purpose": "route",
@@ -29,6 +29,13 @@
       "finish_reason": "stop",
       "prompt_tokens": 1560,
       "completion_tokens": 9
+    },
+    {
+      "purpose": "act",
+      "response_text": "That is everything I have.",
+      "finish_reason": "stop",
+      "prompt_tokens": 1640,
+      "completion_tokens": 8
     }
   ]
 }
