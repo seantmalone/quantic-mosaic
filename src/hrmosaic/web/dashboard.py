@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -366,14 +367,21 @@ class Filters:
         return {field: getattr(self, field) for field in self.__dataclass_fields__}
 
     def query_string(self, **overrides: Any) -> str:
-        """The current filter state as a query string — how the pager keeps the filters."""
+        """The current filter state as a query string — how the pager keeps the filters.
+
+        Percent-encoded through `urlencode`, because this one string is *both* the pager's link
+        and the Export JSON href: a free-text `q` carrying `&` would otherwise truncate the link
+        at the ampersand and a `#` would send the rest to the fragment, so the JSON export would
+        silently answer a different row set than the page displays.
+        """
         state = {**self.as_dict(), **overrides}
-        parts = [
-            f"{key}={value if not isinstance(value, bool) else 'true'}"
-            for key, value in state.items()
-            if value not in (None, "", False) and not (key == "page" and value == 1)
-        ]
-        return "&".join(parts)
+        return urlencode(
+            {
+                key: "true" if value is True else value
+                for key, value in state.items()
+                if value not in (None, "", False) and not (key == "page" and value == 1)
+            }
+        )
 
 
 def _span_time_clause(filters: Filters) -> tuple[str, list[Any]]:
@@ -1379,6 +1387,10 @@ def build_retrieval(request: Request, filters: Filters) -> RetrievalView:
 # Page 7 — tools
 # --------------------------------------------------------------------------------------
 
+#: How the rollup names a tool in SQL. `spans.name` is the tool name for a `tool_call` span and is
+#: `NOT NULL` (§10.1), so this matches the Python fallback `recent` uses and can never group on NULL.
+TOOL_NAME_SQL = "COALESCE(json_extract(payload_json, '$.tool_name'), name, 'unknown')"
+
 
 def build_tools(request: Request, filters: Filters) -> ToolsView:
     store = _store(request)
@@ -1390,51 +1402,63 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
     if filters.errors_only:
         where += " AND json_extract(payload_json, '$.is_error') = 1"
 
-    spans = _payloads(
+    # The rollup is a SQL aggregate, not a Python loop over every row: a `tool_call` payload runs
+    # to 32 KB (§10.5) and the store holds `TRACE_RETENTION_SESSIONS` sessions' worth of them, so
+    # materialising the whole set to count calls would put the 512 MB instance under real pressure.
+    # Every sibling builder (`build_llm`, `build_retrieval`, `build_safety`) is bounded; so is this.
+    rollups = store.execute(
+        f"SELECT {TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls, "
+        "SUM(CASE WHEN json_extract(payload_json, '$.is_error') = 1 THEN 1 ELSE 0 END) AS errors, "
+        "MAX(started_at) AS last_called_at "
+        f"FROM spans WHERE kind = 'tool_call'{where} "
+        "GROUP BY tool_name ORDER BY calls DESC, tool_name",
+        params,
+    ).dicts()
+    # p50/p95 over the newest `ROW_LIMIT` calls *per tool*, so a chatty tool cannot starve a rare
+    # one of its sample and neither can flood memory.
+    durations: dict[str, list[int]] = defaultdict(list)
+    sample = store.execute(
+        "SELECT tool_name, duration_ms FROM ("
+        f"  SELECT {TOOL_NAME_SQL} AS tool_name, duration_ms, "
+        f"         ROW_NUMBER() OVER (PARTITION BY {TOOL_NAME_SQL} ORDER BY started_at DESC) AS rn "
+        f"  FROM spans WHERE kind = 'tool_call'{where}"
+        ") WHERE rn <= ? AND duration_ms IS NOT NULL",
+        [*params, ROW_LIMIT],
+    ).dicts()
+    for row in sample:
+        durations[row["tool_name"]].append(int(row["duration_ms"]))
+
+    recent_spans = _payloads(
         store.execute(
-            "SELECT id, turn_id, started_at, duration_ms, payload_json FROM spans "
-            f"WHERE kind = 'tool_call'{where} ORDER BY started_at DESC",
-            params,
+            "SELECT id, turn_id, name, duration_ms, payload_json FROM spans "
+            f"WHERE kind = 'tool_call'{where} ORDER BY started_at DESC LIMIT ?",
+            [*params, ROW_LIMIT],
         ).dicts()
     )
-    durations: dict[str, list[int]] = defaultdict(list)
-    errors: Counter[str] = Counter()
-    calls: Counter[str] = Counter()
-    last_called: dict[str, int] = {}
-    recent: list[ToolCallRow] = []
-    for span in spans:
-        payload = span["payload"]
-        name = payload.get("tool_name") or span.get("name") or "unknown"
-        calls[name] += 1
-        if payload.get("is_error"):
-            errors[name] += 1
-        if span["duration_ms"] is not None:
-            durations[name].append(int(span["duration_ms"]))
-        last_called[name] = max(last_called.get(name, 0), int(span["started_at"]))
-        if len(recent) < ROW_LIMIT:
-            recent.append(
-                ToolCallRow(
-                    span_id=span["id"],
-                    turn_id=span["turn_id"],
-                    tool_name=name,
-                    arguments=payload.get("arguments") or {},
-                    result_preview=preview_value(payload.get("result_json") or ""),
-                    is_error=bool(payload.get("is_error")),
-                    error_code=payload.get("error_code"),
-                    duration_ms=span["duration_ms"],
-                    actor_employee_id=payload.get("actor_employee_id"),
-                )
-            )
+    recent = [
+        ToolCallRow(
+            span_id=span["id"],
+            turn_id=span["turn_id"],
+            tool_name=span["payload"].get("tool_name") or span.get("name") or "unknown",
+            arguments=span["payload"].get("arguments") or {},
+            result_preview=preview_value(span["payload"].get("result_json") or ""),
+            is_error=bool(span["payload"].get("is_error")),
+            error_code=span["payload"].get("error_code"),
+            duration_ms=span["duration_ms"],
+            actor_employee_id=span["payload"].get("actor_employee_id"),
+        )
+        for span in recent_spans
+    ]
     by_tool = [
         ToolRollup(
-            tool_name=name,
-            calls=count,
-            error_rate=round(errors[name] / count, 4) if count else 0.0,
-            p50_ms=percentile(durations[name], 0.50),
-            p95_ms=percentile(durations[name], 0.95),
-            last_called_at=last_called.get(name),
+            tool_name=row["tool_name"],
+            calls=int(row["calls"]),
+            error_rate=round(int(row["errors"] or 0) / int(row["calls"]), 4) if row["calls"] else 0.0,
+            p50_ms=percentile(durations[row["tool_name"]], 0.50),
+            p95_ms=percentile(durations[row["tool_name"]], 0.95),
+            last_called_at=int(row["last_called_at"]) if row["last_called_at"] is not None else None,
         )
-        for name, count in calls.most_common()
+        for row in rollups
     ]
     return ToolsView(by_tool=by_tool, recent=recent)
 

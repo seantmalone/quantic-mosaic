@@ -19,8 +19,10 @@ What this file pins down:
 
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -210,6 +212,33 @@ async def test_the_pager_keeps_the_filters_and_never_repeats_the_page_parameter(
     for link in links:
         assert link.count("page=") == 1, link
         assert "client_label=demo" in link, link
+
+
+async def test_a_free_text_filter_survives_the_pager_and_the_export_link_intact(seeded):
+    """§11.6: "Export JSON" can never answer a different row set than the page displays.
+
+    `q` is free text. Concatenated into the query string raw, a `&` truncates every link that
+    carries it and a `#` sends the rest to the fragment — so the pager would drop the filter and
+    the export would silently widen the result set, with nothing on screen to say so.
+    """
+    q = "PTO & holidays #2026 = 50%"
+    page_two = await seeded.client.get("/dashboard/turns", params={"q": q, "page": 2}, headers=ADMIN)
+    assert page_two.status_code == 200, page_two.text[:300]
+
+    export = html.unescape(re.search(r'id="export-json"[^>]*href="([^"]+)"', page_two.text).group(1))
+    assert urlparse(export).fragment == "", export
+    assert parse_qs(urlparse(export).query)["q"] == [q], export
+
+    pager_links = [html.unescape(link) for link in re.findall(r'<a class="button" href="(\?[^"]+)"', page_two.text)]
+    assert pager_links, "page 2 must offer at least a Previous link"
+    for link in pager_links:
+        assert parse_qs(urlparse(link).query)["q"] == [q], link
+
+    # Following the export link gives back exactly the page's own filtered result set.
+    exported = await seeded.client.get(export, headers=ADMIN)
+    direct = await seeded.client.get("/api/traces/turns", params={"q": q, "page": 2}, headers=ADMIN)
+    assert exported.status_code == 200, exported.text[:300]
+    assert exported.json() == direct.json()
 
 
 async def test_page_three_renders_every_span_of_the_turn_in_a_waterfall(seeded, store, spans):
