@@ -122,6 +122,26 @@ WRITE_FAILED_NOTE = (
     "Here is what I established; try again or contact the owning team."
 )
 
+#: The one deterministic reminder the loop is allowed to inject (§9.3, P8's live check). The
+#: workflow spec already knows what the turn still needs; before this, nothing told the **model**,
+#: so a run that reached a compliance verdict without ever searching stopped one step short of the
+#: evidence G1 requires and the turn refused. Sent at most once per turn, and it is an operational
+#: instruction — never reasoning, and never persisted anywhere but the verbatim `llm_messages` rows.
+WORKFLOW_INCOMPLETE = (
+    "Not yet. The {workflow} workflow still needs {needs}, and an answer with no retrieved policy "
+    "text cannot be cited. Make ONE search_policy_documents call across {docs} — that is enough — "
+    "then conclude. If the user asked you to create something, propose the write tool once you "
+    "have that policy text; a human confirms it."
+)
+
+#: The second reminder, for the other way a turn can quietly drop what the user asked for: the
+#: model wrote an answer while the write it was asked to propose is still unmade. `_action_outstanding`
+#: already guarded the completion-predicate exit; live, the model left through the other door.
+ACTION_OUTSTANDING = (
+    "You have not proposed the action the user asked for. Call the write tool now with the exact "
+    "details. It is gated: nothing is created until a human confirms it."
+)
+
 BUDGET_NOTE = {
     "max_steps": "I reached my step limit for this turn; here is what I established before stopping.",
     "max_tool_calls": "I reached my tool-call limit for this turn; here is what I established before stopping.",
@@ -395,6 +415,9 @@ class _Turn:
     tool_calls_made: int = 0
     steps_taken: int = 0
     reopened: bool = False
+    #: Each of the two reminders of §9.3 is sent at most once per turn.
+    nudged: bool = False
+    action_reminded: bool = False
     stop_reason: str = "answered"
     pending: ConfirmationCard | None = None
     clarification: str | None = None
@@ -720,6 +743,8 @@ class Orchestrator:
                 Message(role="assistant", content=completion.text, tool_calls=list(completion.tool_calls))
             )
             if not completion.tool_calls:
+                if self._nudge(turn):
+                    continue
                 turn.step_summaries.append(f"step {turn.steps_taken}: no tool call, the model answered")
                 return
 
@@ -767,6 +792,38 @@ class Orchestrator:
             if turn.reopened:
                 # The recovery path buys exactly **one** additional step (§9.2).
                 return
+
+    def _nudge(self, turn: _Turn) -> bool:
+        """Tell the model, at most once each, what the turn still owes (§9.3). Did it send one?
+
+        The completion predicate is Python and cannot be talked out of its requirements — but a
+        model that has stopped calling tools cannot read it either. Two reminders, each sent only
+        on the step where the model tried to stop and only while the gap is real: the workflow has
+        no citable evidence yet, or the user asked for something to be created and nothing has been
+        proposed. Both were live failures under the real provider, and both closed a turn that had
+        not done what it was asked.
+        """
+        workflow = turn.workflow
+        if workflow is not None and not turn.nudged and not workflow.is_complete(turn.state):
+            turn.nudged = True
+            missing = workflow.missing_tool_results(turn.state)
+            needs = ", ".join(missing) if missing else "retrieved policy text you can cite"
+            turn.messages.append(
+                Message(
+                    role="user",
+                    content=WORKFLOW_INCOMPLETE.format(
+                        workflow=workflow.name, needs=needs, docs=", ".join(workflow.policy_docs)
+                    ),
+                )
+            )
+            turn.step_summaries.append(f"step {turn.steps_taken}: workflow incomplete, asked for {needs}")
+            return True
+        if self._action_outstanding(turn) and not turn.action_reminded:
+            turn.action_reminded = True
+            turn.messages.append(Message(role="user", content=ACTION_OUTSTANDING))
+            turn.step_summaries.append(f"step {turn.steps_taken}: the requested action was still unproposed")
+            return True
+        return False
 
     def _action_outstanding(self, turn: _Turn) -> bool:
         """The user asked for something to be **created** and nothing has been proposed yet.
@@ -922,14 +979,14 @@ class Orchestrator:
                 )
                 turn.evidence[chunk.chunk_id] = evidence
                 fresh.append(evidence)
-        # Tools 2 and 4 cite chunks without retrieving them; they count towards the workflow's
-        # document spread but carry no dense score, so they never enter G1's candidate set.
+        # ⚠ Tools 2 and 4 also cite chunk ids, and those ids used to count towards the workflow's
+        # document spread. They no longer do (P8's live check, §9.3). They carry no dense score, so
+        # they never enter G1's candidate set — and a completion predicate that counted them while
+        # the evidence gate did not made `is_complete` true on a turn G1 was about to refuse. Live,
+        # the model reached `check_policy_compliance` without ever searching, the act loop closed
+        # because the workflow "was complete", and both demo tasks refused for want of evidence.
+        # One meaning of "evidence", shared by the predicate and the gate, is the whole fix.
         body = result.body
-        for chunk_id in body.get("chunk_ids") or []:
-            turn.state.note_evidence(str(chunk_id), body.get("doc_id"))
-        for citation in body.get("citations") or []:
-            if isinstance(citation, dict):
-                turn.state.note_evidence(citation.get("chunk_id"), citation.get("doc_id"))
         if result.tool_name in WRITE_TOOLS:
             # §8.5's allocated ids: `MOCK-HR-…` from tool 8, `MOCK-EMAIL-…` from tool 9.
             for key in ("ticket_id", "draft_id"):
@@ -1426,6 +1483,13 @@ async def resume_turn(session_id: str, turn_id: str, confirmation_token: str) ->
     return await get_orchestrator().resume_turn(session_id, turn_id, confirmation_token)
 
 
+#: The two projection helpers, published for `web/sse.py` (P8). The live span rail and `trace[]`
+#: must describe a span identically — the rail collapses into the trace panel under the finished
+#: answer — so there is one implementation of each, not two (§11.3).
+summarise_span = _summary
+preview_value = _preview
+
+
 __all__ = [
     "CONFIRMATION_TTL_S",
     "OUT_OF_CORPUS_PHRASES",
@@ -1440,9 +1504,11 @@ __all__ = [
     "ToolCallRepair",
     "Usage",
     "get_orchestrator",
+    "preview_value",
     "project",
     "render_answer",
     "resume_turn",
     "run_turn",
     "set_orchestrator",
+    "summarise_span",
 ]
