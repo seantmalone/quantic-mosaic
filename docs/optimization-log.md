@@ -140,6 +140,34 @@ completions of uncached prompts.
 
 ---
 
+## 2026-09-10 — The judged "before optimization" baseline (deployed, `r_1789055103_baseline`)
+
+Sean enabled paid billing on the judge project (≈ $0.16 per pass) so the pre-change deployed run
+could be judged before any prompt changed. 264 Gemini calls; judge agreement with the blind human
+labels 1.00 on the seed subset (n=7) and 1.00 on the hard subset (n=8).
+
+| Metric | Before (deployed, judged) |
+|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.692 |
+| Groundedness | 0.979 |
+| Citation accuracy | 0.847 |
+| Partial match (gold facts) | 0.794 |
+| Clarification accuracy (n=3) | 0.667 |
+| Doc recall | 0.855 |
+| Tool selection F1 | 0.926 |
+| Argument correctness | 1.000 |
+| Workflow completion | 0.769 |
+| Over-refusal / missed-refusal | 0.111 / 0.000 |
+| Action safety | 1.000 |
+| Nudge rate | 0.115 |
+| Latency p50 / p95 | 17.6 s / 47.7 s |
+
+Ablation unchanged: `no_structured_tools` moves workflow completion by −0.154 against the
+pre-registered 0.25 threshold, so the hypothesis stays "not supported". This table is the column
+every P13 and performance change is measured against.
+
+---
+
 ## 2026-09-10 — Deep performance assessment (in progress)
 
 Method: (1) anatomy of every LLM call in the deployed run from its traces (calls per role, tokens,
