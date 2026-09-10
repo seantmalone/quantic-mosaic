@@ -190,6 +190,14 @@ def web(store, monkeypatch):
             "llm_stub_script": LLM_SCRIPTS / script,
             # `/ready`'s warm-up loads the real ONNX model; the tests that want it ask for it.
             "embed_warmup": False,
+            # The access gate is a per-test decision, never an ambient one. `settings` is loaded
+            # from the environment at import, so a developer — or a CI runner, or the Appendix A
+            # form of P11's `test_smoke_eval_endpoint` line — who exports `APP_ACCESS_TOKEN` would
+            # otherwise switch the gate on for every test that never asked for it, and the
+            # fixtures' bare `X-Actor` headers carry no credential (§11.1): the suite goes red with
+            # 401 `ACCESS_REQUIRED` on changes that have nothing to do with the gate. Tests that
+            # want the gate pass `app_access_token=SecretStr(...)` themselves.
+            "app_access_token": None,
         }
         for key, value in {**defaults, **overrides}.items():
             monkeypatch.setattr(live_settings, key, value)

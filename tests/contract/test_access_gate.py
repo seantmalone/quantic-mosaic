@@ -32,6 +32,25 @@ async def test_the_gate_is_off_locally_when_no_token_is_set(web):
     assert response.status_code == 200
 
 
+async def test_an_ambient_app_access_token_does_not_switch_the_gate_on_for_the_suite(web, monkeypatch):
+    """An exported `APP_ACCESS_TOKEN` must not reach a test that never asked for the gate.
+
+    `settings` is loaded from the environment at import, so before `tests/conftest.py` pinned the
+    field the variable leaked into every `web()` app: the gate switched on, the fixtures' bare
+    `X-Actor` headers carried no credential, and five gate tests plus all four of
+    `test_smoke_eval_endpoint` went red with 401 `ACCESS_REQUIRED` — including under the Appendix A
+    form of P11's own definition-of-done line, which runs that module with `APP_ACCESS_TOKEN` set.
+    Patching the live settings object here is exactly what importing with the variable exported
+    does, so this fails if the pin is ever removed.
+    """
+    from hrmosaic.settings import settings as live_settings
+
+    monkeypatch.setattr(live_settings, "app_access_token", SecretStr("ambient-token-from-the-shell"))
+    async with web() as client:
+        response = await client.get("/")
+    assert response.status_code == 200
+
+
 async def test_a_gated_route_without_a_token_is_401_and_the_key_page(web):
     async with web(**_gated()) as client:
         page = await client.get("/", headers=HTML)
