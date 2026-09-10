@@ -114,7 +114,12 @@ def main(argv: list[str] | None = None) -> int:
 
     token = os.environ.get("APP_ACCESS_TOKEN")
     if token:
-        found += gate_problems(base, token, arguments.timeout)
+        try:
+            found += gate_problems(base, token, arguments.timeout)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            # A network fault mid-check is a failed smoke, not a traceback: `/health` answered a
+            # moment ago, so the instance dropping now is exactly what this script exists to catch.
+            found.append(f"the access-gate check could not complete: {exc}")
         print("  access gate: checked with APP_ACCESS_TOKEN from the environment")
     else:
         # §15.2: the access token is deliberately not a CI secret, so the deploy job cannot make a

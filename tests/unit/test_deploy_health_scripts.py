@@ -245,3 +245,29 @@ def test_a_token_the_deployment_does_not_recognise_is_reported():
     reported = _gate({None: 401, "tok": 401})
     assert len(reported) == 1
     assert "expected 200" in reported[0]
+
+
+def _health_then(fault):
+    """`/health` succeeds, then every subsequent call raises — the mid-smoke disconnection."""
+
+    def dispatch(url: str, token: str | None, timeout_s: float) -> tuple[int, bytes]:
+        if url.endswith("/health"):
+            return 200, json.dumps(HEALTHY).encode("utf-8")
+        return fault(url, token, timeout_s)
+
+    return dispatch
+
+
+def test_a_network_fault_during_the_gate_check_is_a_failed_smoke_not_a_traceback():
+    """`/health` answered a moment ago; the instance dropping now is the thing this script catches."""
+
+    def drop(url: str, token: str | None, timeout_s: float) -> tuple[int, bytes]:
+        raise ConnectionResetError(54, "Connection reset by peer")
+
+    with mock.patch.object(smoke_deployed, "_get", drop):
+        with pytest.raises(ConnectionResetError):
+            smoke_deployed.gate_problems("https://x.onrender.com", "tok", 5.0)
+
+    with mock.patch.dict(smoke_deployed.os.environ, {"APP_ACCESS_TOKEN": "tok"}):
+        with mock.patch.object(smoke_deployed, "_get", _health_then(drop)):
+            assert smoke_deployed.main(["--url", "https://x.onrender.com"]) == 1
