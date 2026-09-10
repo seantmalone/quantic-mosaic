@@ -768,14 +768,22 @@ imperative-to-assistant forms:
 "security-acceptable-use"`; at least one chunk is quarantined (the canary is reachable); no chunk from any other document is quarantined. It
 deliberately does not assert an exact count.
 
-**The quarantine decision is taken in the tool, before the body is serialised (P15 W2-C fix round).** Since W2-C a `search_policy_documents` hit
-carries the whole stored chunk, and the corpus canary's imperative begins at character 355 — past the 320-character snippet that used to be all a hit
-carried. `_hit()` therefore scans the chunk and its snippet through `core/injection.py::scan` and emits `text: null, quarantined: true` for a dirty
-one. That is what keeps the text off the wire *at all*: §8.1's mounted endpoint is publicly reachable so a grader can attach MCP Inspector, so an
-agent-side shield alone would still have served the imperative in full to any external MCP client. The agent keeps its own shield on the way in — a
-client that trusted a server to police its own output would have none against any other MCP server it is pointed at (§8.1's remote-transport row).
-`tests/integration/test_search_returns_full_chunk_text.py` asserts the raw `tools/call` body on both transports, with no agent between it and the
-assertion.
+**G4 runs at two loci, and neither is redundant (P15 W2-C fix round).** Since W2-C a `search_policy_documents` hit carries the whole stored chunk, and
+the corpus canary's imperative begins at character 355 — past the 320-character snippet that used to be all a hit carried.
+
+1. **In the tool, before the body is serialised.** `_hit()` scans the chunk and its snippet through `core/injection.py::scan` and emits
+   `text: null, quarantined: true` for a dirty one. This is what keeps the text off the wire *at all*: §8.1's mounted endpoint is publicly reachable so
+   a grader can attach MCP Inspector, so an agent-side shield alone would still have served the imperative in full to any external MCP client.
+2. **In `agent/client.py::call_tool`, over the whole result of every tool.** `g4.quarantine_tool_result(name, body)` walks the decoded body and nulls
+   every `text` / `snippet` string that trips `scan`, marking its container `quarantined: true`, **before** the `tool_call` span is written and long
+   before the result is appended to the act conversation. It is per **message**, not per tool, because every tool result is appended verbatim and
+   `get_policy_section` returns whole verbatim sections — which `act.j2` rule 6 steers the model straight at, for "a section no search returned", and a
+   quarantined hit is exactly such a section. And a client that trusted a server to police its own output would have no shield against any other MCP
+   server it is pointed at (§8.1's remote-transport row).
+
+`tests/integration/test_search_returns_full_chunk_text.py` asserts both: the raw `tools/call` body on both transports, with no agent between it and
+the assertion, and `test_no_act_message_contains_unbannered_g4_pattern` over `llm_messages`, driven by two recordings — one that reaches the canary
+through the search and one that reaches it through `get_policy_section`.
 
 Confirmation for irreversible actions is **not** a guardrail — it is a property of the MCP server (§8.6), which is why action safety can be a plain
 test rather than a reported number.

@@ -526,11 +526,14 @@ class McpClient:
 
         body = read_body(result)
         envelope = body.pop(TRACE_KEY, None) or {}
-        if name == g4.SEARCH_TOOL:
-            # §7.4's injection shield, before the span and before the conversation: a search hit
-            # carries the whole chunk now, and a chunk that gives the assistant orders must not be
-            # readable anywhere downstream of here (W2-C).
-            g4.quarantine_search_hits(body)
+        # §7.4's injection shield, before the span and before the conversation, over **every** tool
+        # result rather than over the search one: every result is appended to the act conversation
+        # verbatim, `get_policy_section` returns a whole section of policy text, and W2-C's rule 6
+        # steers the model at it for "a section no search returned" — which is what a quarantined
+        # hit is. A string that gives the assistant orders must not be readable anywhere downstream
+        # of here (W2-C). `search_policy_documents` takes the same decision server-side; this is the
+        # client's own shield, which holds against any MCP server it is pointed at.
+        g4.quarantine_tool_result(name, body)
         actor = envelope.get("actor") or {}
         is_error = bool(getattr(result, "is_error", False))
         text = json.dumps(body, ensure_ascii=False)

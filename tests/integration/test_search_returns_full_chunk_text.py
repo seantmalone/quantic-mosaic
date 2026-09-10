@@ -15,15 +15,17 @@ own context. So the decision is taken **twice**, and neither copy is redundant:
 * in `_search`, before the body is serialised, which is the plan's stated locus and the only place
   that keeps the text off the wire for an MCP Inspector session attached to the deliberately public
   `/mcp-server/mcp` (§15, R-12);
-* in `client.call_tool`, on the way in, because a client that trusts a server to police its own
-  output has no shield against any other MCP server it is pointed at.
+* in `client.call_tool`, over the whole result of **every** tool rather than the search one, because
+  a client that trusts a server to police its own output has no shield against any other server it
+  is pointed at — and because `get_policy_section` returns verbatim section text that rule 6 steers
+  the model straight at.
 
 Either way a quarantined chunk is handed on as its snippet alone with `quarantined: true`, and the
 only prompt that ever shows its text is the synthesis prompt, inside a `quarantined="true"`
 `<document>` banner under rule 4.
 
-Nothing here is a mock. `StubAdapter` replays the committed `injection_probe` recording while the
-retrieval, the corpus and the tool are the shipped MCP server in a separate OS process.
+Nothing here is a mock. `StubAdapter` replays a committed recording while the retrieval, the corpus
+and the tool are the shipped MCP server in a separate OS process.
 """
 
 from __future__ import annotations
@@ -100,9 +102,18 @@ async def test_search_hit_omits_text_for_quarantined_chunk(run_agent, spans):
         assert g4.scan(hit["snippet"]) is None
 
 
-async def test_no_act_message_contains_unbannered_g4_pattern(run_agent, store):
-    """Asserted over `llm_messages` — the verbatim bytes, not a reconstruction of them."""
-    answered = await run_agent("injection_probe.json", ChatRequest(message=QUESTION, employee_id="E1042"))
+@pytest.mark.parametrize("script", ["injection_probe.json", "injection_section_probe.json"])
+async def test_no_act_message_contains_unbannered_g4_pattern(run_agent, store, script):
+    """Asserted over `llm_messages` — the verbatim bytes, not a reconstruction of them.
+
+    The property is **per message**, not per tool, so it is measured on a turn that reaches the
+    canary through each door. `injection_probe` searches; `injection_section_probe` searches and
+    then calls `get_policy_section` on the canary's own section, which is precisely what W2-C's
+    rule 6 steers a model towards once the search has advertised that hit as `quarantined: true`
+    with no text. Without the second script this assertion would hold only because no committed
+    recording ever made that call.
+    """
+    answered = await run_agent(script, ChatRequest(message=QUESTION, employee_id="E1042"))
 
     rows = store.execute(
         "SELECT m.span_id, m.seq, m.role, m.content, s.payload_json FROM llm_messages m "
@@ -171,6 +182,30 @@ async def test_the_synthesis_prompt_carries_one_copy_of_a_passage(run_agent, sto
     for chunk_id in retrieved:
         text = corpusread.get_chunk(chunk_id).text
         assert evidence.count(text) == 1, f"{chunk_id} is rendered {evidence.count(text)} times"
+
+
+async def test_a_quarantined_section_is_nulled_on_the_way_in(run_agent, spans):
+    """The shield is over the whole result, so tool 2's verbatim section is covered too.
+
+    `get_policy_section` returns the raw text of one section and its result is appended to the act
+    conversation verbatim — `prompt_text == text` for every non-search tool. The canary lives in a
+    section of its own, so a model following rule 6 can ask for it by name. `call_tool` scans the
+    body on the way in, before the `tool_call` span is written, so the record and the model see the
+    same nulled field and the same banner.
+    """
+    answered = await run_agent("injection_section_probe.json", ChatRequest(message=QUESTION, employee_id="E1042"))
+
+    sections = [
+        payload
+        for kind, _, payload in spans(answered.turn_id)
+        if kind == "tool_call" and payload["tool_name"] == "get_policy_section"
+    ]
+    assert len(sections) == 1, "the script fetches the canary's section exactly once"
+    body = sections[0]["structured_content"]
+    assert body["chunk_ids"] == [canary_id()], "it fetched the canary's own section"
+    assert body["text"] is None, "the verbatim imperative never leaves call_tool"
+    assert body["quarantined"] is True, "and the model is told why the text is missing"
+    assert body["heading_path"] and body["doc_title"], "everything that is not the text survives"
 
 
 async def test_the_server_never_puts_a_quarantined_chunk_on_the_wire(open_session):

@@ -42,32 +42,62 @@ class Scannable(Protocol):
     text: str
 
 
-#: The one §8.4 tool whose result carries chunk text (W2-C).
+#: The one §8.4 tool whose result carries chunk text in a list of hits (W2-C).
 SEARCH_TOOL = "search_policy_documents"
 
+#: The result keys that can carry **untrusted corpus prose**, at any depth of a tool result.
+#: `text` is `get_policy_section`'s whole section and a search hit's whole chunk; `snippet` is the
+#: 320-character display subset a citation shows, on a hit and on `check_policy_compliance`'s
+#: per-requirement evidence. Nothing else a tool returns is document text: the mock-data tools
+#: return numbers and dates, and the two write tools return prose **we** composed.
+TEXT_KEYS = ("text", "snippet")
 
-def quarantine_search_hits(body: dict[str, Any]) -> dict[str, Any]:
-    """Strip the chunk text of any search hit that gives the assistant orders, in place (W2-C).
+#: How deep `quarantine_tool_result` walks. Every §8.4 body is at most `body → list → dict → list`;
+#: the bound is here so a malformed result from an unknown server cannot spend the request path.
+MAX_DEPTH = 6
 
-    A `search_policy_documents` hit carries the whole stored chunk so the loop need not spend an act
-    step re-reading it. The corpus's one quarantinable chunk is 630 characters and its imperative
-    begins at character 355 — past `SNIPPET_CHARS` — so before W2-C `scan()` over the snippet never
-    saw it and it never reached the act conversation. It would now, one `json.dumps` later.
 
-    The shield runs **here**, in the agent, rather than in the tool: §4.2's dependencies run
-    downward and `mcpserver/` may not import a guardrail, and a client that trusted the server to
-    scan its own output would have no shield at all against any other MCP server it is pointed at.
-    `agent/client.py` calls it on the way in, before the `tool_call` span is written and long before
-    the result is appended to the conversation, so neither the record nor the model ever holds the
-    text. What survives is the 320-character snippet and `quarantined: true` — the same flag `_mark`
-    puts on the lifted `retrieval` span, on the copy the model reads.
+def quarantine_tool_result(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Null every untrusted string in one tool result that gives the assistant orders, in place.
+
+    **Per message, not per tool.** W2-C's gate is "no act message contains an unbannered G4
+    pattern", and every tool result is appended to the act conversation verbatim — so scanning only
+    `search_policy_documents` left the claim resting on which tools a recording happened to call.
+    `get_policy_section` returns a whole section of verbatim policy text, and W2-C's own rule 6
+    steers the model straight at it ("for a section no search returned"), which is exactly what a
+    quarantined hit is: a section whose text the search withheld while advertising
+    `quarantined: true`. So the walk is over the body, not over one tool's shape.
+
+    A dirty string becomes `None` and its containing object gains `quarantined: true` — the same
+    banner `_mark` puts on the lifted `retrieval` span, on the copy the model reads. For a search
+    hit that leaves the 320-character snippet and the flag, which is what a citation needs and all
+    a quarantined passage may carry.
+
+    This runs in `client.call_tool` on the way in, **before the `tool_call` span is written and long
+    before the result is appended to the conversation**, so neither the record nor the model ever
+    holds the text. The search tool takes the same decision server-side (W2-C's BLOCKING bullet, so
+    the text is never on the wire at all); this is the client's own shield, which holds against any
+    MCP server it is pointed at rather than trusting a server to police its own output.
     """
-    for hit in body.get("hits") or []:
-        text = hit.get("text")
-        if text and scan(text) is not None:
-            hit["text"] = None
-            hit["quarantined"] = True
+    _walk(body, depth=0)
     return body
+
+
+def _walk(node: Any, *, depth: int) -> None:
+    """Depth-first over the decoded body, nulling what `scan` fires on. Mutates in place."""
+    if depth > MAX_DEPTH:
+        return
+    if isinstance(node, dict):
+        for key in TEXT_KEYS:
+            value = node.get(key)
+            if isinstance(value, str) and value and scan(value) is not None:
+                node[key] = None
+                node["quarantined"] = True
+        for value in node.values():
+            _walk(value, depth=depth + 1)
+    elif isinstance(node, list):
+        for item in node:
+            _walk(item, depth=depth + 1)
 
 
 @dataclass(frozen=True)
@@ -124,4 +154,15 @@ def check(
     return matches
 
 
-__all__ = ["PATTERNS", "SEARCH_TOOL", "Match", "Scannable", "check", "quarantine_search_hits", "scan", "scan_all"]
+__all__ = [
+    "MAX_DEPTH",
+    "PATTERNS",
+    "SEARCH_TOOL",
+    "TEXT_KEYS",
+    "Match",
+    "Scannable",
+    "check",
+    "quarantine_tool_result",
+    "scan",
+    "scan_all",
+]
