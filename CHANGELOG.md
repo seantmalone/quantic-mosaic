@@ -777,8 +777,9 @@ need an account was built, run and measured here.
 
 - **The 512 MB memory gate, measured 2026-09-10.** `make docker-run-512` — `docker run -m 512m
   --memory-swap 512m`, `/ready` polled green, one stubbed `POST /chat` over `Authorization: Bearer`,
-  then `/health` — reports **`rss_mb = 292.9`** against the §14.3 assertion of `< 420` and a budget
-  of 345 MB: **219 MB of headroom** under the hard 512 MB cgroup limit. The reading is
+  then `/health` — reports **`rss_mb = 291.3`** against the §14.3 assertion of `< 420` and a budget
+  of 345 MB: **221 MB of headroom** under the hard 512 MB cgroup limit. Two runs of the gate the
+  same day read 292.9 and 291.3 MB, so the figure is stable to about a megabyte. The reading is
   `/proc/self/status` `VmRSS` inside the container (Docker Desktop's `linux/arm64` VM, Docker
   29.6.1), i.e. the same real-Linux reader P1's entry describes, not the macOS `getrusage`
   high-water mark. The equivalent numbers on Render's `linux/amd64` builder are re-read at gate 2.
@@ -788,7 +789,7 @@ need an account was built, run and measured here.
   minutes are ~165 builds a month, which is the headroom arithmetic §14.1 asks `deployed.md` to
   carry.
 - **Boot segments inside the container, measured 2026-09-10:** container start → `/health` 200 in
-  **2.1 s**; `/health` → `/ready` green in a further **0.5 s**. That half-second is what baking the
+  **2.0 s**; `/health` → `/ready` green in a further **0.5 s**. That half-second is what baking the
   ONNX model into the image buys against a 16–63 s download.
 - **`${PORT}` expansion proved on the real image.** `docker run -e PORT=10000` →
   `/health.mcp.connected: true` with `url: http://127.0.0.1:10000/mcp-server/mcp` and

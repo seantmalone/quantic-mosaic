@@ -61,7 +61,7 @@ What is **not** pending is the part the image controls, measured locally on 2026
 
 | Segment | Observed | How |
 |---|---|---|
-| Container start → `/health` 200 | **2.1 s** | `docker run -m 512m`, then `scripts/wait_for_health.py` |
+| Container start → `/health` 200 | **2.0 s** | `docker run -m 512m`, then `scripts/wait_for_health.py` |
 | `/health` 200 → `/ready` 200 (ONNX session + index open) | **0.5 s** | `wait_for_health.py --ready`, same run |
 
 Those 0.5 s are what baking the model into the image buys: without it the same segment is a 16–63 s
@@ -172,18 +172,19 @@ one stubbed turn through `POST /chat` over `Authorization: Bearer`, and asserts
 `/health.app.rss_mb < 420`:
 
 ```
-http://127.0.0.1:8000 is up after 2.1s
+http://127.0.0.1:8000 is up after 2.0s
 http://127.0.0.1:8000/ready is green after 2.6s
-  status=ok  git_sha=73d7766ae1651ebc05f7924f86f93e92c54a3f0d  rss_mb=292.9  deploy_mode=local
+  status=ok  git_sha=62b295848e7502591dfc6663d46a69ac4fb8825a  rss_mb=291.3  deploy_mode=local
   mcp.connected=True  tool_count=9  transport=http  url=http://127.0.0.1:8000/mcp-server/mcp
   index.loaded=True  doc_count=14  chunk_count=204  embed_model=BAAI/bge-small-en-v1.5
   degradations=[]
 
-OK — MCP connected with 9 tools and the baked index carries all 14 documents · rss_mb 292.9 < 420.0.
+OK — MCP connected with 9 tools and the baked index carries all 14 documents · rss_mb 291.3 < 420.0.
 ```
 
-**292.9 MB** against a §14.3 budget of 345 MB and a ceiling of 420 MB — **219 MB of headroom**
-below the 512 MB limit. The reading is `/proc/self/status` `VmRSS` inside the container (a real
+**291.3 MB** against a §14.3 budget of 345 MB and a ceiling of 420 MB — **221 MB of headroom**
+below the 512 MB limit. Two runs of the gate on 2026-09-10 read **292.9** and **291.3** MB, so the
+figure is stable to about a megabyte and the assertion is nowhere near its threshold. The reading is `/proc/self/status` `VmRSS` inside the container (a real
 Linux cgroup, under Docker Desktop's `linux/arm64` VM), not the macOS `getrusage` high-water mark
 that `CHANGELOG.md`'s P1 entry distinguishes. The figure on Render's `linux/amd64` builder is
 expected to differ slightly and is re-read at gate 2.
@@ -199,7 +200,7 @@ Every row of §3.1 that P11 owns, read live on the date shown. Nothing here is i
 | Render build-pipeline minutes | **500 included Starter-tier pipeline minutes per month** on the Hobby workspace. When they run out and there is no payment method or the spend limit is reached, "Render stops running pipeline tasks (including service builds!) for the remainder of the current month." Overage is $5 / 1,000 minutes. | 2026-09-10 | https://render.com/docs/build-pipeline |
 | Render documented HTTP request timeout | **"Render web services allow HTTP responses to take up to 100 minutes."** `/docs/web-services` carries no timeout section; this is the figure Render publishes. | 2026-09-10 | https://render.com/docs/render-vs-vercel-comparison |
 | Turso free-tier limits | **100 databases · 5 GB storage · 500 M rows read/month · 10 M rows written/month** | 2026-09-10 | https://turso.tech/pricing |
-| Measured container RSS under `docker run -m 512m` | **292.9 MB** (see the memory section above) | 2026-09-10 | `make docker-run-512` |
+| Measured container RSS under `docker run -m 512m` | **291.3 MB** (292.9 MB on an earlier run of the same gate; see the memory section above) | 2026-09-10 | `make docker-run-512` |
 | Measured cold start / warm turn on the live instance | `pending: gate 2` | — | `scripts/measure_cold_start.py` |
 | Render plan details and usage from the dashboard | `pending: gate 2` — the dashboard needs an authenticated session | — | Render dashboard → usage |
 

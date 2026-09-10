@@ -5,7 +5,7 @@ Nothing blocked P0–P10: every phase up to the evaluation harness builds, tests
 three remaining gates start to bite.** Everything P11 could build and prove without an account is
 built and proven — the Dockerfile, `render.yaml`, the CI `docker` and `deploy` jobs, both
 provisioning scripts, the deploy-time health scripts, and the 512 MB memory gate run against the
-real image (292.9 MB, measured 2026-09-10). What is left is listed here with the **exact command**
+real image (291.3 MB, measured 2026-09-10). What is left is listed here with the **exact command**
 that runs the moment each gate is satisfied.
 
 ---
