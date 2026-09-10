@@ -2,9 +2,9 @@
 
 Every choice here is the spec's, and several are corrections to what a 1.x-era paste would write:
 
-* the official `anthropic` SDK **1.x sync** client, called as
-  `await asyncio.to_thread(client.messages.create, …)`, because §2.1 forbids blocking the single
-  worker's event loop and the SDK's sync client is what the type stubs actually describe;
+* the official `anthropic` SDK **1.x sync** client, iterated inside `asyncio.to_thread(...)`,
+  because §2.1 forbids blocking the single worker's event loop and the SDK's sync client is what
+  the type stubs actually describe;
 * `timeout=25` s with **`max_retries=0`**: the SDK's own retry layer is off, so `RecordingAdapter`'s
   one backoff plus one failover is the single retry layer (§9.4's arithmetic depends on it). Each
   request is sent with `timeout=round_trip_timeout(deadline)`, so a second attempt gets what is
@@ -22,12 +22,21 @@ Every choice here is the spec's, and several are corrections to what a 1.x-era p
   tools alone and re-bill the system prompt every call. Caching is **best effort**: Haiku 4.5's
   minimum cacheable prefix is 4096 tokens and a shorter prefix silently writes no entry, which is
   why the span *records* the two cache counters rather than anything asserting them;
-* no extended thinking and no assistant prefill; `max_tokens` 1024 / 2048 / 512 by purpose.
+* no extended thinking and no assistant prefill; `max_tokens` 1024 / 2048 / 512 by purpose;
+* **`client.messages.stream`, not `messages.create`** (performance plan §3 W2-E). Every call is a
+  streamed round trip, so `ttfb_ms` is the time to the first token rather than to the whole answer
+  — it read `ttfb_ms == duration_ms` on all 185 recorded spans before this — and a caller that
+  passes `on_delta` can put the answer on the page while the model is still writing it. The final
+  message is always `stream.get_final_message()`: the SDK's accumulator is what reassembles a
+  `tool_use` block from its `input_json_delta` fragments, and a hand-rolled one is the only way
+  streaming could change which tool the loop calls.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -41,6 +50,7 @@ from hrmosaic.core.llm.base import (
     Completion,
     CompletionRequest,
     Deadline,
+    DeltaSink,
     Message,
     MissingCredentialError,
     ProviderError,
@@ -56,6 +66,8 @@ from hrmosaic.core.models import LlmPurpose, strict_json_schema
 
 if TYPE_CHECKING:  # httpx2 is the HTTP layer the anthropic SDK ships; tests inject a MockTransport
     import httpx2
+
+logger = logging.getLogger(__name__)
 
 ANTHROPIC_SIGNUP_URL = "https://console.anthropic.com/settings/keys"
 
@@ -134,12 +146,48 @@ class AnthropicAdapter(RecordingAdapter):
         kwargs["timeout"] = round_trip_timeout(deadline, what="anthropic")
         try:
             # The SDK client is synchronous; §2.1 forbids blocking the single worker's loop.
-            response = await asyncio.to_thread(lambda: client.messages.create(**kwargs))
+            response, first_delta_ms = await asyncio.to_thread(self._stream, client, kwargs, request.on_delta)
         except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
             raise ProviderError(f"anthropic transport failure: {exc}", retryable=True) from exc
         except anthropic.APIStatusError as exc:
             raise status_error(exc.status_code, f"anthropic {exc.status_code}: {exc}", exc.response.headers) from exc
-        return self._to_completion(response, structured="output_config" in kwargs)
+        return self._to_completion(response, structured="output_config" in kwargs, first_delta_ms=first_delta_ms)
+
+    @staticmethod
+    def _stream(
+        client: anthropic.Anthropic, kwargs: dict[str, Any], on_delta: DeltaSink | None
+    ) -> tuple[Any, int | None]:
+        """The blocking half of one round trip: `messages.stream`, on the worker thread (W2-E).
+
+        **`stream.get_final_message()`, never a hand-rolled accumulator.** The SDK's own accumulator
+        is what reassembles a `tool_use` block from its `input_json_delta` fragments, and that is the
+        one path by which streaming could move a `ToolSelection` — so the message this returns is the
+        SDK's, byte for byte the one `messages.create` would have returned
+        (`test_stream_completion_parity`).
+
+        `on_delta` is called here, on this thread, for every text delta; it is the caller's job to
+        hand the delta somewhere non-blocking. A sink that raises is logged and **dropped** — a
+        browser that went away must not cost the turn its answer.
+
+        The returned `first_delta_ms` is the real TTFB: how long the provider took to say anything
+        at all. It is `None` when the response carried no text (a pure tool-use step), and
+        `RecordingAdapter.complete` then falls back to the round trip, which is what §11.6 page 5's
+        `streamed` column exists to distinguish.
+        """
+        began = time.monotonic()
+        first: float | None = None
+        with client.messages.stream(**kwargs) as stream:
+            for delta in stream.text_stream:
+                if first is None:
+                    first = time.monotonic()
+                if on_delta is None:
+                    continue
+                try:
+                    on_delta(delta)
+                except Exception:  # a dead delta sink must not cost us the answer
+                    logger.warning("an answer delta sink raised; the completion is unaffected", exc_info=True)
+            message = stream.get_final_message()
+        return message, None if first is None else max(0, round((first - began) * 1000))
 
     def request_kwargs(
         self,
@@ -186,7 +234,7 @@ class AnthropicAdapter(RecordingAdapter):
         return int(self.client().messages.count_tokens(**kwargs).input_tokens)
 
     # -- response translation ------------------------------------------------------------
-    def _to_completion(self, response: Any, *, structured: bool) -> Completion:
+    def _to_completion(self, response: Any, *, structured: bool, first_delta_ms: int | None = None) -> Completion:
         text_parts: list[str] = []
         tool_calls = []
         for block in response.content:
@@ -212,6 +260,8 @@ class AnthropicAdapter(RecordingAdapter):
             cache_creation_input_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
             cache_read_input_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
             structured_output_mode="output_config_json_schema" if structured else None,
+            ttfb_ms=first_delta_ms,
+            streamed=True,
         )
 
 

@@ -6,6 +6,16 @@ records the requests it served, because the shape of the request *is* what the a
 assert: no `strict` on the tool definitions, the `cache_control` breakpoint on the last system
 block, `temperature` in `extra_body`, the strict `response_format` on the OpenAI-compatible path.
 
+**Streaming (W2-E).** `AnthropicAdapter.invoke` calls `client.messages.stream`, which puts
+`"stream": true` on the wire and then *requires* an `text/event-stream` body — a JSON message body
+makes the SDK raise before any test assertion runs. Rather than rewrite the 36 call sites, the
+handler below serves the **same** `(status, payload)` a test already declares and renders it as the
+event sequence the SDK's accumulator expects (`message_start` → per block `content_block_start` /
+`content_block_delta` × n / `content_block_stop` → `message_delta` → `message_stop`) whenever the
+request asked to stream. So one fixture describes both wire shapes, a non-streaming adapter is
+untouched, and a streamed call and a non-streamed one are asserted against a single recorded
+response — which is what `test_stream_completion_parity` needs in order to mean anything.
+
 It also owns the retrieval fixtures (P4): one `corpus_mini` ingest per session, built with the fake
 embedder so the unit suite stays offline, and the connection and settings shims that read it.
 """
@@ -20,22 +30,90 @@ from typing import Any
 import httpx2
 import pytest
 
+#: How many characters of a text block travel in one `text_delta` frame. Small enough that every
+#: fixture body is delivered as several deltas, so a test that counts them has something to count.
+STREAM_CHUNK_CHARS = 8
+
+
+def anthropic_stream_body(payload: dict[str, Any], *, chunk: int = STREAM_CHUNK_CHARS) -> str:
+    """One `POST /v1/messages` **streamed** body, rendered from the same message the JSON path serves.
+
+    Deliberately the whole sequence and not a shortcut: `message_start` carries the input-token and
+    cache counters, `message_delta` carries the final `stop_reason` and `output_tokens`, and a
+    `tool_use` block's arguments arrive as `input_json_delta` fragments — which is the one path by
+    which a hand-rolled accumulator could move a `ToolSelection`, and therefore the one this fixture
+    has to reproduce faithfully.
+    """
+    message = {key: value for key, value in payload.items() if key not in {"content", "usage"}}
+    usage = dict(payload.get("usage") or {})
+    frames: list[str] = []
+
+    def frame(event: dict[str, Any]) -> None:
+        frames.append(f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n")
+
+    opening = {key: value for key, value in usage.items() if key != "output_tokens"} | {"output_tokens": 0}
+    frame(
+        {
+            "type": "message_start",
+            "message": {**message, "content": [], "stop_reason": None, "stop_sequence": None, "usage": opening},
+        }
+    )
+    for index, block in enumerate(payload.get("content") or []):
+        if block.get("type") == "tool_use":
+            start = {"type": "tool_use", "id": block.get("id", ""), "name": block.get("name", ""), "input": {}}
+            body = json.dumps(block.get("input") or {}, ensure_ascii=False)
+            delta_key, delta_type = "partial_json", "input_json_delta"
+        else:
+            start = {"type": "text", "text": ""}
+            body = block.get("text") or ""
+            delta_key, delta_type = "text", "text_delta"
+        frame({"type": "content_block_start", "index": index, "content_block": start})
+        for offset in range(0, len(body), chunk):
+            frame(
+                {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {"type": delta_type, delta_key: body[offset : offset + chunk]},
+                }
+            )
+        frame({"type": "content_block_stop", "index": index})
+    frame(
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": payload.get("stop_reason"), "stop_sequence": payload.get("stop_sequence")},
+            "usage": {"output_tokens": int(usage.get("output_tokens") or 0)},
+        }
+    )
+    frame({"type": "message_stop"})
+    return "".join(frames)
+
+
+def _wants_stream(body: dict[str, Any]) -> bool:
+    return bool(body.get("stream"))
+
+
+def _is_anthropic_message(payload: Any) -> bool:
+    return isinstance(payload, dict) and payload.get("type") == "message"
+
 
 def _client(responses: list[Any], recorded: list[dict[str, Any]]) -> httpx2.Client:
     queue = list(responses)
 
     def handler(request: httpx2.Request) -> httpx2.Response:
-        recorded.append(
-            {
-                "url": str(request.url),
-                "headers": dict(request.headers),
-                "body": json.loads(request.content) if request.content else {},
-            }
-        )
+        body = json.loads(request.content) if request.content else {}
+        recorded.append({"url": str(request.url), "headers": dict(request.headers), "body": body})
         item = queue.pop(0) if len(queue) > 1 else queue[0]
         if callable(item):
             return item(request)
         status, payload = item
+        # A streamed request needs a streamed body; anything else — an error status, an
+        # OpenAI-shaped completion — is served exactly as the test declared it.
+        if status == 200 and _wants_stream(body) and _is_anthropic_message(payload):
+            return httpx2.Response(
+                status,
+                content=anthropic_stream_body(payload).encode("utf-8"),
+                headers={"content-type": "text/event-stream"},
+            )
         return httpx2.Response(status, json=payload)
 
     return httpx2.Client(transport=httpx2.MockTransport(handler))

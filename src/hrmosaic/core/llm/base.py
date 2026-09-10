@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
@@ -43,6 +43,11 @@ if TYPE_CHECKING:  # a type-only edge, so `core.llm` stays importable without th
     from hrmosaic.core.trace import TurnBuffer
 
 Role = Literal["system", "user", "assistant", "tool"]
+
+#: Where a streamed answer's text deltas go. Called on the **worker thread** the SDK's blocking
+#: stream is iterated on, once per delta, in order; it must never raise and never block, because
+#: the provider round trip is what is waiting on it (performance plan §3 W2-E).
+DeltaSink = Callable[[str], None]
 
 #: The single backoff before failover when the provider names no `Retry-After` (§9.8).
 DEFAULT_BACKOFF_S = 1.0
@@ -129,6 +134,10 @@ class Completion(BaseModel):
     cost_usd_estimate: float = 0.0
     structured_output_mode: str | None = None
     ttfb_ms: int | None = None
+    #: Whether the answer came off a **streaming** round trip. §11.6 page 5 shows it beside
+    #: `ttfb_ms`, because the two columns mean different things on a streamed and a non-streamed
+    #: span: streamed, `ttfb_ms` is the first delta; non-streamed, it is the whole round trip.
+    streamed: bool = False
     retry_count: int = 0
     provider_failover: bool = False
     limiter_wait_ms: int = 0
@@ -153,6 +162,10 @@ class CompletionRequest(BaseModel):
     response_schema: type[BaseModel] | None = None
     temperature: float = 0.0
     purpose: LlmPurpose = "act"
+    #: The caller's delta sink, or `None` for a call nobody is watching. It is **not** part of the
+    #: cache key (`cache_key` builds its material field by field): two calls that differ only in
+    #: who is listening are the same call.
+    on_delta: DeltaSink | None = None
 
 
 # --------------------------------------------------------------------------------------
@@ -305,6 +318,7 @@ class ChatModel(Protocol):
         temperature: float = 0.0,
         purpose: LlmPurpose = "act",
         turn: TurnBuffer | None = None,
+        on_delta: DeltaSink | None = None,
     ) -> Completion: ...
 
 
@@ -373,6 +387,7 @@ def record_llm_call(
         provider_failover=completion.provider_failover,
         structured_output_mode=completion.structured_output_mode,
         ttfb_ms=completion.ttfb_ms,
+        streamed=completion.streamed,
     )
     turn.add_span(
         "llm_call",
@@ -451,6 +466,7 @@ class RecordingAdapter:
         temperature: float = 0.0,
         purpose: LlmPurpose = "act",
         turn: TurnBuffer | None = None,
+        on_delta: DeltaSink | None = None,
     ) -> Completion:
         request = CompletionRequest(
             messages=list(messages),
@@ -458,6 +474,7 @@ class RecordingAdapter:
             response_schema=response_schema,
             temperature=temperature,
             purpose=purpose,
+            on_delta=on_delta,
         )
         self._check_daily_cap(turn)
         limiter_wait_ms = await self._limiter.acquire() if self._limiter is not None else 0
@@ -483,7 +500,12 @@ class RecordingAdapter:
                 "retry_count": result.retry_count,
                 "provider_failover": result.failed_over,
                 "limiter_wait_ms": limiter_wait_ms,
-                "ttfb_ms": result.round_trip_ms,
+                # W2-E: `first_delta_ms or round_trip_ms`. A streaming adapter reports when the
+                # first token landed; one that does not stream — the failover, a total failure —
+                # reports the whole round trip, which is what §11.6 page 5's `streamed` column
+                # exists to tell apart. `is not None`, not truthiness: a 0 ms first delta is a
+                # measurement, not a missing one.
+                "ttfb_ms": completion.ttfb_ms if completion.ttfb_ms is not None else result.round_trip_ms,
                 "cost_usd_estimate": estimate_cost_usd(
                     completion.model,
                     prompt_tokens=completion.prompt_tokens,
@@ -594,4 +616,5 @@ async def _invoke_fallback(fallback: ChatModel, request: CompletionRequest, dead
         response_schema=request.response_schema,
         temperature=request.temperature,
         purpose=request.purpose,
+        on_delta=request.on_delta,
     )

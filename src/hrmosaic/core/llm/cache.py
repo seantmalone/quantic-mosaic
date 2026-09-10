@@ -24,6 +24,7 @@ from hrmosaic.core.llm.base import (
     ChatModel,
     Completion,
     CompletionRequest,
+    DeltaSink,
     Message,
     ToolSchema,
     record_llm_call,
@@ -66,6 +67,7 @@ class CachedAdapter:
         temperature: float = 0.0,
         purpose: LlmPurpose = "act",
         turn: TurnBuffer | None = None,
+        on_delta: DeltaSink | None = None,
     ) -> Completion:
         if self.ttl_s <= 0:
             return await self.inner.complete(
@@ -75,6 +77,7 @@ class CachedAdapter:
                 temperature=temperature,
                 purpose=purpose,
                 turn=turn,
+                on_delta=on_delta,
             )
 
         request = CompletionRequest(
@@ -83,14 +86,23 @@ class CachedAdapter:
             response_schema=response_schema,
             temperature=temperature,
             purpose=purpose,
+            on_delta=on_delta,
         )
         store = self._store or get_store()
         key = cache_key(provider=self.provider, model=self.model, request=request)
         started_at = now_micros()
         row = store.execute(CACHE_SELECT, (key,)).one()
         if row is not None and now_micros() - int(row["created_at"]) <= self.ttl_s * 1_000_000:
+            # A hit made no round trip, so it neither streamed nor has a time to first byte —
+            # whatever the stored response said about the call that filled the entry.
             hit = Completion.model_validate_json(row["response_json"]).model_copy(
-                update={"cache_hit": True, "cost_usd_estimate": 0.0, "span_id": None}
+                update={
+                    "cache_hit": True,
+                    "cost_usd_estimate": 0.0,
+                    "span_id": None,
+                    "streamed": False,
+                    "ttfb_ms": 0,
+                }
             )
             span_id = record_llm_call(turn, request=request, completion=hit, started_at=started_at)
             return hit.model_copy(update={"span_id": span_id})
@@ -102,6 +114,7 @@ class CachedAdapter:
             temperature=temperature,
             purpose=purpose,
             turn=turn,
+            on_delta=on_delta,
         )
         store.execute(
             CACHE_UPSERT,

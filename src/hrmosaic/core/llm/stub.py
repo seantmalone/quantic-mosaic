@@ -30,6 +30,12 @@ ENTRY_KEYS = frozenset(
     {"purpose", "response_text", "tool_calls", "finish_reason", "prompt_tokens", "completion_tokens"}
 )
 
+#: How much of a recorded `response_text` travels in one delta. The point is that a stubbed turn
+#: exercises the *same* delta path a live one does — the coalescer, the block scanner and the
+#: `answer_delta` frame — rather than handing the whole answer over in one piece, which would make
+#: every streaming assertion in the contract suite vacuous.
+DELTA_CHARS = 32
+
 
 class StubScriptError(RuntimeError):
     """The script is exhausted, malformed, or out of step with the purposes the loop asked for."""
@@ -76,8 +82,18 @@ class StubAdapter(RecordingAdapter):
                 f"{self.script_path} entry {self._cursor} scripts purpose {expected!r} but the loop "
                 f"asked for {request.purpose!r}"
             )
+        text = entry.get("response_text") or ""
+        # W2-E: the replay streams too, so the SSE contract tests and both demo scripts exercise
+        # the delta path end to end with no key. `ttfb_ms = 0` is honest — a replay makes no round
+        # trip — and it is a measurement, so `RecordingAdapter` keeps it rather than substituting
+        # the round trip.
+        streamed = False
+        if request.on_delta is not None and text:
+            for offset in range(0, len(text), DELTA_CHARS):
+                request.on_delta(text[offset : offset + DELTA_CHARS])
+            streamed = True
         return Completion(
-            text=entry.get("response_text") or "",
+            text=text,
             tool_calls=[
                 ToolCall(
                     id=call.get("id", f"stub_{self._cursor}_{index}"),
@@ -92,6 +108,8 @@ class StubAdapter(RecordingAdapter):
             prompt_tokens=int(entry.get("prompt_tokens") or 0),
             completion_tokens=int(entry.get("completion_tokens") or 0),
             structured_output_mode="stub" if request.response_schema is not None else None,
+            ttfb_ms=0 if streamed else None,
+            streamed=streamed,
         )
 
 

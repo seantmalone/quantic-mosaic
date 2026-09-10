@@ -181,6 +181,10 @@ class LlmCallPayload(_Payload):
     provider_failover: bool = False
     structured_output_mode: str | None = None
     ttfb_ms: int | None = None
+    #: W2-E: whether this call came off a streaming round trip. Without it §11.6 page 5 mixes two
+    #: TTFB definitions in one column — first delta on the streamed spans, whole round trip on the
+    #: rest — and the comparison it exists to support stops meaning anything.
+    streamed: bool = False
 
 
 class RetrievedChunk(_Payload):
