@@ -43,6 +43,21 @@ The app boots with no credentials: with `LLM_PROVIDER=stub` it replays a recorde
 with a real provider but no key it still boots, reports `degraded` on `/health` and answers
 `/chat` with an actionable configuration message rather than an error.
 
+**The two demo tasks.** Both are one-click buttons in the chat UI and both have a curl script.
+
+```bash
+make demo1        # international remote-work eligibility — multi-document, no write
+make demo2        # a PTO request through the confirmation gate to a mock write
+
+# or against any running instance, including the deployed one:
+BASE_URL=https://<app>.onrender.com APP_ACCESS_TOKEN=<key> sh scripts/demo_task_1.sh
+```
+
+`make demo1` / `make demo2` each start their own server with their own recorded stub script, so
+they need no key. The scripts are plain `curl`, parameterised by `BASE_URL`, and print the answer,
+the citations, the full span trace and the `dashboard_url` for the turn. Every call sends
+`Authorization: Bearer $APP_ACCESS_TOKEN`.
+
 ## Deployment
 
 The service runs as a Docker image on Render's free tier, built from the committed `Dockerfile`

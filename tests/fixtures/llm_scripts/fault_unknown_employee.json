@@ -1,0 +1,28 @@
+{
+ "scenario": "fault_unknown_employee",
+ "_note": "§9.5 row 2 — an unknown employee id. `lookup_employee_profile` returns the structured `not_found` of §8.3 (a **successful** result, not an error), and the orchestrator turns it into a clarifying question naming the id format. Two completions: the route call and the one act step that makes the call.",
+ "completions": [
+  {
+   "purpose": "route",
+   "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1999\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\"], \"rationale_summary\": \"A PTO balance question about a named employee id.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 1105,
+   "completion_tokens": 94
+  },
+  {
+   "purpose": "act",
+   "tool_calls": [
+    {
+     "id": "toolu_fue_1",
+     "name": "lookup_employee_profile",
+     "args": {
+      "employee_id": "E1999"
+     }
+    }
+   ],
+   "finish_reason": "tool_use",
+   "prompt_tokens": 1340,
+   "completion_tokens": 62
+  }
+ ]
+}

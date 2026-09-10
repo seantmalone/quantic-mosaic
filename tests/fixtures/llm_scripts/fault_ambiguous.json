@@ -1,0 +1,13 @@
+{
+ "scenario": "fault_ambiguous",
+ "_note": "§9.5 row 4 — an ambiguous request. The router sets needs_clarification, so the turn ends `clarify` without burning a single tool call and the question names the missing information. One completion is the whole script: there is nothing after a clarification.",
+ "completions": [
+  {
+   "purpose": "route",
+   "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": true, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"No dates were given, so the request cannot be checked against the notice rule.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 1080,
+   "completion_tokens": 92
+  }
+ ]
+}

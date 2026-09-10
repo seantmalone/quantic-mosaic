@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosaic HR Copilot — access key</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="access-page">
+<main class="access-card">
+  <h1>Mosaic HR Copilot</h1>
+  <p>This deployment is behind one shared access key. Paste it below, or open the tokenized link
+    you were given — the key is exchanged once for a cookie and removed from the address bar.</p>
+  {% if message %}<p class="access-error" role="alert">{{ message }}</p>{% endif %}
+  <form method="post" action="/access" class="access-form">
+    <label for="access">Access key</label>
+    <input id="access" name="access" type="password" autocomplete="off" required>
+    <button class="button" type="submit">Enter</button>
+  </form>
+  <p class="access-note">API clients, the eval runner and MCP Inspector send
+    <code>Authorization: Bearer &lt;key&gt;</code> instead. <code>/health</code> and
+    <code>/ready</code> are always open.</p>
+</main>
+</body>
+</html>

@@ -351,3 +351,64 @@ rather than assumed.
   so the golden file pins the untruncated bytes and a regression to `snippet` is a diff. One
   consequence to know: a corpus edit that moves either of those two chunks now also re-records that
   golden, which is the same deliberate re-review the manifest already demands.
+
+## 2026-09-09 — P8 web/ (`/chat`, `/chat/confirm`, SSE, `/health`, the access gate, the chat UI)
+
+- **Live provider check, run 2026-09-09** against `claude-haiku-4-5` with the real key from the
+  git-ignored `.env` (`make run`, then `BASE_URL=http://127.0.0.1:8000 bash scripts/demo_task_1.sh`
+  and `scripts/demo_task_2.sh`). **The Anthropic multi-turn tool wire shape is confirmed correct**:
+  12 Haiku calls across the two tasks, zero 400s, every `tool_use` answered by a `tool_result` in
+  the immediately following message. Measured, on the committed code:
+
+  | Task | Outcome | Model calls | Tool calls | Retrievals | Citations | Wall clock | `cost_usd_estimate` |
+  |---|---|---|---|---|---|---|---|
+  | 1 — Berlin remote work | `answered` | 5 | 3 | 1 | 6 from 3 documents | 29.8 s | $0.0339 |
+  | 2 — PTO + gated write | `answered` after Confirm | 7 | 5 | 1 | 5 from 2 documents | 34.0 s | $0.0437 |
+
+  Task 2 produced `MOCK-HR-000001` on the reopened turn (`resumed_count = 1`) with one `confirmed`,
+  spent `confirmations` row. **Total for the pair: $0.0776.** G1/G2/G3 all `allow` on both.
+
+- **Three live-only agent-loop defects the stub could never show, found by that check and fixed.**
+  Under `StubAdapter` the scripted tool sequence always searched the corpus first, so all three
+  were invisible; against the real model each one closed a turn that had not done what it was
+  asked, and **both demo tasks refused** before the fixes:
+  1. *The completion predicate and the evidence gate disagreed about "evidence".* `_absorb` fed the
+     chunk ids that `get_policy_section` and `check_policy_compliance` **cite** into
+     `LoopState.evidence_*`, which the workflow predicates count — but those chunks carry no dense
+     score, so they never enter G1's candidate set. A turn that reached a compliance verdict without
+     searching was therefore "complete" and then refused for want of evidence. The two now share one
+     meaning of evidence: only retrieved chunks count.
+  2. *Nothing told the **model** what the workflow still needed.* `WorkflowSpec` knew; the
+     conversation did not. `Orchestrator._nudge()` now sends one operational reminder, at most once
+     per turn, on the step where the model tried to stop while the workflow was incomplete.
+  3. *An outstanding write was dropped when the model simply answered.* `_action_outstanding` guarded
+     the completion-predicate exit but not the "model returned no tool calls" exit, so demo task 2
+     answered without ever proposing `create_mock_hr_ticket` — the confirmation gate, i.e. the whole
+     safety demo, never fired. `_nudge()` now covers that door too.
+  Alongside them, two prompt rules (both re-recorded in `tests/fixtures/prompts/`): `act.j2` gains
+  "a policy claim needs the policy TEXT, not a title" — the live model had been reaching for
+  `list_policy_documents`, which grounds nothing — and `route.j2` gains "`action` beats `workflow`
+  when the user also asks for something to be created", which is what puts demo task 2 back on the
+  `intent="action"` path `_action_outstanding` keys on.
+
+- **The documented tool sequence of §18.1 is the *expected* one, not a guarantee.** On the live run
+  demo task 1 answered in three tool calls (profile → compliance → one search) rather than the five
+  §18.1 lists, and cited three documents rather than four. `DEMO_EXPECTATIONS` is a floor
+  (`min_tool_calls`, `required_tools`, `precedence_edges`), and `tests/e2e/test_demo_tasks.py` runs
+  it against the committed stub scripts; P10 re-records both scripts from a real exchange.
+
+- **`sse_starlette` patches `uvicorn.Server.handle_exit`, and uvicorn 0.52 replays captured signals.**
+  Two facts that bite any test which stops a server holding an SSE stream open. The agent's own MCP
+  session keeps a long-lived `GET /mcp-server/mcp` open, and uvicorn will not finish a graceful
+  shutdown while serving it; only the process-global `AppStatus.should_exit` drains it, and that is
+  set by `sse_starlette`'s patched **signal handler**, never by assigning `server.should_exit`.
+  Calling `server.handle_exit()` by hand sets both — and then uvicorn re-raises every captured signal
+  once its handlers are restored (`uvicorn/server.py:339`), killing the pytest process with 143. The
+  test helper therefore sets **both latches directly**; a real SIGTERM on Render wants the replay.
+
+- **`web/` hand-rolls its SSE response rather than using `sse_starlette`.** One process-global latch
+  that a stopped server sets for every other stream is enough; `web/sse.py` ends its generators from
+  the lifespan instead.
+
+- **`scripts/wait_for_health.py` was missing.** The `Makefile`'s `demo1` / `demo2` / `docker-run-512`
+  targets have called it since P0. Added here, because `make demo1 && make demo2` is P8's gate.

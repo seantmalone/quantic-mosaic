@@ -1,0 +1,262 @@
+"""The application object and its lifespan (spec §11, §10.3, §14).
+
+One process serves everything: the chat UI, the JSON contract endpoints, the SSE span rail, the
+observability dashboard (P9) and — mounted in-process at `/mcp-server/mcp` — the MCP server the
+agent reaches over loopback Streamable HTTP. That single-service topology is the architectural bet
+of §2.1: one cold start, one memory budget, one trace store.
+
+**What the lifespan owns, in order:**
+
+1. `install_shutdown_handlers()` — on the **main thread**, where `signal.signal` is legal, so a
+   SIGTERM from Render flushes any turn in flight (§10.3).
+2. the store: `get_store()` + `migrate()`, then the one process-wide `TraceWriter`.
+3. boot repair and boot import: `sweep_stale_turns()` closes what a hard kill left open,
+   `retention.sweep()` prunes, and `archive.import_results()` loads the committed evaluation runs
+   from a **stable absolute path** (`import_state.path` is stored as given, so a relative path
+   would re-import under a different working directory). All three repeat every six hours.
+4. `web/sse.py`'s broker: bound to the serving loop and registered as the **one**
+   `core.trace.register_span_listener()` listener (§11.3).
+5. the `Orchestrator`, built here rather than per request so the MCP handshake is cached for the
+   life of the process (§9.1). With the gate on, its client carries `Authorization: Bearer` on
+   every loopback `tools/list` and `tools/call` (§11, §16.4).
+6. the `/ready` warm-up: **one loopback `tools/call`**, never a direct `rag.embed` import, so
+   readiness exercises the same wire the agent uses (§11.4). It runs as a background task because
+   uvicorn does not accept connections until lifespan startup has returned — a loopback call made
+   inside the lifespan would be refused by a socket that is not listening yet.
+
+`/health` never depends on any of it: it answers 200 while the process is up, whatever failed.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import logging
+from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request
+
+from hrmosaic.agent.client import McpClient
+from hrmosaic.agent.orchestrator import Orchestrator, set_orchestrator
+from hrmosaic.core import archive, retention
+from hrmosaic.core import trace as trace_module
+from hrmosaic.core.db import get_store, migrate
+from hrmosaic.core.trace import SessionSpec, TraceWriter
+from hrmosaic.mcpserver.asgi import mcp_lifespan, mount_mcp
+from hrmosaic.mcpserver.server import ServerDeps, build_hr_server
+from hrmosaic.settings import Settings, secret_value
+from hrmosaic.settings import settings as default_settings
+from hrmosaic.web import api
+from hrmosaic.web.sse import broker
+
+logger = logging.getLogger(__name__)
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_DIR = Path(__file__).resolve().parent
+MOCK_DATA_DIR = REPO_ROOT / "mock_data"
+
+#: §10.3 and §10.5: the boot jobs repeat every six hours for a process that stays up for days.
+MAINTENANCE_INTERVAL_S = 6 * 60 * 60
+
+#: How long the warm-up waits between attempts while uvicorn finishes binding its socket.
+WARMUP_POLL_S = 0.2
+
+#: The one warm-up call. `search_policy_documents` is the only tool that touches both halves of
+#: what `/ready` promises: the ONNX model (the query embedding) and the index (the search).
+WARMUP_TOOL = "search_policy_documents"
+WARMUP_ARGUMENTS = {"query": "paid time off accrual", "k": 1}
+
+
+def _employees() -> list[dict[str, Any]]:
+    """The 24 mock employees the act-as selector lists (§11.5)."""
+    document = json.loads((MOCK_DATA_DIR / "employees.json").read_text(encoding="utf-8"))
+    return [
+        {
+            "employee_id": row["employee_id"],
+            "name": row["legal_name"],
+            "title": row["title"],
+            "office_id": row["office_id"],
+        }
+        for row in document["records"]
+    ]
+
+
+def _data_as_of() -> str:
+    return str(json.loads((MOCK_DATA_DIR / "employees.json").read_text(encoding="utf-8"))["as_of"])
+
+
+def _build_client(settings: Settings) -> McpClient:
+    """The in-process client, carrying the bearer header whenever the gate is on (§16.4)."""
+    token = secret_value(settings.app_access_token)
+    headers = {"Authorization": f"Bearer {token}"} if token and api.gate_enabled(settings) else None
+    return McpClient(settings=settings, headers=headers)
+
+
+async def _maintenance(settings: Settings) -> None:
+    """Boot repair and boot import, then the same three jobs every six hours (§10.3, §10.5)."""
+    while True:
+        try:
+            await asyncio.to_thread(_maintenance_pass, settings)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # a maintenance failure must never take the process down
+            logger.warning("a maintenance pass failed", exc_info=True)
+        await asyncio.sleep(MAINTENANCE_INTERVAL_S)
+
+
+def _maintenance_pass(settings: Settings) -> None:
+    store = get_store(settings)
+    swept = trace_module.sweep_stale_turns(store=store)
+    pruned = retention.sweep(store=store)
+    # An absolute path: `import_state.path` is the primary key and is stored exactly as given, so
+    # a relative one would re-import every file the first time the process ran from elsewhere.
+    imported = archive.import_results(store=store, results_dir=(REPO_ROOT / "evaluation" / "results").resolve())
+    logger.info(
+        "maintenance: %d stale turn(s) closed, %d session(s) pruned, %d eval run(s) imported",
+        swept,
+        pruned.sessions_deleted,
+        len(imported.imported),
+    )
+
+
+async def _warm_up(app: FastAPI) -> None:
+    """`/ready` goes green after **one** loopback `tools/call` (§11.4)."""
+    settings: Settings = app.state.settings
+    if not settings.embed_warmup:
+        app.state.ready = True
+        app.state.ready_reason = None
+        return
+
+    client: McpClient = app.state.orchestrator.client
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + settings.ready_warmup_timeout_s
+    last_error = "the MCP server has not answered yet"
+    while loop.time() < deadline:
+        try:
+            await client.discover()
+            break
+        except Exception as exc:  # the socket is not listening yet, or the handshake failed
+            last_error = f"mcp handshake: {exc}"
+            app.state.ready_reason = last_error
+            await asyncio.sleep(WARMUP_POLL_S)
+    else:
+        app.state.ready_reason = last_error
+        return
+
+    session = SessionSpec(client_label="maintenance", employee_id=None)
+    buffer = trace_module.start_turn(session, user_message="startup warm-up")
+    try:
+        result = await client.call_tool(
+            buffer, name=WARMUP_TOOL, arguments=dict(WARMUP_ARGUMENTS), employee_id=api.DEFAULT_ACTOR
+        )
+        if result.is_error:
+            app.state.ready_reason = f"warm-up call failed: {result.text[:200]}"
+            return
+        app.state.ready = True
+        app.state.ready_reason = None
+    except Exception as exc:
+        app.state.ready_reason = f"warm-up call failed: {exc}"
+    finally:
+        buffer.close(outcome="maintenance", stop_reason="maintenance")
+
+
+def _install_error_handlers(app: FastAPI) -> None:
+    """A dict `detail` is the body (§11.1's `{"code": …}`), not a value nested under `detail`."""
+
+    async def http_exception(_: Request, exc: Exception) -> JSONResponse:
+        assert isinstance(exc, HTTPException)
+        body = exc.detail if isinstance(exc.detail, dict) else {"code": "ERROR", "detail": exc.detail}
+        return JSONResponse(body, status_code=exc.status_code, headers=getattr(exc, "headers", None))
+
+    async def validation_error(_: Request, exc: Exception) -> JSONResponse:
+        assert isinstance(exc, RequestValidationError)
+        return JSONResponse(
+            {"code": "INVALID_REQUEST", "errors": json.loads(json.dumps(exc.errors(), default=str))},
+            status_code=422,
+        )
+
+    app.add_exception_handler(HTTPException, http_exception)
+    app.add_exception_handler(RequestValidationError, validation_error)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build the application. `main:app` is the module-level instance uvicorn serves."""
+    resolved = settings or default_settings
+    server = build_hr_server(ServerDeps(index_path=Path(resolved.index_path), transport="http"))
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # 1. the shutdown handlers, on the main thread (§10.3).
+        trace_module.install_shutdown_handlers()
+
+        # 2. the store and the one writer.
+        store = get_store(resolved)
+        migrate(store)
+        trace_module.set_writer(TraceWriter(store))
+
+        # 3. boot repair and boot import, repeating every six hours.
+        maintenance = asyncio.create_task(_maintenance(resolved))
+
+        # 4. the one span listener (§11.3).
+        broker.bind(asyncio.get_running_loop())
+        unregister = trace_module.register_span_listener(broker.publish_span)
+
+        # 5. the orchestrator, so the MCP handshake outlives a request (§9.1).
+        orchestrator = Orchestrator(client=_build_client(resolved), settings=resolved)
+        set_orchestrator(orchestrator)
+        app.state.orchestrator = orchestrator
+
+        # 6. the `/ready` warm-up, after uvicorn starts accepting (§11.4).
+        warmup = asyncio.create_task(_warm_up(app))
+
+        async with mcp_lifespan(server):
+            try:
+                yield
+            finally:
+                broker.close()
+                unregister()
+                for task in (warmup, maintenance):
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await task
+                await orchestrator.aclose()
+                trace_module.flush_open_turns()
+                set_orchestrator(None)
+
+    # `docs_url=None` and friends: §11.8's endpoint list is exact, and FastAPI's three default
+    # documentation routes are not on it.
+    app = FastAPI(
+        title="Mosaic HR Copilot",
+        version=api.APP_VERSION,
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    app.state.settings = resolved
+    app.state.employees = _employees()
+    app.state.data_as_of = _data_as_of()
+    app.state.served_a_turn = False
+    app.state.ready = False
+    app.state.ready_reason = "the embedding model and the index are still loading"
+    app.state.mcp_server = server
+
+    _install_error_handlers(app)
+    app.include_router(api.router)
+    app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
+    mount_mcp(app, server)
+    app.add_middleware(api.AccessGateMiddleware, settings=resolved)
+    return app
+
+
+app = create_app()
+
+
+__all__ = ["MAINTENANCE_INTERVAL_S", "app", "create_app"]

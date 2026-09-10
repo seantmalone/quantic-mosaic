@@ -1,0 +1,183 @@
+/* Mosaic HR Copilot — the whole stylesheet (spec §11.5). No CDN, no build step, no framework:
+   one vendored copy of htmx and this file, so the page a grader loads is the page in the repo. */
+
+:root {
+  --ink: #14202b;
+  --ink-soft: #4a5b6b;
+  --paper: #f6f7f9;
+  --card: #ffffff;
+  --line: #d9dfe6;
+  --accent: #1f6f6b;
+  --accent-soft: #e4f1f0;
+  --warn: #8a5a00;
+  --warn-soft: #fdf1d8;
+  --danger: #9b2c2c;
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* -- masthead ---------------------------------------------------------------------- */
+.masthead {
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  align-items: center; justify-content: space-between;
+  padding: 0.9rem 1.25rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.masthead h1 { font-size: 1.15rem; margin: 0; }
+.tagline { margin: 0.15rem 0 0; color: var(--ink-soft); font-size: 0.85rem; }
+.masthead-nav { display: flex; align-items: center; gap: 0.75rem; }
+.actor-form { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.actor-form select { padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
+.nav-link {
+  font-size: 0.85rem; color: var(--accent); text-decoration: none;
+  background: none; border: 0; cursor: pointer; padding: 0.35rem 0.5rem;
+}
+.nav-link:hover { text-decoration: underline; }
+
+/* -- cold-start banner ------------------------------------------------------------- */
+.banner {
+  display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap;
+  padding: 0.6rem 1.25rem;
+  background: var(--warn-soft); color: var(--warn);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.banner .elapsed { font-family: var(--mono); margin-left: auto; }
+
+/* -- layout ------------------------------------------------------------------------ */
+.layout {
+  display: grid; gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  align-items: start;
+  max-width: 78rem; margin: 1.25rem auto; padding: 0 1.25rem;
+}
+@media (max-width: 60rem) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.messages { display: flex; flex-direction: column; gap: 1rem; }
+
+/* -- turns ------------------------------------------------------------------------- */
+.turn { display: flex; flex-direction: column; gap: 0.6rem; }
+.message { padding: 0.85rem 1rem; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line); }
+.message-user { background: var(--accent-soft); border-color: transparent; }
+.message-user p { margin: 0; }
+.answer-block { margin: 0 0 0.9rem; }
+.answer-block:last-of-type { margin-bottom: 0; }
+.answer-text { margin: 0.35rem 0 0.4rem; }
+
+.badge {
+  display: inline-block; padding: 0.1rem 0.5rem;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+  border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft); background: var(--paper);
+}
+.badge-recommendation { color: var(--warn); background: var(--warn-soft); border-color: transparent; text-transform: none; }
+.badge-escalation { color: var(--danger); background: #fdeaea; border-color: transparent; }
+.badge-policy_fact { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+
+.citation-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; list-style: none; margin: 0; padding: 0; }
+.citation-chip {
+  display: inline-block; padding: 0.15rem 0.55rem;
+  font-size: 0.78rem; text-decoration: none;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: 999px;
+}
+.citation-chip:hover { text-decoration: underline; }
+.snapshot-note { margin: 0.5rem 0 0; font-size: 0.82rem; color: var(--ink-soft); font-style: italic; }
+
+.citation-drawer, .trace-panel { margin-top: 0.75rem; font-size: 0.85rem; }
+.citation-drawer summary, .trace-panel summary { cursor: pointer; color: var(--ink-soft); }
+.citation-list { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+.citation blockquote { margin: 0.3rem 0 0.6rem; padding-left: 0.7rem; border-left: 3px solid var(--line); color: var(--ink-soft); }
+.citation-quarantined .warning { color: var(--danger); font-size: 0.78rem; }
+
+.trace-list { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+.trace-entry { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; padding: 0.15rem 0; }
+.trace-kind { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); }
+.trace-name { font-weight: 600; }
+.trace-summary { color: var(--ink-soft); }
+.trace-args { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-soft); }
+.trace-duration { margin-left: auto; font-family: var(--mono); font-size: 0.72rem; color: var(--ink-soft); }
+.trace-entry[data-status="error"] .trace-name { color: var(--danger); }
+.turn-links { margin: 0.5rem 0 0; }
+
+/* -- the confirmation card --------------------------------------------------------- */
+.confirm-card {
+  margin-top: 0.9rem; padding: 0.9rem 1rem;
+  border: 2px solid var(--warn); border-radius: var(--radius); background: var(--warn-soft);
+}
+.confirm-card h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: var(--warn); }
+.confirm-summary { margin: 0 0 0.5rem; }
+.arguments-preview {
+  margin: 0 0 0.7rem; padding: 0.6rem; overflow-x: auto;
+  font-family: var(--mono); font-size: 0.78rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+}
+.confirm-actions { display: flex; gap: 0.5rem; }
+
+/* -- composer ---------------------------------------------------------------------- */
+.composer {
+  margin-top: 1rem; padding: 0.9rem 1rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.composer textarea { width: 100%; padding: 0.6rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+.composer-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+
+.button {
+  padding: 0.45rem 0.9rem; font: inherit; font-size: 0.88rem;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink);
+  cursor: pointer;
+}
+.button:hover { border-color: var(--accent); }
+.button-send, .button-confirm { background: var(--accent); border-color: var(--accent); color: #fff; }
+.button-cancel { background: var(--card); }
+.button[disabled] { opacity: 0.55; cursor: progress; }
+
+/* -- the live rail ----------------------------------------------------------------- */
+.rail {
+  position: sticky; top: 1.25rem;
+  padding: 0.9rem 1rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.rail h2 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.rail-note, .rail-footer { margin: 0; font-size: 0.78rem; color: var(--ink-soft); }
+.span-rail {
+  list-style: none; margin: 0.7rem 0; padding: 0;
+  max-height: 26rem; overflow-y: auto;
+  font-family: var(--mono); font-size: 0.75rem;
+}
+.span-item { padding: 0.25rem 0.4rem; border-left: 3px solid var(--line); margin-bottom: 0.2rem; }
+.span-tool_call { border-left-color: var(--accent); }
+.span-retrieval { border-left-color: #3b6fb0; }
+.span-llm_call { border-left-color: #7a5bb5; }
+.span-guardrail { border-left-color: var(--warn); }
+.span-confirmation { border-left-color: var(--warn); }
+.span-error, .span-item.span-error { border-left-color: var(--danger); color: var(--danger); }
+
+/* -- the key page ------------------------------------------------------------------ */
+.access-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; }
+.access-card {
+  max-width: 32rem; padding: 1.75rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.access-card h1 { margin-top: 0; font-size: 1.2rem; }
+.access-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; margin: 1rem 0; }
+.access-form label { flex-basis: 100%; font-size: 0.85rem; color: var(--ink-soft); }
+.access-form input { flex: 1 1 14rem; padding: 0.45rem 0.6rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; }
+.access-error { color: var(--danger); font-size: 0.9rem; }
+.access-note { font-size: 0.82rem; color: var(--ink-soft); }

@@ -124,6 +124,82 @@ def run_agent(writer):
     return drive
 
 
+@asynccontextmanager
+async def web_server(settings) -> AsyncIterator[str]:
+    """`web/main.py`'s **whole** app on a real uvicorn — the deployed topology, in one process.
+
+    Not `ASGITransport`: the agent reaches its own MCP mount over **loopback HTTP**, so the app
+    under test has to be listening on a real port or the very wire P8 exists to serve would be the
+    one thing not exercised. It is also the only way the access gate can be observed on the mount.
+    """
+    from sse_starlette.sse import AppStatus
+
+    from hrmosaic.core import trace as trace_module
+    from hrmosaic.web.main import create_app
+
+    # As in `mounted_server()`: the latch is process-global and a stopped server sets it for every
+    # later stream in the process.
+    AppStatus.should_exit = False
+    server = uvicorn.Server(
+        uvicorn.Config(create_app(settings), host="127.0.0.1", port=settings.port, log_level="warning")
+    )
+    serving = asyncio.create_task(server.serve())
+    try:
+        while not server.started:
+            await asyncio.sleep(0.02)
+        yield f"http://127.0.0.1:{settings.port}"
+    finally:
+        # Both latches, and neither by way of `handle_exit`. The agent's own MCP session holds a
+        # long-lived `GET /mcp-server/mcp` open, and uvicorn will not finish a graceful shutdown
+        # while it is serving that stream; only `sse_starlette`'s process-global
+        # `AppStatus.should_exit` drains it. Calling `server.handle_exit()` would set both — and
+        # then uvicorn 0.52 re-raises every captured signal once its handlers are restored
+        # (`server.py:339`), killing the pytest process with 143. A real SIGTERM on Render wants
+        # exactly that replay; a test does not.
+        AppStatus.should_exit = True
+        server.should_exit = True
+        await serving
+        AppStatus.should_exit = False
+        trace_module.clear_span_listeners()
+        trace_module.set_writer(None)
+        # The lifespan installs the SIGTERM/atexit handlers, and `_handlers_installed` is a module
+        # global: leaving it set would silently turn a later test's own `install_shutdown_handlers()`
+        # into a no-op. uvicorn's `capture_signals` has already restored the handler it wrapped.
+        trace_module.reset_shutdown_handlers()
+
+
+@pytest.fixture
+def web(store, monkeypatch):
+    """Factory: `async with web(script="demo_task_1.json") as client:` — a live app and a client.
+
+    Every keyword after `script` is a `settings` override applied for the duration of the server,
+    so a test can turn the access gate on, point `MCP_SERVER_URL` elsewhere, or ask for the real
+    warm-up without reaching for the environment.
+    """
+    import httpx
+
+    from hrmosaic.settings import settings as live_settings
+
+    @asynccontextmanager
+    async def start(script: str = "demo_task_1.json", **overrides) -> AsyncIterator[httpx.AsyncClient]:
+        port = free_port()
+        defaults = {
+            "port": port,
+            "mcp_server_url": f"http://127.0.0.1:{port}/mcp-server/mcp",
+            "llm_provider": "stub",
+            "llm_stub_script": LLM_SCRIPTS / script,
+            # `/ready`'s warm-up loads the real ONNX model; the tests that want it ask for it.
+            "embed_warmup": False,
+        }
+        for key, value in {**defaults, **overrides}.items():
+            monkeypatch.setattr(live_settings, key, value)
+        async with web_server(live_settings) as base_url:
+            async with httpx.AsyncClient(base_url=base_url, timeout=120.0) as client:
+                yield client
+
+    return start
+
+
 @pytest.fixture
 def spans(store):
     """Every span of a turn, in `seq` order, as `(kind, name, payload)` — what the gates assert on."""

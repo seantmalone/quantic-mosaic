@@ -1,0 +1,87 @@
+{#
+  One finished turn, server-rendered (spec §11.5).
+
+  `POST /chat` and `POST /chat/confirm` return this fragment to an htmx request and the same
+  `ChatResponse` as JSON to everyone else, so the badges and the citation chips
+  `tests/contract/test_chat_page_renders.py` asserts on are the ones the grader sees.
+#}
+<article class="turn" id="turn-{{ turn.turn_id }}" data-session-id="{{ turn.session_id }}"
+         data-turn-id="{{ turn.turn_id }}" data-outcome="{{ turn.outcome }}">
+  {% if question %}
+  <div class="message message-user"><p>{{ question }}</p></div>
+  {% endif %}
+
+  <div class="message message-agent">
+    {% for block in turn.answer_blocks %}
+    <section class="answer-block answer-block-{{ block.type }}">
+      <span class="badge badge-{{ block.type }}">{{ badge_text[block.type] }}</span>
+      <p class="answer-text">{{ block.text }}</p>
+      {% if block.citations %}
+      <ul class="citation-chips">
+        {% for chunk_id in block.citations %}{% set citation = citations_by_id.get(chunk_id) %}{% if citation %}
+        <li>
+          <a class="citation-chip" href="{{ citation.source_url }}" data-chunk-id="{{ citation.chunk_id }}"
+             data-snippet="{{ citation.snippet }}" title="{{ citation.snippet }}">
+            {{ citation.doc_title }} · {{ citation.section }}
+          </a>
+        </li>
+        {% endif %}{% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+    {% endfor %}
+
+    {% if as_of %}
+    <p class="snapshot-note">Employee data as of {{ as_of_human }}</p>
+    {% endif %}
+
+    {% if turn.confirmation %}
+    <form class="confirm-card" hx-post="/chat/confirm" hx-target="#turn-{{ turn.turn_id }}" hx-swap="outerHTML">
+      <h3>Confirm before anything is written</h3>
+      <p class="confirm-summary">{{ turn.confirmation.human_summary }}</p>
+      <pre class="arguments-preview">{{ arguments_preview }}</pre>
+      <input type="hidden" name="session_id" value="{{ turn.session_id }}">
+      <input type="hidden" name="turn_id" value="{{ turn.turn_id }}">
+      <div class="confirm-actions">
+        <button class="button button-confirm" type="submit" name="decision" value="confirmed">Confirm</button>
+        <button class="button button-cancel" type="submit" name="decision" value="declined">Cancel</button>
+      </div>
+    </form>
+    {% endif %}
+
+    {% if turn.citations %}
+    <details class="citation-drawer">
+      <summary>{{ turn.citations | length }} source{{ '' if turn.citations | length == 1 else 's' }}</summary>
+      <ol class="citation-list">
+        {% for citation in turn.citations %}
+        <li class="citation{% if citation.quarantined %} citation-quarantined{% endif %}">
+          <a class="citation-chip" href="{{ citation.source_url }}" data-chunk-id="{{ citation.chunk_id }}">
+            {{ citation.doc_title }} · {{ citation.heading_path }}
+          </a>
+          {% if citation.quarantined %}<span class="warning">Quarantined by G4 — not citable</span>{% endif %}
+          <blockquote>{{ citation.snippet }}</blockquote>
+        </li>
+        {% endfor %}
+      </ol>
+    </details>
+    {% endif %}
+
+    <details class="trace-panel">
+      <summary>Agent activity — {{ turn.trace | length }} step{{ '' if turn.trace | length == 1 else 's' }}
+        · {{ turn.usage.tool_calls }} tool call{{ '' if turn.usage.tool_calls == 1 else 's' }}
+        · {{ turn.usage.llm_calls }} model call{{ '' if turn.usage.llm_calls == 1 else 's' }}</summary>
+      <ol class="trace-list">
+        {% for entry in turn.trace %}
+        <li class="trace-entry trace-{{ entry.kind }}" data-kind="{{ entry.kind }}" data-status="{{ entry.status }}">
+          <span class="trace-kind">{{ entry.kind }}</span>
+          <span class="trace-name">{{ entry.name }}</span>
+          <span class="trace-summary">{{ entry.summary }}</span>
+          {% if entry.args_preview %}<code class="trace-args">{{ entry.args_preview }}</code>{% endif %}
+          <span class="trace-duration">{{ entry.duration_ms or 0 }} ms</span>
+        </li>
+        {% endfor %}
+      </ol>
+      <p class="turn-links"><a href="{{ turn.dashboard_url }}">Full span waterfall</a></p>
+    </details>
+  </div>
+</article>

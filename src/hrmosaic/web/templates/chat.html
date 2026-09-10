@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosaic HR Copilot</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-title">
+    <h1>Mosaic HR Copilot</h1>
+    <p class="tagline">Policy answers with citations, tools over MCP, and a full audit trail.</p>
+  </div>
+  <nav class="masthead-nav">
+    <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select">
+      <label for="actor-select">Act as</label>
+      <select id="actor-select" name="actor" aria-label="Act as">
+        {% for employee in employees %}
+        <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
+          {{ employee.employee_id }} — {{ employee.name }}, {{ employee.title }}
+        </option>
+        {% endfor %}
+        <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
+      </select>
+    </form>
+    {% if is_admin %}
+    <a class="nav-link" id="dashboard-link" href="/dashboard">Dashboard</a>
+    {% endif %}
+    {% if gate_on %}
+    <form method="post" action="/access/logout"><button class="nav-link" type="submit">Sign out</button></form>
+    {% endif %}
+  </nav>
+</header>
+
+<div id="cold-start-banner" class="banner" hidden>
+  <strong>Waking the free instance…</strong>
+  <span>This deployment spins down when idle; the first request takes a little while.</span>
+  <span id="cold-start-elapsed" class="elapsed">0 s</span>
+</div>
+
+<main class="layout">
+  <section class="conversation">
+    <div id="messages" class="messages"></div>
+
+    <form id="chat-form" class="composer" hx-post="/chat" hx-target="#messages" hx-swap="beforeend"
+          hx-disabled-elt="#send-button">
+      <label class="visually-hidden" for="message">Your question</label>
+      <textarea id="message" name="message" rows="3" required
+                placeholder="Ask about policy, your PTO balance, remote work…"></textarea>
+      <input type="hidden" name="client_label" value="web">
+      <input type="hidden" name="turn_id" id="turn-id">
+      <input type="hidden" name="session_id" id="session-id">
+      <div class="composer-actions">
+        <button id="send-button" class="button button-send" type="submit">Ask</button>
+        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
+          Demo 1 — work from Berlin
+        </button>
+        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
+          Demo 2 — book three days of PTO
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="rail">
+    <h2>Live agent activity</h2>
+    <p class="rail-note">Spans arrive as they close. If the stream drops, the finished answer still
+      carries the same trace.</p>
+    <ol id="span-rail" class="span-rail" aria-live="polite"></ol>
+    <p class="rail-footer">Employee data snapshot: {{ data_as_of }}</p>
+  </aside>
+</main>
+
+<script>
+  (function () {
+    "use strict";
+    var rail = document.getElementById("span-rail");
+    var form = document.getElementById("chat-form");
+    var messageBox = document.getElementById("message");
+    var turnField = document.getElementById("turn-id");
+    var sessionField = document.getElementById("session-id");
+    var stream = null;
+
+    function newId() {
+      return (crypto.randomUUID ? crypto.randomUUID() : "").replace(/-/g, "");
+    }
+
+    function railEntry(text, kind, status) {
+      var item = document.createElement("li");
+      item.className = "span-item span-" + kind + (status === "error" ? " span-error" : "");
+      item.textContent = text;
+      rail.appendChild(item);
+      rail.scrollTop = rail.scrollHeight;
+    }
+
+    function openStream(turnId) {
+      if (stream) { stream.close(); }
+      rail.replaceChildren();
+      stream = new EventSource("/chat/stream?turn_id=" + encodeURIComponent(turnId));
+      stream.addEventListener("turn_started", function () { railEntry("turn started", "meta", "ok"); });
+      stream.addEventListener("span", function (event) {
+        var span = JSON.parse(event.data);
+        railEntry(span.kind + " · " + span.name + " — " + span.summary, span.kind, span.status);
+      });
+      stream.addEventListener("turn_completed", function (event) {
+        var done = JSON.parse(event.data);
+        railEntry("turn completed · " + done.outcome, "meta", "ok");
+        stream.close();
+        stream = null;
+      });
+      stream.onerror = function () { if (stream) { stream.close(); stream = null; } };
+    }
+
+    // The UI generates `turn_id` and subscribes FIRST, then fires the POST — the POST does not
+    // return until the turn is over, so its body can never carry the id the rail needs (§11.1).
+    document.body.addEventListener("htmx:configRequest", function (event) {
+      if (event.detail.path !== "/chat") { return; }
+      var turnId = newId();
+      event.detail.parameters.turn_id = turnId;
+      turnField.value = turnId;
+      openStream(turnId);
+    });
+
+    document.body.addEventListener("htmx:afterSwap", function () {
+      var turns = document.querySelectorAll("#messages .turn");
+      if (turns.length) { sessionField.value = turns[turns.length - 1].dataset.sessionId || ""; }
+      messageBox.value = "";
+    });
+
+    document.querySelectorAll(".demo-button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        messageBox.value = button.dataset.prompt;
+        form.requestSubmit();
+      });
+    });
+
+    // The cold-start banner: a `/health` preflight with an elapsed counter (§11.5).
+    (function coldStartPreflight() {
+      var banner = document.getElementById("cold-start-banner");
+      var elapsed = document.getElementById("cold-start-elapsed");
+      var began = Date.now();
+      banner.hidden = false;
+      var ticker = setInterval(function () {
+        elapsed.textContent = Math.round((Date.now() - began) / 1000) + " s";
+      }, 1000);
+      fetch("/health").then(function (response) { return response.json(); }).catch(function () { return null; })
+        .then(function () { clearInterval(ticker); banner.hidden = true; });
+    })();
+  })();
+</script>
+</body>
+</html>
