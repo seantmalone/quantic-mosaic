@@ -13,18 +13,17 @@ two names from the yield is the live half of the 2.x arity check in
 
 from __future__ import annotations
 
-import asyncio
-import socket
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
-import uvicorn
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
+
+from tests.conftest import mounted_server
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENTRYPOINT = REPO_ROOT / "mcp" / "server_entrypoint.py"
@@ -35,12 +34,6 @@ BASE_META: dict[str, object] = {
     "mosaic/actor": {"employee_id": "E1042", "source": "explicit"},
     "mosaic/retrieval": {"strategy": None, "k_override": None},
 }
-
-
-def free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
 
 
 @asynccontextmanager
@@ -54,29 +47,11 @@ async def stdio_session() -> AsyncIterator[ClientSession]:
 
 @asynccontextmanager
 async def http_session() -> AsyncIterator[ClientSession]:
-    """A session against `build_mounted_app()` on loopback — the graded topology, minus `web/`."""
-    from sse_starlette.sse import AppStatus
-
-    from hrmosaic.mcpserver.asgi import build_mounted_app
-
-    # `sse_starlette.AppStatus.should_exit` is a process-global latch: stopping one uvicorn sets it
-    # and every later SSE stream in the process drains immediately. One server per process is the
-    # only case its authors had in mind; a test module starts several, so the latch is cleared here.
-    AppStatus.should_exit = False
-    port = free_port()
-    server = uvicorn.Server(uvicorn.Config(build_mounted_app(), host="127.0.0.1", port=port, log_level="warning"))
-    serving = asyncio.create_task(server.serve())
-    try:
-        while not server.started:
-            await asyncio.sleep(0.02)
-        url = f"http://127.0.0.1:{port}/mcp-server/mcp"
+    """A `ClientSession` against that mount, connected with the SDK's Streamable HTTP client."""
+    async with mounted_server() as url:
         async with streamable_http_client(url) as (read, write), ClientSession(read, write) as session:
             await session.initialize()
             yield session
-    finally:
-        server.should_exit = True
-        await serving
-        AppStatus.should_exit = False
 
 
 #: The two transports every discovery and tool-call test runs against.

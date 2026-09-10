@@ -276,3 +276,42 @@ rather than assumed.
   §8.4 instead of defining the contract, and `tests/contract/test_rules_grammar_matches_spec.py` fails
   if the spec and `mcpserver/rules.py`'s own vocabularies ever drift apart — in either direction. No
   runtime behaviour changed; `src/` is byte-identical.
+
+## 2026-09-10 — P7 agent/ (orchestrator, guardrails, workflows)
+
+- **`python scripts/probe_provider.py` — PASS, re-run 2026-09-10 against P7's real system prompt.**
+  The probe no longer carries a hand-written stand-in: `SYSTEM_PROMPT` is now
+  `agent/prompts/act.j2`'s rendered **system** block, the longest of the three and the one every act
+  step of every turn sends, so the number below is the prefix that actually ships.
+- **Measured cacheable prefix: 3523 tokens** (`messages.count_tokens` over *tools → system*, the
+  nine committed `mcp/tools/*.schema.json` as published plus the real act system prompt), against
+  `claude-haiku-4-5`'s **4096-token minimum cacheable prefix**. Still **below** the floor by ~570
+  tokens, so the cache assertion is **not armed** and both calls reported
+  `cache_creation_input_tokens: 0` / `cache_read_input_tokens: 0` — the silent no-op §9.8 predicts.
+  P6 measured 2172 with its own shorter stand-in prompt; the rest of the rise is P5's full tool
+  descriptions, which the probe now reads from the committed schemas. **The prompt was deliberately
+  not padded to clear the floor**: §9.8 makes caching best-effort and asserts nothing, and a system
+  prompt written to hit a token count would be a worse prompt. Both calls returned schema-valid JSON
+  (`in=3830 out=64`, ≈ $0.0042 each) and the `gemini-3.5-flash-lite` judge returned schema-valid JSON
+  through strict `response_format`. Total live spend for the re-measure: **under one cent**.
+- **The root-combinator strip is now shared, not Anthropic-only.** `get_policy_section` publishes a
+  root `oneOf` (§8.4) and Gemini's OpenAI-compatible layer refuses one on
+  `tools[].function.parameters` exactly as the Messages API refuses it on `input_schema` — and Gemini
+  is *both* the judge and the agent's failover, so a stripper in one adapter would have sent the
+  refused schema on precisely the path a live demo falls back to. `base.py` now owns
+  `ROOT_COMBINATOR_KEYS` / `without_root_combinators()` and both adapters call it;
+  `tests/unit/test_openai_compat_tool_schema.py` asserts it against the committed schemas and on the
+  real wire for both adapters.
+- **The confirmation gate can only be observed over the mounted HTTP transport.** The gate reads and
+  writes `confirmations` / `mock_writes` in the **trace store**, and `mcp/server_entrypoint.py
+  --stdio` is a separate OS process with a store of its own — so a stdio test asserting "no
+  `mock_writes` row" would be counting a table the server never touched. `tests/conftest.py` grew a
+  `mounted_mcp_url` fixture for that reason and both confirmation tests use it; everything else keeps
+  the stricter stdio subprocess.
+- **Two ambiguities in §9.1 resolved, both recorded in the P7 report:** the out-of-scope refusal and
+  the G5 escalation are produced **deterministically** rather than by a synthesis call (there is no
+  evidence to synthesize from, and G1 forbids answering from parametric knowledge), and a turn whose
+  router intent is `action` is not closed by a workflow completion predicate before it has proposed
+  the write the user asked for in words — otherwise `pto_request.is_complete`, which a cited answer
+  alone satisfies, would end demo task 2 one step before its confirmation gate.
+- **Suite after P7: 923 tests, `make lint` clean, `pytest -q` pristine, ~33 s** (from 781 at P5).

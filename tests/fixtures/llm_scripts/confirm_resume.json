@@ -1,0 +1,71 @@
+{
+  "scenario": "confirm_resume",
+  "_note": "A PTO request that reaches the confirmation gate and is picked up again after a human confirms (spec §8.6, §9.1). Route, three act steps, the gated create_mock_hr_ticket, then — after resume_turn re-issues that one call with the token — a single synthesize. The synthesized citations are real chunk ids from the committed index. Used by tests/integration/test_resume_rehydrates_from_the_store.py; P8's own /chat/confirm lifecycle test brings its own fixture.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1120,
+      "completion_tokens": 96
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {"id": "toolu_cr_1", "name": "lookup_employee_profile", "args": {"employee_id": "E1042"}},
+        {"id": "toolu_cr_2", "name": "check_pto_balance", "args": {"employee_id": "E1042", "as_of": "2026-09-15"}}
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1380,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_cr_3",
+          "name": "search_policy_documents",
+          "args": {"query": "PTO request advance notice manager approval blackout", "k": 5}
+        },
+        {
+          "id": "toolu_cr_4",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1042",
+            "parameters": {"days": 3, "start_date": "2026-09-15"}
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 2410,
+      "completion_tokens": 118
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_cr_5",
+          "name": "create_mock_hr_ticket",
+          "args": {
+            "employee_id": "E1042",
+            "queue": "hr-timeoff",
+            "summary": "PTO request 15-17 Sep 2026 (3 days)",
+            "details": "Three days of PTO from 15 to 17 September 2026, requested through the HR copilot.",
+            "priority": "normal"
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 3120,
+      "completion_tokens": 104
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO is requested in MosaicOne and needs your manager's approval; the standard notice is five business days ahead of the first day off.\", \"citations\": [\"c_16186f87d12c1302\", \"c_d57a7964d974ba44\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Balance-aware and cited; the ticket was opened after confirmation.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 4210,
+      "completion_tokens": 108
+    }
+  ]
+}

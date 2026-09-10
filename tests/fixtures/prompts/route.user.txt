@@ -1,0 +1,3 @@
+ACTING PERSONA: E1042 (explicit). Employee data is a synthetic snapshot; state the as_of date a tool reports whenever you quote a balance, an accrual or an eligibility date.
+
+QUESTION: I want to work from Berlin from 3 November to 14 December 2026 — can I?

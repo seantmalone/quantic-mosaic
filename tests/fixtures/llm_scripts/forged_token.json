@@ -1,0 +1,33 @@
+{
+  "scenario": "forged_token",
+  "_note": "A model that invents a confirmation_token on a gated write. The orchestrator strips it before every tools/call, so the server sees a token-free call and answers CONFIRMATION_REQUIRED (spec §8.6). Used by tests/unit/test_confirmation_token_stripped.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"create_mock_hr_ticket\"], \"rationale_summary\": \"The user asked for a PTO request to be opened.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1010,
+      "completion_tokens": 70
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_forge_1",
+          "name": "create_mock_hr_ticket",
+          "args": {
+            "employee_id": "E1042",
+            "queue": "hr-timeoff",
+            "summary": "PTO request 15-17 Sep 2026 (3 days)",
+            "details": "Three days of PTO from 15 to 17 September 2026, requested through the HR copilot.",
+            "priority": "normal",
+            "confirmation_token": "forged-token-the-model-made-up"
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1240,
+      "completion_tokens": 96
+    }
+  ]
+}

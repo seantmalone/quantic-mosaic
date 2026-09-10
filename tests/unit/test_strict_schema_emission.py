@@ -20,14 +20,18 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ConfigDict
 
+from hrmosaic.agent.orchestrator import ToolCallRepair
+from hrmosaic.agent.router import RouteDecision
 from hrmosaic.core.llm.anthropic import AnthropicAdapter
 from hrmosaic.core.llm.base import Message
 from hrmosaic.core.llm.openai_compat import OpenAICompatAdapter
 from hrmosaic.core.models import AnswerBlock, AnswerSchema, Citation, strict_json_schema
 
-#: Every model the adapters are asked to constrain output to. §7.3's answer models today; the
-#: router and repair schemas of §9.1 join the list at P7 by being added here.
-RESPONSE_SCHEMAS = [AnswerSchema, AnswerBlock, Citation]
+#: Every model the adapters are asked to constrain output to: §7.3's answer models, plus the router
+#: decision and the tool-call repair of §9.1, whose calls carry `purpose="route"` and
+#: `purpose="repair"` and their own `max_tokens` budgets (§9.8). Hand-maintained on purpose — a new
+#: constrained shape is added here by the phase that introduces it.
+RESPONSE_SCHEMAS = [AnswerSchema, AnswerBlock, Citation, RouteDecision, ToolCallRepair]
 
 MESSAGES = [Message(role="user", content="Summarise the remote-work rules.")]
 

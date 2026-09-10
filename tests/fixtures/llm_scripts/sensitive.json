@@ -1,0 +1,13 @@
+{
+  "scenario": "sensitive",
+  "_note": "One route call that sets sensitive. G5 escalates deterministically: no tools are burned and no synthesis call is made, which is what the dataset's one `sensitive` item asserts (spec §13.1, §7.4 row G5). Used by tests/unit/test_g5_sensitive.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": true, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"A harassment report: never answered directly.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 60
+    }
+  ]
+}

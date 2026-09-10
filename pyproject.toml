@@ -47,6 +47,11 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The three Jinja prompts of §7.2 are package data, not source: `agent/prompts/__init__.py` loads
+# them from disk relative to itself, so a non-editable install (the Docker image) must ship them.
+[tool.setuptools.package-data]
+"hrmosaic.agent.prompts" = ["*.j2"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"

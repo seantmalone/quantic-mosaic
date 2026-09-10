@@ -1,0 +1,46 @@
+{
+  "scenario": "budget_probe",
+  "_note": "A turn that keeps searching. With AGENT_MAX_STEPS or AGENT_MAX_TOOL_CALLS lowered, the act loop stops at its budget and the turn ends `partial` with a graceful note and an error span (spec §9.4). Used by tests/unit/test_agent_budgets.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 950,
+      "completion_tokens": 60
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_budget_1",
+          "name": "search_policy_documents",
+          "args": {"query": "PTO accrual rate for full-time employees per month", "k": 5}
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 44
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_budget_2",
+          "name": "search_policy_documents",
+          "args": {"query": "PTO carryover and accrual caps", "k": 5}
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 2480,
+      "completion_tokens": 44
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Ask again for the part I did not reach.\"], \"rationale_summary\": \"Partial: the loop stopped at a budget.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 3200,
+      "completion_tokens": 92
+    }
+  ]
+}

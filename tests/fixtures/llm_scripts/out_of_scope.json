@@ -1,0 +1,13 @@
+{
+  "scenario": "out_of_scope",
+  "_note": "One route call that sets out_of_scope, and nothing after it: the turn refuses and redirects with zero tools/call (spec §9.2, §7.4 row G1). Used by tests/unit/test_g1_evidence_gate.py. The second entry is never reached on the pre-check path, where no model call happens at all.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": true, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [], \"rationale_summary\": \"Not a Mosaic Robotics HR question.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 940,
+      "completion_tokens": 58
+    }
+  ]
+}

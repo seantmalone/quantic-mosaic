@@ -1,0 +1,41 @@
+{
+  "scenario": "rag_only",
+  "_note": "A pure policy question routed `policy_qa`, where the model ALSO asks for a people-data tool it was never offered. The router gate of spec §9.2 restricts the catalog to tools 1-4 and the orchestrator refuses the un-offered call at the boundary, so the turn makes zero non-RAG tool calls. Used by tests/e2e/test_rag_only_makes_no_people_calls.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 62
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {"id": "toolu_rag_1", "name": "lookup_employee_profile", "args": {"employee_id": "E1042"}},
+        {
+          "id": "toolu_rag_2",
+          "name": "search_policy_documents",
+          "args": {"query": "PTO accrual rate for full-time employees per month", "k": 5}
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "response_text": "The accrual table answers this without any employee record.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2480,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Check your own balance with the HR copilot if you want the number for your record.\"], \"rationale_summary\": \"Answered from the PTO accrual table alone.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 2610,
+      "completion_tokens": 92
+    }
+  ]
+}
