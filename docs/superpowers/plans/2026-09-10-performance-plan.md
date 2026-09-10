@@ -528,8 +528,9 @@ paired per-item deltas and deterministic span-level invariants, with the quantil
 | `after` Wave 1 | 2 | 52 | ~188 | store/embed invariants + limiter zero |
 | `after` Wave 2 | 3 | 78 | ~282 | the p95 claims need the extra n |
 
-Cost per sweep: ~$0.47 of Haiku (`cost_usd_estimate` of the committed run) + 264 free Gemini judge
-calls. Three sweeps ≈ $1.41 + ~790 judge calls; budget the judge's `JUDGE_RPM=10` pacing (~9 min/arm)
+Cost per sweep: ~$0.47 of Haiku (`cost_usd_estimate` of the committed run) + 264 billed Gemini judge
+calls at ≈ $0.16 (the judge project has been on paid billing since 2026-09-10). Three sweeps ≈ $1.41
+of Haiku + ≈ $0.48 of judge over ~790 judge calls; budget the judge's `JUDGE_RPM=10` pacing (~9 min/arm)
 and its recorded 429s.
 
 ### 5.2 Fixed conditions (all runs)

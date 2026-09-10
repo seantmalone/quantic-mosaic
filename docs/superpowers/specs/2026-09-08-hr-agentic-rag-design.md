@@ -1299,7 +1299,8 @@ plain answer saying the daily model budget is exhausted; `/health.llm.agent` rep
 string** — that vocabulary stays at exactly five (§11.4). The token-bucket limiter (`LLM_RPM` 10 / `LLM_BURST`) is unchanged and orthogonal to the cap.
 
 **Expected spend.** A full three-variant evaluation sweep is roughly **300–450 Haiku calls** at ~5 K input tokens (largely cache reads) and ~400 output
-tokens ⇒ **$2–4**; development and demo rehearsals add a few dollars more; **total expected under $10**. The judge and the failover path cost nothing.
+tokens ⇒ **$2–4**; development and demo rehearsals add a few dollars more; **total expected under $10**. The **failover** path costs nothing — its Cloud project is still on a free key — while the **judge** has cost
+**≈ $0.16 per 264-call pass** since paid billing was enabled on its project on 2026-09-10, which the under-$10 total already absorbs.
 
 Every adapter emits exactly one `llm_call` span per call plus its `llm_messages` rows, with `provider`, `model`, `purpose`, tokens (including
 `cache_creation_input_tokens` / `cache_read_input_tokens`), `cost_usd_estimate`, `ttfb_ms`, `finish_reason`, `retry_count`, `cache_hit`,

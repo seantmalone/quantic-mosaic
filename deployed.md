@@ -294,17 +294,21 @@ here. An unenforced constraint is recorded as a **warning, not a failure**: ever
 output: 5.00, cache_write: 1.25, cache_read: 0.10}` — so no change was needed, and every
 `cost_usd_estimate` on an `llm_call` span is computed from the prices above.
 
-**What the unverified Gemini figure does and does not affect.** §13.9 is explicit that the Gemini
-RPD/TPM arithmetic bounds **only the judge and the failover path**; what bounds the agent is
-`LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per UTC day) and the prompt cache. The P10 sweep issued
-its judge calls behind the same token-bucket limiter as everything else (`LLM_RPM = 10` — the code
-default, which is what the harness process runs; the deployed service has been configured at
-`LLM_RPM=60` / `LLM_BURST=30` since 2026-09-10, on the Anthropic account's own 10,000 RPM / 10M
+**What the unverified Gemini figure does and does not affect.** §13.9 is explicit that the
+**free-tier** Gemini RPD/TPM arithmetic bounds **only the failover path**. It no longer bounds the
+judge: the judge's Cloud project moved to paid billing on 2026-09-10, so what bounds the judge is
+the **≈ $0.16 a 264-call pass** costs (the cost row above) and the wall clock, not a free daily
+request cap. What bounds the agent is `LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per UTC day) and
+the prompt cache. The failover project is the one still on a free key, and it is exercised only
+when an Anthropic call fails — each such call recorded as `provider_failover` on the span — so the
+unverified figure sits on the path where it can affect nothing a published run depends on. The P10
+sweep issued its judge calls behind the same token-bucket limiter as everything else (`LLM_RPM = 10`
+— the code default, which is what the harness process runs; the deployed service has been configured
+at `LLM_RPM=60` / `LLM_BURST=30` since 2026-09-10, on the Anthropic account's own 10,000 RPM / 10M
 input-tokens-per-minute limits read from response headers that day, after the deployed sweep
-recorded a 3.9 s/turn mean of bucket waiting at 10, p90 12.2 s — so ≤ 600 judge
-calls/hour against a reported 15 RPM ceiling) and the observed behaviour — how many judge calls the
-run made and whether any `429` / `Retry-After` was seen — is recorded in `CHANGELOG.md` and in the
-run's `eval_runs.notes`. That observation is the honest substitute for a number this environment
+recorded a 3.9 s/turn mean of bucket waiting at 10, p90 12.2 s), and the observed behaviour — how
+many judge calls the run made and whether any `429` / `Retry-After` was seen — is recorded in
+`CHANGELOG.md` and in the run's `eval_runs.notes`. That observation is the honest substitute for a number this environment
 could not read. **P11 step 0 re-read the row on 2026-09-10 and it is still unpublished**: the AI
 Studio rate-limit page still requires an authenticated session that this environment does not have.
 `pending: an authenticated AI Studio session`.
