@@ -1,0 +1,114 @@
+# Optimization log — output quality and performance
+
+A dated engineering log of every optimization question asked about the Mosaic HR Copilot, the
+evidence gathered, the decision taken, and what it changed. It exists so the work can be reported
+on and spoken to in the demo. Newest entries are at the bottom; each entry names its evidence
+(a run id, a trace query, a Render log line, a script) so a reader can check it.
+
+Conventions: times are UTC; run ids are the `evaluation/results/r_*.json` files; "local" is the
+developer laptop, "deployed" is the Render free instance at 0.1 vCPU / 512 MB.
+
+---
+
+## 2026-09-10 — Output quality: where Haiku falls short, and the seven mitigations
+
+**Question.** The judged local baseline (`r_1789032950_baseline`) scored strict pass 0.654 against
+the 0.85 target. Which failures are the model's, which are the orchestration's, and what should
+change?
+
+**Evidence.** Per-item spans and `llm_messages` for the eight strict failures; the deployed
+baseline (`r_1789055103_baseline`) fails the same eight items for the same causes, so the local
+traces stand as evidence for the deployed numbers.
+
+| Item | Failing clause | Cause found in the trace |
+|---|---|---|
+| equipment-001 | tool-recall, doc-recall, workflow, behaviour | Router guessed `out_of_scope` — the route prompt never says what the corpus contains |
+| pto-002 | one G2 block dropped | The model cited a tool result (`check_pto_balance`) because the synthesis rules demand a citation on every fact and never exempt employee data |
+| remote-002, expenses-002 | `min_distinct_docs: 3` | One search reached two documents; the only breadth mechanism fires on routed workflows, and these routed as policy QA |
+| remote-003 | tool-recall, workflow, behaviour | G1 refused; the recovery step re-ran with no message explaining why, and was spent without a search |
+| pto-003, unsafe-001 | workflow end state | `pto_request` lists the employee profile as a slot but its completion predicate never required the lookup |
+| amb-003 | clarification | Router named one missing detail; the dataset expects both |
+
+**Decision (Sean, 2026-09-10): implement all seven.** R1 corpus list in the route prompt; R2 "tool
+results carry no citation" synthesis rule; R3 a once-per-turn breadth reminder; R4 a message on the
+G1 recovery step; R5 `pto_request` requires the profile lookup; R6 name every missing detail; R7 G1
+scores compliance-engine evidence on the same dense path as retrieval (thresholds unchanged).
+Rejected: few-shot tool sequences in the act prompt (the exemplar would score the ToolSelection
+metric), `k` guidance (the harness overrides `k`), and editing dataset expectations to fit answers.
+
+**Comparability protocol.** Judge the pre-change deployed baseline first (quota permitting) so the
+report has a judged "before" column; re-drive all three deployed arms after the change; disclose
+that R5 changes what the `no_structured_tools` arm disables; report the higher `nudge_rate` as a
+diagnostic, not a regression. Status: implementation wave P13 in progress.
+
+---
+
+## 2026-09-10 — Readiness defect found while measuring cold start
+
+**What the measurement showed.** Render did spin the free instance down: its own health-check log
+lines stop at 17:20:59Z, ~15 min after the last inbound request, and a fresh container logs
+"Started server process" at 17:29:05Z; the probe's first `/health` answered at 17:29:11Z, ≈49 s
+after the idle ended. But `/ready` stayed 503 for the life of the process with
+`warm-up call failed: … SSE stream ended without a response`, while `/chat` answered normally.
+
+**Cause.** The in-process MCP client built its HTTP client with httpx2's default 5-second timeout;
+the SDK's own factory uses 30 s connect and 300 s read because a Streamable HTTP response stream is
+held open until the result arrives. On 0.1 vCPU the first embedding call (ONNX session load) takes
+longer than 5 s, the loopback stream timed out, and the one-shot warm-up latched readiness false.
+Locally the model loads in 2.6 s, so no local gate ever saw it. Nothing in the deploy path checked
+`/ready`, so the whole published sweep ran against an instance reporting `ready: false`.
+
+**Fix (P11c, commit 395036d).** Loopback timeouts set to the SDK's 30 s / 300 s-read values; the
+warm-up call retries inside `READY_WARMUP_TIMEOUT_S`; `scripts/smoke_deployed.py` now fails a
+deploy whose `/ready` never greens. Verification: the next deploy's `/ready`, then the re-measured
+three cold probes (pending).
+
+---
+
+## 2026-09-10 — Performance: "is it the CPU?"
+
+**Question.** A warm `POST /chat` on the free instance took 26.3 s for a two-tool question; the
+spec's §14.4 table expected 1.5–5 s. Is the 0.1 vCPU the cause, and what would it cost to fix?
+
+**Evidence.** The two 26-item baseline runs, one local and one deployed, summed by span kind.
+
+| Per turn (26 items) | Local | Deployed |
+|---|---|---|
+| Latency p50 | 17.7 s | 17.6 s |
+| Latency p95 | 42.4 s | 47.7 s |
+| LLM calls (Haiku) | 13.4 s | 13.6 s |
+| Retrieval (embed + search) | 0.05 s | 0.80 s |
+| Tool bodies | 0.08 s | 0.89 s |
+| Trace-store writes | ~0 | 0.06 s |
+
+**Conclusion.** The free instance is ~15× slower on CPU-bound work, but that work is under two
+seconds of an ~18-second turn; roughly three quarters of every turn is waiting on the model
+(router → act steps → synthesis, each a few seconds, none cached because the static prefix sits
+below Haiku's 4,096-token caching floor). The 26.3 s probe sits inside the same band both runs
+show. The §14.4 expectation was written for a stub-model turn and is to be corrected. A paid CPU
+tier would buy back ≈1.5 s per turn plus the removal of cold starts; it would not touch the model
+time. Adversarial verification of this attribution and a priced options table: in progress.
+
+---
+
+## 2026-09-10 — Deep performance assessment (in progress)
+
+Method: (1) anatomy of every LLM call in the deployed run from its traces (calls per role, tokens,
+latency, a fitted latency model); (2) a map of the turn's serial structure from the code; (3) a
+budgeted live latency probe of Haiku (input tokens, output tokens, JSON-schema output, prompt
+caching); (4) three independent proposals from different angles (fewest round-trips, per-call
+latency, infra and overlap); (5) two adversarial reviewers per lever (latency realism; quality and
+grading risk); (6) one ordered plan in waves — zero-cost/no-spec-change, zero-cost/re-evaluated,
+paid/owner-approval. Results and the plan will be appended here and filed under
+`docs/superpowers/plans/`.
+
+---
+
+## Demo talking points (to be finalised)
+
+- Every optimization claim in this project is traceable to a run id and a span query; the
+  dashboard shows the same traces the analysis used.
+- The readiness defect is a good story: the instance passed every smoke and the whole evaluation
+  while `/ready` was wrong, and only a measurement designed to fail honestly (refusing to publish a
+  timeout as a number) exposed it.
+- "Is it the CPU?" — the intuitive answer was wrong; two full runs settled it in one table.
