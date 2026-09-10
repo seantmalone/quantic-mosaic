@@ -179,7 +179,7 @@ every P13 and performance change is measured against.
 
 ---
 
-## 2026-09-10 — Deep performance assessment (in progress)
+## 2026-09-10 — Deep performance assessment: the plan
 
 Method: (1) anatomy of every LLM call in the deployed run from its traces (calls per role, tokens,
 latency, a fitted latency model); (2) a map of the turn's serial structure from the code; (3) a
@@ -189,6 +189,21 @@ latency, infra and overlap); (5) two adversarial reviewers per lever (latency re
 grading risk); (6) one ordered plan in waves — zero-cost/no-spec-change, zero-cost/re-evaluated,
 paid/owner-approval. Results and the plan will be appended here and filed under
 `docs/superpowers/plans/`.
+
+**Result (49 agents; plan filed at `docs/superpowers/plans/2026-09-10-performance-plan.md`).** Every
+lever was proposed from one of three angles, then put through two adversarial reviewers (latency
+realism; quality and grading risk); only levers both kept survive, at the reviewers' figures.
+
+| Wave | What it contains | Predicted p50 / p95 after | Cost | Needs |
+|---|---|---|---|---|
+| Baseline | — | 17.6 s / 47.7 s | — | — |
+| 1 · zero cost, no graded change | rate-limiter hygiene (measurement only; 0 ms interactive), query-embedding memo (−0.3 s), trace store off the request path (−0.1 s) | 13.7 s / 35.2 s | $0 | docs updates only |
+| 2 · zero cost, changes graded behaviour | act loop stops writing a throw-away 224-token answer (−1.5 s), synthesis output diet (−0.5 s), full chunk text on search hits so a fetch step disappears (−0.4 s), input diet (cost only), streaming the answer (first prose 3 s sooner at p50, 17 s at p95) | 11.4 s / 33.1 s | $0 | a new sweep + judge + labels; one spec non-goal reversed for streaming |
+| 3 · paid | Render Starter 0.5 CPU ≈ −0.45 s; keep-alive pinger | not credited | $7/month | owner approval; not recommended |
+
+The largest single interactive win is in Wave 2: nearly half of all act-loop output tokens are a
+closing answer that nothing reads. Wave 1 is being implemented in the final fix wave (P14); Wave 2
+awaits Sean's decision because it re-drives the evaluation and re-labels.
 
 ---
 
