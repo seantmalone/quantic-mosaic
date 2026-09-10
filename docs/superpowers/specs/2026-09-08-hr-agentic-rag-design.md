@@ -1654,7 +1654,11 @@ gated route is then 403, so the deployment is unusable and says so).
 
 `GET /ready` returns **503** `{"ready": false, "reason": …}` until the ONNX model and index are resident, then 200. Warm-up is a startup task issuing
 **one loopback `tools/call`**, never a direct `rag.embed` import, so readiness exercises the same wire the agent uses; `EMBED_WARMUP=0` skips it, which
-is what CI's health-only steps use. `tests/integration/test_health_mcp_down.py` points the client at a dead port and asserts `/health` is 200,
+is what CI's health-only steps use. The loopback client sets that call's transport timeouts explicitly — **30 s** connect/write/pool and a **300 s
+read**, the numbers the SDK's own client factory uses — because a Streamable HTTP response stream is held open until the result arrives, and httpx2's
+5 s default read timeout expires while the first embedding loads the ONNX session on a 0.1-CPU instance. The handshake **and** the call both retry
+inside the single `READY_WARMUP_TIMEOUT_S` deadline, checked between attempts and never cancelling a call already on the wire, so one slow first call
+cannot latch `/ready` at 503 for the life of the process. `tests/integration/test_health_mcp_down.py` points the client at a dead port and asserts `/health` is 200,
 `degraded`, with `mcp_disconnected` listed.
 
 ### 11.5 Chat UI (R6.2, R6.5)

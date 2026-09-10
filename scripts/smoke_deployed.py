@@ -2,7 +2,7 @@
 
     python scripts/smoke_deployed.py --url "$DEPLOY_URL"
 
-The last step of CI's `deploy` job, and an acceptance gate of P11. It answers three questions that
+The last step of CI's `deploy` job, and an acceptance gate of P11. It answers four questions that
 `assert_health.py` cannot ask of a local container:
 
 1. **Is this a real build?** `/health.app.git_sha` must not be `"dev"`. §12.3 resolves
@@ -13,6 +13,11 @@ The last step of CI's `deploy` job, and an acceptance gate of P11. It answers th
    `APP_ENV=render` with no `APP_ACCESS_TOKEN`, which 403s every gated route — the service would be
    live and useless (§11.4). Every *other* degradation is tolerated: a missing judge key or an
    unreachable trace store degrades a feature, not the deployment.
+4. **Did the warm-up finish?** `GET /ready` must reach 200 within `--ready-timeout` (default 600 s,
+   `SMOKE_READY_TIMEOUT_S`). Nothing in the deploy path used to ask: `/ready` was 503 on the live
+   instance for every deploy up to P11c — the warm-up `tools/call` read-timed-out after five
+   seconds on a 0.1-CPU worker and was never retried — while `/health` said `ok` and `POST /chat`
+   answered, so the smoke was green the whole time. A failure here quotes the `reason` field.
 
 **The bearer check is opportunistic by design.** `APP_ACCESS_TOKEN` is deliberately *not* a CI
 secret (§15.2), so in the `deploy` job this script makes no gated call and says so. Run locally
@@ -31,6 +36,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -44,6 +50,18 @@ UNAUTHENTICATED_STATUS = 401
 
 #: `--url ""` is what an unset `DEPLOY_URL` secret expands to in CI.
 URL_SCHEMES = ("http://", "https://")
+
+#: How long `/ready` has to green. A cold free-tier instance spends its first minutes loading the
+#: ONNX model on a 0.1 CPU, and the warm-up itself retries inside `READY_WARMUP_TIMEOUT_S`, so this
+#: is generous on purpose: the check exists to catch a readiness that never arrives, not a slow one.
+READY_TIMEOUT_S = 600.0
+
+#: The environment override, for a caller who wants a shorter wait than the deploy job's.
+READY_TIMEOUT_ENV = "SMOKE_READY_TIMEOUT_S"
+
+#: How long between polls. `/ready` is an open route and answers from process state, so this is
+#: paced for politeness rather than for cost.
+READY_POLL_S = 5.0
 
 
 class BadUrl(ValueError):
@@ -112,11 +130,60 @@ def gate_problems(url: str, token: str, timeout_s: float) -> list[str]:
     return found
 
 
-def main(argv: list[str] | None = None) -> int:
+def ready_timeout_default() -> float:
+    """`SMOKE_READY_TIMEOUT_S` when it parses as a number, else `READY_TIMEOUT_S`.
+
+    A malformed value falls back rather than ending the deploy job in an argparse traceback: the
+    wait is a convenience knob, and no deployment fact depends on which number it took.
+    """
+    try:
+        return float(os.environ[READY_TIMEOUT_ENV])
+    except (KeyError, ValueError):
+        return READY_TIMEOUT_S
+
+
+def _ready_reason(status: int, body: bytes) -> str:
+    """`/ready`'s own `reason`, or the bare status when the body is not the documented JSON."""
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return f"HTTP {status}"
+    reason = payload.get("reason") if isinstance(payload, dict) else None
+    return f"HTTP {status}: {reason}" if reason else f"HTTP {status}"
+
+
+def ready_problems(url: str, *, wait_s: float, request_timeout_s: float, poll_s: float = READY_POLL_S) -> list[str]:
+    """Poll `GET /ready` until it answers 200, or report the last `reason` it gave (§11.4).
+
+    The deadline is checked after a poll, so `wait_s=0` still asks once — a bounded wait, never a
+    single-shot check that would fail every genuinely cold instance.
+    """
+    deadline = time.monotonic() + wait_s
+    while True:
+        status, body = _get(f"{url.rstrip('/')}/ready", None, request_timeout_s)
+        if status == 200:
+            return []
+        reason = _ready_reason(status, body)
+        if time.monotonic() >= deadline:
+            return [f"/ready never returned 200 within {wait_s:g}s — last answer: {reason}"]
+        time.sleep(poll_s)
+
+
+def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", required=True, help="base URL of the deployed instance")
     parser.add_argument("--timeout", type=float, default=60.0, help="seconds to allow each request")
-    arguments = parser.parse_args(argv)
+    parser.add_argument(
+        "--ready-timeout",
+        type=float,
+        default=ready_timeout_default(),
+        help=f"seconds to wait for /ready to answer 200 (default {READY_TIMEOUT_S:g}, {READY_TIMEOUT_ENV})",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = parse_arguments(argv)
     try:
         base = require_base_url(arguments.url)
     except BadUrl as exc:
@@ -143,6 +210,14 @@ def main(argv: list[str] | None = None) -> int:
 
     found = health_problems(payload)
 
+    try:
+        ready = ready_problems(base, wait_s=arguments.ready_timeout, request_timeout_s=arguments.timeout)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        # `/health` answered a moment ago, so an instance that drops now is a failed smoke.
+        ready = [f"the /ready check could not complete: {exc}"]
+    found += ready
+    print("  /ready: never green — see below" if ready else "  /ready: 200")
+
     token = os.environ.get("APP_ACCESS_TOKEN")
     if token:
         try:
@@ -162,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         for problem in found:
             print(f"  - {problem}", file=sys.stderr)
         return 1
-    print(f"\nOK — {base} is serving a real build with its MCP server connected.")
+    print(f"\nOK — {base} is serving a real build with its MCP server connected, and /ready is green.")
     return 0
 
 

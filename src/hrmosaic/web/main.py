@@ -68,6 +68,12 @@ MAINTENANCE_INTERVAL_S = 6 * 60 * 60
 #: How long the warm-up waits between attempts while uvicorn finishes binding its socket.
 WARMUP_POLL_S = 0.2
 
+#: How long the warm-up waits between `tools/call` attempts. Longer than `WARMUP_POLL_S`, which
+#: paces a handshake against a socket that is not listening yet: a retried call has already reached
+#: the server, and on a 0.1-CPU instance an immediate second attempt would only pile another cold
+#: embed onto the CPU the first one is still using.
+WARMUP_RETRY_S = 1.0
+
 #: The one warm-up call. `search_policy_documents` is the only tool that touches both halves of
 #: what `/ready` promises: the ONNX model (the query embedding) and the index (the search).
 WARMUP_TOOL = "search_policy_documents"
@@ -135,7 +141,15 @@ def _maintenance_pass(settings: Settings) -> None:
 
 
 async def _warm_up(app: FastAPI) -> None:
-    """`/ready` goes green after **one** loopback `tools/call` (§11.4)."""
+    """`/ready` goes green after **one** loopback `tools/call` (§11.4).
+
+    One successful call, but not one attempt: the handshake and the call share the single
+    `READY_WARMUP_TIMEOUT_S` deadline and both retry inside it. Without that, one dropped stream on
+    the first (and slowest) call latched `ready = False` for the life of the process while
+    `/health` stayed `ok` and `/chat` answered — the defect P11c fixes. The deadline is checked
+    **between** attempts only: a call already on the wire is bounded by the transport's read
+    timeout and is never cancelled, because it is the one loading the ONNX session.
+    """
     settings: Settings = app.state.settings
     if not settings.embed_warmup:
         app.state.ready = True
@@ -161,16 +175,21 @@ async def _warm_up(app: FastAPI) -> None:
     session = SessionSpec(client_label="maintenance", employee_id=None)
     buffer = trace_module.start_turn(session, user_message="startup warm-up")
     try:
-        result = await client.call_tool(
-            buffer, name=WARMUP_TOOL, arguments=dict(WARMUP_ARGUMENTS), employee_id=api.DEFAULT_ACTOR
-        )
-        if result.is_error:
-            app.state.ready_reason = f"warm-up call failed: {result.text[:200]}"
-            return
-        app.state.ready = True
-        app.state.ready_reason = None
-    except Exception as exc:
-        app.state.ready_reason = f"warm-up call failed: {exc}"
+        while True:
+            try:
+                result = await client.call_tool(
+                    buffer, name=WARMUP_TOOL, arguments=dict(WARMUP_ARGUMENTS), employee_id=api.DEFAULT_ACTOR
+                )
+                if not result.is_error:
+                    app.state.ready = True
+                    app.state.ready_reason = None
+                    return
+                app.state.ready_reason = f"warm-up call failed: {result.text[:200]}"
+            except Exception as exc:
+                app.state.ready_reason = f"warm-up call failed: {exc}"
+            if loop.time() >= deadline:
+                return
+            await asyncio.sleep(WARMUP_RETRY_S)
     finally:
         buffer.close(outcome="maintenance", stop_reason="maintenance")
 

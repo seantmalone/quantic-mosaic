@@ -273,6 +273,70 @@ def test_a_network_fault_during_the_gate_check_is_a_failed_smoke_not_a_traceback
             assert smoke_deployed.main(["--url", "https://x.onrender.com"]) == 1
 
 
+# --- smoke_deployed's `/ready` wait ---------------------------------------------------------
+#
+# `/ready` was permanently 503 on the deployed instance for every deploy up to P11c — the warm-up
+# `tools/call` timed out after five seconds on a 0.1-CPU worker and never retried — while `/health`
+# stayed `ok` and `POST /chat` answered. Nothing in the deploy path looked at `/ready`, so the
+# smoke was green throughout. It is not any more: the wait is bounded, and a failure names the
+# `reason` the endpoint itself reports.
+
+NOT_READY = json.dumps(
+    {"ready": False, "reason": "warm-up call failed: search_policy_documents could not be called: SSE stream ended"}
+).encode("utf-8")
+READY = json.dumps({"ready": True, "reason": None}).encode("utf-8")
+
+
+def _ready(answers: list[tuple[int, bytes]], wait_s: float) -> list[str]:
+    """Play `answers` back one poll at a time, the last one repeating; `poll_s=0` so nothing waits."""
+    replies = list(answers)
+    asked: list[str] = []
+
+    def fake_get(url: str, token: str | None, timeout_s: float) -> tuple[int, bytes]:
+        asked.append(url)
+        return replies.pop(0) if len(replies) > 1 else replies[0]
+
+    with mock.patch.object(smoke_deployed, "_get", fake_get):
+        found = smoke_deployed.ready_problems(
+            "https://x.onrender.com", wait_s=wait_s, request_timeout_s=5.0, poll_s=0.0
+        )
+    assert all(url == "https://x.onrender.com/ready" for url in asked), asked
+    return found
+
+
+def test_a_ready_that_greens_on_the_second_poll_passes_the_smoke():
+    """A cold free-tier instance is expected to answer 503 first; that is not a failure."""
+    assert _ready([(503, NOT_READY), (200, READY)], wait_s=30.0) == []
+
+
+def test_a_ready_that_never_greens_fails_the_smoke_and_quotes_its_reason():
+    reported = _ready([(503, NOT_READY)], wait_s=0.0)
+    assert len(reported) == 1
+    assert "SSE stream ended" in reported[0], reported[0]
+
+
+def test_a_ready_that_answers_something_other_than_json_still_fails_by_status():
+    reported = _ready([(502, b"<html>Bad Gateway</html>")], wait_s=0.0)
+    assert len(reported) == 1
+    assert "HTTP 502" in reported[0], reported[0]
+
+
+def test_the_ready_wait_is_ten_minutes_unless_the_environment_says_otherwise():
+    """`SMOKE_READY_TIMEOUT_S` is the knob; a value that is not a number falls back, never raises."""
+    with mock.patch.dict(smoke_deployed.os.environ, {}, clear=True):
+        assert smoke_deployed.ready_timeout_default() == smoke_deployed.READY_TIMEOUT_S == 600.0
+    with mock.patch.dict(smoke_deployed.os.environ, {"SMOKE_READY_TIMEOUT_S": "12"}):
+        assert smoke_deployed.ready_timeout_default() == 12.0
+    with mock.patch.dict(smoke_deployed.os.environ, {"SMOKE_READY_TIMEOUT_S": "soon"}):
+        assert smoke_deployed.ready_timeout_default() == 600.0
+
+
+def test_the_cli_carries_a_ready_timeout_flag():
+    with mock.patch.dict(smoke_deployed.os.environ, {"SMOKE_READY_TIMEOUT_S": "7"}):
+        assert smoke_deployed.parse_arguments(["--url", "https://x"]).ready_timeout == 7.0
+    assert smoke_deployed.parse_arguments(["--url", "https://x", "--ready-timeout", "1.5"]).ready_timeout == 1.5
+
+
 # --- an unset DEPLOY_URL secret -------------------------------------------------------------
 #
 # In the `deploy` job an unset `DEPLOY_URL` repository secret expands to the empty string, so both

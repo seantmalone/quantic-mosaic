@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx2
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
@@ -73,6 +74,11 @@ TRACE_KEY = "_trace"
 
 #: How long `close()` waits for the owning task to unwind before cancelling it.
 CLOSE_TIMEOUT_S = 10.0
+
+#: The loopback transport's timeouts, mirroring the SDK's own `create_mcp_http_client`: 30 s to
+#: connect, write and take a pool slot, and **300 s to read**. httpx2's default is `Timeout(5.0)`
+#: on all four phases, which is wrong for a StreamableHTTP `tools/call` (see `_http_client`).
+LOOPBACK_TIMEOUT = httpx2.Timeout(30.0, read=300.0)
 
 #: Tools 1–4 of §8.4 — the RAG tools, and the whole catalog for `intent == "policy_qa"` (§9.2).
 RAG_TOOLS: tuple[str, ...] = (
@@ -311,18 +317,22 @@ class McpClient:
             http_client=http_client,
         )
 
-    def _http_client(self) -> Any:
+    def _http_client(self) -> httpx2.AsyncClient | None:
         """A client carrying the access-gate header, or `None` to let the SDK build its own.
 
         The gate is P8's; this is the seam it plugs into, because `streamable_http_client` takes an
         `httpx2.AsyncClient` rather than a headers mapping (§11, the in-process MCP client sends
         `Authorization: Bearer` on `tools/list` and on every `tools/call`).
+
+        `LOOPBACK_TIMEOUT` is not optional here: on a 0.1-CPU free instance the first
+        `search_policy_documents` call loads the ONNX session before it embeds anything, so the
+        response stream stays silent for far longer than httpx2's 5 s default read timeout. A
+        StreamableHTTP response stream that is silent between bytes is not a dead stream — it is a
+        result still being computed — which is why the SDK's own factory reads for 300 s.
         """
         if not self._headers:
             return None
-        import httpx2
-
-        return httpx2.AsyncClient(headers=self._headers)
+        return httpx2.AsyncClient(headers=self._headers, timeout=LOOPBACK_TIMEOUT)
 
     # -- discovery ---------------------------------------------------------------------
     async def discover(self, turn: TurnBuffer | None = None) -> DiscoveredCatalog:
@@ -536,6 +546,7 @@ class McpClient:
 
 
 __all__ = [
+    "LOOPBACK_TIMEOUT",
     "RAG_TOOLS",
     "STDIO_ENTRYPOINT",
     "TOKEN_ARGUMENT",
