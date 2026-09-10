@@ -39,7 +39,18 @@ metric), `k` guidance (the harness overrides `k`), and editing dataset expectati
 **Comparability protocol.** Judge the pre-change deployed baseline first (quota permitting) so the
 report has a judged "before" column; re-drive all three deployed arms after the change; disclose
 that R5 changes what the `no_structured_tools` arm disables; report the higher `nudge_rate` as a
-diagnostic, not a regression. Status: implementation wave P13 in progress.
+diagnostic, not a regression.
+
+**Implemented (P13, six commits ending b24ad32; 1,703 tests, 21 new).** Every mandated wording is
+verbatim. Two facts a reader should know: the route prompt now lists the corpus titles read from
+the committed index manifest, with a test that fails if the two ever drift; and G1 scores
+compliance-engine evidence on the identical dense path retrieval uses, so a chunk that scores
+below threshold still refuses (the tests pin that to 1e-5 against retrieval's own score). Disclosed
+costs: the breadth reminder adds one act step to most single-search turns, so `nudge_rate` and
+latency rise by design, and the `no_structured_tools` ablation arm now disables a tool the PTO
+workflow genuinely requires, so post-change ablation figures are reported beside, not instead of,
+the pre-change ones. Deployed with `LLM_RPM=60` / `LLM_BURST=30`; the "after" sweep of all three
+arms and its judge pass are running.
 
 ---
 
