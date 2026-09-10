@@ -777,9 +777,10 @@ need an account was built, run and measured here.
 
 - **The 512 MB memory gate, measured 2026-09-10.** `make docker-run-512` — `docker run -m 512m
   --memory-swap 512m`, `/ready` polled green, one stubbed `POST /chat` over `Authorization: Bearer`,
-  then `/health` — reports **`rss_mb = 291.3`** against the §14.3 assertion of `< 420` and a budget
-  of 345 MB: **221 MB of headroom** under the hard 512 MB cgroup limit. Two runs of the gate the
-  same day read 292.9 and 291.3 MB, so the figure is stable to about a megabyte. The reading is
+  then `/health` — reports **`rss_mb = 292.1`** against the §14.3 assertion of `< 420` and a budget
+  of 345 MB: **220 MB of headroom** under the hard 512 MB cgroup limit. Four runs of the gate the
+  same day, each on the image built from the commit whose `git_sha` the run prints, read 292.9,
+  291.3, 292.1 and 292.1 MB, so the figure is stable to about a megabyte. The reading is
   `/proc/self/status` `VmRSS` inside the container (Docker Desktop's `linux/arm64` VM, Docker
   29.6.1), i.e. the same real-Linux reader P1's entry describes, not the macOS `getrusage`
   high-water mark. The equivalent numbers on Render's `linux/amd64` builder are re-read at gate 2.
