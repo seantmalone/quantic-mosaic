@@ -17,10 +17,17 @@ section is the DOCS.3 subject, the `###` is one of requirement 10's ten justific
 **Three link lines are gate-aware.** `Deployed:` must carry the tokenized `?access=` link and
 `Demo video:` the recording URL, and neither may still read `TBD-before-submission` (SUB.1,
 SUB.2, DEMO.1). Neither artifact can exist before a human satisfies a gate — the Render account
-(gate 2 + 4) and the recording (gate 7) — so until then the line must carry a marker that names
-the gate and `NEEDS-FROM-USER.md` must carry that gate. The assertion is therefore a branch, not
-a skip: an `https://` value is held to the full requirement, a `pending: gate …` value is held
-to naming a gate that is genuinely open. The placeholder itself is banned outright.
+(gate 2 + 4) and the recording (gate 6; gate 7 is the submission itself) — so until then the line
+must carry a marker that names the gate and `NEEDS-FROM-USER.md` must carry that gate. Gate
+numbers here are `NEEDS-FROM-USER.md`'s, which are design spec §19.1's. The assertion is therefore
+a branch, not a skip: an `https://` value is held to the full requirement, a `pending: gate …`
+value is held to naming a gate that is genuinely open. The placeholder itself is banned outright.
+
+**The blocks a script owns are asserted inside their markers, never across the document.**
+`design-and-evaluation.md` runs to hundreds of lines, so `"latency" in section` is satisfied by
+prose that has nothing to do with the results table; the results assertions are therefore scoped
+to the text between `<!-- EVAL-NUMBERS:BEGIN -->` and `<!-- EVAL-NUMBERS:END -->` and are checked
+against the row labels `scripts/paste_eval_numbers.py` declares, so deleting the block fails.
 """
 
 from __future__ import annotations
@@ -98,6 +105,26 @@ AI_TOOLING_SECTIONS = [
     "## AI use and ownership",
 ]
 
+#: DOCS.4 — the workflow facts `ai-tooling.md` must state, each asserted on its own.
+#: The value is the set of lower-cased phrases that, together, evidence the fact; a document that
+#: merely says "Claude Code" and "Opus" somewhere satisfies none of them.
+AI_TOOLING_WORKFLOW_FACTS = {
+    "the design workflow — probes, proposals, a judge panel": ["probe", "proposal", "judge"],
+    "the per-phase loop — implementer, reviewer, fix rounds": ["implementer", "reviewer", "fix round"],
+    "blind labelling by separate sessions": ["blind", "labelling", "session"],
+}
+
+#: DOCS.4 — `## What did not work` must name concrete, dated failures, not a genre. At least three
+#: of these must appear; the document currently carries every one.
+AI_TOOLING_CONCRETE_FAILURES = {
+    "the over-engineered v1 specification": ["over-engineered"],
+    "gitleaks false positives": ["gitleaks"],
+    "provider outages and free-tier quotas": ["outage", "quota"],
+    "two concurrent turns of one agent": ["concurrent turns"],
+    "the voided blind-labelling round": ["voided"],
+    "subagent scope creep": ["scope creep"],
+}
+
 #: R1.3 / DOCS.2 — README's five headings.
 README_SECTIONS = [
     "## Setup",
@@ -115,6 +142,26 @@ EVIDENCE_SCREENSHOTS = [
     "mcp-discovery-page.png",
     "ci-deploy-skipped.png",
 ]
+
+#: R8.4 — the dispatched red run whose job graph `ci-deploy-skipped.png` captures. A screenshot of
+#: a CI graph is only evidence if the run it was taken from can be opened, so both documents that
+#: show the figure must carry the URL rather than forwarding the reader to `CHANGELOG.md`.
+CI_EVIDENCE_RUN_URL = "https://github.com/seantmalone/quantic-mosaic/actions/runs/34485304411"
+
+#: The markers `scripts/paste_eval_numbers.py` writes between, and nothing else writes at all.
+EVAL_NUMBERS_BEGIN = "<!-- EVAL-NUMBERS:BEGIN -->"
+EVAL_NUMBERS_END = "<!-- EVAL-NUMBERS:END -->"
+
+#: RUBRIC5.8's six metric families, each named by the row label the block must carry. Substrings
+#: like "latency" occur all over the surrounding prose; a table row does not.
+METRIC_FAMILY_ROW_LABELS = {
+    "groundedness": "Groundedness (mean, claim-level)",
+    "citation accuracy": "Citation accuracy (CitResolve × F1)",
+    "tool selection": "Tool selection (F1, order-insensitive)",
+    "workflow completion": "Workflow completion",
+    "action safety": "Action safety pass rate",
+    "latency": "Latency p50 / p95 (ms)",
+}
 
 DEMO_IDS = [f"DEMO.{n}" for n in range(1, 8)]
 SUB_IDS = [f"SUB.{n}" for n in range(1, 4)]
@@ -157,14 +204,15 @@ def _link_value(label: str) -> str:
     raise AssertionError(f"README.md has no `{label}:` line in its first 20 lines")
 
 
-def _demo_expectations() -> list:
-    """The live `DEMO_EXPECTATIONS` records, loaded from the e2e test that enforces them.
+def _attribute_from_module(path: Path, alias: str, attribute: str):
+    """One module-level constant, read from a file that is not importable as a package member.
 
-    `tests/` is not a package, so the module is loaded by path. Documenting a sequence that the
-    executable records do not require is exactly the rot R10.3 is worried about.
+    Neither `tests/` nor `scripts/` is a package, so both are loaded by path. Reading the live
+    constant rather than restating it is the point: a documented sequence, or a documented table
+    row, that the executable declaration does not require is exactly the rot R10.3 is worried
+    about.
     """
-    path = REPO_ROOT / "tests" / "e2e" / "test_demo_tasks.py"
-    spec = importlib.util.spec_from_file_location("_demo_tasks_for_docs", path)
+    spec = importlib.util.spec_from_file_location(alias, path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     # `@dataclass` resolves its own module through `sys.modules`, so registering it is not
@@ -172,9 +220,36 @@ def _demo_expectations() -> list:
     sys.modules[spec.name] = module
     try:
         spec.loader.exec_module(module)
-        return module.DEMO_EXPECTATIONS
+        return getattr(module, attribute)
     finally:
         sys.modules.pop(spec.name, None)
+
+
+def _demo_expectations() -> list:
+    """The live `DEMO_EXPECTATIONS` records, loaded from the e2e test that enforces them."""
+    return _attribute_from_module(
+        REPO_ROOT / "tests" / "e2e" / "test_demo_tasks.py", "_demo_tasks_for_docs", "DEMO_EXPECTATIONS"
+    )
+
+
+def _paste_eval_numbers_rows() -> list:
+    """The live `ROWS` table `scripts/paste_eval_numbers.py` renders the results block from."""
+    return _attribute_from_module(
+        REPO_ROOT / "scripts" / "paste_eval_numbers.py", "_paste_eval_numbers_for_docs", "ROWS"
+    )
+
+
+def _eval_numbers_block() -> str:
+    """Only the text the script owns — between its two markers, exclusive.
+
+    Everything outside is hand-authored prose about the same subjects, which is why a results
+    assertion run over the whole `##` section passes with the table deleted.
+    """
+    text = _text(DESIGN)
+    assert EVAL_NUMBERS_BEGIN in text and EVAL_NUMBERS_END in text, (
+        f"design-and-evaluation.md carries no {EVAL_NUMBERS_BEGIN} / {EVAL_NUMBERS_END} markers"
+    )
+    return text[text.index(EVAL_NUMBERS_BEGIN) + len(EVAL_NUMBERS_BEGIN) : text.index(EVAL_NUMBERS_END)]
 
 
 # --------------------------------------------------------------------------- README (R1.3, DOCS.2)
@@ -303,10 +378,19 @@ def test_design_document_references_all_three_evidence_screenshots():
     assert missing == [], f"design-and-evaluation.md does not reference: {missing}"
 
 
-def test_the_two_committed_screenshots_exist():
-    """The third is committed by the main session with the red CI run (R8.4)."""
-    for name in ["mcp-discovery-4-tools.png", "mcp-discovery-page.png"]:
+def test_the_three_committed_screenshots_exist():
+    """All three, including the R8.4 red-run job graph committed at `5419ec5`."""
+    for name in EVIDENCE_SCREENSHOTS:
         assert (EVIDENCE / name).exists(), f"docs/evidence/{name} is missing"
+
+
+def test_the_ci_evidence_screenshot_is_referenced_with_its_run_url():
+    """R8.4 — the figure and the run it was taken from travel together, in both documents."""
+    for path in (DESIGN, DEPLOYED):
+        text = _text(path)
+        name = path.relative_to(REPO_ROOT)
+        assert "ci-deploy-skipped.png" in text, f"{name} does not reference the CI evidence screenshot"
+        assert CI_EVIDENCE_RUN_URL in text, f"{name} shows the screenshot without naming its run URL"
 
 
 def test_documented_demo_sequences_match_the_executable_records():
@@ -321,24 +405,41 @@ def test_documented_demo_sequences_match_the_executable_records():
 
 
 def test_results_table_carries_the_metric_families():
-    """RUBRIC5.8 — all six families are reported in one table (filled by paste_eval_numbers.py)."""
-    body = _section(DESIGN, "## Evaluation questions, expected answers and results")
-    for metric in [
-        "groundedness",
-        "citation",
-        "tool_selection_accuracy",
-        "workflow_completion",
-        "action_safety_pass_rate",
-        "latency",
-    ]:
-        assert metric in body.lower() or metric in body, f"the results section omits {metric}"
+    """RUBRIC5.8 — all six families are reported as rows *inside* the marked results block.
+
+    Scoped to the block, not to the ~600-line `##` section around it. The section names every one
+    of these words in prose — the methodology, the limitations, the per-item discussion — so the
+    substring form of this assertion stayed green with the whole table deleted, which is the one
+    mutation it exists to catch.
+    """
+    block = _eval_numbers_block()
+    missing = [
+        f"{family} (expected the row `| {label} |`)"
+        for family, label in METRIC_FAMILY_ROW_LABELS.items()
+        if f"| {label} |" not in block
+    ]
+    assert missing == [], f"the EVAL-NUMBERS block reports no row for: {missing}"
+
+
+def test_results_block_carries_every_row_the_script_declares():
+    """The block is `scripts/paste_eval_numbers.py`'s output, so its `ROWS` are the floor.
+
+    Read from the live `ROWS` rather than restated here: a row added to the script and never
+    pasted into the document, or a document quietly trimmed to fewer rows than the script writes,
+    is the same defect and this is the assertion that sees it.
+    """
+    block = _eval_numbers_block()
+    declared = [label for label, *_ in _paste_eval_numbers_rows()]
+    assert declared, "scripts/paste_eval_numbers.py declares no ROWS"
+    missing = [label for label in declared if f"| {label} |" not in block]
+    assert missing == [], f"the EVAL-NUMBERS block is missing rows paste_eval_numbers.py declares: {missing}"
 
 
 def test_paste_eval_numbers_markers_are_intact():
     """`scripts/paste_eval_numbers.py` writes between these two markers and nowhere else."""
     text = _text(DESIGN)
-    assert text.count("<!-- EVAL-NUMBERS:BEGIN -->") == 1
-    assert text.count("<!-- EVAL-NUMBERS:END -->") == 1
+    assert text.count(EVAL_NUMBERS_BEGIN) == 1
+    assert text.count(EVAL_NUMBERS_END) == 1
 
 
 # ----------------------------------------------------------------------------- deployed.md (DOCS.5)
@@ -384,13 +485,60 @@ def test_deployed_references_the_ci_evidence_screenshot():
 
 
 def test_ai_tooling_has_its_three_sections():
+    """DOCS.4 — the three `##` headings, as whole lines."""
     assert _missing(AI_TOOLING, AI_TOOLING_SECTIONS) == []
 
 
-def test_ai_tooling_names_the_tools_and_the_workflow():
+def test_ai_tooling_names_the_tools():
+    """The development tools and the two run-time model families, by name and by model id."""
     text = _text(AI_TOOLING)
-    for phrase in ["Claude Code", "Opus"]:
+    for phrase in ["Claude Code", "Opus", "claude-haiku-4-5", "gemini-3.5-flash-lite"]:
         assert phrase in text, f"ai-tooling.md does not name {phrase!r}"
+
+
+def test_ai_tooling_describes_the_design_workflow():
+    """The pre-code half: probes that ran, written proposals, and a judge panel that chose."""
+    body = _text(AI_TOOLING).lower()
+    missing = [
+        word
+        for word in AI_TOOLING_WORKFLOW_FACTS["the design workflow — probes, proposals, a judge panel"]
+        if word not in body
+    ]
+    assert missing == [], f"ai-tooling.md does not describe the design workflow — missing {missing}"
+
+
+def test_ai_tooling_describes_the_per_phase_implementer_reviewer_loop():
+    """The build half: one implementer, an independently dispatched reviewer, then fix rounds."""
+    body = _text(AI_TOOLING).lower()
+    missing = [
+        word
+        for word in AI_TOOLING_WORKFLOW_FACTS["the per-phase loop — implementer, reviewer, fix rounds"]
+        if word not in body
+    ]
+    assert missing == [], (
+        f"ai-tooling.md does not describe the per-phase implementer → reviewer loop — missing {missing}"
+    )
+
+
+def test_ai_tooling_describes_the_blind_labelling_by_separate_sessions():
+    """RUBRIC5.8's honesty clause: the agreement labels came from a blind, separate session."""
+    body = _text(AI_TOOLING).lower()
+    missing = [word for word in AI_TOOLING_WORKFLOW_FACTS["blind labelling by separate sessions"] if word not in body]
+    assert missing == [], f"ai-tooling.md does not describe the blind labelling round — missing {missing}"
+
+
+def test_what_did_not_work_names_at_least_three_concrete_failures():
+    """DOCS.4 — a section that says "it was iterative" names nothing; these are the failures."""
+    body = _section(AI_TOOLING, "## What did not work").lower()
+    named = [
+        failure
+        for failure, phrases in AI_TOOLING_CONCRETE_FAILURES.items()
+        if all(phrase in body for phrase in phrases)
+    ]
+    assert len(named) >= 3, (
+        f"`## What did not work` names only {named} — DOCS.4 wants at least three concrete items, "
+        f"from {sorted(AI_TOOLING_CONCRETE_FAILURES)}"
+    )
 
 
 def test_ai_tooling_carries_the_ownership_disclosure():

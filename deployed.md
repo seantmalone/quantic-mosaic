@@ -60,8 +60,10 @@ exempting the owner would have been decorative.
 The evidence is a **recorded red run**, not an assertion: a temporary branch carrying one
 deliberately failing test, dispatched with `deploy_only: true`, whose job graph shows `test` red
 and `deploy` **skipped with the reason "dependent job failed"**. It is committed as
-[`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png), and the run URL is
-in `CHANGELOG.md`.
+[`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png), and the run is open
+at
+[`actions/runs/34485304411`](https://github.com/seantmalone/quantic-mosaic/actions/runs/34485304411),
+so the job graph in the screenshot can be checked against the run that produced it.
 
 ## Access
 
@@ -185,8 +187,8 @@ Actions minutes because the repository is public (verified public 2026-09-08).
 
 | Line | Amount | Observed |
 |---|---|---|
-| Render Hobby web service | **$0** | 2026-09-10 |
-| Turso database | **$0** | 2026-09-10 |
+| Render Hobby web service | **$0** — the plan price, read from Render's pricing page 2026-09-10 | `pending: gate 2/4` — no service exists yet, so nothing has been billed to observe |
+| Turso database | **$0** — the free plan's price, read 2026-09-10 | `pending: gate 3` — no database exists yet |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
 | Judge + failover (Gemini `gemini-3.5-flash-lite`) | **$0** free tier | 2026-09-09 |
 | Agent (Anthropic `claude-haiku-4-5`) | **estimated under $10 all-in** (§9.8) | see `CHANGELOG.md` |

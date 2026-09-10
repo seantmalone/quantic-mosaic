@@ -15,6 +15,9 @@ failed builds on wording edits.
 `NEEDS-FROM-USER.md`), so until then this script falls back to the newest committed `baseline`
 run file, marks the table's provenance line accordingly, and prints which source it used. It
 never invents a figure, and it never presents a `local` run as if it were the published one.
+"Newest" is read from **inside** the file — the run's `created_at`, or the epoch in its
+`r_<seconds>_<variant>` id — never from `st_mtime`, which git does not preserve and a fresh clone
+therefore assigns arbitrarily (see `run_sort_key`).
 
 Usage:
 
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -69,6 +73,49 @@ def _ms(value: Any) -> str:
     return "–" if value is None else f"{round(float(value)):,}"
 
 
+#: `r_<epoch seconds>_<variant>` — the run id the runner mints, and the fallback ordering key for
+#: a run file written before `created_at` existed.
+RUN_ID_EPOCH = re.compile(r"^r_(\d+)_")
+
+
+def _epoch_seconds(value: Any) -> float | None:
+    """A run timestamp normalised to seconds, whatever unit it was written in.
+
+    The runner writes `created_at` in **microseconds**; the run id embeds **seconds**. Comparing
+    the two raw would order every microsecond stamp above every second stamp, so both are scaled
+    into the same unit here. Anything beyond ~year 5138 in seconds is a finer unit.
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        return None
+    seconds = float(value)
+    while seconds > 1e11:
+        seconds /= 1000.0
+    return seconds
+
+
+def run_sort_key(path: Path) -> tuple[float, str]:
+    """Order committed runs by the timestamp **inside** the file, never by the filesystem's.
+
+    `st_mtime` was the original key and it is not a property of the run: git records no mtime, so
+    every file in a fresh clone carries its checkout time, in whatever order the checkout happened
+    to write them. A CI job and a developer's laptop could therefore paste different figures from
+    the same commit. `created_at` — and, for a file that predates it, the epoch in the run id — is
+    written by the run itself and survives a clone.
+    """
+    try:
+        run = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return (-1.0, path.name)
+    if not isinstance(run, dict):
+        return (-1.0, path.name)
+    stamp = _epoch_seconds(run.get("created_at"))
+    if stamp is None:
+        match = RUN_ID_EPOCH.match(str(run.get("run_id") or path.stem))
+        stamp = _epoch_seconds(int(match.group(1))) if match else None
+    # `path.name` breaks ties deterministically rather than leaving glob order to decide.
+    return (stamp if stamp is not None else -1.0, path.name)
+
+
 def _load_run() -> tuple[dict, str]:
     """The published run if it exists, else the newest committed `baseline` run."""
     if LATEST.exists():
@@ -80,10 +127,7 @@ def _load_run() -> tuple[dict, str]:
             return json.loads(run_path.read_text(encoding="utf-8")), str(LATEST.relative_to(REPO_ROOT))
         return pointer, str(LATEST.relative_to(REPO_ROOT))
 
-    candidates = sorted(
-        (path for path in RESULTS_DIR.glob("*_baseline.json")),
-        key=lambda path: path.stat().st_mtime,
-    )
+    candidates = sorted(RESULTS_DIR.glob("*_baseline.json"), key=run_sort_key)
     if not candidates:
         raise SystemExit(
             "no evaluation run to read: evaluation/results/latest.json is absent (gates 2 and 4) "

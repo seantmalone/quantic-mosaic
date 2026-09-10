@@ -169,8 +169,9 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 **Ownership and responsibility.** I remain fully responsible for the **correctness**, **security**
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
-responsibility for the code as submitted work. Concretely: correctness is defended by 1,623
-committed tests and a 26-item evaluation whose real numbers — including the ones below target —
+responsibility for the code as submitted work. Concretely: correctness is defended by the whole
+committed suite — over 1,600 tests, 1,652 of them when this paragraph was written on 2026-09-10 —
+and by a 26-item evaluation whose real numbers, including the ones below target,
 are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
 and dataset, and a write gate enforced at a boundary rather than in a prompt; integrity by this

@@ -702,7 +702,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (1,623 tests: unit, contract, integration, architecture and e2e-with-stub), then `scripts/pii_check.py` |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (unit, contract, integration, architecture and e2e-with-stub; over 1,600 tests as of 2026-09-10), then `scripts/pii_check.py` |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; curls `RENDER_DEPLOY_HOOK_URL` |
 
@@ -721,8 +721,11 @@ no branch protection — every phase pushes directly to `main`, so a rule exempt
 be decorative. The evidence is a **recorded red run**: a temporary branch carrying one
 deliberately failing test, dispatched with `deploy_only: true`, whose job graph shows `deploy`
 **skipped with the reason "dependent job failed"**, captured as
-[`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png) with its run URL in
-`CHANGELOG.md`.
+[`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png). The run itself is
+open to anyone:
+[`actions/runs/34485304411`](https://github.com/seantmalone/quantic-mosaic/actions/runs/34485304411)
+— `lint` and `docker` green, `test` red, `deploy` skipped — and `CHANGELOG.md` records the same
+URL beside the branch it was dispatched from.
 
 ### Rejected hosts
 
