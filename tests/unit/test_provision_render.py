@@ -45,10 +45,21 @@ SECRETS = {
 class RecordingApi:
     """The Render endpoints the script touches, plus a log of every request it received."""
 
-    def __init__(self, *, service_exists: bool = False, existing_env: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        service_exists: bool = False,
+        existing_env: dict[str, str] | None = None,
+        auto_deploy: str = "no",
+        ignores_auto_deploy_patch: bool = False,
+    ) -> None:
         self.service_exists = service_exists
         self.env: dict[str, str] = dict(existing_env or {})
         self.requests: list[httpx.Request] = []
+        #: What the *service* reports, which is not necessarily what `render.yaml` says: a service
+        #: created by hand, or by a Blueprint deploy before `autoDeploy: false` landed, has it on.
+        self.auto_deploy = auto_deploy
+        self.ignores_auto_deploy_patch = ignores_auto_deploy_patch
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -58,7 +69,7 @@ class RecordingApi:
             "id": SERVICE_ID,
             "name": SERVICE_NAME,
             "type": "web_service",
-            "autoDeploy": "no",
+            "autoDeploy": self.auto_deploy,
             "serviceDetails": {"runtime": "docker", "plan": "free", "url": SERVICE_URL},
         }
 
@@ -73,7 +84,14 @@ class RecordingApi:
             return httpx.Response(200, json=[{"service": self._service()}] if self.service_exists else [])
         if path == "/v1/services" and method == "POST":
             self.service_exists = True
+            self.auto_deploy = json.loads(request.content).get("autoDeploy", "yes")
             return httpx.Response(201, json={"service": self._service(), "deployId": "dep-1"})
+        if path == f"/v1/services/{SERVICE_ID}" and method == "GET":
+            return httpx.Response(200, json=self._service())
+        if path == f"/v1/services/{SERVICE_ID}" and method == "PATCH":
+            if not self.ignores_auto_deploy_patch:
+                self.auto_deploy = json.loads(request.content)["autoDeploy"]
+            return httpx.Response(200, json=self._service())
         if path == f"/v1/services/{SERVICE_ID}/env-vars" and method == "GET":
             return httpx.Response(200, json=[{"envVar": {"key": k, "value": v}} for k, v in self.env.items()])
         if path == f"/v1/services/{SERVICE_ID}/env-vars" and method == "PUT":
@@ -175,6 +193,48 @@ def test_provision_adopts_an_existing_service_instead_of_creating_a_second_one()
     result = _provision(api)
     assert result.created is False
     assert not any(r.method == "POST" and r.url.path == "/v1/services" for r in api.requests)
+
+
+# --- autoDeploy on the adopt path ------------------------------------------------------------
+
+
+def test_an_adopted_service_with_auto_deploy_on_is_patched_off():
+    """Adoption is the documented re-run path, and only `create_service` used to set autoDeploy.
+
+    A service created by hand — or by a Blueprint deploy from before `autoDeploy: false` landed —
+    keeps Render's own auto-deploy **on**, which defeats half of the R8.4 argument: a push to
+    `main` would reach production without passing `needs: [test, docker]`.
+    """
+    api = RecordingApi(service_exists=True, auto_deploy="yes")
+    result = _provision(api)
+    patch = _sent(api, "PATCH", f"/v1/services/{SERVICE_ID}")
+    assert json.loads(patch.content) == {"autoDeploy": "no"}
+    assert result.auto_deploy_observed is False
+    assert result.auto_deploy_patched is True
+
+
+def test_an_adopted_service_already_matching_the_blueprint_is_not_patched():
+    api = RecordingApi(service_exists=True, auto_deploy="no")
+    result = _provision(api)
+    assert not any(r.method == "PATCH" for r in api.requests)
+    assert result.auto_deploy_observed is False
+    assert result.auto_deploy_patched is False
+
+
+def test_the_reported_auto_deploy_is_the_services_own_answer_not_the_blueprints():
+    """The summary line used to print `render.yaml`'s value whatever the service actually said."""
+    api = RecordingApi(service_exists=True, auto_deploy="yes", ignores_auto_deploy_patch=True)
+    with pytest.raises(provision_render.RenderApiError) as raised:
+        _provision(api)
+    assert "autoDeploy" in str(raised.value)
+    assert "R8.4" in str(raised.value)
+
+
+def test_a_created_service_reports_auto_deploy_off_too():
+    api = RecordingApi()
+    result = _provision(api)
+    assert result.auto_deploy_observed is False
+    assert result.auto_deploy_patched is False
 
 
 # --- environment variables -----------------------------------------------------------------

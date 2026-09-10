@@ -271,3 +271,37 @@ def test_a_network_fault_during_the_gate_check_is_a_failed_smoke_not_a_traceback
     with mock.patch.dict(smoke_deployed.os.environ, {"APP_ACCESS_TOKEN": "tok"}):
         with mock.patch.object(smoke_deployed, "_get", _health_then(drop)):
             assert smoke_deployed.main(["--url", "https://x.onrender.com"]) == 1
+
+
+# --- an unset DEPLOY_URL secret -------------------------------------------------------------
+#
+# In the `deploy` job an unset `DEPLOY_URL` repository secret expands to the empty string, so both
+# scripts are invoked as `--url ""`. `urllib.request.urlopen("/health")` then raises
+# `ValueError: unknown url type: '/health'`, which neither script's except tuple catches — so the
+# job explicitly designed so that "a job that skipped quietly would look identical to a green one"
+# would end in an unexplained stack trace. Both now reject it up front, by name.
+
+
+@pytest.mark.parametrize("script", [wait_for_deploy, smoke_deployed], ids=["wait_for_deploy", "smoke_deployed"])
+def test_an_empty_url_is_refused_by_name_and_names_the_secret(script, capsys):
+    exit_code = script.main(["--url", ""])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "DEPLOY_URL" in captured.err
+    assert "NEEDS-FROM-USER.md" in captured.err
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("script", [wait_for_deploy, smoke_deployed], ids=["wait_for_deploy", "smoke_deployed"])
+def test_a_schemeless_url_is_refused_rather_than_probed(script, capsys):
+    exit_code = script.main(["--url", "mosaic-hr-copilot.onrender.com"])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "scheme" in captured.err
+
+
+@pytest.mark.parametrize("script", [wait_for_deploy, smoke_deployed], ids=["wait_for_deploy", "smoke_deployed"])
+def test_a_real_url_survives_the_check_with_its_trailing_slash_trimmed(script):
+    assert (
+        script.require_base_url("https://mosaic-hr-copilot.onrender.com/") == "https://mosaic-hr-copilot.onrender.com"
+    )

@@ -20,8 +20,9 @@ with `APP_ACCESS_TOKEN` exported — as P11's acceptance gate does — it additi
 is on and that the token opens it: `GET /` must be **401** without the header (the access gate
 answers the key page, not `ADMIN_REQUIRED`) and 200 with it.
 
-Exit status is 0 when every check passes, 1 otherwise. The token is read from the environment,
-sent only to `--url`, and never printed.
+Exit status is 0 when every check passes, 1 otherwise — including when `--url` is empty or
+schemeless, which is what an unset `DEPLOY_URL` secret expands to. The token is read from the
+environment, sent only to `--url`, and never printed.
 """
 
 from __future__ import annotations
@@ -40,6 +41,32 @@ FATAL_DEGRADATION = "access_token_missing"
 #: the 403 `ADMIN_REQUIRED` of the persona check — that one is about *which* actor you are, this
 #: one about whether you got past the door at all.
 UNAUTHENTICATED_STATUS = 401
+
+#: `--url ""` is what an unset `DEPLOY_URL` secret expands to in CI.
+URL_SCHEMES = ("http://", "https://")
+
+
+class BadUrl(ValueError):
+    """`--url` was empty or had no scheme; nothing was smoked."""
+
+
+def require_base_url(url: str | None) -> str:
+    """Reject an unusable `--url` by name, before urllib turns it into a raw `ValueError`.
+
+    `urllib.request.urlopen("/health")` raises `ValueError: unknown url type: '/health'`, which is
+    not in `main`'s except tuple — so an unset `DEPLOY_URL` would end this script in a stack trace
+    rather than a sentence naming the secret. Same check, same wording, as `wait_for_deploy.py`;
+    the two are deliberately standalone scripts with no shared import.
+    """
+    candidate = (url or "").strip()
+    if not candidate:
+        raise BadUrl(
+            "--url is empty. In CI that means the DEPLOY_URL repository secret is unset — see "
+            "NEEDS-FROM-USER.md (gates 2 and 4), then run scripts/provision_render.py."
+        )
+    if not candidate.lower().startswith(URL_SCHEMES):
+        raise BadUrl(f"--url {candidate!r} has no http:// or https:// scheme; it is not a base URL.")
+    return candidate.rstrip("/")
 
 
 def health_problems(payload: dict) -> list[str]:
@@ -90,7 +117,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", required=True, help="base URL of the deployed instance")
     parser.add_argument("--timeout", type=float, default=60.0, help="seconds to allow each request")
     arguments = parser.parse_args(argv)
-    base = arguments.url.rstrip("/")
+    try:
+        base = require_base_url(arguments.url)
+    except BadUrl as exc:
+        print(f"FAIL — {exc}", file=sys.stderr)
+        return 1
 
     try:
         status, body = _get(f"{base}/health", None, arguments.timeout)

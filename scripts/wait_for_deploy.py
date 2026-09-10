@@ -14,8 +14,9 @@ deployed. Render sets `RENDER_GIT_COMMIT` on the instance and `settings.py` reso
 at all the script degrades to the weakest useful check — a build stamp that is not `"dev"` — and
 says so, rather than silently reverting to a liveness poll.
 
-Exit status is 0 once the expected build answers, 1 on timeout. `/health` is open, so nothing here
-reads a credential.
+Exit status is 0 once the expected build answers, and 1 on timeout or on an unusable `--url`
+(empty or schemeless — what an unset `DEPLOY_URL` secret expands to). `/health` is open, so
+nothing here reads a credential.
 """
 
 from __future__ import annotations
@@ -32,6 +33,33 @@ POLL_INTERVAL_S = 5.0
 
 #: A short sha is a prefix of the full one; anything shorter than this is too weak to match on.
 MIN_SHA_PREFIX = 7
+
+#: `--url ""` is what an unset `DEPLOY_URL` secret expands to in CI, and it is not a rare case: it
+#: is the second-most-likely state of the `deploy` job before the Render account exists.
+URL_SCHEMES = ("http://", "https://")
+
+
+class BadUrl(ValueError):
+    """`--url` was empty or had no scheme; nothing was probed."""
+
+
+def require_base_url(url: str | None) -> str:
+    """Reject an unusable `--url` by name, before urllib turns it into a raw `ValueError`.
+
+    `urllib.request.urlopen("/health")` raises `ValueError: unknown url type: '/health'`, which
+    `probe`'s except tuple deliberately does not catch — a malformed URL is a configuration fault
+    to report, not a transient network fault to retry. Saying so here means the operator reads
+    "DEPLOY_URL is empty" instead of a stack trace.
+    """
+    candidate = (url or "").strip()
+    if not candidate:
+        raise BadUrl(
+            "--url is empty. In CI that means the DEPLOY_URL repository secret is unset — see "
+            "NEEDS-FROM-USER.md (gates 2 and 4), then run scripts/provision_render.py."
+        )
+    if not candidate.lower().startswith(URL_SCHEMES):
+        raise BadUrl(f"--url {candidate!r} has no http:// or https:// scheme; it is not a base URL.")
+    return candidate.rstrip("/")
 
 
 def is_live(payload: dict, expected_sha: str | None) -> bool:
@@ -86,8 +114,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=900.0, help="seconds to wait before giving up")
     parser.add_argument("--sha", default=None, help="expected commit (default: $GITHUB_SHA)")
     arguments = parser.parse_args(argv)
+    try:
+        base = require_base_url(arguments.url)
+    except BadUrl as exc:
+        print(f"FAIL — {exc}", file=sys.stderr)
+        return 1
     expected = arguments.sha or os.environ.get("GITHUB_SHA") or None
-    return wait(arguments.url, expected, arguments.timeout)
+    return wait(base, expected, arguments.timeout)
 
 
 if __name__ == "__main__":

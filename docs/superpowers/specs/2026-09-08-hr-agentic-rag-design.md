@@ -2352,6 +2352,17 @@ against that branch with `deploy_only: true`, so `deploy`'s `if` is satisfied, `
 hook URL and runs `gh secret set`. `scripts/provision_turso.py` (Turso Platform API) creates the database, mints a scoped token and sets it as a
 Render env var and a GitHub secret. The only irreducibly manual step is installing the Render GitHub App, which no API can do (§19.1 item 2).
 
+**Amendment: the deploy hook URL cannot be retrieved programmatically, so there are *two* irreducibly manual steps, not one** (ratified 2026-09-10,
+P11 fix round). Render's REST API exposes no endpoint that returns a service's `deployHookUrl` — re-confirmed against `api-docs.render.com` on
+2026-09-10, where Render's own community thread *"How to Retrieve deployHookUrl Programmatically via API or Terraform Provider?"* is still open. The
+URL is published in the dashboard only (Service → Settings → Deploy Hook). `provision_render.py` therefore reads `RENDER_DEPLOY_HOOK_URL` from the
+environment when it is already set, and otherwise prints copying it as a named TODO — it does not fabricate one, and the CI `deploy` job stays red,
+loudly, until the secret exists. **`POST /v1/services/{id}/deploys` with `RENDER_API_KEY` is the documented API-side alternative**, and would make
+provisioning fully unattended by dropping `RENDER_DEPLOY_HOOK_URL` from §15.2's three repository secrets; it is recorded here as the known option and
+deliberately **not** adopted, because changing which secret triggers production is a design decision for §15.2, not a fix. Also amended: `provision_render.py`
+reconciles `autoDeploy` on the **adopt** path too (`PATCH /v1/services/{id}`), and reports the value the service itself returns — an adopted service
+that kept Auto-Deploy on would defeat half of the R8.4 argument while the console asserted it was off.
+
 ## 15. CI/CD
 
 ### 15.1 `.github/workflows/ci.yml` — one file, four jobs

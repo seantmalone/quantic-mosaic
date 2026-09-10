@@ -184,10 +184,27 @@ def test_the_docker_job_waits_for_health_and_then_asserts_it():
 
 
 def test_the_docker_job_proves_the_image_can_render_a_page():
-    """P9 carry-forward: templates and static assets must ship, not just import (§14.2)."""
+    """P9 carry-forward: templates and static assets must ship, not just import (§14.2).
+
+    `/access` is the §11.8 key page and is **never gated**, so rendering it proves the Jinja
+    templates arrived without spending a credential; `/static/*` is open too.
+    """
     runs = _run_lines("docker")
-    assert "/dashboard" in runs
+    assert "/access" in runs
     assert "/static/app.css" in runs
+
+
+def test_the_docker_job_makes_no_gated_call():
+    """§15.2, verbatim: this job "makes **no** gated call".
+
+    It passes a throwaway `APP_ACCESS_TOKEN` inline so the image boots *with the gate on*, but it
+    never presents that token: an earlier revision curled `/` and `/dashboard` with
+    `Authorization: Bearer` and `X-Actor: admin`, which contradicted the section. The MCP handshake
+    that `/dashboard` was there to prove is asserted, credential-free, by `assert_health.py`.
+    """
+    runs = _run_lines("docker")
+    assert "Authorization:" not in runs
+    assert "X-Actor:" not in runs
 
 
 def test_the_docker_job_always_dumps_the_container_log():
@@ -210,10 +227,16 @@ def test_deploy_runs_only_on_a_main_push_or_a_deliberate_dispatch():
     assert "inputs.deploy_only == 'true'" in condition
 
 
-def test_the_first_deploy_step_fails_loudly_when_the_hook_secret_is_unset():
-    """Until user gates 2–4 land there is no hook, and the job must say so, not skip quietly."""
+def test_the_first_deploy_step_fails_loudly_when_either_deploy_secret_is_unset():
+    """Until user gates 2–4 land there is no hook, and the job must say so, not skip quietly.
+
+    `DEPLOY_URL` is guarded in the same step: unset, it expands to `""`, and the two scripts that
+    consume it would otherwise be the first place the operator learns anything is wrong.
+    """
     first = _steps("deploy")[0]
     assert "RENDER_DEPLOY_HOOK_URL" in str(first.get("env", {}))
+    assert "RENDER_DEPLOY_HOOK_URL" in first["run"]
+    assert "DEPLOY_URL" in first["run"]
     assert "exit 1" in first["run"]
     assert "NEEDS-FROM-USER.md" in first["run"]
 

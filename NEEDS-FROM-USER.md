@@ -73,8 +73,10 @@ python scripts/provision_render.py    # creates the free service from render.yam
 line. Paste it into `README.md`'s `Deployed:` line and `deployed.md`'s `## Access`, then delete
 `data/runtime/provision_turso.json`.
 
-**The one step no API can do:** Render publishes the **deploy hook URL** in the dashboard (Service →
-Settings → Deploy Hook), not through `/v1/services`. Copy it and either export
+**The second step no API can do** (re-confirmed against `api-docs.render.com` on 2026-09-10, and
+ratified as an amendment to spec §14.6): Render publishes the **deploy hook URL** in the dashboard
+(Service → Settings → Deploy Hook) and exposes it through no REST endpoint — the request for one is
+still an open thread on Render's own community forum. Copy it and either export
 `RENDER_DEPLOY_HOOK_URL` before running `provision_render.py` or run `gh secret set
 RENDER_DEPLOY_HOOK_URL` afterwards; the script prints this as a `TODO` line when it cannot find it.
 Until that secret exists, CI's `deploy` job **fails on its first step with a message naming this
@@ -100,9 +102,20 @@ EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant dense_only_k2
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant no_structured_tools
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" make ablation
-jq -r '.target, .variant' evaluation/results/latest.json                # deployed  baseline
-jq -r '.runs[].config_json.target' evaluation/results/comparison.json   # deployed x3
+jq -r '.target, .variant' evaluation/results/latest.json                     # deployed  baseline
+jq -r '.target, (.variants[].variant)' evaluation/results/comparison.json   # deployed, then the three variants
 ```
+
+> **The second `jq` is not the one the roadmap prints.** The P11 brief and roadmap §4 both carry
+> `jq -r '.runs[].config_json.target' evaluation/results/comparison.json   # deployed x3`, and that
+> command *cannot* pass against any `comparison.json` this project writes — before or after the
+> gates land. `evaluation/ablation.py` emits `{generated_at, target, dataset_sha, variants[],
+> workflow_completion_check, flips, note}`: there is no `runs` key and no `config_json`, so the
+> printed command fails with `jq: error (…): Cannot iterate over null`. `target` is a *single
+> shared top-level field* precisely because `ablation.py` refuses to compare runs whose targets
+> differ, which is the §13.9 "three runs sharing `target: deployed`" check the DoD line is asking
+> for. The corrected command above prints `deployed` once and then the three variant names, which
+> proves the same thing against the artifact's real shape. See P11-report.md §11.
 
 Every eval item sends `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin` and **fails
 closed** without both — the privileged `/chat` options are admin-only by design.

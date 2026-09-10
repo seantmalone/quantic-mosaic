@@ -24,6 +24,12 @@ answer to "was I cold?" and a mismatch means the idle wait was too short.
 
 The turn is gated, so `APP_ACCESS_TOKEN` is required and sent as `Authorization: Bearer`; it is
 never printed. Two turns of a paid Haiku model, once, is the whole cost of this measurement.
+
+**Every segment must succeed or nothing is published.** `httpx` does not raise on 4xx/5xx, so each
+call's status is asserted explicitly: a `/chat` that 403s on a wrong token or a non-admin persona,
+a `/health` that is not 200, or a `/ready` that never greens inside `ready_timeout_s` all end the
+run with a named `MeasurementFailed` naming the status and quoting the first 200 characters of the
+body — rather than being timed and pasted into `deployed.md` as a real latency.
 """
 
 from __future__ import annotations
@@ -45,6 +51,32 @@ DEFAULT_IDLE_S = float(os.environ.get("EVAL_COLD_IDLE_S", "1000"))
 DEFAULT_QUESTION = "How many days of paid time off do I accrue each year?"
 
 READY_POLL_INTERVAL_S = 1.0
+
+#: How much of a failing body is quoted back. Enough to read a `{"code": "ADMIN_REQUIRED"}`, short
+#: enough that a stack trace or an HTML error page cannot flood the console.
+BODY_EXCERPT_CHARS = 200
+
+
+class MeasurementFailed(RuntimeError):
+    """A segment did not complete successfully, so there is no latency worth publishing."""
+
+
+def _excerpt(response: httpx.Response) -> str:
+    """The first line of the body, truncated. The request's bearer is never echoed in a response."""
+    body = " ".join(response.text.split())
+    return body[:BODY_EXCERPT_CHARS] + ("…" if len(body) > BODY_EXCERPT_CHARS else "")
+
+
+def _require_200(response: httpx.Response, what: str) -> httpx.Response:
+    """A measurement that cannot fail is not a measurement (§14.4).
+
+    `httpx` does not raise on 4xx/5xx, so without this a `POST /chat` that 403s — a wrong or
+    expired `APP_ACCESS_TOKEN`, or a non-admin persona — would be *timed* and its latency published
+    in `deployed.md` as the project's "first turn" figure.
+    """
+    if response.status_code != 200:
+        raise MeasurementFailed(f"{what} answered HTTP {response.status_code}: {_excerpt(response)}")
+    return response
 
 
 @dataclass(frozen=True)
@@ -107,23 +139,39 @@ def measure(
         time.sleep(idle_s)
 
     started = time.monotonic()
-    health = client.get(f"{base}/health", timeout=180.0)
+    health = _require_200(client.get(f"{base}/health", timeout=180.0), "GET /health")
     health_ms = _elapsed_ms(started)
     payload = health.json()
 
     started = time.monotonic()
+    became_ready = False
     while _elapsed_ms(started) < ready_timeout_s * 1000:
         if client.get(f"{base}/ready", timeout=60.0).status_code == 200:
+            became_ready = True
             break
         time.sleep(poll_interval_s)
     ready_ms = _elapsed_ms(started)
+    if not became_ready:
+        # Falling out of the loop used to *record* the timeout as the model-load segment, so a
+        # never-green instance published `ready_timeout_s` as a measurement (§11.4: /ready is 503
+        # until the model and the index are resident — if it never greens, nothing is measurable).
+        raise MeasurementFailed(
+            f"GET /ready never answered 200 within {ready_timeout_s:.0f}s: the model or the index "
+            "never became resident, so there is no cold-start figure to publish"
+        )
 
     started = time.monotonic()
-    client.post(f"{base}/chat", json={"message": question}, headers=headers, timeout=180.0)
+    _require_200(
+        client.post(f"{base}/chat", json={"message": question}, headers=headers, timeout=180.0),
+        "the first POST /chat",
+    )
     first_turn_ms = _elapsed_ms(started)
 
     started = time.monotonic()
-    client.post(f"{base}/chat", json={"message": question}, headers=headers, timeout=180.0)
+    _require_200(
+        client.post(f"{base}/chat", json={"message": question}, headers=headers, timeout=180.0),
+        "the warm POST /chat",
+    )
     warm_turn_ms = _elapsed_ms(started)
 
     application = payload.get("app") or {}
@@ -160,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
             measurement = measure(
                 client, arguments.url, token=token, idle_s=arguments.idle, question=arguments.question
             )
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, MeasurementFailed) as exc:
             print(f"FAIL — {arguments.url} could not be measured: {exc}", file=sys.stderr)
             return 1
 

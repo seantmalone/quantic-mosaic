@@ -9,7 +9,10 @@ The only deployed thing this project has. What the script does, in order:
    values and `sync: false` secrets, so the Blueprint and the API-created service cannot drift;
 2. resolve the workspace (`GET /v1/owners`) and adopt an existing service by name, or create one.
    Adopting matters: a second free web service would share the same 750 instance-hours and chain
-   its own spin-up onto the first (§14.1);
+   its own spin-up onto the first (§14.1). An adopted service is then **read back and reconciled**:
+   if its `autoDeploy` disagrees with `render.yaml` it is `PATCH`ed into line, and the summary
+   prints the value the *service* reported — a service adopted with Auto-Deploy still on would
+   otherwise defeat half of R8.4 while the console asserted it was off;
 3. **generate `APP_ACCESS_TOKEN` with `secrets.token_urlsafe(32)`** — §19's "no user step" — and
    keep the one already on the service on a re-run, because regenerating it would silently break
    the tokenized link a grader is expected to click;
@@ -22,10 +25,15 @@ The only deployed thing this project has. What the script does, in order:
 6. print the tokenized `https://<app>.onrender.com/?access=<token>` link for `README.md`'s
    `Deployed:` line and `deployed.md`'s `## Access`.
 
-**The one value the REST API does not expose is the deploy hook URL.** Render publishes it in the
-dashboard (Service → Settings → Deploy Hook), not through `/v1/services`, so the script takes it
-from `RENDER_DEPLOY_HOOK_URL` when set and otherwise reports copying it as the single remaining
-manual step instead of pretending to have it.
+**The one value the REST API does not expose is the deploy hook URL** — re-confirmed against
+Render's current API reference on 2026-09-10 (`api-docs.render.com`: no endpoint returns a
+`deployHookUrl`, and Render's own community thread "How to Retrieve deployHookUrl Programmatically
+via API or Terraform Provider?" is still open). Render publishes it in the dashboard only
+(Service → Settings → Deploy Hook), so the script takes it from `RENDER_DEPLOY_HOOK_URL` when set
+and otherwise reports copying it as the single remaining manual step instead of pretending to have
+it. Recorded as a ratified amendment to §14.6; `POST /v1/services/{id}/deploys` with
+`RENDER_API_KEY` exists as an alternative CI trigger, but swapping CI onto it would be a change to
+§15.2's three-secret contract, not a fix, so it is not done here.
 
 Credentials are read but never printed: the console gets a length and a SHA-256 fingerprint. The
 access token *is* printed, deliberately — it is the shared link secret of §11, published in
@@ -106,6 +114,10 @@ class Provisioned:
     created: bool
     access_token: str
     access_token_generated: bool
+    #: What the **service** reports, read back from the API — never what `render.yaml` says.
+    auto_deploy_observed: bool = False
+    #: True when the adopted service disagreed with the blueprint and was PATCHed into line.
+    auto_deploy_patched: bool = False
     github_secrets_set: list[str] = field(default_factory=list)
     manual_steps: list[str] = field(default_factory=list)
 
@@ -149,7 +161,7 @@ def load_blueprint(path: Path = BLUEPRINT_PATH) -> Blueprint:
 
 
 class RenderClient:
-    """The five Render endpoints this script uses, and nothing else."""
+    """The Render endpoints this script uses, and nothing else."""
 
     def __init__(
         self,
@@ -201,6 +213,15 @@ class RenderClient:
         body = self._request("POST", "/v1/services", json=payload).json()
         return body["service"]
 
+    def get_service(self, service_id: str) -> dict[str, Any]:
+        body = self._request("GET", f"/v1/services/{service_id}").json()
+        return body.get("service") or body
+
+    def update_service(self, service_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """`PATCH /v1/services/{id}` — the only write this script makes to the service itself."""
+        body = self._request("PATCH", f"/v1/services/{service_id}", json=payload).json()
+        return body.get("service") or body
+
     def env_vars(self, service_id: str) -> dict[str, str]:
         rows = self._request("GET", f"/v1/services/{service_id}/env-vars").json()
         result: dict[str, str] = {}
@@ -237,6 +258,48 @@ def gh_secret_set(name: str, value: str) -> bool:
 # --------------------------------------------------------------------------------------
 # Provisioning
 # --------------------------------------------------------------------------------------
+
+
+def auto_deploy_of(service: dict[str, Any]) -> bool | None:
+    """Render reports `autoDeploy` as the string `"yes"`/`"no"`; `None` means it did not say."""
+    raw = service.get("autoDeploy")
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() == "yes"
+
+
+def reconcile_auto_deploy(client: RenderClient, service: dict[str, Any], wanted: bool) -> tuple[bool, bool]:
+    """Make the service's `autoDeploy` match `render.yaml`, and return `(observed, patched)`.
+
+    Only `create_service` used to set `autoDeploy`, so an **adopted** service — the documented
+    re-run path — kept whatever it had. A service created by hand, or by a Blueprint deploy from
+    before `autoDeploy: false` landed, therefore stayed on while the console printed
+    `auto_deploy=OFF (R8.4)`, because that line was read from the committed blueprint rather than
+    from the service. Half of the R8.4 argument (Render's own auto-deploy is off, so the CI hook is
+    the only path to production) was silently untrue in exactly the state most likely on a retry.
+
+    Raises `RenderApiError` when the service still disagrees after the PATCH: a claim about R8.4
+    that the platform contradicts is worse than no claim.
+    """
+    service_id = str(service["id"])
+    observed = auto_deploy_of(service)
+    patched = False
+    if observed is not wanted:
+        service = client.update_service(service_id, {"autoDeploy": "yes" if wanted else "no"})
+        observed = auto_deploy_of(service)
+        patched = True
+    if observed is None:
+        observed = auto_deploy_of(client.get_service(service_id))
+    if observed is not wanted:
+        raise RenderApiError(
+            f"service {service_id} reports autoDeploy={observed!r} but render.yaml says "
+            f"{wanted!r}, and the PATCH did not change it. Turn Auto-Deploy off in the Render "
+            "dashboard (Service → Settings): with it on, a push to main reaches production "
+            "without passing `needs: [test, docker]`, which is half of R8.4."
+        )
+    return observed, patched
 
 
 def collect_secret_values() -> dict[str, str]:
@@ -295,6 +358,7 @@ def provision(
         )
     service_id = str(service["id"])
     url = str((service.get("serviceDetails") or {}).get("url") or f"https://{blueprint.name}.onrender.com")
+    auto_deploy_observed, auto_deploy_patched = reconcile_auto_deploy(client, service, blueprint.auto_deploy)
 
     existing = {} if created else client.env_vars(service_id)
     access_token = existing.get("APP_ACCESS_TOKEN") or ""
@@ -313,6 +377,8 @@ def provision(
         created=created,
         access_token=access_token,
         access_token_generated=access_token_generated,
+        auto_deploy_observed=auto_deploy_observed,
+        auto_deploy_patched=auto_deploy_patched,
     )
 
     wanted = {"RENDER_DEPLOY_HOOK_URL": deploy_hook_url, "DEPLOY_URL": url, "RENDER_API_KEY": api_key}
@@ -378,9 +444,13 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         client.close()
 
+    # `auto_deploy` is the value the *service* reported back, not `render.yaml`'s — a claim about
+    # R8.4 is only worth printing if the platform agrees with it.
+    observed = "on" if result.auto_deploy_observed else "OFF (R8.4)"
     print(
         f"  service={blueprint.name} ({result.service_id})  {'created' if result.created else 'already existed'}\n"
-        f"  url={result.url}  auto_deploy={'on' if blueprint.auto_deploy else 'OFF (R8.4)'}\n"
+        f"  url={result.url}  auto_deploy={observed} as reported by the service"
+        f"{' (patched from on)' if result.auto_deploy_patched and not result.created else ''}\n"
         f"  APP_ACCESS_TOKEN {'generated' if result.access_token_generated else 'kept'}: "
         f"{fingerprint(result.access_token)}\n"
         f"  github secrets set: {', '.join(result.github_secrets_set) or '(none)'}"

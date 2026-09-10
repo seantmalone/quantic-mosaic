@@ -62,11 +62,13 @@ jobs:
       - name: the image ships its templates and its static assets
         # P9 carry-forward: the Jinja templates and the vendored assets live under `src/` and are
         # reached through PYTHONPATH, not through a wheel — so only rendering a page proves they
-        # shipped. The chat page mounts the access gate; `/dashboard` is page 1, which performs an
-        # MCP handshake on load; `/static/*` is open and needs no header.
+        # shipped. Both calls are on OPEN routes, because §15.2 says this job makes **no gated
+        # call**: `/access` is the key page of §11.8 (never gated, and a real Jinja render of
+        # `access.html`), and `/static/*` needs no header at all. The MCP handshake `/dashboard`
+        # used to prove is already asserted, without a credential, by `assert_health.py`'s
+        # `mcp.connected` + `tool_count == 9`.
         run: |
-          curl -fsS -o /dev/null -H "Authorization: Bearer ci-access-token" http://127.0.0.1:8000/
-          curl -fsS -o /dev/null -H "Authorization: Bearer ci-access-token" -H "X-Actor: admin" http://127.0.0.1:8000/dashboard
+          curl -fsS -o /dev/null http://127.0.0.1:8000/access
           curl -fsS -o /dev/null http://127.0.0.1:8000/static/app.css
       - if: always()
         run: docker logs app && docker rm -f app
@@ -78,13 +80,18 @@ jobs:
     runs-on: ubuntu-latest
     env: { DEPLOY_URL: "${{ secrets.DEPLOY_URL }}" }
     steps:
-      # First, and deliberately loud: without the hook there is no deploy, and a job that skipped
-      # quietly would look identical to a green one in the job graph.
-      - name: The deploy hook secret must exist
+      # First, and deliberately loud: without these there is no deploy, and a job that skipped
+      # quietly would look identical to a green one in the job graph. DEPLOY_URL is guarded here
+      # too — `wait_for_deploy.py --url ""` and `smoke_deployed.py --url ""` reject an empty or
+      # schemeless URL by name, but the reason belongs at the top of the job, not three steps in.
+      - name: The deploy secrets must exist
         env: { RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" }
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "::error::RENDER_DEPLOY_HOOK_URL is not set. The Render service has not been provisioned yet:"
+          missing=""
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then missing="RENDER_DEPLOY_HOOK_URL"; fi
+          if [ -z "$DEPLOY_URL" ]; then missing="${missing:+$missing and }DEPLOY_URL"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::$missing is not set. The Render service has not been provisioned yet:"
             echo "::error::see NEEDS-FROM-USER.md (gate 2 = the Render GitHub App, gate 4 = the Render API key),"
             echo "::error::then run scripts/provision_turso.py and scripts/provision_render.py."
             exit 1
