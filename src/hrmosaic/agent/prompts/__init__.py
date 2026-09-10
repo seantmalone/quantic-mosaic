@@ -27,7 +27,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from hrmosaic.core import corpusread
-from hrmosaic.core.models import ENVELOPE_KINDS, UNRENDERED_ENVELOPES
+from hrmosaic.core.models import UNRENDERED_ENVELOPES
 
 #: The three templates of §7.2, and the only ones. A fourth would be a new prompt surface.
 TEMPLATES = ("route.j2", "act.j2", "synthesize.j2")
@@ -97,7 +97,6 @@ def persona_block(*, employee_id: str, actor_source: str) -> str:
 
 
 __all__ = [
-    "ENVELOPE_KINDS",
     "PROMPT_DIR",
     "TEMPLATES",
     "UNRENDERED_ENVELOPES",
