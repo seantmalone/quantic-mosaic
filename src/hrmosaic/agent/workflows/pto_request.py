@@ -26,13 +26,29 @@ POLICY_DOCS = ("pto-and-holidays", "manager-approval-matrix")
 MIN_CITATIONS = 2
 
 
+#: What each required slot is **in workflow words**, for the act loop's reminder. Never a tool
+#: name: the reminder reports the debt and lets the model choose how to settle it (§9.1 step 2).
+SLOT_DESCRIPTIONS = {
+    "check_pto_balance": "no PTO balance for this employee is in state yet",
+    "check_policy_compliance": "no compliance verdict is in state yet",
+}
+
+#: The evidence clause of the predicate below, said plainly — and said *truthfully*: two citable
+#: passages, not "one search".
+EVIDENCE_DESCRIPTION = (
+    f"the turn holds fewer than {MIN_CITATIONS} citable policy passages on notice and approval, "
+    "and an answer may state policy only from passages it can cite"
+)
+
+
+def evidence_met(state: LoopState) -> bool:
+    """The predicate's evidence clause, named — a confirmed write closes it just as citations do."""
+    return len(state.evidence_chunk_ids) >= MIN_CITATIONS or bool(state.mock_write_ids)
+
+
 def is_complete(state: LoopState) -> bool:
     """The predicate of §9.3, clause by clause."""
-    return (
-        state.has("check_pto_balance")
-        and state.decided()
-        and (len(state.evidence_chunk_ids) >= MIN_CITATIONS or bool(state.mock_write_ids))
-    )
+    return state.has("check_pto_balance") and state.decided() and evidence_met(state)
 
 
 SPEC = WorkflowSpec(
@@ -48,6 +64,18 @@ SPEC = WorkflowSpec(
     policy_docs=POLICY_DOCS,
     is_complete=is_complete,
     requires_tool_results=("check_pto_balance", "check_policy_compliance"),
+    slot_descriptions=SLOT_DESCRIPTIONS,
+    evidence_description=EVIDENCE_DESCRIPTION,
+    evidence_met=evidence_met,
 )
 
-__all__ = ["MIN_CITATIONS", "NAME", "POLICY_DOCS", "SPEC", "is_complete"]
+__all__ = [
+    "EVIDENCE_DESCRIPTION",
+    "MIN_CITATIONS",
+    "NAME",
+    "POLICY_DOCS",
+    "SLOT_DESCRIPTIONS",
+    "SPEC",
+    "evidence_met",
+    "is_complete",
+]

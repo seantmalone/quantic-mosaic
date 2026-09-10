@@ -129,19 +129,29 @@ WRITE_FAILED_NOTE = (
 #: stopped one step short of the evidence G1 requires and the turn refused. Sent at most once per
 #: turn, and it is an operational instruction — never reasoning, and never persisted anywhere but
 #: the verbatim `llm_messages` rows.
+#:
+#: **It names the debt, never a tool.** `{debts}` is filled from the workflow spec's slot
+#: descriptions ("no compliance verdict is in state yet"), because a reminder that listed the
+#: remaining calls would hand the model the rest of its tool sequence — and §13.4's ToolSelection
+#: on a nudged turn would then be scoring the hint. The turn records that it was nudged
+#: (`PlanPayload.nudges`) so P10 can report a `nudge_rate` beside those scores.
 WORKFLOW_INCOMPLETE = (
-    "Not yet. The {workflow} workflow still needs {needs}, and an answer with no retrieved policy "
-    "text cannot be cited. Make ONE search_policy_documents call across {docs} — that is enough — "
-    "then conclude. If the user asked you to create something, propose the write tool once you "
-    "have that policy text; a human confirms it."
+    "Not yet — this turn is not finished. The {workflow} workflow is incomplete: {debts}. "
+    "Only a passage retrieved by SEARCHING the policy corpus can be cited: a section fetched by "
+    "its exact heading is not scored, grounds nothing, and an answer resting on one is refused. "
+    "Close each gap above with the tools you were offered, then conclude. If the user also asked "
+    "for something to be created, propose it once the policy supports it; a human confirms it "
+    "before anything is created."
 )
 
 #: The second reminder, for the other way a turn can quietly drop what the user asked for: the
 #: model wrote an answer while the write it was asked to propose is still unmade. `_action_outstanding`
 #: already guarded the completion-predicate exit; live, the model left through the other door.
+#: Same rule as above — the debt, not the tool that settles it.
 ACTION_OUTSTANDING = (
-    "You have not proposed the action the user asked for. Call the write tool now with the exact "
-    "details. It is gated: nothing is created until a human confirms it."
+    "The user asked for something to be created and this turn has not proposed it yet — no "
+    "proposed action is in state. Propose it now, with the exact details it needs. Proposing is "
+    "safe: the action is gated, and nothing is created until a human confirms it."
 )
 
 BUDGET_NOTE = {
@@ -417,9 +427,9 @@ class _Turn:
     tool_calls_made: int = 0
     steps_taken: int = 0
     reopened: bool = False
-    #: Each of the two act-loop reminders (§9.1 step 2) is sent at most once per turn.
-    nudged: bool = False
-    action_reminded: bool = False
+    #: Which act-loop reminders (§9.1 step 2) have been sent — each at most once per turn, and the
+    #: list the `plan` span publishes as `nudges[]` so a nudged turn is visible to §13.4's reader.
+    nudges: list[str] = field(default_factory=list)
     stop_reason: str = "answered"
     pending: ConfirmationCard | None = None
     clarification: str | None = None
@@ -433,7 +443,19 @@ class _Turn:
         return time.perf_counter() - self.began
 
     def chunks(self) -> list[EvidenceChunk]:
+        """Every chunk the turn retrieved — what §7.2's synthesis prompt renders, quarantine flag
+        and all, so the model sees the labelled envelope rather than a silently shortened corpus."""
         return list(self.evidence.values())
+
+    def citable(self) -> list[EvidenceChunk]:
+        """What G1 weighs: the chunks an answer could actually cite.
+
+        A quarantined chunk is not one of them — G2 strips every citation to it (§7.4 trigger 4) —
+        so letting it carry the evidence gate would clear the way for an answer whose support is
+        removed two steps later. The gate and the completion predicates therefore read the same
+        set; `LoopState.note_evidence` drops the same chunks for the same reason.
+        """
+        return [chunk for chunk in self.evidence.values() if not chunk.quarantined]
 
 
 class Orchestrator:
@@ -565,7 +587,7 @@ class Orchestrator:
         assert decision is not None
 
         # -- 3. G1 over the accumulated chunk set ---------------------------------------
-        verdict = g1.check(turn.chunks(), turn=turn.buffer)
+        verdict = g1.check(turn.citable(), turn=turn.buffer)
         if not verdict.passed and decision.rag_only and not turn.reopened:
             # §9.2's one-step recovery: the full catalog, one more act step, and a plan span
             # that says so. The step counts against AGENT_MAX_STEPS.
@@ -577,7 +599,7 @@ class Orchestrator:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             if turn.pending is not None:
                 return self._park(turn, cold_start=cold_start)
-            verdict = g1.check(turn.chunks(), turn=turn.buffer)
+            verdict = g1.check(turn.citable(), turn=turn.buffer)
         if not verdict.passed:
             return self._refuse(turn, verdict.reason, cold_start=cold_start)
 
@@ -714,6 +736,7 @@ class Orchestrator:
                     ),
                     step_index=turn.steps_taken,
                     catalog_reopened=turn.reopened,
+                    nudges=list(turn.nudges),
                 ),
             )
 
@@ -731,9 +754,7 @@ class Orchestrator:
                 turn.stop_reason = "timeout"
                 return
 
-            permitted = allowed_tools(
-                decision, catalog, disabled=turn.request.options.tools_disabled, reopened=turn.reopened
-            )
+            permitted = self._permitted(turn)
             completion = await self.model().complete(
                 turn.messages,
                 tools=offered(decision, catalog, disabled=turn.request.options.tools_disabled, reopened=turn.reopened),
@@ -795,6 +816,22 @@ class Orchestrator:
                 # The recovery path buys exactly **one** additional step (§9.2).
                 return
 
+    def _permitted(self, turn: _Turn) -> list[str]:
+        """The names this act step may call: §9.2's gate, then §13.9's per-turn ablation filter.
+
+        One expression, read by the loop before it offers the tool array and by `_nudge` before it
+        reports a debt, so a reminder can never ask for something the very next call boundary would
+        refuse. A turn with no catalog has called nothing and can call nothing.
+        """
+        if turn.decision is None or turn.catalog is None:
+            return []
+        return allowed_tools(
+            turn.decision,
+            turn.catalog,
+            disabled=turn.request.options.tools_disabled,
+            reopened=turn.reopened,
+        )
+
     def _nudge(self, turn: _Turn) -> bool:
         """Tell the model, at most once each, what the turn still owes. Did it send one?
 
@@ -807,24 +844,32 @@ class Orchestrator:
         no citable evidence yet, or the user asked for something to be created and nothing has been
         proposed. Both were live failures under the real provider, and both closed a turn that had
         not done what it was asked.
+
+        **A reminder reports the debt in workflow words and stops there.** Naming the tools that
+        would settle it would make the harness, not the model, the author of the rest of the tool
+        sequence on every nudged turn. And a debt nothing permitted can settle is not reported at
+        all: under §13.9's `no_structured_tools` ablation the model would answer the reminder with
+        a call the gate refuses, and the ablation would be reading `tool_not_offered` spans of its
+        own making.
         """
+        permitted = self._permitted(turn)
         workflow = turn.workflow
-        if workflow is not None and not turn.nudged and not workflow.is_complete(turn.state):
-            turn.nudged = True
-            missing = workflow.missing_tool_results(turn.state)
-            needs = ", ".join(missing) if missing else "retrieved policy text you can cite"
-            turn.messages.append(
-                Message(
-                    role="user",
-                    content=WORKFLOW_INCOMPLETE.format(
-                        workflow=workflow.name, needs=needs, docs=", ".join(workflow.policy_docs)
-                    ),
+        if workflow is not None and "workflow_incomplete" not in turn.nudges and not workflow.is_complete(turn.state):
+            debts = workflow.debts(turn.state, permitted=permitted)
+            if debts:
+                turn.nudges.append("workflow_incomplete")
+                owed = "; ".join(debts)
+                turn.messages.append(
+                    Message(role="user", content=WORKFLOW_INCOMPLETE.format(workflow=workflow.name, debts=owed))
                 )
-            )
-            turn.step_summaries.append(f"step {turn.steps_taken}: workflow incomplete, asked for {needs}")
-            return True
-        if self._action_outstanding(turn) and not turn.action_reminded:
-            turn.action_reminded = True
+                turn.step_summaries.append(f"step {turn.steps_taken}: workflow incomplete — {owed}")
+                return True
+        if (
+            self._action_outstanding(turn)
+            and "action_outstanding" not in turn.nudges
+            and any(name in permitted for name in WRITE_TOOLS)
+        ):
+            turn.nudges.append("action_outstanding")
             turn.messages.append(Message(role="user", content=ACTION_OUTSTANDING))
             turn.step_summaries.append(f"step {turn.steps_taken}: the requested action was still unproposed")
             return True
@@ -968,7 +1013,10 @@ class Orchestrator:
         fresh: list[EvidenceChunk] = []
         for payload in result.retrievals:
             for chunk in payload.chunks:
-                turn.state.note_evidence(chunk.chunk_id, chunk.doc_id)
+                # `_mark` has already run (it is `call_tool`'s `on_retrieval` seam), so the flag is
+                # final here: a quarantined hit stays on the `retrieval` span and stays out of the
+                # evidence a predicate or a gate may count.
+                turn.state.note_evidence(chunk.chunk_id, chunk.doc_id, quarantined=chunk.quarantined)
                 if chunk.chunk_id in turn.evidence:
                     continue
                 evidence = EvidenceChunk(
@@ -984,7 +1032,10 @@ class Orchestrator:
                 )
                 turn.evidence[chunk.chunk_id] = evidence
                 fresh.append(evidence)
-        # ⚠ Tools 2 and 4 also cite chunk ids, and those ids used to count towards the workflow's
+        # ⚠ Two kinds of chunk id are *not* evidence, for one reason: an answer cannot rest on
+        # them. A quarantined chunk is the second kind — G2 strips every citation to it — and it is
+        # dropped by `note_evidence` above while staying, flag and all, on the `retrieval` span.
+        # Tools 2 and 4 also cite chunk ids, and those ids used to count towards the workflow's
         # document spread. They no longer do (P8's live check: §9.3's predicate now reads evidence
         # the same way §7.4's G1 does). They carry no dense score, so they never enter G1's candidate
         # set — and a completion predicate that counted them while the evidence gate did not made
@@ -1365,7 +1416,7 @@ class Orchestrator:
 
     def _rehydrate_retrieval(self, turn: _Turn, payload: RetrievalPayload) -> None:
         for chunk in payload.chunks:
-            turn.state.note_evidence(chunk.chunk_id, chunk.doc_id)
+            turn.state.note_evidence(chunk.chunk_id, chunk.doc_id, quarantined=chunk.quarantined)
             if chunk.quarantined and chunk.chunk_id not in turn.quarantined:
                 turn.quarantined.append(chunk.chunk_id)
             turn.evidence.setdefault(

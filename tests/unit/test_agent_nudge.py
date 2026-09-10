@@ -13,11 +13,20 @@ it either, so a turn could close one step short of the evidence G1 was about to 
 answer refused. Each reminder is sent at most once per turn, only on the step where the model tried
 to stop, and only while the gap is real.
 
+**What a reminder may say.** The DEBT, in workflow words — never the tool that would settle it.
+A reminder listing the remaining calls would author the rest of the tool sequence on every nudged
+turn, and §13.4's ToolSelection would be scoring the hint; a reminder claiming "one search is
+enough" would be false for `remote_work_eligibility`, which needs three distinct documents. Both
+are asserted below, and every turn records which reminders fired (`PlanPayload.nudges`) so P10 can
+publish a `nudge_rate` next to the scores.
+
 **What the narrowing is for.** Tools 2 and 4 (`get_policy_section`, `check_policy_compliance`) cite
 chunk ids without retrieving them: those ids carry no dense score, so they never enter G1's
 candidate set. While they also counted towards the workflow's document spread, `is_complete` could
-be true on a turn the evidence gate was about to refuse — which is exactly what happened live. One
-meaning of "evidence", shared by the predicate and the gate, is the fix.
+be true on a turn the evidence gate was about to refuse — which is exactly what happened live. A
+quarantined chunk is the same defect wearing a different hat: G2 strips every citation to one, so
+evidence that only G4 quarantined is evidence no answer may lean on. One meaning of "evidence",
+shared by the predicate and the gate, is the fix.
 """
 
 from __future__ import annotations
@@ -26,10 +35,12 @@ import time
 
 import pytest
 
-from hrmosaic.agent.client import ToolResult
+from hrmosaic.agent.client import DiscoveredCatalog, ToolResult
+from hrmosaic.agent.guardrails import g1
 from hrmosaic.agent.orchestrator import (
     ACTION_OUTSTANDING,
     WORKFLOW_INCOMPLETE,
+    ChatOptions,
     ChatRequest,
     ConfirmationCard,
     Orchestrator,
@@ -37,10 +48,51 @@ from hrmosaic.agent.orchestrator import (
 )
 from hrmosaic.agent.router import RouteDecision
 from hrmosaic.agent.workflows import get as get_workflow
-from hrmosaic.core.models import RetrievalPayload, RetrievedChunk
+from hrmosaic.core.models import DiscoveredTool, RetrievalPayload, RetrievedChunk
 
 PTO = get_workflow("pto_request")
 REMOTE = get_workflow("remote_work_eligibility")
+
+#: The nine tools of §8.4, as `tools/list` hands them over.
+TOOL_NAMES = (
+    "search_policy_documents",
+    "get_policy_section",
+    "list_policy_documents",
+    "check_policy_compliance",
+    "lookup_employee_profile",
+    "check_pto_balance",
+    "lookup_benefits_status",
+    "create_mock_hr_ticket",
+    "draft_hr_email",
+)
+
+#: §13.9's ablation, verbatim from the spec's variant table — the five tools it disables.
+NO_STRUCTURED_TOOLS = [
+    "lookup_employee_profile",
+    "check_pto_balance",
+    "lookup_benefits_status",
+    "create_mock_hr_ticket",
+    "draft_hr_email",
+]
+
+
+def catalog() -> DiscoveredCatalog:
+    """A discovered catalog carrying the nine names — what `allowed_tools` filters."""
+    return DiscoveredCatalog(
+        server="hrmosaic-mcp",
+        transport="stdio",
+        url=None,
+        protocol_version="2025-06-18",
+        server_info=None,
+        tools=tuple(
+            DiscoveredTool(name=name, description=name, input_schema={"type": "object", "properties": {}})
+            for name in TOOL_NAMES
+        ),
+        catalog_sha="sha",
+        mcp_session_id=None,
+        handshake_ms=1,
+        discovered_at=0,
+    )
 
 
 def decision(intent: str, workflow: str | None) -> RouteDecision:
@@ -57,16 +109,21 @@ def decision(intent: str, workflow: str | None) -> RouteDecision:
     )
 
 
-def a_turn(*, intent: str = "workflow", workflow=PTO) -> _Turn:
+def a_turn(*, intent: str = "workflow", workflow=PTO, disabled: list[str] | None = None) -> _Turn:
     """A turn carrying only what `_nudge` and `_absorb` read.
 
     `buffer` is `None` on purpose: neither method touches it, and a reminder that ever reached the
-    span writer would fail here with an `AttributeError` rather than pass quietly.
+    span writer would fail here with an `AttributeError` rather than pass quietly. The catalog is
+    real, because `_nudge` now reads the same allowed-tool list the act step calls through.
     """
     return _Turn(
-        request=ChatRequest(message="Can I take five days off next month?", employee_id="E1042"),
+        request=ChatRequest(
+            message="Can I take five days off next month?",
+            employee_id="E1042",
+            options=ChatOptions(tools_disabled=list(disabled or [])),
+        ),
         buffer=None,
-        catalog=None,
+        catalog=catalog(),
         began=time.perf_counter(),
         decision=decision(intent, workflow.name if workflow is not None else None),
         workflow=workflow,
@@ -78,7 +135,7 @@ def orchestrator() -> Orchestrator:
     return Orchestrator()
 
 
-def retrieval(*chunks: tuple[str, str]) -> RetrievalPayload:
+def retrieval(*chunks: tuple[str, str], quarantined: bool = False) -> RetrievalPayload:
     return RetrievalPayload(
         query="pto notice period",
         k=5,
@@ -94,6 +151,7 @@ def retrieval(*chunks: tuple[str, str]) -> RetrievalPayload:
                 rank=index + 1,
                 dense_score=0.71,
                 snippet="Requests are submitted at least ten business days in advance.",
+                quarantined=quarantined,
             )
             for index, (chunk_id, doc_id) in enumerate(chunks)
         ],
@@ -125,27 +183,66 @@ def test_an_incomplete_workflow_is_reminded_once_and_only_once():
 
     assert agent._nudge(turn) is True
     assert [message.role for message in turn.messages] == ["user"]
+    assert turn.nudges == ["workflow_incomplete"]
 
     # The gap is still real on the next step, and the reminder is still not repeated.
     assert agent._nudge(turn) is False
     assert len(turn.messages) == 1
+    assert turn.nudges == ["workflow_incomplete"]
 
 
-def test_the_reminder_names_the_workflow_the_missing_tools_and_the_documents():
+def test_the_reminder_names_the_workflow_and_every_unfilled_slot():
     turn = a_turn()
     orchestrator()._nudge(turn)
 
     content = turn.messages[0].content or ""
     assert "pto_request" in content
-    assert "check_pto_balance" in content and "check_policy_compliance" in content
-    for doc_id in PTO.policy_docs:
-        assert doc_id in content
     assert content == WORKFLOW_INCOMPLETE.format(
         workflow="pto_request",
-        needs="check_pto_balance, check_policy_compliance",
-        docs=", ".join(PTO.policy_docs),
+        debts="; ".join(
+            [
+                "no PTO balance for this employee is in state yet",
+                "no compliance verdict is in state yet",
+                "the turn holds fewer than 2 citable policy passages on notice and approval, and "
+                "an answer may state policy only from passages it can cite",
+            ]
+        ),
     )
-    assert turn.step_summaries == ["step 0: workflow incomplete, asked for check_pto_balance, check_policy_compliance"]
+    assert turn.step_summaries == [
+        "step 0: workflow incomplete — no PTO balance for this employee is in state yet; "
+        "no compliance verdict is in state yet; the turn holds fewer than 2 citable policy "
+        "passages on notice and approval, and an answer may state policy only from passages it can cite"
+    ]
+
+
+@pytest.mark.parametrize("workflow", [PTO, REMOTE], ids=lambda spec: spec.name)
+def test_no_reminder_ever_names_a_tool(workflow):
+    """The P7 review's I1: on a nudged turn the harness must not author the remaining calls.
+
+    Every tool name in the catalog is checked against both reminders and against the debts of a
+    turn that has done nothing at all — the state in which every slot is unfilled and the wording
+    is at its most tempting.
+    """
+    turn = a_turn(intent="action", workflow=workflow)
+    agent = orchestrator()
+    agent._nudge(turn)
+    agent._nudge(turn)
+
+    sent = " ".join(message.content or "" for message in turn.messages)
+    assert len(turn.messages) == 2
+    for name in TOOL_NAMES:
+        assert name not in sent, f"the reminder dictates {name}"
+        assert name not in " ".join(turn.step_summaries)
+
+
+def test_the_remote_work_reminder_states_the_three_document_floor():
+    """M3: "ONE search is enough" was false — this workflow cannot be closed by one document."""
+    turn = a_turn(workflow=REMOTE)
+    orchestrator()._nudge(turn)
+
+    content = turn.messages[0].content or ""
+    assert "3 distinct policy documents" in content
+    assert "enough" not in content
 
 
 def test_a_complete_workflow_is_never_reminded():
@@ -157,7 +254,18 @@ def test_a_complete_workflow_is_never_reminded():
     assert PTO.is_complete(turn.state)
 
     assert orchestrator()._nudge(turn) is False
-    assert turn.messages == [] and turn.step_summaries == []
+    assert turn.messages == [] and turn.step_summaries == [] and turn.nudges == []
+
+
+def test_a_filled_slot_drops_out_of_the_debt_and_the_rest_remains():
+    turn = a_turn()
+    turn.state.record("check_pto_balance", {"remaining_days": 12.0})
+
+    orchestrator()._nudge(turn)
+
+    content = turn.messages[0].content or ""
+    assert "no PTO balance" not in content
+    assert "no compliance verdict is in state yet" in content
 
 
 def test_a_turn_with_no_workflow_and_no_action_is_never_reminded():
@@ -180,6 +288,7 @@ def test_an_unproposed_action_is_reminded_once_and_only_once():
     assert turn.messages[0].role == "user"
     assert turn.messages[0].content == ACTION_OUTSTANDING
     assert turn.step_summaries == ["step 0: the requested action was still unproposed"]
+    assert turn.nudges == ["action_outstanding"]
 
     assert agent._nudge(turn) is False
     assert len(turn.messages) == 1
@@ -218,6 +327,7 @@ def test_the_workflow_reminder_comes_first_and_the_action_reminder_on_the_next_s
     assert turn.messages[1].content == ACTION_OUTSTANDING
     assert agent._nudge(turn) is False
     assert len(turn.messages) == 2
+    assert turn.nudges == ["workflow_incomplete", "action_outstanding"]
 
 
 def test_a_reminder_never_invents_evidence():
@@ -229,6 +339,50 @@ def test_a_reminder_never_invents_evidence():
 
     assert turn.state.evidence_chunk_ids == [] and turn.state.evidence_doc_ids == []
     assert turn.evidence == {}
+
+
+# --------------------------------------------------------------------------------------
+# A reminder never asks for a tool this turn may not call (§13.9's ablation)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_ablation_that_disables_the_write_tools_silences_the_action_reminder():
+    """No permitted tool can propose the action, so asking for it would only invite a refused call."""
+    turn = a_turn(intent="action", workflow=None, disabled=NO_STRUCTURED_TOOLS)
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == [] and turn.nudges == []
+
+
+def test_a_debt_only_a_disabled_tool_could_settle_is_not_reported():
+    """The balance is out of reach under `no_structured_tools`; the reminder does not ask for it."""
+    turn = a_turn(intent="action", disabled=NO_STRUCTURED_TOOLS)
+    turn.state.record("check_policy_compliance", {"verdict": "compliant"})
+    turn.state.note_evidence("pto-and-holidays#0001", "pto-and-holidays")
+    turn.state.note_evidence("pto-and-holidays#0002", "pto-and-holidays")
+    assert PTO.is_complete(turn.state) is False, "the balance is the one unfilled slot"
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == [] and turn.nudges == []
+
+
+def test_a_debt_a_permitted_tool_can_still_settle_is_reported_under_the_ablation():
+    """The ablation silences what it disabled and nothing else: retrieval is still permitted."""
+    turn = a_turn(disabled=NO_STRUCTURED_TOOLS)
+
+    assert orchestrator()._nudge(turn) is True
+    content = turn.messages[0].content or ""
+    assert "no PTO balance" not in content
+    assert "no compliance verdict is in state yet" in content
+    assert "citable policy passages" in content
+
+
+def test_a_turn_that_discovered_no_catalog_is_never_reminded():
+    turn = a_turn(intent="action", workflow=PTO)
+    turn.catalog = None
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == []
 
 
 # --------------------------------------------------------------------------------------
@@ -252,6 +406,7 @@ def test_a_retrieved_chunk_is_evidence():
     assert turn.state.evidence_chunk_ids == ["pto-and-holidays#0007"]
     assert turn.state.evidence_doc_ids == ["pto-and-holidays"]
     assert list(turn.evidence) == ["pto-and-holidays#0007"]
+    assert [chunk.chunk_id for chunk in turn.citable()] == ["pto-and-holidays#0007"]
 
 
 @pytest.mark.parametrize(
@@ -277,6 +432,44 @@ def test_a_merely_cited_chunk_id_is_not_evidence(tool_name: str, body: dict):
     assert turn.evidence == {}
     # The result itself is still in state — only its citations stopped counting as evidence.
     assert turn.state.has(tool_name)
+
+
+def test_a_quarantined_chunk_is_not_evidence_and_does_not_satisfy_a_predicate():
+    """G4 quarantined it, so G2 will strip every citation to it: it can support nothing.
+
+    The retrieval itself is untouched — the chunk is still in `turn.evidence` for the prompt and
+    still on the persisted `retrieval` span with its flag — but the completion predicate and the
+    evidence gate both look past it, and a turn holding nothing else is refused rather than
+    answered from support the answer is forbidden to cite.
+    """
+    turn = a_turn()
+    agent = orchestrator()
+    agent._absorb(turn, result("check_pto_balance", {"remaining_days": 12.0}))
+    agent._absorb(turn, result("check_policy_compliance", {"verdict": "compliant"}))
+    fresh = agent._absorb(
+        turn,
+        result(
+            "search_policy_documents",
+            {"chunks": []},
+            retrievals=[
+                retrieval(
+                    ("pto-and-holidays#0007", "pto-and-holidays"),
+                    ("manager-approval-matrix#0002", "manager-approval-matrix"),
+                    quarantined=True,
+                )
+            ],
+        ),
+    )
+
+    assert [chunk.chunk_id for chunk in fresh] == ["pto-and-holidays#0007", "manager-approval-matrix#0002"]
+    assert turn.state.evidence_chunk_ids == [] and turn.state.evidence_doc_ids == []
+    assert PTO.is_complete(turn.state) is False
+    assert REMOTE.evidence_met(turn.state) is False
+
+    # And G1 refuses: the only chunks the turn holds are ones no answer may cite.
+    assert turn.citable() == []
+    assert g1.evaluate(turn.citable()).passed is False
+    assert g1.evaluate(turn.chunks()).passed is True, "the control — unquarantined, these would pass"
 
 
 def test_a_compliance_verdict_without_retrieval_does_not_complete_the_pto_workflow():
@@ -347,12 +540,17 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
     act_calls = [payload for kind, _, payload in records if kind == "llm_call" and payload["purpose"] == "act"]
     assert len(act_calls) == 3, "one reminder each, then the loop lets the model stop"
 
-    summaries = next(payload["step_summaries"] for kind, name, payload in records if name == "act_summary")
-    assert summaries == [
-        "step 1: workflow incomplete, asked for check_pto_balance, check_policy_compliance",
+    summary = next(payload for kind, name, payload in records if name == "act_summary")
+    assert summary["step_summaries"] == [
+        "step 1: workflow incomplete — no PTO balance for this employee is in state yet; "
+        "no compliance verdict is in state yet; the turn holds fewer than 2 citable policy "
+        "passages on notice and approval, and an answer may state policy only from passages it can cite",
         "step 2: the requested action was still unproposed",
         "step 3: no tool call, the model answered",
     ]
+    # Machine-readable, on the plan span, so §13.4's reader can separate nudged turns from the
+    # rest and P10 can report a `nudge_rate` (P7 review, I1b).
+    assert summary["nudges"] == ["workflow_incomplete", "action_outstanding"]
 
     # The reminders reached the model verbatim, and live nowhere but the `llm_messages` rows.
     rows = store.execute(
@@ -363,11 +561,23 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
     reminders = [
         row["content"]
         for row in rows
-        if row["role"] == "user" and row["content"].startswith(("Not yet.", "You have not proposed"))
+        if row["role"] == "user" and row["content"].startswith(("Not yet", "The user asked for something"))
     ]
-    assert reminders[0].startswith("Not yet. The pto_request workflow still needs")
+    assert reminders[0].startswith("Not yet — this turn is not finished. The pto_request workflow is incomplete")
     assert ACTION_OUTSTANDING in reminders
 
     # And they manufactured nothing: no tool ran, so G1 still refuses.
     assert response.outcome == "refused"
     assert response.usage.tool_calls == 0
+
+
+@pytest.mark.anyio
+async def test_a_turn_that_was_never_nudged_records_an_empty_nudges_list(run_agent, spans):
+    """The other half of the `nudge_rate`: a clean turn says so, rather than saying nothing."""
+    response = await run_agent(
+        "injection_probe.json",
+        ChatRequest(message="What should I do about a suspicious phishing email?", employee_id="E1042"),
+    )
+
+    summary = next(payload for kind, name, payload in spans(response.turn_id) if name == "act_summary")
+    assert summary["nudges"] == []

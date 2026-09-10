@@ -34,9 +34,31 @@ POLICY_DOCS = (
 MIN_DISTINCT_DOCS = 3
 
 
+#: What each required slot is **in workflow words**, for the act loop's reminder. Never a tool
+#: name: the reminder reports the debt and lets the model choose how to settle it (§9.1 step 2).
+SLOT_DESCRIPTIONS = {
+    "lookup_employee_profile": "no employee record is in state yet",
+    "check_policy_compliance": "no compliance verdict is in state yet",
+}
+
+#: The evidence clause of the predicate below, said plainly — and said *truthfully*: one search of
+#: one document cannot satisfy a three-document floor, whatever a reminder claims.
+EVIDENCE_DESCRIPTION = (
+    f"the turn holds citable policy passages from fewer than {MIN_DISTINCT_DOCS} distinct policy "
+    f"documents, and this question is answerable only across at least {MIN_DISTINCT_DOCS} of them "
+    "— the tenure and duration thresholds, the approved-country list and the device rules are "
+    "each written in a different document"
+)
+
+
+def evidence_met(state: LoopState) -> bool:
+    """The predicate's evidence clause, named: R3.5's multi-document floor."""
+    return len(state.evidence_doc_ids) >= MIN_DISTINCT_DOCS
+
+
 def is_complete(state: LoopState) -> bool:
     """The predicate of §9.3, clause by clause."""
-    return state.has("lookup_employee_profile") and state.decided() and len(state.evidence_doc_ids) >= MIN_DISTINCT_DOCS
+    return state.has("lookup_employee_profile") and state.decided() and evidence_met(state)
 
 
 SPEC = WorkflowSpec(
@@ -51,6 +73,18 @@ SPEC = WorkflowSpec(
     policy_docs=POLICY_DOCS,
     is_complete=is_complete,
     requires_tool_results=("lookup_employee_profile", "check_policy_compliance"),
+    slot_descriptions=SLOT_DESCRIPTIONS,
+    evidence_description=EVIDENCE_DESCRIPTION,
+    evidence_met=evidence_met,
 )
 
-__all__ = ["MIN_DISTINCT_DOCS", "NAME", "POLICY_DOCS", "SPEC", "is_complete"]
+__all__ = [
+    "EVIDENCE_DESCRIPTION",
+    "MIN_DISTINCT_DOCS",
+    "NAME",
+    "POLICY_DOCS",
+    "SLOT_DESCRIPTIONS",
+    "SPEC",
+    "evidence_met",
+    "is_complete",
+]

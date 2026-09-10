@@ -107,6 +107,12 @@ class PlanPayload(_Payload):
     rationale_summary: str = ""
     step_index: int = 0
     catalog_reopened: bool = False
+    #: Which of the act loop's deterministic reminders fired on this turn (§9.1 step 2) —
+    #: `workflow_incomplete`, `action_outstanding`. A nudged turn is one the harness pushed back
+    #: into the loop, so §13.4's per-turn scores are only comparable alongside a `nudge_rate`;
+    #: recording the names here is what lets P10 report one. **Defaulted on purpose**: rows written
+    #: before the field existed still parse as `PlanPayload` (§10.2).
+    nudges: list[str] = Field(default_factory=list)
 
 
 class MessagesRef(_Payload):

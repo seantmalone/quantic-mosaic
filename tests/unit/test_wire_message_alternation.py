@@ -4,7 +4,9 @@ Anthropic documents both, and both are 400s, not warnings:
 
 * **roles alternate** — no two consecutive `user` messages and no two consecutive `assistant` ones;
 * **every `tool_use` block is answered by a `tool_result` block in the immediately following
-  message** — not eventually, and not spread over several messages.
+  message** — not eventually, and not spread over several messages;
+* **no message is empty** — an empty content block is a 400 wherever it sits, and the act loop
+  makes one every time the model stops with no text and no tool call.
 
 The provider-neutral `Message` carries **one** tool result each (`tool_call_id` is singular), so an
 act step that asked for two tools hands the adapter two `tool` messages in a row. Turning each into
@@ -50,11 +52,19 @@ TWO_TOOL_STEP = [
 
 
 def assert_wire_is_well_formed(messages: list[dict]) -> None:
-    """The two Messages API rules, over one recorded request body."""
+    """The three Messages API rules, over one recorded request body."""
     roles = [message["role"] for message in messages]
     assert all(first != second for first, second in zip(roles, roles[1:], strict=False)), (
         f"roles must alternate, got {roles}"
     )
+
+    for index, message in enumerate(messages[:-1]):
+        content = message["content"]
+        assert content, f"message {index} of {len(messages)} is empty and is not the last"
+        blocks = content if isinstance(content, list) else [{"type": "text", "text": content}]
+        for block in blocks:
+            if block.get("type") == "text":
+                assert block["text"].strip(), f"message {index} carries an empty text block"
 
     for index, message in enumerate(messages):
         content = message["content"]
@@ -110,6 +120,45 @@ def test_the_repair_round_trip_sends_one_assistant_turn_and_one_user_turn(wire, 
     assert [message["role"] for message in sent] == ["user", "assistant", "user"]
     assert [block["type"] for block in sent[2]["content"]] == ["tool_result", "tool_result", "text"]
     assert sent[2]["content"][-1]["text"].startswith("The call to lookup_employee_profile")
+    assert_wire_is_well_formed(sent)
+
+
+def test_an_empty_assistant_turn_before_a_reminder_never_reaches_the_wire(wire, anthropic_response):
+    """The shape a nudged turn makes: a completion with no text and no tool calls, then a reminder.
+
+    `_act` appends the assistant turn before it knows whether the loop will let the model stop, so
+    an empty completion followed by one of §9.1 step 2's reminders leaves a non-final
+    `{"role": "assistant", "content": ""}` in the array. The Messages API rejects an empty content
+    block with a non-retryable 400 — live, it escaped the loop's own handling and surfaced as the
+    web layer's catch-all. The empty turn said nothing and asked for nothing, so it is dropped and
+    the reminder joins the user turn it follows.
+    """
+    reminder = "Not yet — this turn is not finished. The pto_request workflow is incomplete."
+    nudged = [
+        *TWO_TOOL_STEP[:2],
+        Message(role="assistant", content="", tool_calls=[]),
+        Message(role="user", content=reminder),
+    ]
+    sent = send(wire, anthropic_response, nudged)
+
+    assert [message["role"] for message in sent] == ["user"]
+    assert [block["text"] for block in sent[0]["content"]] == [TWO_TOOL_STEP[1].content, reminder]
+    assert_wire_is_well_formed(sent)
+
+
+def test_a_reminder_after_a_tool_step_answers_the_step_and_stays_in_the_one_user_turn(wire, anthropic_response):
+    """The same, one step later: the reminder rides with the `tool_result` blocks that answer the step."""
+    reminder = "The user asked for something to be created and this turn has not proposed it yet."
+    nudged = [
+        *TWO_TOOL_STEP,
+        Message(role="assistant", content="", tool_calls=[]),
+        Message(role="user", content=reminder),
+    ]
+    sent = send(wire, anthropic_response, nudged)
+
+    assert [message["role"] for message in sent] == ["user", "assistant", "user"]
+    assert [block["type"] for block in sent[2]["content"]] == ["tool_result", "tool_result", "text"]
+    assert sent[2]["content"][-1]["text"] == reminder
     assert_wire_is_well_formed(sent)
 
 

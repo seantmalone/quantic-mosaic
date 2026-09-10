@@ -412,3 +412,49 @@ rather than assumed.
 
 - **`scripts/wait_for_health.py` was missing.** The `Makefile`'s `demo1` / `demo2` / `docker-run-512`
   targets have called it since P0. Added here, because `make demo1 && make demo2` is P8's gate.
+
+## 2026-09-10 — P7 fix round 2 (the act loop's two reminders)
+
+- **A reminder names the debt, never the tool.** `WORKFLOW_INCOMPLETE` used to inject
+  `check_pto_balance`, `check_policy_compliance` and "Make ONE `search_policy_documents` call", and
+  `ACTION_OUTSTANDING` said "Call the write tool now" — so on a nudged turn the harness, not the
+  model, authored the remaining tool sequence and §13.4's ToolSelection would have been scoring the
+  hint. The wording now comes from the workflow spec's `slot_descriptions` / `evidence_description`
+  ("no compliance verdict is in state yet"), and the evidence clause states what the predicate
+  *actually* requires: "one search is enough" was false for `remote_work_eligibility`, which needs
+  three distinct `doc_id`s. Every turn now records which reminders fired in the `plan` span's new
+  `nudges[]` (defaulted, so older rows still parse), which is what lets P10 publish a `nudge_rate`
+  beside the per-turn scores.
+- **A reminder never asks for a tool the turn may not call.** `_nudge` reads the same
+  `allowed_tools(...)` list the act step calls through, so under §13.9's `no_structured_tools`
+  ablation the debts only a disabled tool could settle are dropped and the action reminder is
+  silent — otherwise the ablation would have been reading `tool_not_offered` spans it manufactured
+  itself.
+- **An empty assistant turn never reaches the wire.** `_act` appends the assistant message before it
+  knows whether the loop will let the model stop, so an empty completion followed by a reminder left
+  a non-final `{"role": "assistant", "content": ""}` — a non-retryable 400 on the Messages API that
+  escaped the loop's own handling and surfaced as `web/`'s catch-all. `_split_system` now drops a
+  content-less, tool-call-less assistant entry, and `test_wire_message_alternation.py` asserts a
+  third structural rule: no non-final message is empty.
+- **A quarantined chunk is not evidence.** G2 strips every citation to one, so counting it let
+  `is_complete` close a turn on support the answer is forbidden to use — the same defect as counting
+  a merely *cited* chunk id. `LoopState.note_evidence` drops it and `turn.citable()` keeps it out of
+  G1, while the `retrieval` span still carries the hit with its flag and the synthesis prompt still
+  renders the labelled envelope.
+- **Live provider check, run 2026-09-10** against `claude-haiku-4-5` with the real key from the
+  git-ignored `.env` (`make run`, then `BASE_URL=http://127.0.0.1:8000 bash scripts/demo_task_1.sh`
+  and `scripts/demo_task_2.sh`). **Both demo tasks completed with the reworded reminders.** Demo 1
+  ended `answered` with 5 citations spanning 3 documents (`remote-and-hybrid-work`,
+  `tax-and-location-addendum`, `security-acceptable-use`), 6 tool calls, 4 retrievals;
+  `nudges: ["workflow_incomplete"]` — the model had the profile and the verdict but no retrieved
+  text, was told so, and answered it with four searches. Demo 2 ended `answered` after the
+  confirmation gate with `MOCK-HR-000012` created, 6 tool calls;
+  `nudges: ["workflow_incomplete", "action_outstanding"]` — one reminder bought the policy
+  passages, the other the gated proposal. Total spend for the live check, including one earlier
+  refused run whose wording was too weak, **$0.12**.
+- **The first wording refused, and why the second does not.** "Close each gap with the tools you
+  were offered" left `claude-haiku-4-5` fetching sections by exact heading — `get_policy_section`
+  returns no scored chunk, so G1 saw an empty candidate set and demo 1 refused. The shipped text
+  says what only a search can give it: *"Only a passage retrieved by SEARCHING the policy corpus can
+  be cited: a section fetched by its exact heading is not scored, grounds nothing, and an answer
+  resting on one is refused."* Still no tool name — the capability, not the call.

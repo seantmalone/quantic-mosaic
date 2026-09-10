@@ -247,6 +247,11 @@ def _split_system(messages: Sequence[Message]) -> tuple[list[dict[str, Any]], li
     rules at once. Consecutive same-role messages are therefore **coalesced** into a single message
     whose content is the concatenation of their blocks, which puts every `tool_result` of a step in
     the one user turn that answers the assistant's `tool_use` blocks, in order, results first.
+
+    A third rule joins them: **no message may be empty**. An assistant entry with neither text nor
+    tool calls is dropped rather than emitted, because the act loop appends one whenever the model
+    stops with an empty completion — and a reminder appended after it would leave that empty
+    message in a non-final position, which the API rejects with a non-retryable 400.
     """
     system_blocks: list[dict[str, Any]] = []
     conversation: list[tuple[str, list[dict[str, Any]]]] = []
@@ -280,6 +285,15 @@ def _split_system(messages: Sequence[Message]) -> tuple[list[dict[str, Any]], li
                 for call in message.tool_calls
             ]
             emit("assistant", blocks)
+        elif message.role == "assistant" and not message.content:
+            # An assistant turn that said nothing and called nothing: **dropped**, never emitted.
+            # The act loop produces one whenever the model stops with an empty completion, and the
+            # next thing it appends is one of §9.1 step 2's reminders — which would leave
+            # `{"role": "assistant", "content": ""}` in a non-final position. The Messages API
+            # rejects an empty content block with a non-retryable 400, so the whole nudged turn
+            # would die at the provider and surface as the web layer's catch-all. It carries no
+            # information either way: nothing was said and nothing was asked for.
+            continue
         else:
             emit(message.role, [{"type": "text", "text": message.content}] if message.content else [])
     if system_blocks:
