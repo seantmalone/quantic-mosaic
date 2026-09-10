@@ -12,8 +12,8 @@ What this file pins down:
 * every page **and** every `/api/*` read answers **403** `{"code": "ADMIN_REQUIRED"}` without it;
 * pages 1 and 2 show and filter on `auth_mode` and `actor_role`;
 * the three write controls of §11.6 are present and wired, never rendered dead;
-* the bounded smoke-eval endpoint refuses an over-large request and reports the missing P10 runner
-  rather than raising;
+* the bounded smoke-eval endpoint refuses an over-large request and lazily resolves the harness
+  (its bounded success path is `tests/integration/test_smoke_eval_endpoint.py`);
 * the eval-row → trace deep link resolves.
 """
 
@@ -389,13 +389,10 @@ async def test_run_smoke_eval_is_on_page_eleven_bounded_and_lazily_imports_the_r
     )
     assert two_variants.status_code == 422
 
-    # `evaluation/runner.py` is P10's; until it lands the bounded request answers a clear 501
-    # rather than raising, and P10's own test replaces this assertion with a real one-item run.
-    bounded = await seeded.client.post("/api/eval/runs", json={"variant": "baseline", "n_items": 2}, headers=ADMIN)
-    try:
-        import evaluation.runner  # noqa: F401
-    except ImportError:
-        assert bounded.status_code == 501, bounded.text
-        assert bounded.json()["code"] == "EVAL_RUNNER_UNAVAILABLE"
-    else:  # pragma: no cover — true only once P10 has landed
-        assert bounded.status_code == 200
+    # The handler imports `evaluation.runner` **lazily**, inside itself, so the dashboard boots
+    # without the harness. P10 landed it, so the name resolves and the smoke entry point exists;
+    # the bounded success path — one real item over the running app — is
+    # `tests/integration/test_smoke_eval_endpoint.py`, which owns the base URL the run drives.
+    from evaluation import runner as eval_runner
+
+    assert callable(eval_runner.smoke_run)

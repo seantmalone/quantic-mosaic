@@ -1,0 +1,45 @@
+{
+ "transport": "stdio",
+ "server_info": {
+  "name": "mosaic-hr",
+  "version": "0.1.0"
+ },
+ "protocol_version": "2025-11-25",
+ "removed_tools": [
+  "lookup_employee_profile",
+  "check_pto_balance",
+  "lookup_benefits_status",
+  "create_mock_hr_ticket",
+  "draft_hr_email"
+ ],
+ "tool_count": 4,
+ "tools": [
+  {
+   "name": "check_policy_compliance",
+   "description": "Evaluate one HR scenario against the policy rules deterministically: which requirements apply, which are met, which approvals the request needs and what to do next, every requirement citing the policy section that backs it.",
+   "required": [
+    "scenario",
+    "employee_id"
+   ]
+  },
+  {
+   "name": "get_policy_section",
+   "description": "Return the verbatim text of one section of a policy document, with its neighbours and siblings for context.",
+   "required": [
+    "doc_id"
+   ]
+  },
+  {
+   "name": "list_policy_documents",
+   "description": "List the HR policy documents in the corpus with their topics, sizes and effective dates.",
+   "required": []
+  },
+  {
+   "name": "search_policy_documents",
+   "description": "Semantic + lexical search over the 14 HR policy documents.",
+   "required": [
+    "query"
+   ]
+  }
+ ]
+}

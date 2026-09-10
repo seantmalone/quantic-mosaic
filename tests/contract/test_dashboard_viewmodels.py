@@ -305,8 +305,11 @@ async def test_the_item_rows_carry_the_scores_verdicts_and_a_trace_link(seeded):
     assert item["scores"]
     assert item["verdicts"]["groundedness"]["judge_model"] == "gemini-3.5-flash-lite"
     assert item["trace_url"] == f"/dashboard/sessions/{seeded['turn']['session_id']}#turn-{item['turn_id']}"
-    # `question` / `gold` come from `evaluation/dataset.yaml`, a P10 deliverable: empty, not invented
-    assert item["question"] is None and item["gold"] is None
+    # `question` / `gold` come from `evaluation/dataset.yaml` — never from the stored answer, which
+    # would make the page agree with itself by construction. P10 landed the dataset, so the two
+    # columns are the dataset's own text for this item id.
+    assert item["question"] == "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
+    assert item["gold"] and item["gold"].startswith("Conditional")
 
 
 # --------------------------------------------------------------------------------------

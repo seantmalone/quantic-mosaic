@@ -95,8 +95,14 @@ class Settings(BaseSettings):
     index_path: Path = Path("data/index/hr_index.sqlite")
     retrieval_k: int = Field(default=5, ge=1, le=10)
     retrieval_strategy: Literal["hybrid_rrf", "dense_only"] = "hybrid_rrf"
-    min_evidence_score: float = Field(default=0.32, ge=0.0, le=1.0)
-    min_support_score: float = Field(default=0.26, ge=0.0, le=1.0)
+    # Calibrated at P10 (2026-09-09) from the observed dense-score distribution over this corpus,
+    # not guessed: 26 dataset questions plus 8 extra out-of-corpus probes, retrieval only. The two
+    # populations separate cleanly — in-scope `max_dense_score` ∈ [0.622, 0.917], out-of-scope
+    # ∈ [0.466, 0.584] — so 0.60 is the midpoint of the gap and 0.45 sits above the observed noise
+    # floor (0.29) yet below every in-scope top-5 score (0.574). The shipped 0.32 / 0.26 were below
+    # the model's cosine floor over this corpus, which made G1's score clauses unreachable (§21).
+    min_evidence_score: float = Field(default=0.60, ge=0.0, le=1.0)
+    min_support_score: float = Field(default=0.45, ge=0.0, le=1.0)
 
     # --- chunking ------------------------------------------------------------------------
     chunk_max_chars: int = Field(default=1400, ge=1)

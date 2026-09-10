@@ -6,7 +6,8 @@ Anthropic documents both, and both are 400s, not warnings:
 * **every `tool_use` block is answered by a `tool_result` block in the immediately following
   message** — not eventually, and not spread over several messages;
 * **no message is empty** — an empty content block is a 400 wherever it sits, and the act loop
-  makes one every time the model stops with no text and no tool call.
+  makes one every time the model stops with no text and no tool call. Whitespace-only counts as
+  empty: `"\n"` is truthy in Python and still an empty block on the wire.
 
 The provider-neutral `Message` carries **one** tool result each (`tool_call_id` is singular), so an
 act step that asked for two tools hands the adapter two `tool` messages in a row. Turning each into
@@ -137,6 +138,28 @@ def test_an_empty_assistant_turn_before_a_reminder_never_reaches_the_wire(wire, 
     nudged = [
         *TWO_TOOL_STEP[:2],
         Message(role="assistant", content="", tool_calls=[]),
+        Message(role="user", content=reminder),
+    ]
+    sent = send(wire, anthropic_response, nudged)
+
+    assert [message["role"] for message in sent] == ["user"]
+    assert [block["text"] for block in sent[0]["content"]] == [TWO_TOOL_STEP[1].content, reminder]
+    assert_wire_is_well_formed(sent)
+
+
+@pytest.mark.parametrize("blank", ["", " ", "\n", "\n  \t "])
+def test_a_whitespace_only_assistant_turn_is_dropped_exactly_like_an_empty_one(wire, anthropic_response, blank):
+    """A completion of `"\n"` is truthy in Python and still an empty content block on the wire.
+
+    The drop rule reads `not (content or "").strip()`, not plain falsiness: the Messages API's 400
+    is about the *rendered* block, so a model that stops with a stray newline would otherwise leave
+    a non-final assistant message the provider rejects — the same non-retryable failure the empty
+    case already fixed, reached one whitespace character later.
+    """
+    reminder = "Not yet — this turn is not finished."
+    nudged = [
+        *TWO_TOOL_STEP[:2],
+        Message(role="assistant", content=blank, tool_calls=[]),
         Message(role="user", content=reminder),
     ]
     sent = send(wire, anthropic_response, nudged)

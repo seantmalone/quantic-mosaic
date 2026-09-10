@@ -36,22 +36,24 @@ class Candidate:
 
 
 def test_a_strong_candidate_set_passes():
-    verdict = g1.evaluate([Candidate(0.71), Candidate(0.44), Candidate(0.28)])
+    verdict = g1.evaluate([Candidate(0.71), Candidate(0.64), Candidate(0.48)])
     assert verdict.passed
     assert verdict.max_dense_score == 0.71
     assert verdict.supporting == 3
 
 
 def test_everything_below_the_evidence_threshold_refuses():
-    verdict = g1.evaluate([Candidate(0.31), Candidate(0.30), Candidate(0.29)])
+    # The out-of-scope band this corpus actually produces: P10's calibration measured every
+    # out-of-corpus probe at `max_dense_score` ≤ 0.584 against an in-scope floor of 0.622.
+    verdict = g1.evaluate([Candidate(0.58), Candidate(0.57), Candidate(0.54)])
     assert not verdict.passed
-    assert "0.310" in verdict.reason and "0.32" in verdict.reason
+    assert "0.580" in verdict.reason and "0.60" in verdict.reason
 
 
 def test_one_strong_chunk_alone_is_not_enough_support():
     verdict = g1.evaluate([Candidate(0.71), Candidate(0.11)])
     assert not verdict.passed
-    assert "1 chunk(s) at or above 0.26" in verdict.reason
+    assert "1 chunk(s) at or above 0.45" in verdict.reason
 
 
 def test_an_empty_candidate_set_refuses():
@@ -68,7 +70,7 @@ def test_a_bm25_only_candidate_is_judged_on_its_dense_score_not_its_rrf_score():
     every query at the project's own defaults. Both candidates below carry that maximum; only the
     dense score separates them.
     """
-    retained = g1.evaluate([Candidate(0.71, rrf_score=0.03, bm25_rank=1), Candidate(0.44, bm25_rank=2)])
+    retained = g1.evaluate([Candidate(0.71, rrf_score=0.03, bm25_rank=1), Candidate(0.64, bm25_rank=2)])
     dropped = g1.evaluate([Candidate(0.10, rrf_score=0.03, bm25_rank=1), Candidate(0.09, bm25_rank=2)])
     assert retained.passed
     assert not dropped.passed

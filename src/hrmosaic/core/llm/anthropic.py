@@ -285,8 +285,11 @@ def _split_system(messages: Sequence[Message]) -> tuple[list[dict[str, Any]], li
                 for call in message.tool_calls
             ]
             emit("assistant", blocks)
-        elif message.role == "assistant" and not message.content:
+        elif message.role == "assistant" and not (message.content or "").strip():
             # An assistant turn that said nothing and called nothing: **dropped**, never emitted.
+            # `.strip()` and not plain falsiness: a completion of `"\n"` or `" "` is truthy, would
+            # be emitted as a text block the API still reads as empty, and would fail exactly as an
+            # `""` does — the 400 is about the rendered block, not about Python truthiness.
             # The act loop produces one whenever the model stops with an empty completion, and the
             # next thing it appends is one of §9.1 step 2's reminders — which would leave
             # `{"role": "assistant", "content": ""}` in a non-final position. The Messages API

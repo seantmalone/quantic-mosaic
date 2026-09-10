@@ -2,8 +2,12 @@
 
 The rule fires when the fused candidate set is too weak to ground an answer:
 
-* `max_dense_score < MIN_EVIDENCE_SCORE` (0.32), **or**
-* fewer than two candidates at or above `MIN_SUPPORT_SCORE` (0.26).
+* `max_dense_score < MIN_EVIDENCE_SCORE` (0.60), **or**
+* fewer than two candidates at or above `MIN_SUPPORT_SCORE` (0.45).
+
+Both numbers were **calibrated at P10** from the observed distribution over this corpus rather than
+guessed (§7.4, §21): the shipped 0.32 / 0.26 sat below the embedding model's cosine floor here, so
+neither clause could ever fire and the rule was a no-op. See `CHANGELOG.md` for the measurement.
 
 Every fused candidate carries a dense score by construction — §7.1's fill step scores the BM25-only
 arrivals against the query vector using their stored embeddings — so the rule is **total**: there is
