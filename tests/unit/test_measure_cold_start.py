@@ -15,6 +15,8 @@ for one.
 
 from __future__ import annotations
 
+import inspect
+
 import httpx
 import pytest
 
@@ -180,3 +182,24 @@ def test_a_failed_segment_exits_non_zero_rather_than_printing_a_table(monkeypatc
     assert exit_code == 1
     assert "FAIL" in captured.err
     assert "First request total" not in captured.out
+
+
+# --- the ready timeout the first live probe blew through -------------------------------------
+
+
+def test_the_ready_timeout_is_generous_enough_for_a_free_instance():
+    """180 s was measured against the local image, where `/ready` greens in 2.6 s.
+
+    Render's free plan gives 0.1 of a CPU and `/health` — its health-check path — answers 200 while
+    the ONNX model is still loading, so the first live cold probe on 2026-09-10 timed out at 180 s
+    without producing a figure. A ceiling that stops the measurement before the thing being measured
+    has finished is a missing number, not a safeguard.
+    """
+    assert measure_cold_start.DEFAULT_READY_TIMEOUT_S >= 600
+
+
+def test_the_ready_timeout_is_settable_from_the_command_line():
+    parser_default = measure_cold_start.main.__globals__["DEFAULT_READY_TIMEOUT_S"]
+    assert parser_default == measure_cold_start.DEFAULT_READY_TIMEOUT_S
+    signature = inspect.signature(measure_cold_start.measure)
+    assert signature.parameters["ready_timeout_s"].default == measure_cold_start.DEFAULT_READY_TIMEOUT_S

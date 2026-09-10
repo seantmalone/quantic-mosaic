@@ -2341,6 +2341,13 @@ results set into the live image (§13.10) — so a pull request runs `lint`, `te
 `needs: [test, docker]` still holds on a dispatch, which is exactly what makes the same input usable as the red-run evidence path below. **Belt and braces on the platform:**
 Render Auto-Deploy is **Off** (`autoDeploy: false`), so the only path from a commit to the running service is the hook this job curls.
 
+**Amendment: deploys are triggered by the Render API from CI; a Deploy Hook is an equivalent alternative** (ratified 2026-09-10, P11b, post-gate).
+The deploy hook URL is published in the dashboard and by no REST endpoint (§14.6), so it cannot be provisioned unattended; the `Trigger Render deploy`
+step therefore curls `$RENDER_DEPLOY_HOOK_URL` when that secret exists and otherwise `POST`s `/v1/services/$RENDER_SERVICE_ID/deploys` with
+`RENDER_API_KEY` — secrets `provision_render.py` sets by itself. The step's guard is an OR over the two credential sets and still fails loudly, naming
+`NEEDS-FROM-USER.md`, when neither is present. R8.4 is untouched either way: the job still carries `needs: [test, docker]`, and Render's own
+Auto-Deploy is still off, so a commit reaches production only by passing through this job.
+
 **The evidence artifact.** P11 records a deliberately red run: push a temporary branch carrying one deliberately failing test and dispatch `ci.yml`
 against that branch with `deploy_only: true`, so `deploy`'s `if` is satisfied, `test` fails, and the job graph shows `deploy` **skipped with reason
 "dependent job failed"**. The branch is deleted afterwards; no new workflow input and no failure-injection switch exists. The screenshot is committed as `docs/evidence/ci-deploy-skipped.png` and referenced from
@@ -2434,8 +2441,16 @@ minutes; they still run on pull requests, where `test_docs_completeness.py` is t
 
 ### 15.2 Secrets, and how the R8 bullets map
 
-Three repository secrets, set by `scripts/provision_*.py` via `gh secret set` at P11: `RENDER_DEPLOY_HOOK_URL` (the `deploy` job), `DEPLOY_URL`
-(`wait_for_deploy.py`, `smoke_deployed.py`) and `RENDER_API_KEY` (`check_render_hours.py`, warn-only). **No LLM key is a CI secret, and neither is the access
+Repository secrets, set by `scripts/provision_*.py` via `gh secret set` at P11: `RENDER_DEPLOY_HOOK_URL` (the `deploy` job), `DEPLOY_URL`
+(`wait_for_deploy.py`, `smoke_deployed.py`) and `RENDER_API_KEY` (`check_render_hours.py`, warn-only).
+
+**Amendment: `RENDER_SERVICE_ID` joins them, and deploys are triggered by the Render API** (ratified 2026-09-10, P11b, post-gate). Because the deploy
+hook URL cannot be read back from any endpoint (§14.6), CI triggers production through `POST /v1/services/$RENDER_SERVICE_ID/deploys` with
+`RENDER_API_KEY` — both already in hand — and a Deploy Hook remains an equivalent alternative that wins when `RENDER_DEPLOY_HOOK_URL` is set. Five
+secrets, then, not three; every one of them addresses Render's control plane and none is a credential the *application* answers with, which is what
+this section has always actually claimed.
+
+**No LLM key is a CI secret, and neither is the access
 token** — the push path never calls a provider, `make eval` runs from the developer's machine, and the `docker` job passes a throwaway
 `APP_ACCESS_TOKEN` inline, which proves only that the image boots with the gate on: the job makes **no gated call**, because `/health` and `/ready`
 stay open and `wait_for_health.py` / `assert_health.py` are all it runs. That is why the deploy path is fast, offline and free of 429 flakes.

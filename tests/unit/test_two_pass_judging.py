@@ -22,6 +22,8 @@ An ablation arm is never pending: §13.9 judges `baseline` only, so an arm is co
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import evaluation.runner as runner
@@ -316,3 +318,68 @@ async def test_a_pass_that_blows_the_failure_budget_writes_nothing(tmp_path, wri
     assert "judge_status: pending" in str(raised.value)
     assert wrote == [], "an aborted pass writes no artifact at all"
     assert path.read_text(encoding="utf-8") == before, "the run file is byte-identical"
+
+
+# --------------------------------------------------------------------------------------------
+# `--report`: putting REPORT.md back on the published run
+# --------------------------------------------------------------------------------------------
+#
+# §13.10 makes REPORT.md the human-readable face of the **published** run, but `write_artifacts`
+# writes it for every run, so a sweep that ends on `no_structured_tools` leaves the report
+# describing an ablation arm. That is what the first deployed sweep did. The only two ways to put
+# it back — `--judge` and `--recompute-agreement` — both need a judge, so a run left
+# `judge_status: pending` by an exhausted free-tier quota had no way at all.
+
+
+def _written(tmp_path, run: RunFile) -> None:
+    (tmp_path / f"{run.run_id}.json").write_text(json.dumps(run.model_dump(mode="json"), indent=1), encoding="utf-8")
+
+
+def test_report_regenerates_the_report_from_a_committed_run_file(tmp_path):
+    published = _run(variant="baseline", judge_status="pending", judged=False, strict=None)
+    arm = _run(variant="no_structured_tools", judge_status="not_applicable", judged=False, strict=0.61)
+    arm.run_id = "r_test_no_structured_tools"
+    _written(tmp_path, published)
+    _written(tmp_path, arm)
+
+    report_path = tmp_path / "REPORT.md"
+    runner.write_report(arm, results_dir=tmp_path, path=report_path)
+    assert "r_test_no_structured_tools" in report_path.read_text(encoding="utf-8")
+
+    result = runner.rewrite_report(published.run_id, results_dir=tmp_path, path=report_path)
+
+    report = report_path.read_text(encoding="utf-8")
+    assert result.run_id == published.run_id
+    assert "r_test_baseline" in report
+    assert "r_test_no_structured_tools" not in report
+
+
+def test_report_works_on_a_run_no_judge_has_touched(tmp_path):
+    """The whole point: a `judge_status: pending` run must still be able to publish its report."""
+    published = _run(variant="baseline", judge_status="pending", judged=False, strict=None)
+    _written(tmp_path, published)
+
+    report_path = tmp_path / "REPORT.md"
+    runner.rewrite_report(published.run_id, results_dir=tmp_path, path=report_path)
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "judge_status: pending" in report
+    assert runner.PENDING_COMPOSITE in report
+
+
+def test_report_names_the_missing_run_rather_than_raising_a_file_error(tmp_path):
+    with pytest.raises(SystemExit) as raised:
+        runner.rewrite_report("r_does_not_exist", results_dir=tmp_path, path=tmp_path / "REPORT.md")
+    assert "does not exist" in str(raised.value)
+
+
+def test_report_drives_nothing(tmp_path, monkeypatch):
+    """It must be safe to run against a live deployment: no /chat, no judge, no cost."""
+    published = _run(variant="baseline", judge_status="pending", judged=False, strict=None)
+    _written(tmp_path, published)
+
+    def explode(*_args, **_kwargs):  # pragma: no cover - only reached on a regression
+        raise AssertionError("rewrite_report must not construct a Runner")
+
+    monkeypatch.setattr(runner, "Runner", explode)
+    runner.rewrite_report(published.run_id, results_dir=tmp_path, path=tmp_path / "REPORT.md")

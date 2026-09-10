@@ -1683,6 +1683,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cold-probes", action="store_true", help="run the three §13.5 cold probes")
     parser.add_argument("--results-dir", default=str(RESULTS_DIR))
     parser.add_argument(
+        "--report",
+        metavar="RUN_ID",
+        default=None,
+        help=(
+            "rewrite evaluation/REPORT.md from an existing run file. Drives nothing, judges "
+            "nothing and spends nothing. §13.10 makes REPORT.md the human-readable face of the "
+            "**published** run, but every run writes it, so finishing a sweep with a variant "
+            "leaves the report describing an ablation arm."
+        ),
+    )
+    parser.add_argument(
         "--recompute-agreement",
         metavar="RUN_ID",
         default=None,
@@ -1946,6 +1957,25 @@ def recompute_agreement(
     return run
 
 
+def rewrite_report(run_id: str, *, results_dir: Path = RESULTS_DIR, path: Path = REPORT_PATH) -> RunFile:
+    """Regenerate `evaluation/REPORT.md` from a committed run file. Reads only; spends nothing.
+
+    §13.10 makes REPORT.md the human-readable face of the **published** run, but `write_artifacts`
+    calls `write_report` for *every* run, so a sweep that ends on `no_structured_tools` leaves the
+    report describing an ablation arm — which is what happened to the first deployed sweep. Until
+    now the only ways to put it back were `--judge` and `--recompute-agreement`, both of which need
+    a judge, so a run left `judge_status: pending` by an exhausted free-tier quota had no way at all.
+
+    Run `python -m evaluation.ablation` afterwards to re-append the ablation section.
+    """
+    source = Path(results_dir) / f"{run_id}.json"
+    if not source.exists():
+        raise SystemExit(f"{source} does not exist; there is no run to report on")
+    run = RunFile.model_validate(json.loads(source.read_text(encoding="utf-8")))
+    write_report(run, results_dir=Path(results_dir), path=path)
+    return run
+
+
 def _agreement_note(previous: str | None, slot: AgreementMetric, note: str) -> str:
     """Append this metric's note idempotently, leaving the *other* metric's note alone.
 
@@ -1976,6 +2006,15 @@ async def _main(argv: Sequence[str] | None = None) -> int:
                     "citation_accuracy_mean": run.metrics.citation_accuracy_mean,
                     "strict_pass_rate": run.metrics.strict_pass_rate,
                 },
+                indent=1,
+            )
+        )
+        return 0
+    if args.report:
+        run = rewrite_report(args.report, results_dir=Path(args.results_dir))
+        print(  # noqa: T201 — this is a CLI
+            json.dumps(
+                {"run_id": run.run_id, "variant": run.variant, "target": run.target, "judge_status": run.judge_status},
                 indent=1,
             )
         )
@@ -2066,6 +2105,7 @@ __all__ = [
     "fmt",
     "main",
     "recompute_agreement",
+    "rewrite_report",
     "render_report",
     "require_base_url",
     "resolve_target",

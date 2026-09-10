@@ -51,6 +51,15 @@ BUILD_MINUTES_WARN = 400
 #: Hourly samples: fine enough to see a spin-down, coarse enough for one request per month.
 RESOLUTION_SECONDS = 3600
 
+#: The instance-count metric endpoint.
+#:
+#: ⚠ This was `/v1/resources/metrics/instance-count` until the first live run on 2026-09-10, where
+#: it answered `404 page not found` and the script's warn-never-fail path swallowed it into
+#: "skipping the budget check". The real path has no `resources` segment. `instance-count` is also
+#: the only metric name this endpoint accepts for a web service — `cpu-usage`, `memory-usage` and
+#: `http-request-count` all answer `400 invalid metric name`.
+INSTANCE_COUNT_METRIC = "/v1/metrics/instance-count"
+
 
 def _parse(timestamp: str) -> datetime:
     return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -71,6 +80,11 @@ def instance_hours(series: list[dict[str, Any]]) -> float:
             span_s = (_parse(following["timestamp"]) - _parse(current["timestamp"])).total_seconds()
             total += float(current["value"]) * span_s / 3600.0
     return total
+
+
+def has_samples(series: list[dict[str, Any]]) -> bool:
+    """True when the metric actually returned data points, not just an empty envelope."""
+    return any(resource.get("values") for resource in series)
 
 
 def build_minutes(deploys: list[dict[str, Any]], *, since: str) -> float:
@@ -129,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             service_id = str(service["id"])
 
         series = client.get_json(
-            "/v1/resources/metrics/instance-count",
+            INSTANCE_COUNT_METRIC,
             {"resource": service_id, "startTime": since, "endTime": now, "resolutionSeconds": RESOLUTION_SECONDS},
         )
         deploys = client.get_json(f"/v1/services/{service_id}/deploys", {"limit": 100})
@@ -141,10 +155,20 @@ def main(argv: list[str] | None = None) -> int:
 
     hours = instance_hours(series)
     minutes = build_minutes(deploys, since=since)
+    # An empty series is not "zero hours used". Render answered 200 with `[]` for the live free
+    # service on 2026-09-10 — the metric carries no samples for a free instance type — and printing
+    # `~0.0 of 750` for that would be a measurement this script never made.
+    hours_line = (
+        f"  instance hours ~{hours:.1f} of {INSTANCE_HOURS_BUDGET} "
+        f"({INSTANCE_HOURS_BUDGET - hours:.1f} left) — derived from the instance-count metric"
+        if has_samples(series)
+        else f"  instance hours UNAVAILABLE of {INSTANCE_HOURS_BUDGET} — "
+        f"{INSTANCE_COUNT_METRIC} answered 200 with no samples for this service; the Render "
+        "dashboard's own usage page is the figure to read"
+    )
     print(
         f"  since {since}\n"
-        f"  instance hours ~{hours:.1f} of {INSTANCE_HOURS_BUDGET} "
-        f"({INSTANCE_HOURS_BUDGET - hours:.1f} left) — derived from the instance-count metric\n"
+        f"{hours_line}\n"
         f"  build minutes  ~{minutes:.1f} of {BUILD_MINUTES_BUDGET} "
         f"({BUILD_MINUTES_BUDGET - minutes:.1f} left) — derived from deploy wall-clock, an upper bound"
     )

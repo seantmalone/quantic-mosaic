@@ -32,6 +32,7 @@ OWNER_ID = "tea-1234"
 SERVICE_ID = "srv-5678"
 SERVICE_NAME = "mosaic-hr-copilot"
 SERVICE_URL = f"https://{SERVICE_NAME}.onrender.com"
+DEPLOY_ID = "dep-9012"
 
 SECRETS = {
     "ANTHROPIC_API_KEY": "sk-ant-not-real",
@@ -52,7 +53,13 @@ class RecordingApi:
         existing_env: dict[str, str] | None = None,
         auto_deploy: str = "no",
         ignores_auto_deploy_patch: bool = False,
+        plan: str = "free",
     ) -> None:
+        #: What the *service* reports as its plan. `free` everywhere except the tests that prove
+        #: the script refuses to touch anything billable.
+        self.plan = plan
+        #: Every `POST …/deploys` body this fixture received.
+        self.deploys: list[dict] = []
         self.service_exists = service_exists
         self.env: dict[str, str] = dict(existing_env or {})
         self.requests: list[httpx.Request] = []
@@ -70,7 +77,7 @@ class RecordingApi:
             "name": SERVICE_NAME,
             "type": "web_service",
             "autoDeploy": self.auto_deploy,
-            "serviceDetails": {"runtime": "docker", "plan": "free", "url": SERVICE_URL},
+            "serviceDetails": {"runtime": "docker", "plan": self.plan, "url": SERVICE_URL},
         }
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -86,6 +93,9 @@ class RecordingApi:
             self.service_exists = True
             self.auto_deploy = json.loads(request.content).get("autoDeploy", "yes")
             return httpx.Response(201, json={"service": self._service(), "deployId": "dep-1"})
+        if path == f"/v1/services/{SERVICE_ID}/deploys" and method == "POST":
+            self.deploys.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": DEPLOY_ID, "status": "build_in_progress"})
         if path == f"/v1/services/{SERVICE_ID}" and method == "GET":
             return httpx.Response(200, json=self._service())
         if path == f"/v1/services/{SERVICE_ID}" and method == "PATCH":
@@ -289,28 +299,82 @@ def test_the_tokenized_link_is_the_one_that_goes_into_the_readme():
 # --- GitHub secrets ------------------------------------------------------------------------
 
 
-def test_exactly_the_three_repository_secrets_of_15_2_are_set():
+def test_exactly_the_repository_secrets_of_15_2_are_set():
+    expected = ["RENDER_DEPLOY_HOOK_URL", "DEPLOY_URL", "RENDER_API_KEY", "RENDER_SERVICE_ID"]
     api = RecordingApi()
     gh = RecordingGh()
     result = _provision(api, gh=gh)
-    assert gh.names == ["RENDER_DEPLOY_HOOK_URL", "DEPLOY_URL", "RENDER_API_KEY"]
-    assert result.github_secrets_set == ["RENDER_DEPLOY_HOOK_URL", "DEPLOY_URL", "RENDER_API_KEY"]
+    assert gh.names == expected
+    assert result.github_secrets_set == expected
 
 
-def test_without_a_deploy_hook_url_the_other_two_secrets_are_still_set():
-    """The hook URL is the one value the Render REST API does not expose (§14.6)."""
+def test_without_a_deploy_hook_url_the_api_trigger_secrets_are_still_set():
+    """The hook URL is the one value the Render REST API does not expose (§14.6).
+
+    That is why `RENDER_SERVICE_ID` exists: with it and `RENDER_API_KEY`, CI can trigger a deploy
+    through `POST /v1/services/{id}/deploys` and the missing hook stops being a blocker rather than
+    just a TODO.
+    """
     api = RecordingApi()
     gh = RecordingGh()
     result = _provision(api, gh=gh, deploy_hook_url=None)
-    assert gh.names == ["DEPLOY_URL", "RENDER_API_KEY"]
+    assert gh.names == ["DEPLOY_URL", "RENDER_API_KEY", "RENDER_SERVICE_ID"]
     assert "RENDER_DEPLOY_HOOK_URL" in result.manual_steps[0]
+
+
+def test_the_service_id_secret_is_the_live_service_id_not_the_blueprint_name():
+    api = RecordingApi()
+    gh = RecordingGh()
+    values: dict[str, str] = {}
+
+    def record(name: str, value: str) -> bool:
+        values[name] = value
+        return gh(name, value)
+
+    _provision(api, gh=record)
+    assert values["RENDER_SERVICE_ID"] == SERVICE_ID
+    assert values["DEPLOY_URL"] == SERVICE_URL
 
 
 def test_a_failing_gh_call_is_reported_as_a_manual_step_not_a_crash():
     api = RecordingApi()
     result = _provision(api, gh=RecordingGh(fails=True))
     assert result.github_secrets_set == []
-    assert len(result.manual_steps) == 3
+    assert len(result.manual_steps) == 4
+
+
+# --- the deploy that carries the environment variables --------------------------------------
+#
+# The first live provisioning run, 2026-09-10, is why these exist. Render starts a deploy the
+# instant a service is created — one second after the POST, and therefore *before* the env-var PUT
+# — and that build came up green but useless: `deploy_mode=local`, `llm.agent.configured=false`,
+# `trace_store.backend=sqlite`, access gate off. A green deploy serving a misconfigured instance is
+# the worse of the two failure shapes, because nothing goes red.
+
+
+def test_a_deploy_is_triggered_after_the_environment_variables_are_written():
+    api = RecordingApi()
+    result = _provision(api)
+
+    assert result.deploy_id == DEPLOY_ID
+    order = [(r.method, r.url.path) for r in api.requests]
+    env_put = order.index(("PUT", f"/v1/services/{SERVICE_ID}/env-vars"))
+    deploy = order.index(("POST", f"/v1/services/{SERVICE_ID}/deploys"))
+    assert env_put < deploy, "a deploy triggered before the PUT would build without the variables"
+
+
+def test_the_deploy_keeps_renders_layer_cache():
+    """A cleared cache re-downloads the ONNX model and rebuilds the index; nothing here needs that."""
+    api = RecordingApi()
+    _provision(api)
+    assert api.deploys == [{"clearCache": "do_not_clear"}]
+
+
+def test_no_deploy_suppresses_the_trigger_and_says_so():
+    api = RecordingApi()
+    result = _provision(api, trigger_deploy=False)
+    assert result.deploy_id is None
+    assert not api.deploys
 
 
 # --- errors --------------------------------------------------------------------------------
@@ -333,3 +397,86 @@ def test_a_render_api_error_is_reported_not_swallowed():
             gh=RecordingGh(),
         )
     assert "403" in str(raised.value)
+
+
+# --- nothing this script does may cost money -----------------------------------------------
+#
+# Render refuses to create *any* service, free ones included, until the workspace carries a
+# payment method — `402 Payment information is required`, observed live on 2026-09-10. Adding the
+# card turned a plan mistake from a rejected request into a monthly bill, and the standing
+# instruction is "do not deploy anything that will cost me money". These tests are that
+# instruction, executable.
+
+
+def test_the_created_service_asks_for_the_free_plan_and_one_instance():
+    api = RecordingApi()
+    _provision(api)
+    payload = json.loads(_sent(api, "POST", "/v1/services").content)
+    assert payload["serviceDetails"]["plan"] == "free"
+    assert payload["serviceDetails"]["numInstances"] == 1
+    assert "disk" not in payload["serviceDetails"]
+    assert "autoscaling" not in payload["serviceDetails"]
+
+
+def test_the_plan_is_read_back_off_the_service_not_taken_from_the_payload():
+    """Asking for `free` is not the same as being given `free`, so the API is asked again."""
+    api = RecordingApi()
+    result = _provision(api)
+    assert result.plan_observed == "free"
+    reads = [r for r in api.requests if r.method == "GET" and r.url.path == f"/v1/services/{SERVICE_ID}"]
+    assert reads, "the created service must be re-read before the script trusts its plan"
+
+
+def test_a_service_that_comes_back_on_a_paid_plan_stops_everything():
+    api = RecordingApi(plan="starter")
+    with pytest.raises(provision_render.BillablePlan) as raised:
+        _provision(api)
+    assert "starter" in str(raised.value)
+    # Nothing was written to the service, and nothing was deleted to "fix" it.
+    assert not any(r.method == "PUT" for r in api.requests)
+    assert not any(r.method == "DELETE" for r in api.requests)
+
+
+def test_an_adopted_service_on_a_paid_plan_is_refused_rather_than_reused():
+    api = RecordingApi(service_exists=True, plan="standard")
+    with pytest.raises(provision_render.BillablePlan):
+        _provision(api)
+    assert not any(r.method == "PUT" for r in api.requests)
+
+
+def test_a_create_payload_on_a_paid_plan_never_leaves_the_process():
+    with pytest.raises(provision_render.BillablePlan):
+        provision_render.assert_free_payload(
+            {"type": "web_service", "serviceDetails": {"plan": "starter", "numInstances": 1}}
+        )
+    with pytest.raises(provision_render.BillablePlan):
+        provision_render.assert_free_payload({"serviceDetails": {"plan": "free", "numInstances": 2}})
+    with pytest.raises(provision_render.BillablePlan):
+        provision_render.assert_free_payload({"serviceDetails": {"plan": "free", "disk": {"sizeGB": 1}}})
+    provision_render.assert_free_payload({"serviceDetails": {"plan": "free", "numInstances": 1}})
+
+
+def test_patch_refuses_any_field_that_changes_what_is_billed():
+    """`autoDeploy` is the only legitimate PATCH; a future caller cannot smuggle a plan in beside it."""
+    client = _client(RecordingApi(service_exists=True))
+    for payload in ({"plan": "starter"}, {"numInstances": 3}, {"serviceDetails": {"plan": "starter"}}):
+        with pytest.raises(provision_render.BillablePlan):
+            client.update_service(SERVICE_ID, payload)
+
+
+def test_a_blueprint_declaring_a_paid_plan_is_refused_before_any_request():
+    api = RecordingApi()
+    blueprint = provision_render.load_blueprint()
+    paid = provision_render.Blueprint(**{**blueprint.__dict__, "plan": "starter"})
+    with pytest.raises(provision_render.BillablePlan):
+        provision_render.provision(
+            _client(api),
+            paid,
+            repo="https://github.com/seantmalone/quantic-mosaic",
+            branch="main",
+            region="oregon",
+            secret_values=dict(SECRETS),
+            deploy_hook_url=None,
+            gh=RecordingGh(),
+        )
+    assert api.requests == []

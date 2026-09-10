@@ -52,6 +52,16 @@ DEFAULT_QUESTION = "How many days of paid time off do I accrue each year?"
 
 READY_POLL_INTERVAL_S = 1.0
 
+#: How long to wait for `/ready` after the wake, and why it is not the 180 s it used to be.
+#:
+#: ⚠ 180 s was chosen against the local image, where `/ready` greens in 2.6 s. The first live cold
+#: probe on 2026-09-10 blew straight through it: Render's free plan gives 0.1 of a CPU, `/health`
+#: (the Render health-check path) answers 200 while the model is still loading, and the ONNX session
+#: plus the sqlite-vec index take far longer to become resident there than on a developer's machine.
+#: A ceiling that stops the measurement before the thing being measured has finished is not a
+#: safeguard, it is a missing number — so the default is generous and `--ready-timeout` exposes it.
+DEFAULT_READY_TIMEOUT_S = float(os.environ.get("COLD_READY_TIMEOUT_S", "900"))
+
 #: How much of a failing body is quoted back. Enough to read a `{"code": "ADMIN_REQUIRED"}`, short
 #: enough that a stack trace or an HTML error page cannot flood the console.
 BODY_EXCERPT_CHARS = 200
@@ -127,7 +137,7 @@ def measure(
     token: str,
     idle_s: float,
     question: str = DEFAULT_QUESTION,
-    ready_timeout_s: float = 180.0,
+    ready_timeout_s: float = DEFAULT_READY_TIMEOUT_S,
     poll_interval_s: float = READY_POLL_INTERVAL_S,
 ) -> ColdStart:
     """Idle, then walk the four segments of §14.4 in order against a genuinely cold instance."""
@@ -193,6 +203,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", default=os.environ.get("DEPLOY_URL"), help="base URL of the live instance")
     parser.add_argument("--idle", type=float, default=DEFAULT_IDLE_S, help="seconds to idle before the cold probe")
     parser.add_argument("--question", default=DEFAULT_QUESTION, help="the question both turns ask")
+    parser.add_argument(
+        "--ready-timeout",
+        type=float,
+        default=DEFAULT_READY_TIMEOUT_S,
+        help="seconds to wait for /ready after the wake (the model load is the slow segment)",
+    )
     arguments = parser.parse_args(argv)
 
     if not arguments.url:
@@ -206,7 +222,12 @@ def main(argv: list[str] | None = None) -> int:
     with httpx.Client(follow_redirects=True) as client:
         try:
             measurement = measure(
-                client, arguments.url, token=token, idle_s=arguments.idle, question=arguments.question
+                client,
+                arguments.url,
+                token=token,
+                idle_s=arguments.idle,
+                question=arguments.question,
+                ready_timeout_s=arguments.ready_timeout,
             )
         except (httpx.HTTPError, MeasurementFailed) as exc:
             print(f"FAIL — {arguments.url} could not be measured: {exc}", file=sys.stderr)

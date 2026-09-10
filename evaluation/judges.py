@@ -21,8 +21,11 @@ P12 rather than paraphrasing them.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
+import time
 from collections.abc import Sequence
 from typing import Any, Literal, NamedTuple
 
@@ -34,6 +37,57 @@ from hrmosaic.core.trace import TurnBuffer
 from hrmosaic.settings import Settings
 
 logger = logging.getLogger(__name__)
+
+#: Judge calls per minute. Google's free tier meters `gemini-3.5-flash-lite` **per minute** as well
+#: as per day, and the judge pass fires its calls back to back, so an unpaced pass walks straight
+#: into `429 RESOURCE_EXHAUSTED` — observed on 2026-09-10, where a sequential 10-call burst on
+#: *either* Google project answered 4 × 200 and 6 × 429, and the deployed baseline's judge pass
+#: aborted at item 2 of 26 having lost 4 verdicts against a budget of 3. The default leaves headroom
+#: under the free tier's published limit; raise it with `JUDGE_RPM` on a paid key.
+JUDGE_RPM = int(os.environ.get("JUDGE_RPM", "10"))
+
+#: How many times one judge question may be re-sent after a **rate-limit** refusal. This is not the
+#: repair retry: a 429 says nothing about the reply, so re-sending the identical prompt is the whole
+#: fix, and it must not consume the one repair attempt a malformed reply is owed.
+JUDGE_RATE_LIMIT_ATTEMPTS = int(os.environ.get("JUDGE_RATE_LIMIT_ATTEMPTS", "5"))
+
+#: The backoff used when the provider refuses without saying how long to wait. Doubles each time.
+JUDGE_RATE_LIMIT_BACKOFF_S = 8.0
+
+#: The ceiling on one backoff, so a pass cannot silently stall for minutes.
+JUDGE_RATE_LIMIT_MAX_BACKOFF_S = 64.0
+
+
+def is_rate_limited(exc: ProviderError) -> bool:
+    """A 429, however the adapter phrased it."""
+    if exc.status == 429:
+        return True
+    text = str(exc).lower()
+    return "429" in text or "resource_exhausted" in text or "exceeded your current quota" in text
+
+
+class Pacer:
+    """A minimum interval between calls, so a burst cannot outrun a per-minute quota.
+
+    Deliberately a floor on the *gap*, not a token bucket: a bucket lets a pass spend its whole
+    minute's allowance in two seconds and then answer 429 for the next fifty-eight, which is the
+    shape that broke the first deployed judge pass.
+    """
+
+    def __init__(self, rpm: int, *, clock=time.monotonic, sleep=asyncio.sleep) -> None:
+        self.min_interval_s = 60.0 / rpm if rpm > 0 else 0.0
+        self._clock = clock
+        self._sleep = sleep
+        self._next_at = 0.0
+
+    async def wait(self) -> None:
+        now = self._clock()
+        delay = self._next_at - now
+        if delay > 0:
+            await self._sleep(delay)
+            now = self._clock()
+        self._next_at = now + self.min_interval_s
+
 
 #: §13.3's verdict scale: `supported | partially_supported | unsupported | contradicted`.
 VERDICT_SCORES: dict[str, float] = {
@@ -229,11 +283,15 @@ class Judge:
         run_id: str,
         model: ChatModel | None = None,
         settings: Settings | None = None,
+        pacer: Pacer | None = None,
     ) -> None:
         self.run_id = run_id
         self._model = model or build_judge_model(settings)
+        self._pacer = pacer if pacer is not None else Pacer(JUDGE_RPM)
         self.calls = 0
         self.failures = 0
+        #: Rate-limit refusals absorbed by the backoff. Reported so a slow pass is explicable.
+        self.rate_limited = 0
 
     @property
     def model_name(self) -> str:
@@ -242,6 +300,46 @@ class Judge:
     @property
     def provider(self) -> str:
         return getattr(self._model, "provider", "unknown")
+
+    async def _complete(
+        self,
+        messages: list[Message],
+        *,
+        schema: type[BaseModel],
+        purpose: str,
+        turn: TurnBuffer,
+        metric: str,
+        item_id: str,
+    ):
+        """One paced provider call, re-sent unchanged while the provider is merely rate-limiting.
+
+        A 429 is not a bad answer, so it must not consume the repair retry `_ask` owes a malformed
+        one — and it must not count as a lost verdict, which is what aborted the first deployed
+        judge pass at item 2 of 26.
+        """
+        backoff = JUDGE_RATE_LIMIT_BACKOFF_S
+        for attempt in range(JUDGE_RATE_LIMIT_ATTEMPTS):
+            await self._pacer.wait()
+            self.calls += 1
+            try:
+                return await self._model.complete(messages, response_schema=schema, purpose=purpose, turn=turn)
+            except ProviderError as exc:
+                if not is_rate_limited(exc) or attempt == JUDGE_RATE_LIMIT_ATTEMPTS - 1:
+                    raise
+                self.rate_limited += 1
+                delay = exc.retry_after if exc.retry_after is not None else backoff
+                delay = min(float(delay), JUDGE_RATE_LIMIT_MAX_BACKOFF_S)
+                logger.warning(
+                    "judge %s for %s was rate-limited; waiting %.0fs and re-sending (attempt %d/%d)",
+                    metric,
+                    item_id,
+                    delay,
+                    attempt + 2,
+                    JUDGE_RATE_LIMIT_ATTEMPTS,
+                )
+                await asyncio.sleep(delay)
+                backoff = min(backoff * 2, JUDGE_RATE_LIMIT_MAX_BACKOFF_S)
+        raise AssertionError("unreachable: the loop above either returns or raises")  # pragma: no cover
 
     async def _ask(
         self,
@@ -260,12 +358,13 @@ class Judge:
         repairs = 0
         for attempt in range(2):
             try:
-                self.calls += 1
-                completion = await self._model.complete(
+                completion = await self._complete(
                     messages,
-                    response_schema=schema,
+                    schema=schema,
                     purpose="judge" if metric != "decompose" else "decompose",
                     turn=turn,
+                    metric=metric,
+                    item_id=item_id,
                 )
                 raw = completion.text
                 parsed = schema.model_validate(completion.parsed_json()).model_dump(mode="json")

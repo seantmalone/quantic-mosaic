@@ -227,26 +227,49 @@ def test_deploy_runs_only_on_a_main_push_or_a_deliberate_dispatch():
     assert "inputs.deploy_only == 'true'" in condition
 
 
-def test_the_first_deploy_step_fails_loudly_when_either_deploy_secret_is_unset():
-    """Until user gates 2–4 land there is no hook, and the job must say so, not skip quietly.
+def test_the_first_deploy_step_fails_loudly_when_no_trigger_credential_is_set():
+    """A deploy job with nothing to trigger must say so, not skip quietly.
 
-    `DEPLOY_URL` is guarded in the same step: unset, it expands to `""`, and the two scripts that
-    consume it would otherwise be the first place the operator learns anything is wrong.
+    Either credential set is sufficient (§14.5): the deploy hook, or `RENDER_API_KEY` +
+    `RENDER_SERVICE_ID` for `POST /v1/services/{id}/deploys`. `DEPLOY_URL` is guarded in the same
+    step: unset, it expands to `""`, and the two scripts that consume it would otherwise be the
+    first place the operator learns anything is wrong.
     """
     first = _steps("deploy")[0]
-    assert "RENDER_DEPLOY_HOOK_URL" in str(first.get("env", {}))
-    assert "RENDER_DEPLOY_HOOK_URL" in first["run"]
+    env = str(first.get("env", {}))
+    for name in ("RENDER_DEPLOY_HOOK_URL", "RENDER_API_KEY", "RENDER_SERVICE_ID"):
+        assert name in env
+        assert name in first["run"]
     assert "DEPLOY_URL" in first["run"]
     assert "exit 1" in first["run"]
     assert "NEEDS-FROM-USER.md" in first["run"]
 
 
-def test_the_deploy_job_curls_the_hook_then_waits_then_smokes():
+def test_either_trigger_credential_alone_satisfies_the_guard():
+    """The guard is OR, not AND: the hook, *or* the API key and service id together."""
+    guard = _steps("deploy")[0]["run"]
+    condition = next(line for line in guard.splitlines() if "RENDER_DEPLOY_HOOK_URL" in line and "-z" in line)
+    assert "&&" in condition and "||" in condition, condition
+    # …and a lone RENDER_API_KEY without the service id is NOT enough.
+    assert '[ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]' in condition
+
+
+def test_the_deploy_job_triggers_then_waits_then_smokes():
+    """Both trigger paths live in one step, and it runs before the wait and the smoke."""
     runs = [str(step.get("run", "")) for step in _steps("deploy")]
-    hook = next(index for index, run in enumerate(runs) if 'curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"' in run)
+    trigger = next(index for index, run in enumerate(runs) if 'curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"' in run)
+    assert "/v1/services/$RENDER_SERVICE_ID/deploys" in runs[trigger], "the API fallback shares the trigger step"
     wait = next(index for index, run in enumerate(runs) if "scripts/wait_for_deploy.py" in run)
     smoke = next(index for index, run in enumerate(runs) if "scripts/smoke_deployed.py" in run)
-    assert hook < wait < smoke
+    assert trigger < wait < smoke
+
+
+def test_the_api_trigger_never_puts_a_bearer_token_on_a_curl_line():
+    """`curl -H "Authorization: Bearer $SECRET"` is what gitleaks' curl-auth-header rule reads."""
+    runs = "\n".join(str(step.get("run", "")) for step in _steps("deploy"))
+    assert 'AUTH_HEADER="Authorization: Bearer $RENDER_API_KEY"' in runs
+    assert '-H "$AUTH_HEADER"' in runs
+    assert 'Bearer $RENDER_API_KEY" \\' not in runs
 
 
 def test_the_deploy_job_reads_deploy_url_from_the_repository_secret():
@@ -254,6 +277,30 @@ def test_the_deploy_job_reads_deploy_url_from_the_repository_secret():
 
 
 def test_no_model_key_and_no_access_token_is_a_ci_secret():
-    """§15.2: exactly three repository secrets, and none of them is a credential the app answers with."""
+    """§15.2's real claim: nothing CI holds is a credential the *application* answers with.
+
+    The enumerated list grew from three to five when the deploy hook stopped being the only way to
+    reach production — `RENDER_API_KEY` and `RENDER_SERVICE_ID` drive
+    `POST /v1/services/{id}/deploys`, which needs no browser step. Both address the Render control
+    plane, so the invariant is unchanged: no `ANTHROPIC_API_KEY`, no `JUDGE_API_KEY`, no
+    `LLM_FALLBACK_API_KEY`, no `TURSO_*` and — above all — no `APP_ACCESS_TOKEN`. The push path
+    never calls a provider (`LLM_PROVIDER=stub`) and the `docker` job mints its own throwaway token
+    inline, so CI has no use for any of them and holding one would be leak surface for no gain.
+    """
     referenced = set(re.findall(r"secrets\.([A-Z_]+)", CI_TEXT))
-    assert referenced == {"GITHUB_TOKEN", "RENDER_DEPLOY_HOOK_URL", "DEPLOY_URL"}
+    assert referenced == {
+        "GITHUB_TOKEN",
+        "RENDER_DEPLOY_HOOK_URL",
+        "RENDER_API_KEY",
+        "RENDER_SERVICE_ID",
+        "DEPLOY_URL",
+    }
+    forbidden = {
+        "ANTHROPIC_API_KEY",
+        "JUDGE_API_KEY",
+        "LLM_FALLBACK_API_KEY",
+        "TURSO_DATABASE_URL",
+        "TURSO_AUTH_TOKEN",
+        "APP_ACCESS_TOKEN",
+    }
+    assert not referenced & forbidden

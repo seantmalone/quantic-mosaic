@@ -139,3 +139,23 @@ def test_the_thresholds_are_the_documented_ones():
 
 def test_both_budgets_can_warn_at_once():
     assert len(usage.warnings_for(instance_hours=700.0, build_minutes=450.0)) == 2
+
+
+# --- what the first live run corrected ------------------------------------------------------
+
+
+def test_the_instance_count_metric_path_has_no_resources_segment():
+    """`/v1/resources/metrics/instance-count` answered `404 page not found` on 2026-09-10.
+
+    The script's own warn-never-fail path swallowed that into "skipping the budget check", which is
+    the correct behaviour for an outage and the wrong behaviour for a wrong URL — so the path is
+    pinned here rather than left to the next live run to rediscover.
+    """
+    assert usage.INSTANCE_COUNT_METRIC == "/v1/metrics/instance-count"
+
+
+def test_an_empty_metric_series_is_reported_as_unavailable_not_as_zero_hours():
+    """Render answers 200 with `[]` for a free instance type; `~0.0 of 750` would be a lie."""
+    assert usage.has_samples([]) is False
+    assert usage.has_samples([{"values": []}]) is False
+    assert usage.has_samples([{"values": [{"timestamp": "2026-09-01T00:00:00Z", "value": 1}]}]) is True

@@ -94,11 +94,27 @@ jobs:
       # quietly would look identical to a green one in the job graph. DEPLOY_URL is guarded here
       # too — `wait_for_deploy.py --url ""` and `smoke_deployed.py --url ""` reject an empty or
       # schemeless URL by name, but the reason belongs at the top of the job, not three steps in.
+      #
+      # There are TWO ways to reach production and either is sufficient (§14.5):
+      #   * RENDER_DEPLOY_HOOK_URL — Render's own deploy hook. It is published in the dashboard and
+      #     by no REST endpoint (re-confirmed against the live account on 2026-09-10: `deploy-hook`,
+      #     `deployHook`, `hooks`, `deploy-hooks` and `settings` under /v1/services/{id} all 404,
+      #     and GET /v1/services/{id} carries no deployHookUrl), so it cannot be provisioned
+      #     unattended and needs a human with a browser;
+      #   * RENDER_API_KEY + RENDER_SERVICE_ID — `POST /v1/services/{id}/deploys`, which
+      #     `scripts/provision_render.py` can set without anyone opening a browser.
+      # Neither weakens R8.4: this job still carries `needs: [test, docker]`, and Render's own
+      # Auto-Deploy is still off, so a commit reaches production only by passing through here.
       - name: The deploy secrets must exist
-        env: { RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" }
+        env:
+          RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          RENDER_API_KEY: "${{ secrets.RENDER_API_KEY }}"
+          RENDER_SERVICE_ID: "${{ secrets.RENDER_SERVICE_ID }}"
         run: |
           missing=""
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then missing="RENDER_DEPLOY_HOOK_URL"; fi
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ] && { [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; }; then
+            missing="RENDER_DEPLOY_HOOK_URL (or RENDER_API_KEY and RENDER_SERVICE_ID together)"
+          fi
           if [ -z "$DEPLOY_URL" ]; then missing="${missing:+$missing and }DEPLOY_URL"; fi
           if [ -n "$missing" ]; then
             echo "::error::$missing is not set. The Render service has not been provisioned yet:"
@@ -109,8 +125,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version-file: '.python-version' }
+      # The hook wins when it exists, because it is the path §14.5 was written around; the API call
+      # is the equivalent alternative that needs no browser step. `AUTH_HEADER` is a variable rather
+      # than a literal on the curl line for the same reason as in the Makefile's memory gate:
+      # gitleaks' `curl-auth-header` rule reads anything behind `Authorization: Bearer` on a curl
+      # invocation as a committed credential, which is the right default.
       - name: Trigger Render deploy
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
-        env: { RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" }
+        env:
+          RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          RENDER_API_KEY: "${{ secrets.RENDER_API_KEY }}"
+          RENDER_SERVICE_ID: "${{ secrets.RENDER_SERVICE_ID }}"
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "triggering via the Render deploy hook"
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+          else
+            echo "triggering via POST /v1/services/$RENDER_SERVICE_ID/deploys"
+            AUTH_HEADER="Authorization: Bearer $RENDER_API_KEY"
+            curl -fsS -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+              -H "$AUTH_HEADER" \
+              -H 'Content-Type: application/json' \
+              -d '{"clearCache":"do_not_clear"}' > /dev/null
+          fi
       - run: python scripts/wait_for_deploy.py --url "$DEPLOY_URL" --timeout 900
       - run: python scripts/smoke_deployed.py --url "$DEPLOY_URL"
