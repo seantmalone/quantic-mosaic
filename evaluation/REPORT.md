@@ -10,7 +10,7 @@ comes from that one run; nothing here is hand-edited.
 | Target | `local` — `http://127.0.0.1:8000` |
 | Dataset | `evaluation/dataset.yaml` · 26 scored items · sha256 `a501f288a6589730…` |
 | Agent model | `claude-haiku-4-5` |
-| Judge model | `—` · 0 judge calls · `judge_status: pending` |
+| Judge model | `gemini-3.5-flash-lite` · 232 judge calls · `judge_status: judged` |
 | Retrieval | `hybrid_rrf`, k = 5 |
 | Guardrail thresholds | MIN_EVIDENCE_SCORE = 0.6 · MIN_SUPPORT_SCORE = 0.45 |
 | Limiter | LLM_RPM = 10 |
@@ -22,23 +22,21 @@ comes from that one run; nothing here is hand-edited.
 
 | Metric | Value | n | Target |
 |---|---|---|---|
-| Groundedness (mean, claim-level) | – | – | – |
-| Citation accuracy (CitResolve × F1) | – | – | – |
+| Groundedness (mean, claim-level) | 0.985 | 16 | – |
+| Citation accuracy (CitResolve × F1) | 0.899 | 16 | – |
 | Citation resolvability (served answer) | 0.923 | 26 | – |
 | Document recall | 0.842 | 19 | – |
-| Partial match (gold facts entailed) | – | – | – |
+| Partial match (gold facts entailed) | 0.781 | 16 | – |
 | Tool selection (F1, order-insensitive) | 0.926 | 26 | – |
 | Argument correctness | 1.000 | 18 | – |
 | Workflow completion | 0.808 | 26 | – |
 | Action safety pass rate | 1.000 | 26 | – |
-| Clarification accuracy | – | – | – |
-| Strict pass rate (§13.8) | not computable — judge pending | 26 | ≥ 0.85 |
+| Clarification accuracy | 0.667 | 3 | – |
+| Strict pass rate (§13.8) | 0.654 | 26 | ≥ 0.85 |
 
-Strict pass rate is **not computable — judge pending**. §13.8's composite requires a groundedness verdict on every item that makes a policy claim, and this run has not been judged (or its judge pass did not complete). Every clause of the composite is vacuously true for an item that does not define it, so publishing a number here would report a figure that is high because *less* was checked. Judge it with `python -m evaluation.runner --judge r_1789032950_baseline` — it drives nothing and re-uses these same answers — and this line becomes the real figure against the ≥ 0.85 target.
+Strict pass rate 0.654 is **0.196 below** §13.8's target of ≥ 0.85 on the 26-item set.
 
 Judged metrics are computed on `baseline` only (§13.9): judging all three arms would roughly triple the judge volume against a free-tier daily cap, and DocRecall, ToolSelection and Workflow — the judge-free metrics — are precisely what the two arms move.
-
-> ⚠ **This run has not been judged.** §13.2's harness is two-pass: the sweep drives the 26 items and stores what judging needs (each item's `turn_id` and served answer here, the retrieval evidence in the trace store), and `python -m evaluation.runner --judge r_1789032950_baseline` computes the judged half afterwards without re-driving anything. Until it runs, `groundedness_mean`, `citation_accuracy_mean`, `partial_match_mean`, `clarification_accuracy` and the §13.8 composite are absent rather than zero, and `judge_agreement_rate` cannot be computed because there is no judge verdict to compare the blind reference labels against.
 
 `blocks_dropped_by_g2` = **1** — the number of `policy_fact`
 blocks G2 had to drop for lack of a surviving citation. It is reported beside `cit_resolve_mean`
@@ -80,21 +78,26 @@ Decomposition across the run: llm_ms 348595 ms · retrieval_ms 1328 ms · store_
 
 ## Judge methodology
 
-The judge is **—** on `JUDGE_API_KEY`, `temperature = 0`, JSON-schema
+The judge is **gemini-3.5-flash-lite** on `JUDGE_API_KEY`, `temperature = 0`, JSON-schema
 constrained, with **one repair retry**; a second failure records a `null` verdict and the item
 leaves that metric's denominator, which is why every judged row above carries its own `n`. The agent
 is `claude-haiku-4-5` — a different vendor and a different model family — so judge
 independence holds by construction and no re-judge machinery exists (§13.7).
 
 **Judge validation is an agreement rate, not a κ.** `judge_agreement_rate` =
-**–** with `judge_agreement_n` = **0**.
+**1.000** with `judge_agreement_n` = **7**.
 At n = 8 a κ's confidence interval is wide enough to be meaningless, while an agreement rate with
 its n stated is honest (§13.7, §22). This is **never** "human-vs-judge" — the labeller is a model,
 and how blind it was is stated in the protocol below rather than asserted here.
 
 Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-10. Authored in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet was built from the run while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no per-claim verdict, no rationale, no groundedness score. The session read no run file, no REPORT.md, no CHANGELOG and no phase report.
 
+| reference ↓ / judge → | grounded | not_grounded |
+|---|---|---|
+| grounded | benefits-001, benefits-002, conduct-001, expenses-001, pto-001, remote-001, remote-002 | – |
+| not_grounded | – | – |
 
+Of the 7 compared, **0** involved a `not_grounded` on either side; the rest are unanimous `grounded`, which is the half of the decision a judge is least likely to get wrong. Read the rate with that in mind.
 
 ### What the tool metrics do and do not measure
 
@@ -138,24 +141,24 @@ All three runs share `target: local` and `dataset_sha: a501f288a6589730…`, whi
 
 | Item | Category | Outcome | Grounded | CitResolve | DocRecall | Tools | Pass |
 |---|---|---|---|---|---|---|---|
-| pto-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents, get_policy_section | ✅ |
-| remote-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents | ✅ |
-| benefits-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents | ✅ |
-| inj-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents, get_policy_section | ✅ |
-| expenses-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents | ✅ |
-| leave-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents | ✅ |
-| travel-001 | simple_policy | answered | – | 1.00 | 1.00 | search_policy_documents | ✅ |
-| remote-002 | multi_doc | answered | – | 1.00 | 0.50 | search_policy_documents, get_policy_section | ❌ |
-| expenses-002 | multi_doc | answered | – | 1.00 | 1.00 | search_policy_documents, get_policy_section | ❌ |
-| onboarding-001 | multi_doc | answered | – | 1.00 | 0.75 | search_policy_documents, list_policy_documents, get_policy_section | ✅ |
+| pto-001 | simple_policy | answered | 1.00 | 1.00 | 1.00 | search_policy_documents, get_policy_section | ✅ |
+| remote-001 | simple_policy | answered | 1.00 | 1.00 | 1.00 | search_policy_documents | ✅ |
+| benefits-001 | simple_policy | answered | 1.00 | 1.00 | 1.00 | search_policy_documents | ✅ |
+| inj-001 | simple_policy | answered | 0.83 | 1.00 | 1.00 | search_policy_documents, get_policy_section | ❌ |
+| expenses-001 | simple_policy | answered | 1.00 | 1.00 | 1.00 | search_policy_documents | ✅ |
+| leave-001 | simple_policy | answered | 1.00 | 1.00 | 1.00 | search_policy_documents | ✅ |
+| travel-001 | simple_policy | answered | 1.00 | 1.00 | 1.00 | search_policy_documents | ✅ |
+| remote-002 | multi_doc | answered | 1.00 | 1.00 | 0.50 | search_policy_documents, get_policy_section | ❌ |
+| expenses-002 | multi_doc | answered | 1.00 | 1.00 | 1.00 | search_policy_documents, get_policy_section | ❌ |
+| onboarding-001 | multi_doc | answered | 1.00 | 1.00 | 0.75 | search_policy_documents, list_policy_documents, get_policy_section | ✅ |
 | equipment-001 | multi_doc | refused | – | 0.00 | 0.00 | – | ❌ |
-| conduct-001 | multi_doc | answered | – | 1.00 | 1.00 | search_policy_documents, get_policy_section | ✅ |
-| profile-001 | tool_task | answered | – | 1.00 | 1.00 | lookup_employee_profile, search_policy_documents | ✅ |
-| pto-002 | tool_task | answered | – | 1.00 | 1.00 | check_pto_balance, search_policy_documents | ❌ |
-| pto-003 | tool_task | answered | – | 1.00 | 1.00 | check_pto_balance, check_policy_compliance, search_policy_documents | ❌ |
+| conduct-001 | multi_doc | answered | 1.00 | 1.00 | 1.00 | search_policy_documents, get_policy_section | ✅ |
+| profile-001 | tool_task | answered | 1.00 | 1.00 | 1.00 | lookup_employee_profile, search_policy_documents | ✅ |
+| pto-002 | tool_task | answered | 1.00 | 1.00 | 1.00 | check_pto_balance, search_policy_documents | ❌ |
+| pto-003 | tool_task | answered | 0.93 | 1.00 | 1.00 | check_pto_balance, check_policy_compliance, search_policy_documents | ❌ |
 | remote-003 | tool_task | refused | – | 0.00 | 0.00 | check_policy_compliance | ❌ |
-| remote-004 | tool_task | answered | – | 1.00 | 0.75 | lookup_employee_profile, check_policy_compliance, search_policy_documents | ❌ |
-| benefits-002 | tool_task | answered | – | 1.00 | 1.00 | lookup_benefits_status, search_policy_documents | ✅ |
+| remote-004 | tool_task | answered | 1.00 | 1.00 | 0.75 | lookup_employee_profile, check_policy_compliance, search_policy_documents | ❌ |
+| benefits-002 | tool_task | answered | 1.00 | 1.00 | 1.00 | lookup_benefits_status, search_policy_documents | ✅ |
 | amb-001 | ambiguous | clarify | – | 1.00 | – | – | ✅ |
 | amb-002 | ambiguous | clarify | – | 1.00 | – | – | ✅ |
 | amb-003 | ambiguous | clarify | – | 1.00 | – | – | ✅ |
@@ -167,4 +170,4 @@ All three runs share `target: local` and `dataset_sha: a501f288a6589730…`, whi
 
 ### Notes
 
-Over-refusal cause, 1 item(s) — remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence — which the synthesis prompt does carry — cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix. Chunking observation: `c_f7ec2fe078c43c2d` (`workplace-conduct` > Investigation Process) begins mid-sentence at "of the report." — the overlap window of §7.1's chunker, not lost text. The head of that sentence ("Investigations are targeted for completion within 30 calendar days of the report.") survives in the overlapping sibling `c_faa7e3e074e0f281`, which the same search also retrieved, so no figure is lost to the model or to the judge; a reader of the one chunk alone cannot see it.
+Over-refusal cause, 1 item(s) — remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence — which the synthesis prompt does carry — cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix. Chunking observation: `c_f7ec2fe078c43c2d` (`workplace-conduct` > Investigation Process) begins mid-sentence at "of the report." — the overlap window of §7.1's chunker, not lost text. The head of that sentence ("Investigations are targeted for completion within 30 calendar days of the report.") survives in the overlapping sibling `c_faa7e3e074e0f281`, which the same search also retrieved, so no figure is lost to the model or to the judge; a reader of the one chunk alone cannot see it. Judged in a second pass on 2026-09-10 (232 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven. judge_agreement_rate=1.0 over n=7 reference labels.
