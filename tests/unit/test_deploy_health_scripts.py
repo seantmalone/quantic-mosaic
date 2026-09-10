@@ -331,6 +331,45 @@ def test_the_ready_wait_is_ten_minutes_unless_the_environment_says_otherwise():
         assert smoke_deployed.ready_timeout_default() == 600.0
 
 
+def test_a_smoke_whose_ready_never_greens_exits_1_and_says_why(capsys):
+    """`main()`, not `ready_problems()`: the deploy job reads an exit code and a stderr line.
+
+    P11c proved the `/ready` wait in isolation and wired it into `main`, but nothing asserted that
+    the wiring carries the failure out — the CI job's whole contract. `--ready-timeout 0` still
+    asks once (the deadline is checked after the poll), so this is the never-green case at its
+    cheapest, with no sleeping.
+    """
+
+    def never_ready(url: str, token: str | None, timeout_s: float) -> tuple[int, bytes]:
+        return 503, NOT_READY
+
+    with mock.patch.dict(smoke_deployed.os.environ, {}, clear=True):
+        with mock.patch.object(smoke_deployed, "_get", _health_then(never_ready)):
+            assert smoke_deployed.main(["--url", "https://x.onrender.com", "--ready-timeout", "0"]) == 1
+
+    captured = capsys.readouterr()
+    assert "SSE stream ended" in captured.err, captured.err
+    assert "/ready never returned 200" in captured.err, captured.err
+    assert "/ready: never green" in captured.out, captured.out
+
+
+def test_a_ready_timeout_that_is_not_a_number_warns_before_it_falls_back(capsys):
+    """Silently taking 600 s where the caller asked for 30 is how a knob stops being a knob."""
+    with mock.patch.dict(smoke_deployed.os.environ, {"SMOKE_READY_TIMEOUT_S": "soon"}):
+        assert smoke_deployed.ready_timeout_default() == smoke_deployed.READY_TIMEOUT_S
+
+    warning = capsys.readouterr()
+    assert warning.out == ""
+    assert len(warning.err.strip().splitlines()) == 1, warning.err
+    assert "SMOKE_READY_TIMEOUT_S" in warning.err and "soon" in warning.err and "600" in warning.err
+
+
+def test_an_unset_ready_timeout_is_not_worth_a_warning(capsys):
+    with mock.patch.dict(smoke_deployed.os.environ, {}, clear=True):
+        assert smoke_deployed.ready_timeout_default() == smoke_deployed.READY_TIMEOUT_S
+    assert capsys.readouterr().err == ""
+
+
 def test_the_cli_carries_a_ready_timeout_flag():
     with mock.patch.dict(smoke_deployed.os.environ, {"SMOKE_READY_TIMEOUT_S": "7"}):
         assert smoke_deployed.parse_arguments(["--url", "https://x"]).ready_timeout == 7.0

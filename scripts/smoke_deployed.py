@@ -134,11 +134,21 @@ def ready_timeout_default() -> float:
     """`SMOKE_READY_TIMEOUT_S` when it parses as a number, else `READY_TIMEOUT_S`.
 
     A malformed value falls back rather than ending the deploy job in an argparse traceback: the
-    wait is a convenience knob, and no deployment fact depends on which number it took.
+    wait is a convenience knob, and no deployment fact depends on which number it took. It does say
+    so on stderr, though — a caller who exported `SMOKE_READY_TIMEOUT_S=30s` asked for thirty
+    seconds and would otherwise wait ten minutes with nothing in the log to explain it. An **unset**
+    variable is the ordinary case and warns about nothing.
     """
+    raw = os.environ.get(READY_TIMEOUT_ENV)
+    if raw is None:
+        return READY_TIMEOUT_S
     try:
-        return float(os.environ[READY_TIMEOUT_ENV])
-    except (KeyError, ValueError):
+        return float(raw)
+    except ValueError:
+        print(
+            f"WARN — {READY_TIMEOUT_ENV}={raw!r} is not a number; waiting {READY_TIMEOUT_S:g}s for /ready instead",
+            file=sys.stderr,
+        )
         return READY_TIMEOUT_S
 
 

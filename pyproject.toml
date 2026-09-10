@@ -21,6 +21,11 @@ dependencies = [
     "pydantic==2.13.5",
     "pydantic-settings==2.13.0",
     "httpx==0.28.1",
+    # `agent/client.py` imports `httpx2` at module level (the MCP 2.x transport's own HTTP layer,
+    # which both provider SDKs also ship), so it is a direct dependency of this package and not
+    # only a transitive one: pinning it here is what keeps that import from resolving to whatever
+    # version `mcp` or `anthropic` happens to pull next.
+    "httpx2==2.12.0",
     "fastembed==0.8.0",
     "sqlite-vec==0.1.9",
     "mcp==2.2.0",

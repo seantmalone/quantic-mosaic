@@ -70,6 +70,7 @@ httpx==0.28.1
     #   openai
 httpx2==2.12.0
     # via
+    #   hrmosaic (pyproject.toml)
     #   anthropic
     #   mcp
 huggingface-hub==1.30.0
