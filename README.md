@@ -7,12 +7,13 @@ every step it took — routing decision, retrieval, tool calls, guardrails — i
 State-changing actions are mock and pass a one-time human confirmation gate before anything is
 written.
 
-Deployed: TBD-before-submission
-Demo video: TBD-before-submission
+Deployed: pending: gate 2 + 4 (Render account + API key) — see NEEDS-FROM-USER.md
+Demo video: pending: gate 6 (record the walkthrough) — see docs/demo-script.md
 Repo: https://github.com/seantmalone/quantic-mosaic
 
 Documentation: `design-and-evaluation.md` (architecture, RAG and MCP design, evaluation results),
 `deployed.md` (the live deployment, access and cold start), `ai-tooling.md` (AI-use disclosure),
+`docs/architecture.html` (an interactive walkthrough of the architecture),
 `docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md` (the full design spec).
 
 ## Setup
@@ -68,6 +69,13 @@ make docker            # build the image
 make docker-run-512    # run it under the 512 MB memory gate
 ```
 
+**Access.** The deployed instance carries one shared secret, `APP_ACCESS_TOKEN`. The link on the
+`Deployed:` line above already carries it as `?access=<token>`, which is exchanged once for an
+HttpOnly cookie and stripped from the URL; API clients and MCP Inspector send
+`Authorization: Bearer <token>` instead. Choose **HR admin** in the act-as selector to reach the
+observability dashboard. Full details, every environment variable and the measured numbers are in
+`deployed.md`.
+
 **Cold start.** The free instance spins down after 15 minutes idle, so the first request after an
 idle period takes roughly 35–70 seconds. Open `/health` first and wait for a 200 before chatting;
 the UI shows a cold-start banner with an elapsed counter while that happens.
@@ -80,7 +88,9 @@ make ablation    # compares the baseline run against the two ablation variants
 ```
 
 Results are committed under `evaluation/results/` and rendered by the dashboard's evaluation
-pages; `evaluation/REPORT.md` carries the written analysis.
+pages; `evaluation/REPORT.md` carries the written analysis and
+`design-and-evaluation.md` carries the methodology, the 26 questions with their expected answers,
+the judge-agreement figures and the known limitations.
 
 ## Third-party components
 
