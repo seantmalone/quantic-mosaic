@@ -28,6 +28,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import math
+import threading
 
 from hrmosaic.settings import settings
 
@@ -52,6 +53,9 @@ QUERY_CONVENTION = f"prefix:{QUERY_PREFIX}"
 FAKE_MODEL_NAME = "fake-hash-384"
 
 _model = None
+
+#: Guards the memo lookup so `embed_query_with_meta` can attribute a hit to the call that took it.
+_query_lock = threading.Lock()
 
 
 def model_name() -> str:
@@ -121,19 +125,35 @@ def clear_query_cache() -> None:
     A process-wide LRU makes an embed count order-dependent across a whole test session, and a test
     that asserts "this embedded once" would pass vacuously against a cache some earlier test filled.
     """
-    _embed_query_cached.cache_clear()
+    with _query_lock:
+        _embed_query_cached.cache_clear()
 
 
-def query_cache_hits() -> int:
-    """Cumulative hits on the query memo — what `retrieve()` reads to stamp `embed_cache_hit`."""
-    return _embed_query_cached.cache_info().hits
+def embed_query_with_meta(text: str) -> tuple[list[float], bool]:
+    """The vector **and** whether the memo served it, decided inside this one call.
+
+    `RetrievalResult.embed_cache_hit` used to be derived by `retrieve()` diffing the LRU's
+    process-global hit counter around `embed_query`. `retrieve()` runs under `asyncio.to_thread`,
+    so two retrievals are genuinely concurrent threads and that diff attributes **another**
+    thread's hit to this one: a span whose embed was 390 ms of real ONNX work reports the work as
+    free, and the one number W1-B is measured by stops describing the call it sits on.
+
+    The lock is held across the embed itself, not only across the counter reads. That is the point
+    of it twice over: it makes the pair (`hits` before, `hits` after) belong to this call, and two
+    threads asking for the same vector then cost one ONNX run rather than two — which is what a
+    512 MB / 0.1 CPU instance wants regardless.
+
+    The caller gets a **copy**: the list inside an LRU entry is the cache's own object, and one
+    `sort()` or in-place scale downstream would poison every later hit for the lifetime of the
+    process.
+    """
+    with _query_lock:
+        before = _embed_query_cached.cache_info().hits
+        vector = _embed_query_cached(model_name(), QUERY_CONVENTION, settings.embed_dim, text)
+        cache_hit = _embed_query_cached.cache_info().hits > before
+    return list(vector), cache_hit
 
 
 def embed_query(text: str) -> list[float]:
-    """Embed one question. The asymmetric half: the prefix of `QUERY_CONVENTION` is applied here.
-
-    Memoised, and the caller gets a **copy**: the list inside an LRU entry is the cache's own
-    object, and one `sort()` or in-place scale downstream would poison every later hit for the
-    lifetime of the process.
-    """
-    return list(_embed_query_cached(model_name(), QUERY_CONVENTION, settings.embed_dim, text))
+    """Embed one question. The asymmetric half: the prefix of `QUERY_CONVENTION` is applied here."""
+    return embed_query_with_meta(text)[0]

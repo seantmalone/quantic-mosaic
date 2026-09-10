@@ -20,6 +20,8 @@ safe rather than merely fast, and each has a test below:
 
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from hrmosaic.rag import embed
@@ -133,3 +135,56 @@ def test_the_retrieval_payload_carries_the_flag():
     from hrmosaic.core.models import RetrievalPayload
 
     assert RetrievalPayload(query="q", k=5, k_source="default", strategy="hybrid_rrf").embed_cache_hit is False
+
+
+# --------------------------------------------------------------------------------------
+# The hit flag is decided inside the call (P15 item 0)
+# --------------------------------------------------------------------------------------
+#
+# `retrieve()` runs under `asyncio.to_thread`, so two retrievals are genuinely concurrent threads.
+# Deriving `embed_cache_hit` by diffing the process-global LRU hit counter before and after
+# `embed_query` therefore stamps another thread's hit onto a span whose embed was real work — the
+# flag would say "free" about the 390 ms the span is there to report. `embed_query_with_meta`
+# decides inside the same call instead.
+
+
+def test_the_embed_reports_its_own_hit(fake_embedder):
+    vector, cache_hit = embed.embed_query_with_meta("a question")
+    again, second_hit = embed.embed_query_with_meta("a question")
+
+    assert (cache_hit, second_hit) == (False, True)
+    assert vector == again
+    assert embed.embed_query("a question") == vector, "the plain call is the same vector"
+
+
+def test_two_interleaved_lookups_attribute_their_hits_correctly(fake_embedder, monkeypatch):
+    """A hit taken by another thread mid-embed must not be reported as this call's hit."""
+    embed.embed_query("already cached")
+
+    inside = threading.Event()
+    release = threading.Event()
+    real = embed._fake_embed
+
+    def slow(text: str) -> list[float]:
+        if text.endswith("fresh question"):
+            inside.set()
+            assert release.wait(timeout=5), "the main thread never released the embed"
+        return real(text)
+
+    monkeypatch.setattr(embed, "_fake_embed", slow)
+
+    seen: dict[str, bool] = {}
+    fresh = threading.Thread(target=lambda: seen.__setitem__("fresh", embed.embed_query_with_meta("fresh question")[1]))
+    cached = threading.Thread(
+        target=lambda: seen.__setitem__("cached", embed.embed_query_with_meta("already cached")[1])
+    )
+
+    fresh.start()
+    assert inside.wait(timeout=5), "the slow embed never started"
+    cached.start()
+    cached.join(timeout=0.25)  # the memo lookup is serialised against the embed in flight
+    release.set()
+    fresh.join(timeout=5)
+    cached.join(timeout=5)
+
+    assert seen == {"fresh": False, "cached": True}

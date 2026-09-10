@@ -80,8 +80,8 @@ def test_a_filter_that_matches_nothing_returns_no_hits(search):
 def test_a_bm25_only_candidate_gets_a_dense_score_from_one_query_embed(mini_index, fake_embedder, monkeypatch):
     """The fill step reads stored vectors; it never re-embeds chunk text (§7.1, §4.2)."""
     calls: list[str] = []
-    original = embed.embed_query
-    monkeypatch.setattr(embed, "embed_query", lambda text: calls.append(text) or original(text))
+    original = embed.embed_query_with_meta
+    monkeypatch.setattr(embed, "embed_query_with_meta", lambda text: calls.append(text) or original(text))
     # The mini corpus is smaller than one arm's k, so the dense arm would otherwise return every
     # chunk and no candidate could be BM25-only.
     monkeypatch.setattr(retrieve, "ARM_K", 3)

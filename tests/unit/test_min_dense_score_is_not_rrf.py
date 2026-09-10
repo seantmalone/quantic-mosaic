@@ -87,7 +87,7 @@ def _build(case: dict[str, tuple[str, float]], tmp_path: Path, monkeypatch) -> I
         "embed_passages",
         lambda texts: [_unit(next(score for body, score in scores.items() if body in text)) for text in texts],
     )
-    monkeypatch.setattr(embed, "embed_query", lambda text: _unit(1.0))
+    monkeypatch.setattr(embed, "embed_query_with_meta", lambda text: (_unit(1.0), False))
     index_path = index.build_index(
         chunks,
         documents,

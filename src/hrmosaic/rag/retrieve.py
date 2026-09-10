@@ -73,9 +73,9 @@ class RetrievalResult:
     dense_candidates: list[str] = field(default_factory=list)
     bm25_candidates: list[str] = field(default_factory=list)
     embed_ms: float = 0.0
-    #: Whether `embed_query` served this retrieval's vector from its memo rather than embedding it
-    #: (W1-B). It is the lever's own measurement hook: `embed_ms` is wall clock and moves with the
-    #: machine, this does not.
+    #: Whether the memo served this retrieval's vector rather than embedding it (W1-B), as
+    #: `embed_query_with_meta` decided **inside** that call. It is the lever's own measurement
+    #: hook: `embed_ms` is wall clock and moves with the machine, this does not.
     embed_cache_hit: bool = False
     search_ms: float = 0.0
 
@@ -135,10 +135,10 @@ def retrieve(
     connection = connection if connection is not None else index.open_index()
     try:
         started = time.perf_counter()
-        hits_before = embed.query_cache_hits()
-        vector = embed.embed_query(query)
+        # The embed reports its own hit. A before/after diff of the memo's process-global counter
+        # would read a concurrent retrieval's hit here — `retrieve()` runs under `asyncio.to_thread`.
+        vector, embed_cache_hit = embed.embed_query_with_meta(query)
         embed_ms = (time.perf_counter() - started) * 1000
-        embed_cache_hit = embed.query_cache_hits() > hits_before
 
         started = time.perf_counter()
         rowids = index.allowed_rowids(connection, doc_ids, topic)
