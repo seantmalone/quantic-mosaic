@@ -5,13 +5,18 @@
 # The default ruleset is kept whole: every provider rule, the `jwt` rule and the
 # high-entropy `generic-api-key` heuristic still apply to `src/`, `scripts/`, `mcp/`,
 # `evaluation/`, docs and `.env*` — nothing below narrows a rule or lowers an entropy
-# threshold. The only carve-out is by path, and only for the two places whose whole
-# purpose is to hold credential-shaped strings that are invalid by construction.
+# threshold. The carve-outs are by path, and only for the places whose whole purpose is to
+# hold credential-shaped strings that are invalid by construction, plus one rule/path/line
+# triple for a build-file false positive that is documented in full at the bottom.
+#
+# `[[allowlists]]` (plural) is the 8.25+ form; the singular `[allowlist]` it replaced cannot
+# express `targetRules`, and gitleaks refuses to load a file that mixes the two. That is why
+# `ci.yml` pins `GITLEAKS_VERSION` — the action's own default was 8.24.3, one release too old.
 
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Synthetic, invalid-by-construction test material only. Never source, scripts or env files."
 paths = [
   # Golden trace fixtures. These are recorded Session → Turn → Span traces replayed by the
@@ -36,4 +41,38 @@ paths = [
 # a path stays fully scanned by every rule.
 regexes = [
   '''^pto\.accrual\.ft_3y_plus$''',
+]
+
+# ── `curl-auth-header` in the two build/CI files ────────────────────────────────────────────────
+# The rule reads whatever follows `Authorization: Bearer` on a curl invocation as a credential, and
+# it is right to. Three findings in this repository's history are not credentials:
+#
+#   * `Makefile` — the 512 MB memory gate's `local-memory-gate`. The Makefile mints it, hands it to
+#     one container bound to `127.0.0.1`, and `docker rm -f`s that container ten seconds later.
+#   * `.github/workflows/ci.yml`, twice — `ci-access-token`, the same shape for the docker job's
+#     equally ephemeral container.
+#
+# **Both are already gone at HEAD.** The Makefile builds its header into `$AUTH_HEADER` *before* the
+# curl and passes `-H "$AUTH_HEADER"`, so no literal sits on a curl line for the rule to read, and
+# the CI docker job makes no gated call at all any more (§15.2). This carve-out exists because the
+# scan reads **history**: commit `16edf18` still carries both lines and no later commit can change
+# what an earlier one contains.
+#
+# `condition = "AND"` binds all three criteria at once — the finding must come from
+# `curl-auth-header`, **and** from one of these two files, **and** carry one of these three line
+# shapes. Any other rule, any other file, or any other token behind `Bearer` in these same two files
+# is still reported. Nothing here touches `src/`, `scripts/`, `mcp/` or `.env*`.
+[[allowlists]]
+description = "curl-auth-header: the Makefile / CI docker-job throwaway container tokens, and `Bearer $VAR` placeholders"
+targetRules = ["curl-auth-header"]
+condition = "AND"
+paths = [
+  '''^Makefile$''',
+  '''^\.github/workflows/ci\.yml$''',
+]
+regexTarget = "line"
+regexes = [
+  '''Bearer[ \t]+\$''',                    # a make/shell variable expansion, never a literal
+  '''Bearer[ \t]+ci-access-token\b''',     # .github/workflows/ci.yml, historic (removed at 05bb244)
+  '''Bearer[ \t]+local-memory-gate\b''',   # Makefile, historic (removed by this commit)
 ]

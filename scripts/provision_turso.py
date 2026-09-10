@@ -53,7 +53,17 @@ from typing import Any
 
 import httpx
 
-from hrmosaic.core.db import StoreError, TursoHTTPStore
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    # `python scripts/provision_turso.py` puts *this file's own directory* on sys.path, not the
+    # repository root. `provision_render.py` and `check_render_hours.py` carry these three lines
+    # because a sibling `from scripts.… import …` raised `ModuleNotFoundError` without them, and
+    # this file is the other half of that pair — `provision_render.py` imports `fingerprint` and
+    # `read_handoff` out of it. Every deploy script therefore resolves its imports the same way
+    # from a bare shell, rather than one of them being a step behind the moment it grows one.
+    sys.path.insert(0, str(REPO_ROOT))
+
+from hrmosaic.core.db import StoreError, TursoHTTPStore  # noqa: E402
 
 TURSO_API_BASE = "https://api.turso.tech"
 
@@ -339,17 +349,23 @@ def main(argv: list[str] | None = None) -> int:
             report = parity_smoke(store)
         finally:
             store.close()
+        # `round trip ok` is a result, not a heading. It used to print before `report.problems`
+        # was looked at, so a run whose `SELECT 1` never came back announced a successful round
+        # trip one line above `FAIL — the database was created but is not usable`. The failure
+        # path is taken first now, and it carries the warnings with it so no diagnostic is lost.
+        if report.problems:
+            for warning in report.warnings:
+                print(f"  WARNING — {warning}", file=sys.stderr)
+            for problem in report.problems:
+                print(f"  - {problem}", file=sys.stderr)
+            print("\nFAIL — the database was created but is not usable.", file=sys.stderr)
+            return 1
         print(
             f"  parity smoke: round trip ok · PRAGMA foreign_keys={report.pragma_foreign_keys} · "
             f"orphan INSERT rejected={report.foreign_keys_enforced}"
         )
         for warning in report.warnings:
             print(f"  WARNING — {warning}")
-        if report.problems:
-            for problem in report.problems:
-                print(f"  - {problem}", file=sys.stderr)
-            print("\nFAIL — the database was created but is not usable.", file=sys.stderr)
-            return 1
 
     handoff = write_handoff(result)
     print(

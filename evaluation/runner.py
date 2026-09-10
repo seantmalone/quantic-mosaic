@@ -1255,6 +1255,31 @@ def _agreement_matrix(run: RunFile, labels: ReferenceLabels, compared: int) -> s
     return "\n".join(lines)
 
 
+def _subset_overlap_caveat() -> str:
+    """The sentence that stops the two agreement figures being read as two independent draws.
+
+    `seed_1729_8` samples the gold-`answer` items at random and `judge_lowest_8` takes the eight
+    the judge scored lowest; nothing keeps them apart, and on this run they share half their
+    membership. Two figures over overlapping samples are not two independent opinions, so the
+    shared items are named rather than left for a reader to intersect by hand. Computed from the
+    two label files, so it stays true if either subset changes.
+    """
+    both = [load_reference_labels(metric.labels_path) for metric in AGREEMENT_METRICS.values()]
+    if any(labels is None for labels in both):
+        return ""
+    sizes = [len(labels.labels) for labels in both]
+    shared = sorted(set.intersection(*({label.item_id for label in labels.labels} for labels in both)))
+    if not shared:
+        return " The two subsets share no item, so each rate is drawn from its own population."
+    items = ", ".join(f"`{item}`" for item in shared)
+    return (
+        f" They are also **not independent samples**: nothing keeps the random draw and the "
+        f"lowest-scoring eight apart, and on this run the two subsets share {len(shared)} of "
+        f"{min(sizes)} items — {items} — so the two rates are not two independent draws and must "
+        f"not be read as one figure corroborating the other."
+    )
+
+
 def _agreement_block(run: RunFile, metric: AgreementMetric) -> str:
     """One judge-validation figure: the rate, its `n`, its subset definition and its protocol."""
     rate = getattr(run.metrics, metric.name)
@@ -1392,6 +1417,7 @@ def render_report(run: RunFile, *, ablation_section: str | None = None) -> str:
     blind = AGREEMENT_METRICS["judge_agreement_rate"]
     blind_labels = load_reference_labels(blind.labels_path)
     blind_discriminating = _discriminating(_agreement_cells(run, blind_labels)) if blind_labels else 0
+    subset_overlap = _subset_overlap_caveat()
     blind_verdict = (
         f"and **{blind_discriminating}** of those carried a `not_grounded` on either side"
         if blind_discriminating
@@ -1495,8 +1521,8 @@ selection uses the judge's own scores and is therefore **not blind** — the lab
 `selection_disclosed: true` — while the *labelling* is blind in the same way as the first: the same
 packet shape, the same four §13.3 evidence classes, and no score, verdict, rationale or report text
 anywhere in it. A disclosed-selection figure is evidence about the judge's hardest cases; it is not
-a second blind opinion, and averaging the two would mean nothing. Both are below, each with its `n`
-and its subset definition.
+a second blind opinion, and averaging the two would mean nothing.{subset_overlap} Both are below, each
+with its `n` and its subset definition.
 
 {agreement_blocks}
 
@@ -1924,11 +1950,14 @@ def _agreement_note(previous: str | None, slot: AgreementMetric, note: str) -> s
     """Append this metric's note idempotently, leaving the *other* metric's note alone.
 
     Each agreement note lives on its own line and starts with its metric name, so a second fold-in
-    of either subset replaces its own line and stacks nothing. The trailing `re.sub` clears the
-    pre-two-subset format, where the note was appended inline to the end of the prose.
+    of either subset replaces its own line and stacks nothing. The `re.sub` clears the
+    pre-two-subset format, where the note was appended inline to the end of the prose paragraph
+    rather than on a line of its own — hence `re.MULTILINE`, without which `$` anchors to the end
+    of the whole string, the legacy note is never matched, and a fold-in stacks a second copy
+    beside it instead of replacing it.
     """
     kept = [line for line in (previous or "").split("\n") if not line.startswith(f"{slot.name}=")]
-    body = re.sub(rf"\s*{re.escape(slot.name)}=[^\n]*$", "", "\n".join(kept)).strip()
+    body = re.sub(rf"\s*{re.escape(slot.name)}=[^\n]*$", "", "\n".join(kept), flags=re.MULTILINE).strip()
     return f"{body}\n{note}".strip() if body else note
 
 

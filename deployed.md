@@ -57,12 +57,17 @@ asserts both.
 the first `POST /chat`, and a second warm `POST /chat`. The published number is distinct from
 §13.5's cold-*turn* p50, which is an eval metric over a warm instance.
 
-What is **not** pending is the part the image controls, measured locally on 2026-09-10:
+What is **not** pending is the part the image controls, measured locally on 2026-09-10. Both rows
+are read off the **same** `make docker-run-512` run whose output is pasted verbatim under *Memory*
+below — the first segment is that run's `is up after`, the second is the gap to its `/ready is green
+after` — so the published figures and the evidence for them cannot drift apart:
 
 | Segment | Observed | How |
 |---|---|---|
-| Container start → `/health` 200 | **2.0 s** | `docker run -m 512m`, then `scripts/wait_for_health.py` |
+| Container start → `/health` 200 | **2.2 s** | `docker run -m 512m`, then `scripts/wait_for_health.py` |
 | `/health` 200 → `/ready` 200 (ONNX session + index open) | **0.5 s** | `wait_for_health.py --ready`, same run |
+
+A second run on the same image read 2.1 s and the same 0.5 s.
 
 Those 0.5 s are what baking the model into the image buys: without it the same segment is a 16–63 s
 download from Hugging Face on 0.1 CPU, on every spin-up. Render's own spin-up (~30–60 s) is added
@@ -174,19 +179,21 @@ one stubbed turn through `POST /chat` over `Authorization: Bearer`, and asserts
 ```
 http://127.0.0.1:8000 is up after 2.2s
 http://127.0.0.1:8000/ready is green after 2.7s
-  status=ok  git_sha=a69c1f4222851c98adbb25f81cd80f431bec7495  rss_mb=292.2  deploy_mode=local
+  status=ok  git_sha=415f358322daeda3fdcbf236a7a27f431200740f  rss_mb=294.9  deploy_mode=local
   mcp.connected=True  tool_count=9  transport=http  url=http://127.0.0.1:8000/mcp-server/mcp
   index.loaded=True  doc_count=14  chunk_count=204  embed_model=BAAI/bge-small-en-v1.5
   degradations=[]
 
-OK — MCP connected with 9 tools and the baked index carries all 14 documents · rss_mb 292.2 < 420.0.
+OK — MCP connected with 9 tools and the baked index carries all 14 documents · rss_mb 294.9 < 420.0.
 ```
 
-**292.2 MB** against a §14.3 budget of 345 MB and a ceiling of 420 MB — **220 MB of headroom**
-below the 512 MB limit. Six runs of the gate on 2026-09-10, each on the image built from the
-commit whose `git_sha` the run prints, read **292.9**, **291.3**, **292.1**, **292.1**, **290.4**
-and **292.2** MB — a spread of 2.5 MB across six builds, so the figure is stable to about a
-megabyte and the assertion is nowhere near its threshold. The reading is `/proc/self/status` `VmRSS` inside the container (a real
+**294.9 MB** against a §14.3 budget of 345 MB and a ceiling of 420 MB — **217 MB of headroom**
+below the 512 MB limit. The published figure is the one the image built from **this** commit
+reported, not an earlier one: two runs of the gate on it read **294.9** and **293.0** MB. Six
+earlier runs the same day, each on the image built from the commit whose `git_sha` that run
+printed, read **290.4**, **291.3**, **292.1**, **292.1**, **292.2** and **292.9** MB — so the
+spread across eight builds is 4.5 MB, the figure is stable to a few megabytes and the assertion is
+nowhere near its threshold. The reading is `/proc/self/status` `VmRSS` inside the container (a real
 Linux cgroup, under Docker Desktop's `linux/arm64` VM), not the macOS `getrusage` high-water mark
 that `CHANGELOG.md`'s P1 entry distinguishes. The figure on Render's `linux/amd64` builder is
 expected to differ slightly and is re-read at gate 2.
@@ -202,7 +209,7 @@ Every row of §3.1 that P11 owns, read live on the date shown. Nothing here is i
 | Render build-pipeline minutes | **500 included Starter-tier pipeline minutes per month** on the Hobby workspace. When they run out and there is no payment method or the spend limit is reached, "Render stops running pipeline tasks (including service builds!) for the remainder of the current month." Overage is $5 / 1,000 minutes. | 2026-09-10 | https://render.com/docs/build-pipeline |
 | Render documented HTTP request timeout | **"Render web services allow HTTP responses to take up to 100 minutes."** `/docs/web-services` carries no timeout section; this is the figure Render publishes. | 2026-09-10 | https://render.com/docs/render-vs-vercel-comparison |
 | Turso free-tier limits | **100 databases · 5 GB storage · 500 M rows read/month · 10 M rows written/month** | 2026-09-10 | https://turso.tech/pricing |
-| Measured container RSS under `docker run -m 512m` | **292.2 MB** (290.4, 291.3, 292.1, 292.1 and 292.9 MB on the other five runs of the same gate that day; see the memory section above) | 2026-09-10 | `make docker-run-512` |
+| Measured container RSS under `docker run -m 512m` | **294.9 MB** on this commit's image (293.0 MB on its second run; 290.4, 291.3, 292.1, 292.1, 292.2 and 292.9 MB on six earlier runs of the same gate that day; see the memory section above) | 2026-09-10 | `make docker-run-512` |
 | Measured cold start / warm turn on the live instance | `pending: gate 2` | — | `scripts/measure_cold_start.py` |
 | Render plan details and usage from the dashboard | `pending: gate 2` — the dashboard needs an authenticated session | — | Render dashboard → usage |
 

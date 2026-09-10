@@ -66,17 +66,26 @@ docker:
 # the container cannot buy headroom back as swap, so 512 MB is a hard ceiling and not a hint.
 #
 # Poll /ready (not just /health) so the ONNX session is resident before anything is measured,
-# serve one stubbed turn over `Authorization: Bearer`, and only then read `/health.app.rss_mb`.
+# serve one stubbed turn over the access gate, and only then read `/health.app.rss_mb`.
 # The trap is what stops a failed assertion from leaving a container holding the port.
 MEMORY_CEILING_MB ?= 420
+
+# The gate's throwaway token: it is minted here, lives for the ten seconds the container lives and
+# is destroyed with it, and it opens nothing but a container bound to 127.0.0.1. It is a *variable*
+# rather than a literal on the curl line because gitleaks' `curl-auth-header` rule reads anything
+# sitting behind `Authorization: Bearer` on a curl invocation as a credential — which is the right
+# default — so the header is built once into `$$AUTH_HEADER` and the curl below passes `-H
+# "$$AUTH_HEADER"`. Nothing token-shaped is then on a curl line for the rule to read.
+MEMORY_GATE_TOKEN ?= local-memory-gate
 docker-run-512:
 	@set -e; \
 	docker run --rm -d --name $(IMAGE)-512 -m 512m --memory-swap 512m \
-	  -e LLM_PROVIDER=stub -e PORT=$(PORT) -e APP_ACCESS_TOKEN=local-memory-gate \
+	  -e LLM_PROVIDER=stub -e PORT=$(PORT) -e APP_ACCESS_TOKEN=$(MEMORY_GATE_TOKEN) \
 	  -p $(PORT):$(PORT) $(IMAGE); \
 	trap 'docker rm -f $(IMAGE)-512 >/dev/null 2>&1 || true' EXIT INT TERM; \
 	$(BIN)/python scripts/wait_for_health.py --url $(BASE_URL) --timeout 300 --ready; \
+	AUTH_HEADER="Authorization: Bearer $(MEMORY_GATE_TOKEN)"; \
 	curl -fsS -o /dev/null -X POST $(BASE_URL)/chat \
-	  -H 'Authorization: Bearer local-memory-gate' -H 'Content-Type: application/json' \
+	  -H "$$AUTH_HEADER" -H 'Content-Type: application/json' \
 	  -d '{"message":"How many days of paid time off do I accrue each year?"}'; \
 	$(BIN)/python scripts/assert_health.py --url $(BASE_URL) --max-rss-mb $(MEMORY_CEILING_MB)

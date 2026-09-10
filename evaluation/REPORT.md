@@ -115,8 +115,8 @@ selection uses the judge's own scores and is therefore **not blind** — the lab
 `selection_disclosed: true` — while the *labelling* is blind in the same way as the first: the same
 packet shape, the same four §13.3 evidence classes, and no score, verdict, rationale or report text
 anywhere in it. A disclosed-selection figure is evidence about the judge's hardest cases; it is not
-a second blind opinion, and averaging the two would mean nothing. Both are below, each with its `n`
-and its subset definition.
+a second blind opinion, and averaging the two would mean nothing. They are also **not independent samples**: nothing keeps the random draw and the lowest-scoring eight apart, and on this run the two subsets share 4 of 8 items — `benefits-001`, `benefits-002`, `conduct-001`, `expenses-001` — so the two rates are not two independent draws and must not be read as one figure corroborating the other. Both are below, each
+with its `n` and its subset definition.
 
 #### `judge_agreement_rate` — subset `seed_1729_8`
 
@@ -164,15 +164,15 @@ above is what tells you how many turns were pushed back into the loop at all.
 <!-- ABLATION:BEGIN -->
 | Metric | baseline | dense_only_k2 | no_structured_tools |
 |---|---|---|---|
-| `groundedness_mean` | judge pending | not judged | not judged |
-| `citation_accuracy_mean` | judge pending | not judged | not judged |
+| `groundedness_mean` | 0.985 | not judged | not judged |
+| `citation_accuracy_mean` | 0.899 | not judged | not judged |
 | `cit_resolve_mean` | 0.923 | 0.923 | 0.885 |
 | `doc_recall_mean` | 0.842 | 0.829 | 0.803 |
 | `tool_selection_accuracy` | 0.926 | 0.926 | 0.840 |
 | `arg_correctness_rate` | 1.000 | 1.000 | 1.000 |
 | `workflow_completion` | 0.808 | 0.731 | 0.615 |
 | `over_refusal_rate` | 0.111 | 0.111 | 0.167 |
-| `strict_pass_rate` | judge pending | 0.692 | 0.615 |
+| `strict_pass_rate` | 0.654 | 0.692 | 0.615 |
 
 > ⚠ **The `no_structured_tools` variant did not move Workflow completion; the interpretive claim
 > below is NOT supported by this run.** §13.9 predicts
@@ -181,7 +181,7 @@ above is what tells you how many turns were pushed back into the loop at all.
 > (delta **-0.192**). Read the table as a measurement, not as evidence that the agentic layer
 > does the work.
 
-Items whose strict pass flips against `baseline`: **not computable — judge pending.** Every clause of `strict_pass` that needs a judge is vacuously true on an unjudged item, so the baseline's per-item `passed` cannot be compared against yet (§13.8). Run `python -m evaluation.runner --judge <baseline run_id>`, then `make ablation` again.
+Items whose strict pass flips against `baseline`: `inj-001` (dense_only_k2), `expenses-002` (dense_only_k2), `onboarding-001` (dense_only_k2), `conduct-001` (dense_only_k2), `pto-002` (dense_only_k2), `inj-001` (no_structured_tools), `profile-001` (no_structured_tools), `benefits-002` (no_structured_tools)
 
 All three runs share `target: local` and `dataset_sha: a501f288a6589730…`, which `evaluation/ablation.py` asserts before it writes anything. Judged metrics are computed on `baseline` only (§13.9); a `null` on an ablation arm means not judged, never zero.
 <!-- ABLATION:END -->
@@ -219,5 +219,6 @@ All three runs share `target: local` and `dataset_sha: a501f288a6589730…`, whi
 
 ### Notes
 
-Over-refusal cause, 1 item(s) — remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence — which the synthesis prompt does carry — cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix. Chunking observation: `c_f7ec2fe078c43c2d` (`workplace-conduct` > Investigation Process) begins mid-sentence at "of the report." — the overlap window of §7.1's chunker, not lost text. The head of that sentence ("Investigations are targeted for completion within 30 calendar days of the report.") survives in the overlapping sibling `c_faa7e3e074e0f281`, which the same search also retrieved, so no figure is lost to the model or to the judge; a reader of the one chunk alone cannot see it. Judged in a second pass on 2026-09-10 (232 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven. judge_agreement_rate=1.0 over n=7 reference labels.
+Over-refusal cause, 1 item(s) — remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence — which the synthesis prompt does carry — cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix. Chunking observation: `c_f7ec2fe078c43c2d` (`workplace-conduct` > Investigation Process) begins mid-sentence at "of the report." — the overlap window of §7.1's chunker, not lost text. The head of that sentence ("Investigations are targeted for completion within 30 calendar days of the report.") survives in the overlapping sibling `c_faa7e3e074e0f281`, which the same search also retrieved, so no figure is lost to the model or to the judge; a reader of the one chunk alone cannot see it. Judged in a second pass on 2026-09-10 (232 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven.
 judge_agreement_rate_hard=0.875 over n=8 reference labels (subset judge_lowest_8). disagreements: inj-001 (reference grounded, judge not_grounded)
+judge_agreement_rate=1.0 over n=7 reference labels (subset seed_1729_8).

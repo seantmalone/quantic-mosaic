@@ -22,9 +22,19 @@ jobs:
         with: { python-version-file: '.python-version' }
       - run: pip install -r requirements-dev.txt
       - run: ruff check . && ruff format --check .
+      # `GITLEAKS_VERSION` is pinned rather than left at the action's default, for two reasons.
+      # The scanner's ruleset is an input like any other, and an unpinned one drifts: run
+      # 34481667075 went red on a commit that touched nothing relevant, purely because the
+      # action had moved to a build whose default ruleset carries `curl-auth-header`. And
+      # `.gitleaks.toml` needs the `[[allowlists]]` form with `targetRules` to scope its one
+      # carve-out to a single rule — that form is 8.25+, and the action's default was **8.24.3**,
+      # which cannot express it. 8.30.1 is newer than the default it replaces (so this pin adds
+      # rules, it does not withhold them) and it is the build every `gitleaks detect` in the
+      # P11 gate log was run against, so CI now runs the scan that was actually verified.
       - uses: gitleaks/gitleaks-action@v2            # full history
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
 
   test:
     runs-on: ubuntu-latest

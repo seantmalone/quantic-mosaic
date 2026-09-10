@@ -776,12 +776,13 @@ token) and 4 (Render API key) are all still open, so everything that needs an ac
 need an account was built, run and measured here.
 
 - **The 512 MB memory gate, measured 2026-09-10.** `make docker-run-512` — `docker run -m 512m
-  --memory-swap 512m`, `/ready` polled green, one stubbed `POST /chat` over `Authorization: Bearer`,
-  then `/health` — reports **`rss_mb = 292.2`** against the §14.3 assertion of `< 420` and a budget
-  of 345 MB: **220 MB of headroom** under the hard 512 MB cgroup limit. Six runs of the gate the
-  same day, each on the image built from the commit whose `git_sha` the run prints, read 292.9,
-  291.3, 292.1, 292.1, 290.4 and 292.2 MB — a 2.5 MB spread, so the figure is stable to about a
-  megabyte. The reading is `/proc/self/status` `VmRSS` inside the container (Docker Desktop's
+  --memory-swap 512m`, `/ready` polled green, one stubbed `POST /chat` through the access gate,
+  then `/health` — reports **`rss_mb = 294.9`** against the §14.3 assertion of `< 420` and a budget
+  of 345 MB: **217 MB of headroom** under the hard 512 MB cgroup limit. That is the figure the
+  image built from this phase's final commit reported; its second run read 293.0 MB, and six
+  earlier runs the same day, each on the image built from the commit whose `git_sha` that run
+  printed, read 290.4, 291.3, 292.1, 292.1, 292.2 and 292.9 MB — a 4.5 MB spread across eight
+  builds, so the figure is stable to a few megabytes. The reading is `/proc/self/status` `VmRSS` inside the container (Docker Desktop's
   `linux/arm64` VM, Docker
   29.6.1), i.e. the same real-Linux reader P1's entry describes, not the macOS `getrusage`
   high-water mark. The equivalent numbers on Render's `linux/amd64` builder are re-read at gate 2.
@@ -797,8 +798,10 @@ need an account was built, run and measured here.
   minutes are ~165 builds a month, which is the headroom arithmetic §14.1 asks `deployed.md` to
   carry.
 - **Boot segments inside the container, measured 2026-09-10:** container start → `/health` 200 in
-  **2.0 s**; `/health` → `/ready` green in a further **0.5 s**. That half-second is what baking the
-  ONNX model into the image buys against a 16–63 s download.
+  **2.2 s**; `/health` → `/ready` green in a further **0.5 s** (a second run on the same image:
+  2.1 s and the same 0.5 s). That half-second is what baking the ONNX model into the image buys
+  against a 16–63 s download. Both segments are read off the same gate run `deployed.md` pastes
+  verbatim, so the published figures and their evidence are one measurement.
 - **`${PORT}` expansion proved on the real image.** `docker run -e PORT=10000` →
   `/health.mcp.connected: true` with `url: http://127.0.0.1:10000/mcp-server/mcp` and
   `tool_count: 9`. The `sh -c` form of `CMD` is what makes that work; the exec form would hand
@@ -878,3 +881,5 @@ need an account was built, run and measured here.
   recomputed from the committed per-item scores by `deterministic.strict_pass_causes()`, which
   `strict_pass()` is itself now defined in terms of, so the cause column and the `passed` flag are
   one computation and cannot disagree.
+
+- 2026-09-10 — P11 fix round (gitleaks false positives, the ablation block after the judge pass, two review minors): the three `curl-auth-header` findings were throwaway container tokens, not secrets, so the `Makefile` now builds its memory-gate header into `$AUTH_HEADER` *before* the `curl` and passes `-H "$AUTH_HEADER"` — nothing token-shaped is left on a curl line for the rule to read — while `.gitleaks.toml` carries one `[[allowlists]]` entry (`condition = "AND"` over the rule, the two build files and three line shapes) for the copies commit `16edf18` will hold for ever, and `ci.yml` pins `GITLEAKS_VERSION: 8.30.1` because the action's default **8.24.3** predates the `targetRules` form and because an unpinned scanner ruleset is what turned run 34481667075 red on a commit that touched nothing relevant. Verified with gitleaks 8.30.1: full-history `detect` **no leaks found**, the `--no-merges --first-parent` range scan CI runs **no leaks found**, a planted `sk-ant-api03-…` key under `src/` still caught, and — the check that says the carve-out is narrow — a *different* token behind `Bearer` in the `Makefile`, and `ci-access-token` in a file outside the two paths, both still caught. `make ablation` re-run now that the baseline is judged, so `evaluation/REPORT.md`'s ablation block carries the real baseline column (0.985 / 0.899 / 0.654) and a real eight-item flip list in place of `judge pending`, and the judge-methodology prose adds the caveat that the two agreement subsets share four items (`benefits-001`, `benefits-002`, `conduct-001`, `expenses-001`) and are therefore not independent samples; folding the blind subset back in also filled the `judge_agreement_subset` field, which had stayed `null`, and exposed that `_agreement_note`'s legacy-format cleanup never fired without `re.MULTILINE` (it appended a second copy of the note instead of replacing it). `scripts/provision_turso.py` prints `parity smoke: round trip ok` only once `report.problems` is clear — it used to announce a successful round trip one line above `FAIL — the database was created but is not usable` — and carries its sibling deploy scripts' `REPO_ROOT` bootstrap. `deployed.md`'s boot table (**2.2 s** container start → `/health`, **0.5 s** on to `/ready`) and its memory figure (**294.9 MB**, 217 MB of headroom; the same image's second run read 293.0 MB) are re-read off *this* commit's own image and stated to come from the run pasted beside them, so the published figures, their evidence and CHANGELOG's P11 entry are one measurement rather than three.
