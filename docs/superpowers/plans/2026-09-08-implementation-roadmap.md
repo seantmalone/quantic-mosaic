@@ -514,12 +514,21 @@ EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant dense_o
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant no_structured_tools
 EVAL_TARGET_BASE_URL="$DEPLOY_URL" make ablation                       # ablation.py only compares runs that already exist
 jq -r '.target, .variant' evaluation/results/latest.json                # deployed  baseline
-jq -r '.runs[].config_json.target' evaluation/results/comparison.json   # deployed x3
+jq -r '.target, (.variants[].variant)' evaluation/results/comparison.json   # deployed, then the three variants
 python scripts/measure_cold_start.py && python scripts/check_render_hours.py     # numbers and dates into deployed.md
 git push origin HEAD:ci-red-evidence && gh workflow run ci.yml --ref ci-red-evidence -f deploy_only=true   # red run: deploy skipped, "dependent job failed"
 EVAL_TARGET_BASE_URL=http://127.0.0.1:8000 pytest tests/integration/test_smoke_eval_endpoint.py -q   # against the running image
 ls docs/evidence/*.png                                 # three committed screenshots
 ```
+
+> **The second `jq` was corrected at source on 2026-09-10 (P11 fix round 2).** It read
+> `jq -r '.runs[].config_json.target' … # deployed x3`, which cannot pass against any
+> `comparison.json` this project writes: `evaluation/ablation.py` emits
+> `{generated_at, target, dataset_sha, variants[], workflow_completion_check, flips, note}` —
+> no `runs`, no `config_json` — so the old line died in `jq: error … Cannot iterate over null`.
+> `target` is a *single shared top-level field* precisely because `ablation.py` refuses to
+> compare runs whose targets differ (§13.9), which is the "three runs sharing `target:
+> deployed`" property the line is asking for. See P11-report.md §16.
 
 ### P12 — Documentation, demo prep, publish · **M** (4 h) · deps P11 · ∥ none · no key · commit `P12(docs): …`
 

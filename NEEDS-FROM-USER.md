@@ -106,16 +106,18 @@ jq -r '.target, .variant' evaluation/results/latest.json                     # d
 jq -r '.target, (.variants[].variant)' evaluation/results/comparison.json   # deployed, then the three variants
 ```
 
-> **The second `jq` is not the one the roadmap prints.** The P11 brief and roadmap §4 both carry
+> **The second `jq` was corrected at source on 2026-09-10 (P11 fix round 2).** The P11 brief,
+> roadmap §4 and `docs/requirements-traceability.md`'s R9.5 row all used to carry
 > `jq -r '.runs[].config_json.target' evaluation/results/comparison.json   # deployed x3`, and that
 > command *cannot* pass against any `comparison.json` this project writes — before or after the
 > gates land. `evaluation/ablation.py` emits `{generated_at, target, dataset_sha, variants[],
-> workflow_completion_check, flips, note}`: there is no `runs` key and no `config_json`, so the
-> printed command fails with `jq: error (…): Cannot iterate over null`. `target` is a *single
-> shared top-level field* precisely because `ablation.py` refuses to compare runs whose targets
-> differ, which is the §13.9 "three runs sharing `target: deployed`" check the DoD line is asking
-> for. The corrected command above prints `deployed` once and then the three variant names, which
-> proves the same thing against the artifact's real shape. See P11-report.md §11.
+> workflow_completion_check, flips, note}`: there is no `runs` key and no `config_json`, so the old
+> command died in `jq: error (…): Cannot iterate over null`. `target` is a *single shared
+> top-level field* precisely because `ablation.py` refuses to compare runs whose targets differ,
+> which is the §13.9 "three runs sharing `target: deployed`" check the line is asking for. All four
+> documents now print the command above, and
+> `tests/contract/test_published_run_commands.py` asserts it stays runnable against the committed
+> artifact. See P11-report.md §16.
 
 Every eval item sends `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin` and **fails
 closed** without both — the privileged `/chat` options are admin-only by design.

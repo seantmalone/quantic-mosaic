@@ -112,6 +112,32 @@ class RunOptions:
     write_report: bool = True
 
 
+class BadTargetUrl(ValueError):
+    """A target base URL that is empty or schemeless — named at the door, not a traceback later."""
+
+
+def require_base_url(base_url: str) -> str:
+    """Reject an empty or schemeless target before a single request is built.
+
+    `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval` with `DEPLOY_URL` unset used to reach `httpx`
+    and die in `httpx.UnsupportedProtocol: Request URL is missing an 'http://' or 'https://'
+    protocol` — and, worse, `resolve_target("")` labelled that run `deployed`, because an empty URL
+    has no loopback host, so a run that never happened could have been filed as the published one.
+    Both are impossible now. Same guard, same wording, as `scripts/wait_for_deploy.py` and
+    `scripts/smoke_deployed.py` (P11).
+    """
+    url = (base_url or "").strip()
+    if not url:
+        raise BadTargetUrl(
+            "EVAL_TARGET_BASE_URL is empty. That is usually "
+            'EVAL_TARGET_BASE_URL="$DEPLOY_URL" with DEPLOY_URL unset — see NEEDS-FROM-USER.md '
+            "(gates 2 and 4), then run scripts/provision_render.py."
+        )
+    if not url.startswith(("http://", "https://")):
+        raise BadTargetUrl(f"EVAL_TARGET_BASE_URL {url!r} has no http:// or https:// scheme; it is not a base URL.")
+    return url
+
+
 def resolve_target(base_url: str) -> str:
     """`local` for a loopback URL, `deployed` for anything else (§13.2)."""
     host = httpx.URL(base_url).host
@@ -214,7 +240,7 @@ class Runner:
     ) -> None:
         self.settings = settings or default_settings
         self.options = options
-        self.options.base_url = options.base_url or self.settings.eval_target_base_url
+        self.options.base_url = require_base_url(options.base_url or self.settings.eval_target_base_url)
         self.dataset = dataset or load_dataset()
         self.target = resolve_target(self.options.base_url)
         self.run_id = run_id_for(options.variant)
@@ -1397,7 +1423,14 @@ async def smoke_run(
         results_dir=Path(directory.name),
         write_report=False,
     )
-    runner = Runner(options)
+    try:
+        runner = Runner(options)
+    except BadTargetUrl as exc:
+        # §8.6: every failure path answers with a useful body. A 500 halfway through a
+        # `text/event-stream` is the one shape the page cannot render.
+        yield _frame("run_error", {"code": "BAD_TARGET_URL", "error": str(exc)})
+        directory.cleanup()
+        return
     yield _frame(
         "run_started",
         {"run_id": runner.run_id, "variant": variant, "target": runner.target, "n_items": n_items},
@@ -1740,13 +1773,18 @@ async def _main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0
+    try:
+        base_url = require_base_url(args.base_url or default_settings.eval_target_base_url)
+    except BadTargetUrl as exc:
+        print(f"FAIL — {exc}", file=sys.stderr)  # noqa: T201 — this is a CLI
+        return 1
     store = get_store(default_settings)
     migrate(store)
     trace_module.set_writer(TraceWriter(store))
     runner = Runner(
         RunOptions(
             variant=args.variant,
-            base_url=args.base_url or default_settings.eval_target_base_url,
+            base_url=base_url,
             label=args.label,
             judge=args.judge_inline,
             item_ids=[value for value in args.items.split(",") if value],
@@ -1793,6 +1831,7 @@ if __name__ == "__main__":
 __all__ = [
     "ABLATION_BEGIN",
     "ABLATION_END",
+    "BadTargetUrl",
     "Runner",
     "RunOptions",
     "build_parser",
@@ -1800,6 +1839,7 @@ __all__ = [
     "main",
     "recompute_agreement",
     "render_report",
+    "require_base_url",
     "resolve_target",
     "run_id_for",
     "smoke_run",
