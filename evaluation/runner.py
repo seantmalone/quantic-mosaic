@@ -64,6 +64,7 @@ from hrmosaic.core import archive, corpusread
 from hrmosaic.core import trace as trace_module
 from hrmosaic.core.db import Store, get_store, migrate, now_micros
 from hrmosaic.core.ids import SEED, new_session_id
+from hrmosaic.core.models import ENVELOPE_KINDS as _ENVELOPE_KINDS
 from hrmosaic.core.trace import SessionSpec, TraceWriter, TurnBuffer
 from hrmosaic.settings import Settings, secret_value
 from hrmosaic.settings import settings as default_settings
@@ -1020,23 +1021,12 @@ class Runner:
 # --------------------------------------------------------------------------------------
 
 
-#: Which §8.4 tool's result envelope counts as which class of evidence (§13.3, ratified 2026-09-10,
-#: restated 2026-09-10 for W2-C). `search_policy_documents` and `list_policy_documents` are
-#: deliberately absent. The second returns titles and grounds nothing (`act.j2` rule 6 says so on
-#: the wire). The first used to be absent because its envelope was a list of 320-character display
-#: snippets of chunks this function already returns in full — a worse copy of what the judge has.
-#: A hit now carries the whole chunk, so that reason had to be re-derived rather than assumed:
-#: `agent/orchestrator.py::_envelope_text` strips `text` back out of the search envelope before the
-#: synthesis prompt renders it, so the banner-marked `<document>` block stays the single copy of a
-#: passage and what the envelope still contributes is metadata about chunks the `retrieval` class
-#: already carries verbatim. The two write tools propose an action; they assert no fact.
-ENVELOPE_KINDS: dict[str, str] = {
-    "get_policy_section": "section",
-    "check_policy_compliance": "compliance",
-    "lookup_employee_profile": "structured_data",
-    "check_pto_balance": "structured_data",
-    "lookup_benefits_status": "structured_data",
-}
+#: Re-exported, never redeclared (§13.3, restated 2026-09-10 for W2-D). `synthesize.j2` renders an
+#: EMPLOYEE CONTEXT envelope for exactly the tools in this map, so the set this function scores and
+#: the set the model was shown are the same object — see `hrmosaic.core.models.ENVELOPE_KINDS` for
+#: why each tool is in it or out of it, and `tests/contract/test_envelope_partition.py` for the
+#: assertion that the render agrees.
+ENVELOPE_KINDS = _ENVELOPE_KINDS
 
 
 def _evidence_of(turn: det.TurnRecord) -> list[EvidenceItem]:
@@ -1052,7 +1042,10 @@ def _evidence_of(turn: det.TurnRecord) -> list[EvidenceItem]:
       **whole** stored text rather than the 320-character display snippet the span payload carries.
       Quarantined chunks are excluded because G2 strips every citation to them (§7.4 trigger 4).
     * `section`, `compliance`, `structured_data` — the tool envelopes of `ENVELOPE_KINDS`, in the
-      exact bytes the prompt rendered.
+      exact bytes the prompt rendered. `synthesize.j2` renders every envelope except
+      `UNRENDERED_ENVELOPES`, declared beside the map in the same module, so the only rendered
+      envelope this function does not score is a confirmed write's own result — which asserts no
+      fact, and is in the prompt so the answer can report the ticket id.
 
     No re-retrieval and no second serialisation: every byte here is read back from the trace.
     """

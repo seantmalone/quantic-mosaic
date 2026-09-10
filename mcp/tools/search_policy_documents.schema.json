@@ -62,7 +62,7 @@
           }
         ],
         "default": null,
-        "description": "Prioritise one corpus topic. When the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus (see topic_backfilled).",
+        "description": "Prioritise one corpus topic. When the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus.",
         "title": "Topic"
       },
       "min_dense_score": {

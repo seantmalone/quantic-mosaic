@@ -670,6 +670,21 @@ an off-by-one would ship a wrong-but-resolvable citation on the wrong passage) a
 `_degraded(synthesis_failed)`. Rule 8's per-document walk is untouched: 13 of 16 gradeable answered
 turns sit at exactly `min_distinct_docs`.
 
+**The model is shown less of a tool result than the record keeps** (P15 W2-D). `ToolResult.text` is
+unchanged — the §11.1 `tool_call` span, G4 and the eval scorers read the whole body — while
+`ToolResult.prompt_text` is what the act conversation is appended from, and for
+`search_policy_documents` it drops the ten result-level telemetry keys (`query_used`, `k_effective`,
+`k_source`, `strategy`, `total_candidates`, `embed_ms`, `search_ms`, `index_version`,
+`topic_backfilled`, `backfill_reason`) and six ranking/offset keys from every hit. `quarantined` is
+kept whenever it is **true**: it is §7.4's banner, not telemetry. `topic`'s published description no
+longer points the model at `topic_backfilled` for the same reason. And `synthesize.j2`'s EMPLOYEE
+CONTEXT loop renders every envelope except `core/models.py::UNRENDERED_ENVELOPES` — the search and
+list envelopes, and nothing else. That set lives beside §13.3's `ENVELOPE_KINDS` in one module,
+imported by both the prompt renderer and `evaluation/runner.py`, so what the model was shown and
+what the judge scores cannot drift; it is a denylist rather than the complement of the evidence map
+because the two **write** tools assert no fact — correctly outside the map — while a confirmed
+write's result is where the answer gets the ticket id it has to report.
+
 The assembled prompt is stored **verbatim** so the dashboard shows the exact bytes sent to the model for every turn (USER.2). A realistic act-loop
 prompt is 20–40 KB, larger than the general 32 KB payload cap of §10.5, so the `messages[]` array is **not** stored inside `payload_json`: it goes to
 the `llm_messages` side table (§10.1), which is exempt from the cap, and the `llm_call` payload carries `messages_ref: {span_id, n_messages,
@@ -2038,9 +2053,10 @@ labels of §13.7 disagree with the judge by construction, since the two were bei
 `list_policy_documents` envelopes are excluded: the second returns titles and grounds nothing, and the first is excluded for a reason **restated at
 P15**. Until W2-C a search hit carried only the 320-character display snippet of a chunk this function already returns in full, so including it would
 have shown the judge a worse copy of what it already had. A hit now carries the whole chunk (§8.4 tool 1), so that sentence would be false — except that
-`agent/orchestrator.py::_envelope_text` strips `text` out of the search envelope before the synthesis prompt renders it, precisely so the banner-marked
-`<document>` block stays the single copy of a passage. The exclusion therefore still holds on its original ground: what reaches the model through that
-envelope is metadata about chunks the `retrieval` class already carries verbatim. The **citation-support** pass (`CitPrecision`/`CitRecall` below) still indexes the `retrieval` class alone, because a chunk id is
+`synthesize.j2` does not render that envelope at all: `core/models.py::UNRENDERED_ENVELOPES` names it and `list_policy_documents`, and the banner-marked
+`<document>` block stays the single copy of a passage. The exclusion therefore still holds, and now trivially — nothing reaches the model through that
+envelope. `ENVELOPE_KINDS` and `UNRENDERED_ENVELOPES` are declared together in `core/models.py` and imported by `evaluation/runner.py` and by
+`agent/prompts/__init__.py`, so the set the judge scores and the set the prompt shows are read from one module. The **citation-support** pass (`CitPrecision`/`CitRecall` below) still indexes the `retrieval` class alone, because a chunk id is
 the only thing an answer can cite. `evaluation/runner.py::_evidence_of` is the one definition: the judge calls it, and the §13.7 labelling packet calls
 the same function, so the two cannot drift.
 

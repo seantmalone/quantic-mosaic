@@ -135,12 +135,14 @@ async def test_the_injected_chunk_text_is_capped(run_agent, spans):
 
 
 async def test_the_synthesis_prompt_carries_one_copy_of_a_passage(run_agent, store, spans):
-    """The search envelope is stripped of its chunk text: the `<document>` block is the single copy.
+    """The `<document>` block is the single copy of a passage in the synthesis prompt.
 
     Every non-quarantined chunk the turn retrieved is already rendered into EVIDENCE from
     `turn.chunks()`, under a `trust="data"` banner and with the `rrf=` weight §7.2 requires. Leaving
-    the text inside the `<tool_result>` envelope as well would double the evidence bytes of the
-    prompt and show the model the same passage twice under two different labels.
+    the text inside a `<tool_result>` envelope as well would double the evidence bytes of the prompt
+    and show the model the same passage twice under two different labels — so W2-D drops the search
+    envelope from EMPLOYEE CONTEXT outright (`core.models.UNRENDERED_ENVELOPES`), which subsumes
+    W2-C's narrower strip of the `text` key.
     """
     answered = await run_agent("injection_probe.json", ChatRequest(message=QUESTION, employee_id="E1042"))
 
@@ -153,8 +155,8 @@ async def test_the_synthesis_prompt_carries_one_copy_of_a_passage(run_agent, sto
     evidence = next(prompt for prompt in prompts if "EMPLOYEE CONTEXT" in prompt)
 
     envelopes = evidence[evidence.index("EMPLOYEE CONTEXT") :]
-    assert '<tool_result tool="search_policy_documents"' in envelopes, "the envelope is still rendered"
-    assert '"text":' not in envelopes, "and it no longer repeats the chunk"
+    assert '<tool_result tool="search_policy_documents"' not in envelopes, "the search envelope is dropped"
+    assert '"text":' not in envelopes, "so nothing repeats the chunk"
 
     retrieved = {hit["chunk_id"] for hit in search_hits(spans(answered.turn_id))} - {canary_id()}
     assert retrieved, "the turn retrieved something citable"

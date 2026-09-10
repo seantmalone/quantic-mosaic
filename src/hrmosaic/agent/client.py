@@ -37,7 +37,7 @@ import hashlib
 import json
 import sys
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -178,6 +178,57 @@ def _validated(tool: Any) -> DiscoveredTool:
 # --------------------------------------------------------------------------------------
 
 
+#: Top-level `search_policy_documents` result keys the model is not shown (W2-D). Ten of them, and
+#: every one is retrieval telemetry the `retrieval` span already records in full (§10.2): the model
+#: acts on the hits, not on how they were found, and these bytes are re-billed as input on every
+#: later act step of the turn.
+SEARCH_TELEMETRY_KEYS = frozenset(
+    {
+        "query_used",
+        "k_effective",
+        "k_source",
+        "strategy",
+        "total_candidates",
+        "embed_ms",
+        "search_ms",
+        "index_version",
+        "topic_backfilled",
+        "backfill_reason",
+    }
+)
+
+#: Per-hit keys on the same basis: `rank` is a position in a list the model reads in order, the
+#: three scores are the fusion's own arithmetic, and the two offsets locate the chunk inside a file
+#: nobody reads. `quarantined` belongs with them and is dropped **only when it is false** — a true
+#: one is the §7.4 banner telling the model this passage may not be cited, and dropping that would
+#: trade a guardrail for bytes.
+HIT_TELEMETRY_KEYS = frozenset({"rank", "dense_score", "bm25_rank", "rrf_score", "char_start", "char_end"})
+
+
+def prompt_body(name: str, body: Mapping[str, Any]) -> dict[str, Any]:
+    """The tool result as the **model** is shown it (§7.2), which is not the one the record keeps.
+
+    Only `search_policy_documents` differs, and only by subtraction: ten telemetry keys off the
+    result and six off each hit, ~9 % of the input tokens of a turn that searches twice. What is
+    left is what a citation needs — the ids, the heading path, the chunk and its snippet — plus the
+    quarantine flag on any hit that carries one.
+
+    `ToolResult.text` stays whole, because three readers need the whole thing: the §11.1 `tool_call`
+    span (and the dashboard drill-down over it), G4, and the eval's scorers.
+    """
+    if name != g4.SEARCH_TOOL:
+        return dict(body)
+    reduced = {key: value for key, value in body.items() if key not in SEARCH_TELEMETRY_KEYS}
+    hits = []
+    for hit in body.get("hits") or []:
+        kept = {key: value for key, value in hit.items() if key not in HIT_TELEMETRY_KEYS}
+        if not kept.get("quarantined"):
+            kept.pop("quarantined", None)
+        hits.append(kept)
+    reduced["hits"] = hits
+    return reduced
+
+
 @dataclass
 class ToolResult:
     """What one `tools/call` produced, as the act loop needs it."""
@@ -191,6 +242,11 @@ class ToolResult:
     duration_ms: int
     text: str
     retrievals: list[RetrievalPayload] = field(default_factory=list)
+
+    @property
+    def prompt_text(self) -> str:
+        """The bytes appended to the act conversation — `text` minus the telemetry (W2-D)."""
+        return json.dumps(prompt_body(self.tool_name, self.body), ensure_ascii=False)
 
     @property
     def confirmation_required(self) -> bool:
@@ -552,8 +608,10 @@ class McpClient:
 
 
 __all__ = [
+    "HIT_TELEMETRY_KEYS",
     "LOOPBACK_TIMEOUT",
     "RAG_TOOLS",
+    "SEARCH_TELEMETRY_KEYS",
     "STDIO_ENTRYPOINT",
     "TOKEN_ARGUMENT",
     "TRACE_KEY",
@@ -562,5 +620,6 @@ __all__ = [
     "McpUnavailable",
     "ToolResult",
     "catalog_sha",
+    "prompt_body",
     "read_body",
 ]

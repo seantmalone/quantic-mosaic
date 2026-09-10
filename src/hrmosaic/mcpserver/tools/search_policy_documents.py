@@ -79,11 +79,14 @@ MIN_DENSE_SCORE_DESCRIPTION = (
     "is ~0.033."
 )
 
-#: The published semantics of `topic` — a soft preference, not a wall. It says on the wire what the
-#: result fields report, so a model reading only the catalog knows the filter can widen under it.
+#: The published semantics of `topic` — a soft preference, not a wall, so a model reading only the
+#: catalog knows the filter can widen under it. It no longer points the model at `topic_backfilled`:
+#: W2-D drops the ten result-level telemetry keys from what the act loop is shown, and a description
+#: naming a field the model cannot see would be a lie on the wire. The widening is still on the
+#: `retrieval` span, where an audit reads it.
 TOPIC_DESCRIPTION = (
     "Prioritise one corpus topic. When the topic alone yields fewer than k hits or a single "
-    "document, results are backfilled from the whole corpus (see topic_backfilled)."
+    "document, results are backfilled from the whole corpus."
 )
 
 #: Why an unfiltered search was run underneath the topic-filtered one. `null` means it was not.

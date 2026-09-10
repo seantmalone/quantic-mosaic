@@ -27,6 +27,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from hrmosaic.core import corpusread
+from hrmosaic.core.models import ENVELOPE_KINDS, UNRENDERED_ENVELOPES
 
 #: The three templates of §7.2, and the only ones. A fourth would be a new prompt surface.
 TEMPLATES = ("route.j2", "act.j2", "synthesize.j2")
@@ -61,6 +62,13 @@ def corpus_titles() -> tuple[str, ...]:
 #: turns because the index behind it does not move while the process runs.
 _environment.globals["corpus_titles"] = corpus_titles
 
+#: Which tool envelopes EMPLOYEE CONTEXT leaves out, as a Jinja global for the same reason: it is a
+#: property of the tool catalog, not of the turn. It comes from `core/models.py` beside the §13.3
+#: evidence map `evaluation/runner.py::_evidence_of` scores, so the set the prompt shows and the set
+#: the judge scores are read from one module and cannot drift
+#: (`tests/contract/test_envelope_partition.py`).
+_environment.globals["unrendered_envelopes"] = UNRENDERED_ENVELOPES
+
 
 def render(template_name: str, /, **context: Any) -> tuple[str, str]:
     """Render one template's `system` and `user` blocks. Returns `(system, user)`."""
@@ -88,4 +96,12 @@ def persona_block(*, employee_id: str, actor_source: str) -> str:
     )
 
 
-__all__ = ["PROMPT_DIR", "TEMPLATES", "corpus_titles", "persona_block", "render"]
+__all__ = [
+    "ENVELOPE_KINDS",
+    "PROMPT_DIR",
+    "TEMPLATES",
+    "UNRENDERED_ENVELOPES",
+    "corpus_titles",
+    "persona_block",
+    "render",
+]

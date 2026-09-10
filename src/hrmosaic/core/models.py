@@ -55,6 +55,36 @@ RetrievalStrategy = Literal["hybrid_rrf", "dense_only"]
 GuardrailVerdict = Literal["allow", "refuse", "redirect", "warn", "repair", "strip", "escalate"]
 ConfirmationResponse = Literal["pending", "confirmed", "declined", "expired"]
 
+#: Which §8.4 tool's result envelope counts as which class of evidence (§13.3, ratified 2026-09-10).
+#: **One definition, two readers.** `evaluation/runner.py::_evidence_of` scores what the model saw
+#: and `synthesize.j2` decides what to show it, from this same map: a second copy would let the
+#: prompt and the judge disagree about what the evidence was, and `groundedness` would stop
+#: describing the answer's own inputs without anything going red. It lives in `core/` because
+#: `evaluation/**` may not import `hrmosaic.agent` (§4.2) and both must read the same object.
+#:
+#: `search_policy_documents` and `list_policy_documents` are deliberately absent: the second returns
+#: titles and grounds nothing, and the first's hits are chunks the synthesis prompt already renders
+#: in full as banner-marked `<document>` blocks built from `turn.chunks()`. The two write tools
+#: propose an action; they assert no fact.
+ENVELOPE_KINDS: dict[str, str] = {
+    "get_policy_section": "section",
+    "check_policy_compliance": "compliance",
+    "lookup_employee_profile": "structured_data",
+    "check_pto_balance": "structured_data",
+    "lookup_benefits_status": "structured_data",
+}
+
+#: The envelopes `synthesize.j2` does **not** render into EMPLOYEE CONTEXT (W2-D). Exactly two, and
+#: they are the two the map above leaves out for a reason that also means the model gains nothing
+#: from reading them: a `search_policy_documents` hit is a chunk the prompt already carries in full,
+#: under its own `<document>` banner and with the `rrf=` weight, and `list_policy_documents` returns
+#: titles. It is a denylist rather than `not in ENVELOPE_KINDS` on purpose: the two **write** tools
+#: are not evidence — they assert no fact, so they are correctly outside the map — but a confirmed
+#: write's result is what tells the answer the ticket id or the draft it has to report, and that
+#: exists nowhere else in the prompt. Deriving the render from the evidence map alone would have
+#: silently dropped it. `tests/contract/test_envelope_partition.py` holds the three sets apart.
+UNRENDERED_ENVELOPES: frozenset[str] = frozenset({"search_policy_documents", "list_policy_documents"})
+
 
 class _Payload(BaseModel):
     """Shared configuration: unknown fields are a bug, not a silent extra column."""

@@ -375,27 +375,6 @@ class _ToolEnvelope:
     result_json: str
 
 
-def _envelope_text(name: str, result_json: str) -> str:
-    """The `<tool_result>` body §7.2 renders — a search hit without its chunk text (W2-C).
-
-    A search hit now carries the whole stored chunk, and every non-quarantined chunk of the turn is
-    already rendered once into the synthesis prompt as a banner-marked `<document>` block built from
-    `turn.chunks()`. Rendering it a second time inside the envelope would double the evidence bytes
-    of that prompt and put the same passage in front of the model twice under two different labels.
-    """
-    if name != g4.SEARCH_TOOL:
-        return result_json
-    try:
-        body = json.loads(result_json)
-    except json.JSONDecodeError:
-        # A §10.5-truncated span payload, seen only on the resume path: there is nothing to strip,
-        # and re-rendering the fragment is what a rehydrated turn has always done.
-        return result_json
-    for hit in body.get("hits") or []:
-        hit.pop("text", None)
-    return json.dumps(body, ensure_ascii=False)
-
-
 def _preview(value: Any, limit: int = 160) -> str:
     body = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     return body if len(body) <= limit else body[: limit - 1] + "…"
@@ -887,7 +866,9 @@ class Orchestrator:
                 # An `isError` result that survived its one repair still goes back to the model —
                 # it is the only way the model learns what went wrong — but it never enters the
                 # workflow state, or a rejected `check_policy_compliance` would count as a verdict.
-                turn.messages.append(Message(role="tool", tool_call_id=call.id, name=call.name, content=result.text))
+                turn.messages.append(
+                    Message(role="tool", tool_call_id=call.id, name=call.name, content=result.prompt_text)
+                )
 
             self._scan(turn, new_chunks)
             turn.step_summaries.append(
@@ -1050,7 +1031,7 @@ class Orchestrator:
         ]
         messages = [
             *turn.messages,
-            Message(role="tool", tool_call_id=call.id, name=call.name, content=failed.text),
+            Message(role="tool", tool_call_id=call.id, name=call.name, content=failed.prompt_text),
             *(
                 Message(role="tool", tool_call_id=pending.id, name=pending.name, content=NOT_RUN_YET)
                 for pending in outstanding
@@ -1152,9 +1133,7 @@ class Orchestrator:
     ) -> list[EvidenceChunk]:
         """Fold one successful tool result into the turn's state, evidence and prompt envelopes."""
         turn.state.record(result.tool_name, result.body)
-        turn.envelopes.append(
-            _ToolEnvelope(name=result.tool_name, result_json=_envelope_text(result.tool_name, result.text))
-        )
+        turn.envelopes.append(_ToolEnvelope(name=result.tool_name, result_json=result.text))
         fresh: list[EvidenceChunk] = []
         for payload in result.retrievals:
             for chunk in payload.chunks:
@@ -1677,10 +1656,7 @@ class Orchestrator:
                 if payload["tool_name"] == COMPLIANCE_TOOL:
                     self._engine_evidence(turn, body, scores=scores)
                 turn.envelopes.append(
-                    _ToolEnvelope(
-                        name=payload["tool_name"],
-                        result_json=_envelope_text(payload["tool_name"], payload.get("result_json") or "{}"),
-                    )
+                    _ToolEnvelope(name=payload["tool_name"], result_json=payload.get("result_json") or "{}")
                 )
         turn.steps_taken = act_calls
         turn.workflow = get_workflow(turn.decision.workflow if turn.decision else None)
@@ -1776,9 +1752,7 @@ class Orchestrator:
                 f"{result.tool_name} failed after the confirmation was accepted",
                 component="mcp",
             )
-            turn.envelopes.append(
-                _ToolEnvelope(name=result.tool_name, result_json=_envelope_text(result.tool_name, result.text))
-            )
+            turn.envelopes.append(_ToolEnvelope(name=result.tool_name, result_json=result.text))
             turn.write_failed = True
             turn.stop_reason = "tool_failed"
         else:

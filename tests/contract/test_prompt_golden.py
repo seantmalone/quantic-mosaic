@@ -51,7 +51,33 @@ EVIDENCE = (
         True,
     ),
 )
-TOOL_RESULTS = [_ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5, "as_of": "2026-09-01"}')]
+#: One envelope per class of §13.3 evidence, so the golden pins what EMPLOYEE CONTEXT renders rather
+#: than only what a `structured_data` result looks like. `check_pto_balance` alone survived every
+#: filter ever proposed, so a suite that pinned it alone would have stayed green while the section
+#: and compliance envelopes vanished — and those two carry `verdict`, `requirements[].met`,
+#: `approvals_required`, `rules_version` and section chunk ids that exist nowhere else in the prompt.
+TOOL_RESULTS = [
+    _ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5, "as_of": "2026-09-01"}'),
+    _ToolEnvelope(
+        name="get_policy_section",
+        result_json=(
+            '{"doc_id": "tax-and-location-addendum", "heading_path": "Duration Thresholds > Stays '
+            'Exceeding 30 Days", "chunk_ids": ["c_2f1a"], "resolved_by": "heading_path", '
+            '"prev_section": "Duration Thresholds > Stays Under 30 Days", "text": "Stays exceeding '
+            '30 consecutive days require Tax & Legal review before travel."}'
+        ),
+    ),
+    _ToolEnvelope(
+        name="check_policy_compliance",
+        result_json=(
+            '{"scenario": "remote_work_abroad", "verdict": "conditional", "as_of": "2026-09-01", '
+            '"requirements": [{"id": "tax.review", "met": false, "detail": "Tax & Legal review not '
+            'recorded"}], "unmet": ["tax.review"], "approvals_required": [{"role": "Tax & Legal", '
+            '"reason": "stay exceeds 30 days"}], "escalate_to": "People Operations", '
+            '"rules_version": "2026.1"}'
+        ),
+    ),
+]
 
 
 @lru_cache(maxsize=1)
@@ -134,7 +160,7 @@ def test_the_user_half_carries_the_frozen_ordering(template):
 
 def test_the_evidence_envelopes_label_trust_and_the_quarantine():
     _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
-    assert user.count('trust="data"') == 3, "two documents and one tool result"
+    assert user.count('trust="data"') == 2 + len(TOOL_RESULTS), "two documents and every tool result"
     lure = chunks()[1]
     assert f'id="{lure.chunk_id}"' in user and 'quarantined="true"' in user
     assert user.count('quarantined="true"') == 1
