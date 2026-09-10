@@ -51,6 +51,11 @@ where = ["src"]
 # them from disk relative to itself, so a non-editable install (the Docker image) must ship them.
 [tool.setuptools.package-data]
 "hrmosaic.agent.prompts" = ["*.j2"]
+# Same argument for the web layer (P9): `web/templates/` and `web/static/` are data directories
+# with no `__init__.py`, loaded from disk relative to `web/`, so a non-editable install must ship
+# them or every page 500s and every vendored asset 404s. The Docker image reaches them through
+# `PYTHONPATH=/app/src` rather than through a wheel, and asserts they arrived at build time.
+"hrmosaic.web" = ["templates/*.html", "templates/**/*.html", "static/*", "static/**/*"]
 
 [tool.ruff]
 line-length = 120

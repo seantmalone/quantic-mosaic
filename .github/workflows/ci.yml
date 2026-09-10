@@ -45,3 +45,55 @@ jobs:
       - run: python -m hrmosaic.rag.ingest --verify-manifest   # R1.4, and it leaves a real index for the suite
       - run: pytest -q                               # the WHOLE suite
       - run: python scripts/pii_check.py             # no SSN shapes / non-.example addresses / non-555 numbers
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version-file: '.python-version' }
+      - run: docker build -t mosaic-hr --build-arg GIT_SHA=${{ github.sha }} .
+      - name: sqlite-vec loads on Debian     # enable_load_extension -> sqlite_vec.load -> vec_version()
+        run: docker run --rm -v "$PWD":/w -w /w python:3.12-slim sh -c "pip install -q sqlite-vec && python scripts/probe_sqlite_vec.py"
+      - run: docker run -d --name app -p 8000:8000 -e LLM_PROVIDER=stub -e PORT=8000 -e APP_ACCESS_TOKEN=ci-access-token mosaic-hr
+      - run: python scripts/wait_for_health.py --url http://127.0.0.1:8000 --timeout 120
+      - run: python scripts/assert_health.py --url http://127.0.0.1:8000   # mcp.connected, tool_count==9,
+                                                                          # index.loaded, doc_count==14
+      - name: the image ships its templates and its static assets
+        # P9 carry-forward: the Jinja templates and the vendored assets live under `src/` and are
+        # reached through PYTHONPATH, not through a wheel — so only rendering a page proves they
+        # shipped. The chat page mounts the access gate; `/dashboard` is page 1, which performs an
+        # MCP handshake on load; `/static/*` is open and needs no header.
+        run: |
+          curl -fsS -o /dev/null -H "Authorization: Bearer ci-access-token" http://127.0.0.1:8000/
+          curl -fsS -o /dev/null -H "Authorization: Bearer ci-access-token" -H "X-Actor: admin" http://127.0.0.1:8000/dashboard
+          curl -fsS -o /dev/null http://127.0.0.1:8000/static/app.css
+      - if: always()
+        run: docker logs app && docker rm -f app
+
+  deploy:      # see §14.5
+    needs: [test, docker]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_dispatch' && inputs.deploy_only == 'true')
+    runs-on: ubuntu-latest
+    env: { DEPLOY_URL: "${{ secrets.DEPLOY_URL }}" }
+    steps:
+      # First, and deliberately loud: without the hook there is no deploy, and a job that skipped
+      # quietly would look identical to a green one in the job graph.
+      - name: The deploy hook secret must exist
+        env: { RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" }
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL is not set. The Render service has not been provisioned yet:"
+            echo "::error::see NEEDS-FROM-USER.md (gate 2 = the Render GitHub App, gate 4 = the Render API key),"
+            echo "::error::then run scripts/provision_turso.py and scripts/provision_render.py."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version-file: '.python-version' }
+      - name: Trigger Render deploy
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+        env: { RENDER_DEPLOY_HOOK_URL: "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" }
+      - run: python scripts/wait_for_deploy.py --url "$DEPLOY_URL" --timeout 900
+      - run: python scripts/smoke_deployed.py --url "$DEPLOY_URL"

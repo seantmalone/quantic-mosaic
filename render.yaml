@@ -1,0 +1,31 @@
+# Render Blueprint for the single Hobby (free) web service (spec §14.1).
+#
+# `autoDeploy: false` is half of the R8.4 argument: Render's own Auto-Deploy is off, so the ONLY
+# path from a commit to the running service is the deploy hook that CI's `deploy` job curls — and
+# that job carries `needs: [test, docker]`, so a red suite cannot reach production.
+#
+# `scripts/provision_render.py` creates the service from these same values over the REST API and
+# populates every `sync: false` variable, so this file is both the committed description of the
+# service and the fallback for a manual Blueprint deploy if the API key is ever unavailable.
+services:
+  - type: web
+    name: mosaic-hr-copilot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: false                 # deploys arrive ONLY via the CI deploy hook
+    envVars:
+      - { key: APP_ENV,         value: render }
+      - { key: LLM_PROVIDER,    value: anthropic }
+      - { key: LLM_MODEL,       value: claude-haiku-4-5 }
+      - { key: OMP_NUM_THREADS, value: "1" }
+      # GIT_SHA: Render exposes RENDER_GIT_COMMIT automatically and settings.py resolves
+      # GIT_SHA -> RENDER_GIT_COMMIT -> "dev"; smoke_deployed.py asserts it is not "dev".
+      - { key: ANTHROPIC_API_KEY,  sync: false }   # the agent (§9.8)
+      - { key: JUDGE_API_KEY,      sync: false }   # Gemini, free
+      - { key: LLM_FALLBACK_API_KEY, sync: false } # Gemini, free
+      - { key: TURSO_DATABASE_URL, sync: false }   # REQUIRED (§19.1 item 3)
+      - { key: TURSO_AUTH_TOKEN,   sync: false }   # REQUIRED (§19.1 item 3)
+      - { key: APP_ACCESS_TOKEN,   sync: false }   # REQUIRED on the graded deployment; provision_render.py
+                                                   #   generates it with secrets.token_urlsafe(32)

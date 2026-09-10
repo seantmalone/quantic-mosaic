@@ -767,3 +767,58 @@ rather than assumed.
   `_open` before `flush_open_turns()` re-arms it, so the `atexit` hook after a SIGTERM finds no open
   turn: spans written after the checkpoint on a turn that then dies are lost, while the
   `error`/`process_exit` row §10.3 guarantees is already written and survives.
+
+## 2026-09-10 — P11 Deployment (the image, the manifests, the provisioning scripts)
+
+**No live deployment exists yet.** User gates 2 (Render account + GitHub App), 3 (Turso platform
+token) and 4 (Render API key) are all still open, so everything that needs an account is listed in
+`NEEDS-FROM-USER.md` with the exact command that runs once it lands. Everything that does **not**
+need an account was built, run and measured here.
+
+- **The 512 MB memory gate, measured 2026-09-10.** `make docker-run-512` — `docker run -m 512m
+  --memory-swap 512m`, `/ready` polled green, one stubbed `POST /chat` over `Authorization: Bearer`,
+  then `/health` — reports **`rss_mb = 292.9`** against the §14.3 assertion of `< 420` and a budget
+  of 345 MB: **219 MB of headroom** under the hard 512 MB cgroup limit. The reading is
+  `/proc/self/status` `VmRSS` inside the container (Docker Desktop's `linux/arm64` VM, Docker
+  29.6.1), i.e. the same real-Linux reader P1's entry describes, not the macOS `getrusage`
+  high-water mark. The equivalent numbers on Render's `linux/amd64` builder are re-read at gate 2.
+- **Cold build wall-clock, measured 2026-09-10** on macOS arm64: `docker build --no-cache` takes
+  **171.5 s** — `pip install` 46.2 s, the fastembed model bake 7.3 s, `ingest --verify-manifest` +
+  `index --selftest` 107.6 s, export 9.5 s. At ~3 minutes a build the 500 included Render pipeline
+  minutes are ~165 builds a month, which is the headroom arithmetic §14.1 asks `deployed.md` to
+  carry.
+- **Boot segments inside the container, measured 2026-09-10:** container start → `/health` 200 in
+  **2.1 s**; `/health` → `/ready` green in a further **0.5 s**. That half-second is what baking the
+  ONNX model into the image buys against a 16–63 s download.
+- **`${PORT}` expansion proved on the real image.** `docker run -e PORT=10000` →
+  `/health.mcp.connected: true` with `url: http://127.0.0.1:10000/mcp-server/mcp` and
+  `tool_count: 9`. The `sh -c` form of `CMD` is what makes that work; the exec form would hand
+  uvicorn the literal string `${PORT}`.
+- **§3.1 rows P11 owns, re-read live on 2026-09-10** (full quotes and sources in `deployed.md`):
+  Render **750** free instance-hours per workspace per calendar month and a **15-minute** spin-down;
+  **500** included pipeline minutes on a Hobby workspace, after which "Render stops running pipeline
+  tasks (including service builds!)" without a payment method; Render's documented request ceiling
+  is **"HTTP responses to take up to 100 minutes"**, three orders of magnitude above
+  `AGENT_WALL_CLOCK_S = 90`, so no change was needed; Turso free is **100 databases · 5 GB · 500 M
+  rows read · 10 M rows written per month**. The Gemini judge-quota row is **still unreadable
+  without an authenticated AI Studio session** and remains recorded as unverified.
+- **P5's carry-forward is closed.** `mcp/run_stdio.sh` and `mcp/run_http.sh` default to
+  `${PYTHON:-.venv/bin/python}`, a path that does not exist in the image; the Dockerfile now sets
+  `ENV PYTHON=python`. Verified by piping an `initialize` frame into `docker run … sh
+  mcp/run_stdio.sh` and reading back `serverInfo.name = mosaic-hr`.
+- **P9's carry-forward is closed twice over.** `pyproject.toml` declares `hrmosaic.web`'s
+  `templates/` and `static/` as package data for the non-editable case, the Dockerfile asserts both
+  paths exist at build time, and CI's `docker` job renders `GET /` and `GET /dashboard` (page 1,
+  which performs an MCP handshake on load) plus `GET /static/app.css` against the running image.
+- **P0's `.dockerignore` negations are proved against Docker's own matcher**, not against a reading
+  of the file: `COPY tests/fixtures/llm_scripts/` and `COPY data/index/chunks.manifest.jsonl` fail
+  the build outright if `!tests/fixtures/llm_scripts/` or `!data/index/chunks.manifest.jsonl` stops
+  re-including its path, and a `RUN test -f` after them fails if the paths arrive empty.
+- **Render publishes no usage or billing API endpoint** (checked against `api-docs.render.com`'s own
+  index on 2026-09-10), so `scripts/check_render_hours.py` *derives* both budgets — instance-hours
+  by integrating `GET /v1/resources/metrics/instance-count` over the month to date, build minutes
+  from the wall-clock of each deploy — and labels both as approximations of the dashboard's own
+  numbers. It warns and never fails, per §14.1.
+- **Render publishes no deploy-hook endpoint either.** `provision_render.py` sets the other two
+  repository secrets and prints copying the hook from Service → Settings → Deploy Hook as the single
+  remaining manual step, rather than pretending to have retrieved it.

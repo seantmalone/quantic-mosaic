@@ -62,11 +62,21 @@ docker:
 	docker build -t $(IMAGE) --build-arg GIT_SHA=$(GIT_SHA) .
 
 # The memory gate (§14.3): APP_ENV stays local, so the access gate is on only because
-# APP_ACCESS_TOKEN is set — exactly as in the CI docker job.
+# APP_ACCESS_TOKEN is set — exactly as in the CI docker job. `--memory-swap` equal to `-m` means
+# the container cannot buy headroom back as swap, so 512 MB is a hard ceiling and not a hint.
+#
+# Poll /ready (not just /health) so the ONNX session is resident before anything is measured,
+# serve one stubbed turn over `Authorization: Bearer`, and only then read `/health.app.rss_mb`.
+# The trap is what stops a failed assertion from leaving a container holding the port.
+MEMORY_CEILING_MB ?= 420
 docker-run-512:
+	@set -e; \
 	docker run --rm -d --name $(IMAGE)-512 -m 512m --memory-swap 512m \
 	  -e LLM_PROVIDER=stub -e PORT=$(PORT) -e APP_ACCESS_TOKEN=local-memory-gate \
-	  -p $(PORT):$(PORT) $(IMAGE)
-	$(BIN)/python scripts/wait_for_health.py --url $(BASE_URL) --timeout 180
-	$(BIN)/python scripts/assert_health.py --url $(BASE_URL)
-	docker rm -f $(IMAGE)-512
+	  -p $(PORT):$(PORT) $(IMAGE); \
+	trap 'docker rm -f $(IMAGE)-512 >/dev/null 2>&1 || true' EXIT INT TERM; \
+	$(BIN)/python scripts/wait_for_health.py --url $(BASE_URL) --timeout 300 --ready; \
+	curl -fsS -o /dev/null -X POST $(BASE_URL)/chat \
+	  -H 'Authorization: Bearer local-memory-gate' -H 'Content-Type: application/json' \
+	  -d '{"message":"How many days of paid time off do I accrue each year?"}'; \
+	$(BIN)/python scripts/assert_health.py --url $(BASE_URL) --max-rss-mb $(MEMORY_CEILING_MB)

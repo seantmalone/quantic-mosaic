@@ -1,8 +1,16 @@
 # What Mosaic HR Copilot needs from Sean
 
-Nothing here blocks P0–P9: every phase up to the dashboard builds, tests and passes CI with
-`LLM_PROVIDER=stub` and no credentials at all. These two items are requested now only so that
-they are never on the critical path when P11 needs them.
+Nothing blocked P0–P10: every phase up to the evaluation harness builds, tests and passes CI with
+`LLM_PROVIDER=stub`, and P10's real runs used the model keys already supplied. **P11 is where the
+three remaining gates start to bite.** Everything P11 could build and prove without an account is
+built and proven — the Dockerfile, `render.yaml`, the CI `docker` and `deploy` jobs, both
+provisioning scripts, the deploy-time health scripts, and the 512 MB memory gate run against the
+real image (292.9 MB, measured 2026-09-10). What is left is listed here with the **exact command**
+that runs the moment each gate is satisfied.
+
+---
+
+## Open gates
 
 - [ ] **2 — Render account + install the Render GitHub App on `seantmalone/quantic-mosaic`.**
       A browser-only OAuth grant; no API can install a GitHub App. Without it Render cannot read
@@ -11,7 +19,7 @@ they are never on the critical path when P11 needs them.
       Needed by: **P11**. Requested: 2026-09-09.
       If it never arrives: no deployment, so RUBRIC5.6 and much of 5.9 fail. The documented
       fallback is Google Cloud Run (same image, but it needs a card), and `make docker-run-512`
-      proves the exact image locally regardless.
+      proves the exact image locally regardless — it already has.
 
 - [ ] **3 — Turso account + platform token → `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.**
       Render's free tier has no persistent disk and wipes the filesystem on every 15-minute
@@ -25,5 +33,106 @@ they are never on the critical path when P11 needs them.
       including every session the grader starts — is lost at the next spin-down, and
       `deployed.md` says so plainly.
 
-Items 1 (model API keys) and 4–7 (the recording and submission steps) are tracked in the design
-spec §19; the keys were supplied on 2026-09-09 and live only in the git-ignored `.env`.
+- [ ] **4 — Render API key.**
+      Turns every remaining deploy operation from clicking into scripting: service creation,
+      env-var population, deploy-hook retrieval, `gh secret set`, log polling and the free-tier
+      budget check. Needs gate 2 first.
+      Do it at: Render dashboard → Account Settings → API Keys → Create → paste it in.
+      Needed by: **P11**, right after gate 2. Requested: 2026-09-10.
+      If it never arrives: roughly fifteen minutes of manual clicking per deploy iteration through
+      the committed `render.yaml` Blueprint flow, which stays a supported path precisely for this.
+
+Items 1 (model API keys, supplied 2026-09-09) and 5–7 (the grader invite, the demo recording and
+the submission) are tracked in the design spec §19. The keys live only in the git-ignored `.env`.
+
+---
+
+## The exact steps, once the gates land
+
+Two operator credentials are read straight from the process environment — they belong to no runtime
+surface, so they are deliberately **not** `Settings` fields and are **not** in `.env.example`:
+
+```sh
+export TURSO_PLATFORM_TOKEN=…    # gate 3
+export RENDER_API_KEY=…          # gate 4
+```
+
+### 1. Provision, in this order
+
+```sh
+python scripts/provision_turso.py     # creates the database, mints a non-expiring full-access
+                                      #   token, runs the live parity smoke, writes a mode-0600
+                                      #   handoff to data/runtime/provision_turso.json
+python scripts/provision_render.py    # creates the free service from render.yaml, sets every
+                                      #   sync:false env var (the three model keys from .env, the
+                                      #   two TURSO_* from the handoff), generates APP_ACCESS_TOKEN
+                                      #   with secrets.token_urlsafe(32), and runs `gh secret set`
+```
+
+`provision_render.py` prints the tokenized `Deployed: https://<app>.onrender.com/?access=<token>`
+line. Paste it into `README.md`'s `Deployed:` line and `deployed.md`'s `## Access`, then delete
+`data/runtime/provision_turso.json`.
+
+**The one step no API can do:** Render publishes the **deploy hook URL** in the dashboard (Service →
+Settings → Deploy Hook), not through `/v1/services`. Copy it and either export
+`RENDER_DEPLOY_HOOK_URL` before running `provision_render.py` or run `gh secret set
+RENDER_DEPLOY_HOOK_URL` afterwards; the script prints this as a `TODO` line when it cannot find it.
+Until that secret exists, CI's `deploy` job **fails on its first step with a message naming this
+file** — deliberately, so a missing deploy is never a silently skipped job.
+
+### 2. Verify the deployment
+
+```sh
+export DEPLOY_URL=https://<app>.onrender.com
+export APP_ACCESS_TOKEN=<the generated token>
+python scripts/smoke_deployed.py --url "$DEPLOY_URL"   # git_sha != "dev"; mcp.connected;
+                                                       #   no access_token_missing; 401 anonymous,
+                                                       #   200 with the bearer
+python scripts/measure_cold_start.py --url "$DEPLOY_URL"   # idles ~17 min, then times the four
+                                                           #   segments; paste into deployed.md
+python scripts/check_render_hours.py                       # warn-only free-tier budget report
+```
+
+### 3. The published evaluation run (§13.10)
+
+```sh
+EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval
+EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant dense_only_k2
+EVAL_TARGET_BASE_URL="$DEPLOY_URL" python -m evaluation.runner --variant no_structured_tools
+EVAL_TARGET_BASE_URL="$DEPLOY_URL" make ablation
+jq -r '.target, .variant' evaluation/results/latest.json                # deployed  baseline
+jq -r '.runs[].config_json.target' evaluation/results/comparison.json   # deployed x3
+```
+
+Every eval item sends `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin` and **fails
+closed** without both — the privileged `/chat` options are admin-only by design.
+
+### 4. The R8.4 red-run evidence pair, and the screenshots
+
+```sh
+git push origin HEAD:ci-red-evidence
+gh workflow run ci.yml --ref ci-red-evidence -f deploy_only=true
+# the branch carries one deliberately failing test; `test` goes red, and the job graph shows
+# `deploy` skipped with the reason "dependent job failed". Screenshot that graph, then delete
+# the branch.
+```
+
+Three screenshots are committed to `docs/evidence/`: `ci-deploy-skipped.png` (the graph above), plus
+the two the design document references.
+
+---
+
+## Blocked by a gate, and by which
+
+| Deliverable | Gate | Command that produces it |
+|---|---|---|
+| The live service and its URL | 2 + 4 | `scripts/provision_render.py` |
+| Every `sync: false` env var on Render | 2 + 4 (+ 3 for `TURSO_*`) | `scripts/provision_render.py` |
+| `RENDER_DEPLOY_HOOK_URL` / `DEPLOY_URL` / `RENDER_API_KEY` repository secrets | 2 + 4 | `scripts/provision_render.py` (`gh secret set`) |
+| The tokenized `README.md` `Deployed:` link | 2 + 4 | printed by `scripts/provision_render.py` |
+| The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` |
+| Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` |
+| Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` |
+| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above |
+| The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block in step 4 above |
+| Gemini free-tier judge quotas | an authenticated AI Studio session | https://aistudio.google.com/rate-limit |
