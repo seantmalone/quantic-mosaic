@@ -132,8 +132,20 @@ gh workflow run ci.yml --ref ci-red-evidence -f deploy_only=true
 # the branch.
 ```
 
-Three screenshots are committed to `docs/evidence/`: `ci-deploy-skipped.png` (the graph above), plus
-the two the design document references.
+Three screenshots are committed to `docs/evidence/`, and after this step all three exist:
+
+| File | What it shows | Status |
+|---|---|---|
+| `mcp-discovery-4-tools.png` | §13.9's `tools/list` from the separate stdio server: 4 tools, the five structured-data tools genuinely absent from discovery | **committed** |
+| `mcp-discovery-page.png` | `/dashboard/mcp` rendering live discovery: the server card (`connected yes`, protocol `2025-11-25`, 32 ms handshake, 9 tools), all nine tools with their `input_schema` / `output_schema` / `annotations`, and the handshake-history row | **committed** |
+| `ci-deploy-skipped.png` | the job graph of the red run above, `deploy` skipped with the reason "dependent job failed" | needs the push in this step |
+
+All three are named in the repository, in three different files: the design document names the
+first and the third (§13.9, §14.5), and `docs/requirements-traceability.md`'s **RUBRIC5.2** row
+names the second — *"`/dashboard/mcp` renders live discovery with all nine JSON Schemas (captured
+as `docs/evidence/mcp-discovery-page.png`)"* — as does the roadmap's rubric table. Earlier drafts of
+this line said "`ci-deploy-skipped.png` plus the two the design document references", which counted
+the CI graph twice and sent two fix rounds hunting for a name that was never missing.
 
 ---
 
