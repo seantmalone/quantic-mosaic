@@ -7,11 +7,13 @@ without Turso every chat session the grader creates is lost (§19.1 item 3, R-4)
 one pasted **platform** token into the two values the deployed instance needs:
 
 1. discover the workspace (`GET /v1/organizations`) unless `--organization` names it;
-2. create the database, tolerating the documented `409` so a re-run is idempotent;
-3. mint a **non-expiring, full-access** database token — the instance writes audit rows for the
+2. make sure the group exists — a workspace created through the current signup flow has none, and
+   `POST …/databases` answers `400 group not found` until one does (observed live, 2026-09-10);
+3. create the database, tolerating the documented `409` so a re-run is idempotent;
+4. mint a **non-expiring, full-access** database token — the instance writes audit rows for the
    life of the deployment, so a `2w` token would silently break the audit log after the demo;
-4. run the **parity smoke** below against the live database;
-5. hand the two values on to `scripts/provision_render.py` through a mode-0600 handoff file under
+5. run the **parity smoke** below against the live database;
+6. hand the two values on to `scripts/provision_render.py` through a mode-0600 handoff file under
    the git-ignored `data/runtime/`. That indirection exists because the documented order is
    `provision_turso.py && provision_render.py` — the Render service does not exist yet when this
    script finishes, so there is nothing to set the variables *on*, and writing them into `.env`
@@ -47,6 +49,7 @@ import json
 import os
 import stat
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -70,8 +73,25 @@ TURSO_API_BASE = "https://api.turso.tech"
 #: Lowercase letters, numbers and dashes only, per the Platform API's documented name rule.
 DEFAULT_DATABASE_NAME = "mosaic-hr"
 
-#: Every Turso workspace is created with a `default` group; the free tier allows exactly one.
+#: The group databases are created in. The free tier allows exactly one.
+#:
+#: ⚠ This was written believing "every Turso workspace is created with a `default` group". It is
+#: not: the first live run against workspace `seantm` on 2026-09-10 found `GET
+#: /v1/organizations/seantm/groups` → `{"groups": []}` and `POST …/databases` answered
+#: `400 {"error":"group not found"}`. A workspace created through the current signup flow has **no
+#: groups at all** until one is made, so `ensure_group()` below creates it.
 DEFAULT_GROUP = "default"
+
+#: Where the group lives. `https://region.turso.io` reports `aws-us-west-2` as the closest edge
+#: from here, and Render's free plan places services in Oregon (US West) by default, so this keeps
+#: the deployed instance and its database in the same region rather than crossing the continent on
+#: every Hrana round trip. `GET /v1/locations` lists the six the platform offers.
+DEFAULT_LOCATION = "aws-us-west-2"
+
+#: How long `ensure_group()` waits for a freshly created group to report itself usable. Group
+#: creation provisions a machine, so the very next `POST …/databases` can otherwise race it.
+GROUP_READY_TIMEOUT_S = 90.0
+GROUP_POLL_INTERVAL_S = 3.0
 
 #: The handoff `provision_render.py` reads when the Render service did not exist yet. Under the
 #: git-ignored `data/runtime/`, written 0600, and deleted by hand once provisioning is done.
@@ -95,6 +115,8 @@ class Provisioned:
     database_url: str
     auth_token: str
     created: bool
+    group: str = DEFAULT_GROUP
+    group_created: bool = False
 
 
 @dataclass
@@ -113,7 +135,7 @@ class SmokeReport:
 
 
 class TursoClient:
-    """The four Platform API calls this script makes, and nothing else."""
+    """The seven Platform API calls this script makes, and nothing else."""
 
     def __init__(
         self,
@@ -144,6 +166,27 @@ class TursoClient:
 
     def organizations(self) -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/organizations").json())
+
+    def groups(self, organization: str) -> list[dict[str, Any]]:
+        return list(self._request("GET", f"/v1/organizations/{organization}/groups").json()["groups"])
+
+    def create_group(self, organization: str, name: str, location: str) -> dict[str, Any] | None:
+        """Returns the created group, or `None` if it already existed (409, as for databases)."""
+        response = self._request(
+            "POST",
+            f"/v1/organizations/{organization}/groups",
+            json={"name": name, "location": location},
+            tolerate=(409,),
+        )
+        if response.status_code == 409:
+            return None
+        return response.json()["group"]
+
+    def get_group(self, organization: str, name: str) -> dict[str, Any] | None:
+        response = self._request("GET", f"/v1/organizations/{organization}/groups/{name}", tolerate=(404,))
+        if response.status_code == 404:
+            return None
+        return response.json()["group"]
 
     def get_database(self, organization: str, name: str) -> dict[str, Any] | None:
         response = self._request("GET", f"/v1/organizations/{organization}/databases/{name}", tolerate=(404,))
@@ -177,12 +220,55 @@ class TursoClient:
 # --------------------------------------------------------------------------------------
 
 
+#: Group states the Platform API reports while a group's machine is still being provisioned.
+GROUP_PENDING_STATES = frozenset({"creating", "pending", "provisioning", "starting"})
+
+
+def _group_is_ready(group: dict[str, Any]) -> bool:
+    status = group.get("status")
+    return status is None or str(status).lower() not in GROUP_PENDING_STATES
+
+
+def ensure_group(
+    client: TursoClient,
+    organization: str,
+    name: str,
+    location: str,
+    *,
+    sleep: Any = time.sleep,
+    now: Any = time.monotonic,
+) -> bool:
+    """Make sure `name` exists and is usable. Returns True if this call created it.
+
+    A workspace made through the current signup flow has no groups at all, so the documented
+    `POST …/databases` answers `400 group not found` until one exists. Creating one provisions a
+    machine, so the group is then polled until the API stops calling it pending — otherwise the
+    very next database create races it.
+    """
+    existing = {str(entry.get("name")) for entry in client.groups(organization)}
+    if name in existing:
+        return False
+
+    client.create_group(organization, name, location)
+    deadline = now() + GROUP_READY_TIMEOUT_S
+    while True:
+        group = client.get_group(organization, name)
+        if group is not None and _group_is_ready(group):
+            return True
+        if now() >= deadline:
+            raise TursoApiError(
+                f"group {name!r} was created in {location} but did not become ready within {GROUP_READY_TIMEOUT_S:.0f}s"
+            )
+        sleep(GROUP_POLL_INTERVAL_S)
+
+
 def provision(
     client: TursoClient,
     *,
     organization: str | None,
     name: str = DEFAULT_DATABASE_NAME,
     group: str = DEFAULT_GROUP,
+    location: str = DEFAULT_LOCATION,
 ) -> Provisioned:
     """Create (or adopt) the database and mint a token for it. Safe to run twice."""
     if organization is None:
@@ -191,6 +277,7 @@ def provision(
             raise TursoApiError("this platform token can see no organizations")
         organization = str(candidates[0].get("slug") or candidates[0]["name"])
 
+    group_created = ensure_group(client, organization, group, location)
     database = client.create_database(organization, name, group)
     created = database is not None
     if database is None:
@@ -206,6 +293,8 @@ def provision(
         database_url=f"libsql://{hostname}",
         auth_token=client.create_token(organization, name),
         created=created,
+        group=group,
+        group_created=group_created,
     )
 
 
@@ -313,7 +402,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--organization", default=None, help="Turso workspace slug (default: the first visible)")
     parser.add_argument("--name", default=DEFAULT_DATABASE_NAME, help="database name")
-    parser.add_argument("--group", default=DEFAULT_GROUP, help="database group")
+    parser.add_argument("--group", default=DEFAULT_GROUP, help="database group (created if absent)")
+    parser.add_argument("--location", default=DEFAULT_LOCATION, help="location for a group this run creates")
     parser.add_argument("--skip-smoke", action="store_true", help="do not open the new database")
     arguments = parser.parse_args(argv)
 
@@ -329,7 +419,13 @@ def main(argv: list[str] | None = None) -> int:
 
     client = TursoClient(platform_token)
     try:
-        result = provision(client, organization=arguments.organization, name=arguments.name, group=arguments.group)
+        result = provision(
+            client,
+            organization=arguments.organization,
+            name=arguments.name,
+            group=arguments.group,
+            location=arguments.location,
+        )
     except TursoApiError as exc:
         print(f"FAIL — {exc}", file=sys.stderr)
         return 1
@@ -339,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"  organization={result.organization}  database={result.database}  "
         f"{'created' if result.created else 'already existed'}\n"
+        f"  group={result.group}  {'created' if result.group_created else 'already existed'}"
+        f"{f' in {arguments.location}' if result.group_created else ''}\n"
         f"  TURSO_DATABASE_URL={result.database_url}\n"
         f"  TURSO_AUTH_TOKEN={fingerprint(result.auth_token)}"
     )

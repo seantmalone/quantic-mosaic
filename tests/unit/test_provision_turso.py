@@ -35,8 +35,20 @@ JWT = "database-jwt-not-a-real-one"
 class RecordingApi:
     """The subset of the Platform API the script uses, plus a log of every request it received."""
 
-    def __init__(self, *, database_exists: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        database_exists: bool = False,
+        groups: tuple[str, ...] = (),
+        pending_polls: int = 0,
+    ) -> None:
         self.database_exists = database_exists
+        # A workspace made through the current signup flow has NO groups — the first live run on
+        # 2026-09-10 got `{"groups": []}` and then `400 group not found` from the database create —
+        # so the empty tuple, not `("default",)`, is the default this fixture starts from.
+        self.groups = list(groups)
+        #: How many `GET …/groups/{name}` calls report the group still coming up before it is ready.
+        self.pending_polls = pending_polls
         self.requests: list[httpx.Request] = []
 
     def transport(self) -> httpx.MockTransport:
@@ -49,7 +61,27 @@ class RecordingApi:
             return httpx.Response(401, json={"error": "unauthorized"})
         if path == "/v1/organizations":
             return httpx.Response(200, json=[{"name": "Sean", "slug": ORG}])
+        if path == f"/v1/organizations/{ORG}/groups" and request.method == "GET":
+            return httpx.Response(200, json={"groups": [{"name": name} for name in self.groups]})
+        if path == f"/v1/organizations/{ORG}/groups" and request.method == "POST":
+            name = json.loads(request.content)["name"]
+            if name in self.groups:
+                return httpx.Response(409, json={"error": f"group {name} already exists"})
+            self.groups.append(name)
+            return httpx.Response(200, json={"group": {"name": name, "status": "creating"}})
+        if path.startswith(f"/v1/organizations/{ORG}/groups/") and request.method == "GET":
+            name = path.rsplit("/", 1)[-1]
+            if name not in self.groups:
+                return httpx.Response(404, json={"error": "group not found"})
+            if self.pending_polls > 0:
+                self.pending_polls -= 1
+                return httpx.Response(200, json={"group": {"name": name, "status": "creating"}})
+            return httpx.Response(200, json={"group": {"name": name, "status": "ready"}})
         if path == f"/v1/organizations/{ORG}/databases" and request.method == "POST":
+            if json.loads(request.content)["group"] not in self.groups:
+                # The live API's answer, pinned: a database cannot be created into a group that
+                # does not exist, and it says so with a 400 rather than creating one for you.
+                return httpx.Response(400, json={"error": "group not found"})
             if self.database_exists:
                 return httpx.Response(409, json={"error": f"database with name {DATABASE} already exists"})
             self.database_exists = True
@@ -96,6 +128,63 @@ def test_provision_creates_the_database_in_the_named_group():
     provision_turso.provision(_client(api), organization=ORG, name=DATABASE, group="default")
     create = next(r for r in api.requests if r.method == "POST" and r.url.path.endswith("/databases"))
     assert json.loads(create.content) == {"name": DATABASE, "group": "default"}
+
+
+def test_provision_creates_the_group_when_the_workspace_has_none():
+    """The live shape, 2026-09-10: a fresh workspace has no groups, so the database create 400s.
+
+    `GET /v1/organizations/seantm/groups` answered `{"groups": []}` and `POST …/databases` answered
+    `400 {"error":"group not found"}`. Provisioning now creates the group first, in the location
+    closest to the Render region, and the 400 above is what this fixture returns if it ever stops.
+    """
+    api = RecordingApi()
+    result = provision_turso.provision(_client(api), organization=ORG, name=DATABASE)
+
+    assert result.group_created is True
+    assert result.group == "default"
+    create_group = next(r for r in api.requests if r.method == "POST" and r.url.path.endswith("/groups"))
+    assert json.loads(create_group.content) == {"name": "default", "location": provision_turso.DEFAULT_LOCATION}
+    # ...and the database was still created, in that group.
+    create_db = next(r for r in api.requests if r.method == "POST" and r.url.path.endswith("/databases"))
+    assert json.loads(create_db.content)["group"] == "default"
+
+
+def test_provision_adopts_an_existing_group_without_creating_a_second():
+    """The free tier allows exactly one group; a re-run must never try to make another."""
+    api = RecordingApi(groups=("default",))
+    result = provision_turso.provision(_client(api), organization=ORG, name=DATABASE)
+
+    assert result.group_created is False
+    assert not any(r.method == "POST" and r.url.path.endswith("/groups") for r in api.requests)
+
+
+def test_ensure_group_waits_for_a_new_group_to_stop_reporting_itself_pending():
+    """Creating a group provisions a machine, so the next database create can race it."""
+    api = RecordingApi(pending_polls=2)
+    slept: list[float] = []
+    created = provision_turso.ensure_group(
+        _client(api), ORG, "default", provision_turso.DEFAULT_LOCATION, sleep=slept.append
+    )
+
+    assert created is True
+    assert slept == [provision_turso.GROUP_POLL_INTERVAL_S] * 2
+    polls = [r for r in api.requests if r.method == "GET" and "/groups/" in r.url.path]
+    assert len(polls) == 3
+
+
+def test_ensure_group_gives_up_by_name_rather_than_hanging_forever():
+    api = RecordingApi(pending_polls=10_000)
+    clock = iter([0.0, 0.0, 1_000.0])
+    with pytest.raises(provision_turso.TursoApiError) as raised:
+        provision_turso.ensure_group(
+            _client(api),
+            ORG,
+            "default",
+            provision_turso.DEFAULT_LOCATION,
+            sleep=lambda _seconds: None,
+            now=lambda: next(clock),
+        )
+    assert "did not become ready" in str(raised.value)
 
 
 def test_provision_is_idempotent_when_the_database_already_exists():
