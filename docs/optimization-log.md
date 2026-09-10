@@ -91,6 +91,55 @@ time. Adversarial verification of this attribution and a priced options table: i
 
 ---
 
+## 2026-09-10 — Performance: the CPU question, adversarially verified
+
+**Method.** Three independent analyses (span-level decomposition of both 26-item runs; live
+microbenchmarks of the deployed instance against the same app running locally; a priced survey of
+Render tiers and free alternatives), then a skeptic instructed to refute the CPU hypothesis with
+eight alternative explanations, recomputing every figure from the raw trace stores.
+
+**Verdict.** The premise "a deployed turn is slow because of the 0.1 vCPU" is refuted on magnitude
+and confirmed only on composition. Like for like (same items, same model, same config, server-side
+turn duration), local p50 is 17,670 ms and deployed p50 is 17,584 ms; the mean service-time gap of
+about 1.6 s per turn is not statistically significant at n=26 (bootstrap 95% CI −0.2 s to +3.5 s).
+Of that small gap, about 72% is CPU-bound work (query embedding ≈41%, Python-side work ≈24%,
+search and the MCP hop ≈7%), 15% is the deployed run simply taking more act steps on three items,
+and 9% is Turso round-trips on the request path. Memory pressure, region latency to Anthropic,
+and the loopback MCP hop were each tested and rejected. The "local turn of a few seconds" the spec
+quoted came from stub-model turns (mean 292 ms) and was never a real-model figure.
+
+**What a bigger CPU would buy.** A 0.5 vCPU Starter instance ($7/month, no spin-down) or a 1 vCPU
+Standard instance ($25/month) projects to a 3–5% faster turn (p50 ≈ 16.8–17.2 s) because the
+CPU-bound share is ~1.0–1.4 s per turn. The two tiers are indistinguishable for this workload. The
+larger user-visible penalty of the free tier is the spin-down itself: ~41–49 s to the first
+response after 15 idle minutes.
+
+**The finding that matters.** The largest controllable cost on the deployed box is the project's
+own LLM rate limiter: `LLM_RPM=10` / `LLM_BURST=10` (a Settings default applied in production, not
+only in the harness) recorded 3.9 s of token-bucket waiting per turn on average (20% of run wall
+clock, p90 12.2 s, max 14.0 s) inside the turn latency. Raising it is an environment change with
+no rebuild, bounded independently by `LLM_DAILY_CALL_CAP`. Second: the same query is embedded
+twice when the soft topic filter backfills (~270 ms per affected turn on 0.1 vCPU) — an LRU cache on
+the query embedding removes it. Third: nothing streams today (time-to-first-byte equals duration on
+all 330 LLM spans), and prompt caching is inactive (zero cache reads), so the user waits for whole
+completions of uncached prompts.
+
+**Costed options table (all paid tiers need Sean's explicit approval).**
+
+| Option | USD / month | CPU / RAM | Spins down | Expected effect |
+|---|---|---|---|---|
+| Render Free (current) | 0 | 0.1 vCPU / 512 MB | yes, 15 min | baseline |
+| Render Starter | 7 | 0.5 vCPU / 512 MB | no | −1.0 to −1.4 s per turn; no cold starts |
+| Render Standard | 25 | 1 vCPU / 2 GB | no | same as Starter for this workload |
+| Google Cloud Run (free allowance, card required) | 0 within allowance | up to 1 vCPU while serving | yes, scale-to-zero | ~10× CPU; a migration, not a knob |
+| Koyeb free | 0 | 0.1 vCPU / 512 MB | yes | no gain |
+| Fly.io / Railway / HF Spaces | trial or paid only | — | — | not a free fit |
+
+**Decision.** Do not buy CPU for speed. The zero-cost levers above go into the performance plan
+(deep assessment in progress); the rate-limiter change is applied with the next deploy.
+
+---
+
 ## 2026-09-10 — Deep performance assessment (in progress)
 
 Method: (1) anatomy of every LLM call in the deployed run from its traces (calls per role, tokens,
