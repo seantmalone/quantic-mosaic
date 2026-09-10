@@ -270,3 +270,30 @@ def test_the_router_is_told_to_name_every_missing_detail():
         "Name EVERY missing detail in rationale_summary, not only the first — the question the "
         "user is shown is built from that line." in system
     )
+
+
+# --------------------------------------------------------------------------------------
+# P15 — the two output-diet prompt rules of the performance plan's Wave 2
+# --------------------------------------------------------------------------------------
+
+
+def test_the_closing_act_step_is_capped_to_one_short_sentence():
+    """W2-A: 48 % of act output tokens were prose no answer path reads.
+
+    The rule keeps `Stop calling tools as soon as you have what the turn needs` byte-for-byte and
+    appends a **format** constraint only. Two things it must not do, both measured: telling the
+    model that a separate later step composes the answer is false on the refuse / park / clarify
+    paths (9 of 26 turns never synthesize) and removes the incentive to draft, which is where
+    evidence gaps surface; and a blanket "do not restate policy" would gut text three
+    in-conversation consumers read (`_nudge`, the G1 recovery reopen, `_rehydrate_messages`). So the
+    closing sentence still has to name what was gathered, specifically enough that a nudged step
+    does not re-search covered ground.
+    """
+    system, _ = prompts.render("act.j2", **context("act.j2"))
+    rule = system[system.index("\n7. ") + 1 :]
+
+    assert rule.startswith("7. Stop calling tools as soon as you have what the turn needs, and say so in one line")
+    assert "ONE sentence of at most 30 words naming what you gathered" in rule
+    assert "which documents, which values" in rule
+    assert "later step" not in system and "separate step" not in system
+    assert "restate" not in system

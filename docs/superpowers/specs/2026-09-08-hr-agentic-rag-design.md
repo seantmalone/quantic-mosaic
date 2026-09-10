@@ -648,6 +648,17 @@ gains rule **6b**: a balance, accrual, date or eligibility value that came from 
 stated with its `as_of` and carries **no** citation, because a tool result has no `chunk_id`, G2 strips a citation to one, and the dropped block takes
 the number with it.
 
+**Two output-diet rules were added at P15** (performance plan §3, Wave 2). `act.j2` rule 7 keeps
+*"Stop calling tools as soon as you have what the turn needs"* byte-for-byte and appends a **format**
+constraint to the closing line: one sentence of at most 30 words naming what was gathered — which
+documents, which values. 21 of 53 deployed act calls closed the loop with zero tool calls and a
+median 224 output tokens of prose that no answer path reads, 48 % of all act output tokens, at
+~10.2 ms/token. The rule is deliberately *not* "a separate later step composes the answer" — that is
+false on the refuse / park / clarify paths, where 9 of 26 turns never synthesize — and deliberately
+not a blanket "do not restate policy": three in-conversation consumers read that text (a §9.1
+reminder's `continue`, the G1 recovery reopen, and `_rehydrate_messages` on resume), so the sentence
+must still name the ground already covered or a nudged step re-searches it.
+
 The assembled prompt is stored **verbatim** so the dashboard shows the exact bytes sent to the model for every turn (USER.2). A realistic act-loop
 prompt is 20–40 KB, larger than the general 32 KB payload cap of §10.5, so the `messages[]` array is **not** stored inside `payload_json`: it goes to
 the `llm_messages` side table (§10.1), which is exempt from the cap, and the `llm_call` payload carries `messages_ref: {span_id, n_messages,
