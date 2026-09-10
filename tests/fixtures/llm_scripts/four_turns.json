@@ -1,0 +1,182 @@
+{
+  "scenario": "four_turns",
+  "_note": "Four identical policy-only turns, back to back against one app instance — `rag_only.json`'s four completions repeated four times. Used by tests/contract/test_access_gate.py::test_four_turns_in_a_row_all_answer_because_the_apps_own_loopback_client_is_exempt, which drives four turns under a per-IP limit of 4 to prove the app's own MCP traffic does not spend the visitor-facing budget (spec §17).",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 62
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_t1_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_t1_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "response_text": "The accrual table answers this without any employee record.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2480,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Check your own balance with the HR copilot if you want the number for your record.\"], \"rationale_summary\": \"Answered from the PTO accrual table alone.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 2610,
+      "completion_tokens": 92
+    },
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 62
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_t2_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_t2_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "response_text": "The accrual table answers this without any employee record.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2480,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Check your own balance with the HR copilot if you want the number for your record.\"], \"rationale_summary\": \"Answered from the PTO accrual table alone.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 2610,
+      "completion_tokens": 92
+    },
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 62
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_t3_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_t3_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "response_text": "The accrual table answers this without any employee record.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2480,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Check your own balance with the HR copilot if you want the number for your record.\"], \"rationale_summary\": \"Answered from the PTO accrual table alone.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 2610,
+      "completion_tokens": 92
+    },
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 62
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_t4_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_t4_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "response_text": "The accrual table answers this without any employee record.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2480,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Check your own balance with the HR copilot if you want the number for your record.\"], \"rationale_summary\": \"Answered from the PTO accrual table alone.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 2610,
+      "completion_tokens": 92
+    }
+  ]
+}

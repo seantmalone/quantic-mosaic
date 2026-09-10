@@ -102,7 +102,7 @@ async def test_with_the_gate_on_the_in_process_client_sends_the_bearer(web, stor
             headers={"Authorization": f"Bearer {TOKEN}"},
         )
 
-    assert headers == {"Authorization": f"Bearer {TOKEN}"}
+    assert headers["Authorization"] == f"Bearer {TOKEN}"
     assert health.json()["mcp"]["connected"] is True
     assert health.json()["mcp"]["tool_count"] == 9, "tools/list passed the gate"
 
@@ -116,12 +116,16 @@ async def test_with_the_gate_on_the_in_process_client_sends_the_bearer(web, stor
 
 
 async def test_with_the_gate_off_the_client_sends_no_authorization_header(web):
-    """Local development stays frictionless: no token set, no header, no gate (§11)."""
+    """Local development stays frictionless: no token set, no credential header, no gate (§11).
+
+    The client still carries `X-Mosaic-Loopback` — the per-process nonce that exempts the app's own
+    traffic from the mount's per-IP limit (§17). It is not a credential and grants nothing.
+    """
     from hrmosaic.agent import orchestrator as agent
 
     async with web() as client:
         headers = dict(agent.get_orchestrator().client._headers)
         health = await client.get("/health")
 
-    assert headers == {}
+    assert "Authorization" not in headers
     assert health.json()["mcp"]["tool_count"] == 9

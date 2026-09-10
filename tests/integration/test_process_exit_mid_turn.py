@@ -127,21 +127,23 @@ def test_a_flushed_turn_keeps_its_llm_messages(writer, store):
 # The subprocess form (P8): a real uvicorn, with a real turn left open (§10.3)
 # --------------------------------------------------------------------------------------
 #
-# The store-level tests above call the handler directly. These start `uvicorn
-# hrmosaic.web.main:app` as its own OS process and kill it — SIGTERM for the graceful path, SIGKILL
-# for the one no handler can run. Only a subprocess can show that the lifespan installed the
-# handler **on the main thread**, where `signal.signal` is legal: off the main thread it would log
-# a warning and leave nothing but the `atexit` hook, which a SIGKILL never reaches either.
+# The store-level tests above call the handler directly. These serve the whole app in its own OS
+# process and kill it — SIGTERM for the graceful path, SIGKILL for the one no handler can run.
+# Only a subprocess can show that the lifespan installed the handler **on the main thread**, where
+# `signal.signal` is legal: off the main thread it would log a warning and leave nothing but the
+# `atexit` hook, which a SIGKILL never reaches either.
 #
-# The turn is left open **deterministically** rather than by racing a request against a signal: the
-# second question exhausts the committed stub script, so `run_turn` raises with the turn's
-# `mcp_discovery` span already buffered and the `turns` row already written. That is precisely the
-# state a crash leaves behind, and reproducing it takes no timing assumptions at all.
+# The turn is left open **deterministically**, by `uvicorn_with_open_turn.py`: it serves the real
+# `hrmosaic.web.main:app` and then opens one turn on the process-wide writer the lifespan installed,
+# never closing it. No endpoint is involved, so there is no timing assumption — and, importantly,
+# no reliance on a request failing: `web/api.py`'s `UnhandledErrorMiddleware` now closes the turn
+# and answers 200 on any unmodelled exception, exactly so that nothing is ever left open this way.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SERVER = Path(__file__).resolve().parent / "uvicorn_with_open_turn.py"
 BOOT_TIMEOUT_S = 60
+OPEN_TURN_TIMEOUT_S = 30
 EXIT_TIMEOUT_S = 20
-QUESTION = "How much PTO do full-time employees accrue each month?"
 
 
 def _environment(port: int, db_path: Path) -> dict[str, str]:
@@ -160,7 +162,7 @@ def _environment(port: int, db_path: Path) -> dict[str, str]:
 
 def _serve(port: int, db_path: Path) -> subprocess.Popen:
     process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "hrmosaic.web.main:app", "--host", "127.0.0.1", "--port", str(port)],
+        [sys.executable, str(SERVER), str(port)],
         cwd=str(REPO_ROOT),
         env=_environment(port, db_path),
         stdout=subprocess.DEVNULL,
@@ -177,13 +179,26 @@ def _serve(port: int, db_path: Path) -> subprocess.Popen:
     raise AssertionError("the subprocess never became healthy")
 
 
-async def _leave_a_turn_open(port: int) -> None:
-    """One turn that answers, then one that dies in flight when the stub script runs out."""
-    async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=60.0) as client:
-        answered = await client.post("/chat", json={"message": QUESTION})
-        assert answered.status_code == 200, answered.text
-        crashed = await client.post("/chat", json={"message": QUESTION})
-        assert crashed.status_code == 500, "the script is exhausted; the turn is left open"
+def _wait_for_the_open_turn(db_path: Path) -> str:
+    """The helper opens its turn just after the socket is listening; wait for the row to appear."""
+    deadline = time.monotonic() + OPEN_TURN_TIMEOUT_S
+    while time.monotonic() < deadline:
+        rows = _rows(db_path, "SELECT id FROM turns WHERE ended_at IS NULL")
+        if len(rows) == 1:
+            return str(rows[0]["id"])
+        time.sleep(0.05)
+    raise AssertionError("the subprocess never left a turn open")
+
+
+def _wait_for_the_boot_sweep(db_path: Path, turn_id: str) -> dict:
+    """`sweep_stale_turns()` runs on a worker thread at boot; `/health` can answer before it lands."""
+    deadline = time.monotonic() + OPEN_TURN_TIMEOUT_S
+    while time.monotonic() < deadline:
+        row = _rows(db_path, "SELECT outcome, stop_reason, ended_at FROM turns WHERE id = ?", (turn_id,))[0]
+        if row["ended_at"] is not None:
+            return row
+        time.sleep(0.05)
+    raise AssertionError("the next boot's sweep never closed the turn")
 
 
 def _rows(db_path: Path, sql: str, params: tuple = ()) -> list[dict]:
@@ -192,12 +207,6 @@ def _rows(db_path: Path, sql: str, params: tuple = ()) -> list[dict]:
         return store.execute(sql, params).dicts()
     finally:
         store.close()
-
-
-def _open_turn_id(db_path: Path) -> str:
-    rows = _rows(db_path, "SELECT id FROM turns WHERE ended_at IS NULL")
-    assert len(rows) == 1, f"expected exactly one turn in flight, found {len(rows)}"
-    return str(rows[0]["id"])
 
 
 @pytest.fixture
@@ -214,8 +223,7 @@ async def test_a_sigterm_flushes_the_turn_a_real_uvicorn_left_open(db_path):
     port = free_port()
     process = _serve(port, db_path)
     try:
-        await _leave_a_turn_open(port)
-        turn_id = _open_turn_id(db_path)
+        turn_id = await asyncio.to_thread(_wait_for_the_open_turn, db_path)
         process.send_signal(signal.SIGTERM)
         await asyncio.to_thread(process.wait, EXIT_TIMEOUT_S)
     finally:
@@ -229,7 +237,7 @@ async def test_a_sigterm_flushes_the_turn_a_real_uvicorn_left_open(db_path):
     assert row["ended_at"] is not None
 
     spans = _rows(db_path, "SELECT kind FROM spans WHERE turn_id = ?", (turn_id,))
-    assert [span["kind"] for span in spans] == ["mcp_discovery", "guardrail"], "the buffer was flushed, not lost"
+    assert [span["kind"] for span in spans] == ["plan"], "the buffer was flushed, not lost"
 
 
 @pytest.mark.anyio
@@ -238,8 +246,7 @@ async def test_a_hard_kill_is_repaired_by_the_next_boots_sweep(db_path):
     port = free_port()
     process = _serve(port, db_path)
     try:
-        await _leave_a_turn_open(port)
-        turn_id = _open_turn_id(db_path)
+        turn_id = await asyncio.to_thread(_wait_for_the_open_turn, db_path)
         process.kill()
         await asyncio.to_thread(process.wait, EXIT_TIMEOUT_S)
     finally:
@@ -259,7 +266,7 @@ async def test_a_hard_kill_is_repaired_by_the_next_boots_sweep(db_path):
 
     reborn = _serve(free_port(), db_path)
     try:
-        row = _rows(db_path, "SELECT outcome, stop_reason, ended_at FROM turns WHERE id = ?", (turn_id,))[0]
+        row = await asyncio.to_thread(_wait_for_the_boot_sweep, db_path, turn_id)
     finally:
         reborn.terminate()
         reborn.wait(EXIT_TIMEOUT_S)

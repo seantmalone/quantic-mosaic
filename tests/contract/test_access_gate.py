@@ -161,3 +161,61 @@ async def test_the_per_ip_rate_limit_covers_post_chat(web):
 
     assert statuses[-1] == 429
     assert page.status_code == 200
+
+
+# --------------------------------------------------------------------------------------
+# The limit is keyed on the client address — and the app's own MCP client is on loopback
+# --------------------------------------------------------------------------------------
+
+
+async def test_four_turns_in_a_row_all_answer_because_the_apps_own_loopback_client_is_exempt(web):
+    """The app must never 429 itself (§17).
+
+    The limit is keyed on `request.client.host`, and the agent reaches its own MCP mount over
+    loopback: `initialize`, `tools/list`, the long-lived `GET`, every `tools/call`, and the
+    `client.discover()` behind each `GET /health` all arrive from `127.0.0.1`. Sharing one bucket
+    with the visitor means a single tool-using turn spends ~10 of the budget, so a grader who asks
+    a few questions in a minute silently gets `partial` answers with the tools refused underneath.
+
+    Four turns under a per-IP limit of **four** is the proof: exactly four `POST /chat` requests,
+    so the visitor-facing budget is spent to the last unit and nothing is left over for the app's
+    own traffic. Every turn must still be `answered`.
+    """
+    async with web("four_turns.json", access_rate_limit_per_min=4) as client:
+        outcomes = []
+        for _ in range(4):
+            response = await client.post("/chat", json={"message": "How much PTO do full-time employees accrue?"})
+            assert response.status_code == 200, response.text
+            outcomes.append(response.json()["outcome"])
+            assert (await client.get("/health")).status_code == 200
+
+    assert outcomes == ["answered"] * 4
+
+
+async def test_a_forged_loopback_nonce_spends_the_budget_like_anyone_else(web):
+    """The nonce is minted per process and never leaves it, so an outsider cannot guess it."""
+    from hrmosaic.web import api
+
+    call = {
+        "json": {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        "headers": {"Accept": "application/json, text/event-stream", api.LOOPBACK_HEADER: "not-the-nonce"},
+    }
+    async with web("rag_only.json", access_rate_limit_per_min=1) as client:
+        first = await client.post("/mcp-server/mcp", **call)
+        second = await client.post("/mcp-server/mcp", **call)
+
+    assert first.status_code != 429, "the first request is within the budget"
+    assert second.status_code == 429, "a wrong nonce is not an exemption"
+
+
+async def test_the_real_nonce_does_not_exempt_post_chat(web):
+    """Only the MCP mount is ever exempt: `POST /chat` is the surface §17's limit exists for."""
+    from hrmosaic.web import api
+
+    headers = {api.LOOPBACK_HEADER: api.LOOPBACK_NONCE}
+    async with web("rag_only.json", access_rate_limit_per_min=1) as client:
+        question = {"message": "What is the weather in Berlin?"}
+        first = await client.post("/chat", json=question, headers=headers)
+        second = await client.post("/chat", json=question, headers=headers)
+
+    assert (first.status_code, second.status_code) == (200, 429)

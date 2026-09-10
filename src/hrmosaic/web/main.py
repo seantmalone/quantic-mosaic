@@ -93,9 +93,17 @@ def _data_as_of() -> str:
 
 
 def _build_client(settings: Settings) -> McpClient:
-    """The in-process client, carrying the bearer header whenever the gate is on (§16.4)."""
+    """The in-process client: the bearer whenever the gate is on (§16.4), and always the nonce.
+
+    `api.LOOPBACK_NONCE` is what tells the gate that a request on the MCP mount is the app talking
+    to itself, so the agent's own `initialize` / `tools/list` / `tools/call` — and the
+    `client.discover()` behind every `GET /health` — do not spend the visitor-facing per-IP budget
+    that is keyed on the one loopback address they all share (§17).
+    """
+    headers = {api.LOOPBACK_HEADER: api.LOOPBACK_NONCE}
     token = secret_value(settings.app_access_token)
-    headers = {"Authorization": f"Bearer {token}"} if token and api.gate_enabled(settings) else None
+    if token and api.gate_enabled(settings):
+        headers["Authorization"] = f"Bearer {token}"
     return McpClient(settings=settings, headers=headers)
 
 
@@ -168,7 +176,14 @@ async def _warm_up(app: FastAPI) -> None:
 
 
 def _install_error_handlers(app: FastAPI) -> None:
-    """A dict `detail` is the body (§11.1's `{"code": …}`), not a value nested under `detail`."""
+    """A dict `detail` is the body (§11.1's `{"code": …}`), not a value nested under `detail`.
+
+    Three handlers, and the third is the one constraint 11 turns on: `HTTPException` and
+    `RequestValidationError` are the modelled refusals, and `api.UnhandledErrorMiddleware` catches
+    everything else — so an exception the design does not model still answers **200** with a typed
+    escalation block and still closes the turn it was raised in, instead of escaping as a bare 500
+    and leaving the turn row open until the next boot sweep (§12.3).
+    """
 
     async def http_exception(_: Request, exc: Exception) -> JSONResponse:
         assert isinstance(exc, HTTPException)
@@ -184,6 +199,9 @@ def _install_error_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(HTTPException, http_exception)
     app.add_exception_handler(RequestValidationError, validation_error)
+    # Added first, so the access gate (added last, and therefore outermost) still refuses before
+    # any work happens, and this sits directly outside Starlette's own `ExceptionMiddleware`.
+    app.add_middleware(api.UnhandledErrorMiddleware)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

@@ -108,6 +108,10 @@ async def test_a_decline_records_a_second_confirmation_span_and_closes_the_turn(
 
     row = store.execute("SELECT outcome, stop_reason, resumed_count FROM turns WHERE id = ?", (turn_id,)).one()
     assert (row["outcome"], row["stop_reason"]) == ("refused", "declined")
+    # §11.2: a decline "closes the turn without reopening". The buffer is reopened only so the
+    # second `confirmation` span goes through `core/trace.py`, and that must not be counted as a
+    # resume — the dashboard's resumed-turn figures read this column.
+    assert row["resumed_count"] == 0, "the declined turn was never resumed"
 
 
 async def test_a_decline_mints_a_declined_row_that_is_never_returned_to_a_client(lifecycle, store):

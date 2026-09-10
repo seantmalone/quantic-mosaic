@@ -102,6 +102,15 @@ UPDATE turns SET ended_at = NULL, outcome = NULL, resumed_count = resumed_count 
 WHERE id = ?
 """
 
+# §11.2: a **declined** proposal reopens the buffer only so the second `confirmation` span can be
+# written through this module — the turn is closed again without ever being resumed. Counting that
+# as a resume would report `resumed_count = 1` on a turn nobody resumed, which is what the
+# dashboard's resumed-turn figures read.
+TURN_REOPEN_UNCOUNTED = """
+UPDATE turns SET ended_at = NULL, outcome = NULL, awaiting_ms = awaiting_ms + ?
+WHERE id = ?
+"""
+
 TURN_ROLLUP_SELECT = """
 SELECT session_id, seq, started_at, awaiting_ms, total_tokens_in, total_tokens_out, llm_calls,
        tool_calls, retrievals, guardrail_hits, llm_ms, retrieval_ms, tool_ms, store_ms,
@@ -702,12 +711,17 @@ class TraceWriter:
             self._open[turn_id] = buffer
         return buffer
 
-    def reopen_turn(self, turn_id: str, awaiting_ms: int) -> TurnBuffer:
-        """§10.3 step 4 — `/chat/confirm` resumes a parked turn."""
+    def reopen_turn(self, turn_id: str, awaiting_ms: int, *, resumed: bool = True) -> TurnBuffer:
+        """§10.3 step 4 — `/chat/confirm` resumes a parked turn.
+
+        `resumed=False` reopens the buffer **without** bumping `resumed_count`: the decline path of
+        §11.2 reopens only so its second `confirmation` span goes through this module, and then
+        closes the turn again without ever resuming it.
+        """
         began = time.perf_counter()
         results = self.store.batch(
             [
-                Statement(TURN_REOPEN, (awaiting_ms, turn_id)),
+                Statement(TURN_REOPEN if resumed else TURN_REOPEN_UNCOUNTED, (awaiting_ms, turn_id)),
                 Statement(TURN_ROLLUP_SELECT, (turn_id,)),
                 Statement(SPAN_MAX_SEQ_SELECT, (turn_id,)),
             ]
@@ -790,8 +804,19 @@ def start_turn(session: SessionSpec, *, user_message: str, turn_id: str | None =
     return get_writer().start_turn(session, user_message=user_message, turn_id=turn_id)
 
 
-def reopen_turn(turn_id: str, awaiting_ms: int) -> TurnBuffer:
-    return get_writer().reopen_turn(turn_id, awaiting_ms)
+def reopen_turn(turn_id: str, awaiting_ms: int, *, resumed: bool = True) -> TurnBuffer:
+    return get_writer().reopen_turn(turn_id, awaiting_ms, resumed=resumed)
+
+
+def open_turns() -> list[TurnBuffer]:
+    """Every turn still buffered, or `[]` when no writer is installed.
+
+    The read-only seam `web/` uses to close a turn an unmodelled failure left open (§12.3): the
+    close still happens through this module, so there is still exactly one trace writer.
+    """
+    with _writer_lock:
+        writer = _writer
+    return writer.open_turns() if writer is not None else []
 
 
 def flush_open_turns() -> int:

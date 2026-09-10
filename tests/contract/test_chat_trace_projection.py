@@ -44,13 +44,25 @@ def _payloads(store, turn_id: str, kind: str) -> list[dict]:
 
 
 async def test_row_1_selected_tools_are_on_the_plan_span_and_one_tool_call_entry_each(tool_using_turn, store):
-    plans = _payloads(store, tool_using_turn["turn_id"], "plan")
+    turn_id = tool_using_turn["turn_id"]
+    plans = _payloads(store, turn_id, "plan")
     selected = {name for plan in plans for name in plan["selected_tools"]}
-    called = {entry["name"] for entry in tool_using_turn["trace"] if entry["kind"] == "tool_call"}
+    entries = [entry for entry in tool_using_turn["trace"] if entry["kind"] == "tool_call"]
+    called = {entry["name"] for entry in entries}
 
     assert selected, "the router recorded what it selected"
     assert called, "and each call has its own trace entry"
-    assert called <= selected | called  # every call is named; the plan may also offer more
+    # Every tool the turn actually called is named on a `plan` span: the router's own
+    # `selected_tools`, or `act_summary`'s, which records what the act loop really used. The plan
+    # may name more than the turn ended up calling; it may never name fewer.
+    assert called <= selected
+
+    # "one tool_call entry each": the projection is one entry per `tool_call` span, never a
+    # de-duplicated or summarised list.
+    spans = store.execute(
+        "SELECT name FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq", (turn_id,)
+    ).dicts()
+    assert sorted(entry["name"] for entry in entries) == sorted(span["name"] for span in spans)
 
 
 async def test_rows_2_and_3_every_tool_call_entry_carries_its_arguments_and_its_output(tool_using_turn):
