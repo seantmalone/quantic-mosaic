@@ -256,8 +256,8 @@ server over the MCP wire, and may import `hrmosaic.core.corpusread`, which is ho
 **The one rule two packages share sits in `core/` (P15 W2-C fix round).** §7.4's injection-pattern table and its pure `scan()` are
 `core/injection.py`, because `mcpserver/tools/search_policy_documents.py` has to take the same quarantine decision the agent takes — a search hit
 carries the whole chunk since W2-C, and `/mcp-server/mcp` is deliberately publicly reachable (§8.1, §15) — and the arrow forbids `mcpserver/`
-importing `hrmosaic.agent`. Measured, that import pulls 2,867 modules and ~1.0 s of `anthropic`/`openai`/`uvicorn` into a stdio server process on a
-512 MB / 0.1 CPU box. Only the *table and the scan* move down: `agent/guardrails/g4.py` re-exports `PATTERNS` and `scan`, remains the only public name
+importing `hrmosaic.agent`. Measured, that import pulls ~2,800 modules and ~0.9 s of `anthropic`/`openai`/`uvicorn` into a stdio server process
+(`import hrmosaic.agent.guardrails.g4` = 2,823 modules / 0.85 s against `import hrmosaic.core.injection` = 12 / 0.003 s). Only the *table and the scan* move down: `agent/guardrails/g4.py` re-exports `PATTERNS` and `scan`, remains the only public name
 for the shield, and keeps everything with a policy in it (the `guardrail` span, the quarantine decisions, the tool-result shield). Nothing outside g4
 imports `core.injection` except that one tool.
 
