@@ -10,10 +10,17 @@ same `retrieve()` call, so the server does no extra work.
 characters and its `IGNORE ALL PREVIOUS INSTRUCTIONS…` imperative begins at character 355 — beyond
 `SNIPPET_CHARS`. Before this change `g4.scan(snippet)` never saw it and the imperative never reached
 the act conversation; a hit carrying the whole chunk puts it one `json.dumps` away from the model's
-own context. So the §7.4 injection shield runs on the way in, before the `tool_call` span is written
-and long before the message is appended: a quarantined chunk is handed on as its snippet alone with
-`quarantined: true`, and the only prompt that ever shows its text is the synthesis prompt, inside a
-`quarantined="true"` `<document>` banner under rule 4.
+own context. So the decision is taken **twice**, and neither copy is redundant:
+
+* in `_search`, before the body is serialised, which is the plan's stated locus and the only place
+  that keeps the text off the wire for an MCP Inspector session attached to the deliberately public
+  `/mcp-server/mcp` (§15, R-12);
+* in `client.call_tool`, on the way in, because a client that trusts a server to police its own
+  output has no shield against any other MCP server it is pointed at.
+
+Either way a quarantined chunk is handed on as its snippet alone with `quarantined: true`, and the
+only prompt that ever shows its text is the synthesis prompt, inside a `quarantined="true"`
+`<document>` banner under rule 4.
 
 Nothing here is a mock. `StubAdapter` replays the committed `injection_probe` recording while the
 retrieval, the corpus and the tool are the shipped MCP server in a separate OS process.
@@ -30,6 +37,7 @@ from hrmosaic.agent.guardrails import g4
 from hrmosaic.agent.orchestrator import ChatRequest
 from hrmosaic.core import corpusread
 from hrmosaic.mcpserver.tools.search_policy_documents import CHUNK_MAX_CHARS
+from tests.integration.conftest import BASE_META
 
 pytestmark = pytest.mark.anyio
 
@@ -163,3 +171,25 @@ async def test_the_synthesis_prompt_carries_one_copy_of_a_passage(run_agent, sto
     for chunk_id in retrieved:
         text = corpusread.get_chunk(chunk_id).text
         assert evidence.count(text) == 1, f"{chunk_id} is rendered {evidence.count(text)} times"
+
+
+async def test_the_server_never_puts_a_quarantined_chunk_on_the_wire(open_session):
+    """W2-C's BLOCKING bullet, at its stated locus: measured on the raw `tools/call` result.
+
+    `/mcp-server/mcp` is deliberately publicly reachable (§15, R-12) so a grader can attach MCP
+    Inspector, so "the wire" is not only the loopback hop between our own client and our own server.
+    This asserts on the bytes the server serialised, with no agent-side shield anywhere between them
+    and the assertion — on both transports, since the fixture parametrises them.
+    """
+    async with open_session() as session:
+        result = await session.call_tool("search_policy_documents", {"query": QUESTION, "k": 5}, meta=BASE_META)
+    serialised = result.content[0].text
+    body = json.loads(serialised)
+
+    dirty = [hit for hit in body["hits"] if hit["chunk_id"] == canary_id()]
+    assert dirty, "the probe must surface the corpus canary, or this test proves nothing"
+    for hit in dirty:
+        assert hit["quarantined"] is True, "the decision is the server's own, at the plan's locus"
+        assert hit["text"] is None
+        assert hit["snippet"], "the snippet is what a quarantined hit is allowed to carry"
+    assert g4.scan(serialised) is None, "nothing in the whole serialised body trips G4"

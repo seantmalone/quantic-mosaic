@@ -210,6 +210,7 @@ quantic-mosaic/
 │   ├── core/         db.py (both stores) · migrations/00N_*.sql · trace.py (writer + SSE hook) ·
 │   │                 models.py (span union, view-models, MODEL_PRICES) · redact.py · ids.py ·
 │   │                 procstat.py · corpusread.py (read-only index reader) · archive.py ·
+│   │                 injection.py (§7.4's pattern table + scan; re-exported by g4) ·
 │   │                 retention.py · llm/{base,openai_compat,anthropic,stub,cache,limiter}.py
 │   ├── rag/          parse/{md,html,pdf,txt}.py · chunk.py · embed.py (the only `.embed(` site) ·
 │   │                 index.py · retrieve.py · ingest.py · download_model.py
@@ -251,6 +252,14 @@ and the HTTP API. Two rules are checked by the single conventions test (§16.3):
 server over the MCP wire, and may import `hrmosaic.core.corpusread`, which is how G2 resolves citations); and `rag/embed.py` is the only caller of
 `.embed(` / `.query_embed(`, with `parallel=` appearing nowhere under `src/`. That `web/**` and `agent/**` never import `hrmosaic.rag.*` except
 `core.corpusread` is a module-docstring convention, reviewed by the phase's subagent, as is every other boundary.
+
+**The one rule two packages share sits in `core/` (P15 W2-C fix round).** §7.4's injection-pattern table and its pure `scan()` are
+`core/injection.py`, because `mcpserver/tools/search_policy_documents.py` has to take the same quarantine decision the agent takes — a search hit
+carries the whole chunk since W2-C, and `/mcp-server/mcp` is deliberately publicly reachable (§8.1, §15) — and the arrow forbids `mcpserver/`
+importing `hrmosaic.agent`. Measured, that import pulls 2,867 modules and ~1.0 s of `anthropic`/`openai`/`uvicorn` into a stdio server process on a
+512 MB / 0.1 CPU box. Only the *table and the scan* move down: `agent/guardrails/g4.py` re-exports `PATTERNS` and `scan`, remains the only public name
+for the shield, and keeps everything with a policy in it (the `guardrail` span, the quarantine decisions, the tool-result shield). Nothing outside g4
+imports `core.injection` except that one tool.
 
 ## 5. Policy corpus and mock data design
 
@@ -758,6 +767,15 @@ imperative-to-assistant forms:
 `tests/unit/test_g4_no_false_positives.py` runs G4 over **every chunk in the committed manifest** and asserts: every quarantined chunk has `doc_id ==
 "security-acceptable-use"`; at least one chunk is quarantined (the canary is reachable); no chunk from any other document is quarantined. It
 deliberately does not assert an exact count.
+
+**The quarantine decision is taken in the tool, before the body is serialised (P15 W2-C fix round).** Since W2-C a `search_policy_documents` hit
+carries the whole stored chunk, and the corpus canary's imperative begins at character 355 — past the 320-character snippet that used to be all a hit
+carried. `_hit()` therefore scans the chunk and its snippet through `core/injection.py::scan` and emits `text: null, quarantined: true` for a dirty
+one. That is what keeps the text off the wire *at all*: §8.1's mounted endpoint is publicly reachable so a grader can attach MCP Inspector, so an
+agent-side shield alone would still have served the imperative in full to any external MCP client. The agent keeps its own shield on the way in — a
+client that trusted a server to police its own output would have none against any other MCP server it is pointed at (§8.1's remote-transport row).
+`tests/integration/test_search_returns_full_chunk_text.py` asserts the raw `tools/call` body on both transports, with no agent between it and the
+assertion.
 
 Confirmation for irreversible actions is **not** a guardrail — it is a property of the MCP server (§8.6), which is why action safety can be a plain
 test rather than a reported number.

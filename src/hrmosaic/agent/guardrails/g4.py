@@ -2,13 +2,20 @@
 
 A quarantined chunk is shown with a warning banner and **cannot be cited**: G2 strips the citation,
 the block is dropped, and G1 may then refuse — on camera. So a false positive here is as dangerous
-as a false negative, and the patterns below are scoped to **imperative-to-assistant** forms rather
-than to the bare verbs. Our own corpus legitimately says *"send your case details to
+as a false negative, and the patterns are scoped to **imperative-to-assistant** forms rather than to
+the bare verbs. Our own corpus legitimately says *"send your case details to
 people-ops@mosaicrobotics.example"*, and demo task 1 has to cite the People Ops mobility contact.
 
 `tests/unit/test_g4_no_false_positives.py` runs `scan()` over **every chunk in the committed
 manifest** and asserts that the only quarantined document is `security-acceptable-use`, which
 carries the deliberate canary inside a labelled *example of a phishing lure* section.
+
+**The table and the scan live in `core/injection.py`; this module is still their only public name.**
+`mcpserver/tools/search_policy_documents.py` has to take the same decision the agent takes — a hit
+carries the whole chunk now, and the MCP endpoint is publicly reachable (§15, R-12) — and §4.2
+forbids `mcpserver/` importing `hrmosaic.agent`. So the regex table moved down to `core/`, which
+both packages may import, and everything with a *policy* in it stayed here. Nothing outside this
+module imports `core.injection`, except the one tool that must.
 
 Fencing is the second half of the defence and lives in the prompts: every untrusted string is
 rendered inside a `<document trust="data">` or `<tool_result trust="data">` envelope under a
@@ -17,12 +24,12 @@ standing system rule that envelope content is data and never an instruction (§7
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from hrmosaic.agent.guardrails import emit
+from hrmosaic.core.injection import PATTERNS, scan
 
 if TYPE_CHECKING:
     from hrmosaic.core.trace import TurnBuffer
@@ -33,37 +40,6 @@ class Scannable(Protocol):
 
     chunk_id: str
     text: str
-
-
-#: The §7.4 table, verbatim in shape. Each entry is `(name, pattern)`; the name is what the
-#: `guardrail` span records as `matched_pattern`, so the dashboard names the rule that fired
-#: rather than echoing a regex.
-PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    (
-        "ignore_previous_instructions",
-        re.compile(
-            r"(?i)\b(ignore|disregard|forget)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all)\b"
-            r"[^.\n]{0,40}\b(instruction|prompt|rule|direction)s?\b"
-        ),
-    ),
-    ("role_header", re.compile(r"(?im)^\s*(system|assistant)\s*:")),
-    ("persona_override", re.compile(r"(?i)\byou are now\b")),
-    ("act_as_assistant", re.compile(r"(?i)\bact as (an?|the)\b[^.\n]{0,30}\b(assistant|ai|model)\b")),
-    (
-        "exfiltration",
-        re.compile(r"(?i)\b(exfiltrat|leak)\w*\b[^.\n]{0,40}\b(roster|database|credential|secret|key)s?\b"),
-    ),
-    (
-        "bulk_data_imperative",
-        re.compile(
-            r"(?i)\b(email|send|forward|post)\b[^.\n]{0,30}\b(the )?"
-            r"(roster|employee list|database|all (records|employees))\b"
-        ),
-    ),
-    ("tool_call_frame", re.compile(r"(?i)<tool_call")),
-    ("chat_template_frame", re.compile(r"<\|im_start\|>")),
-    ("long_base64_run", re.compile(r"[A-Za-z0-9+/]{201,}={0,2}")),
-)
 
 
 #: The one §8.4 tool whose result carries chunk text (W2-C).
@@ -101,20 +77,6 @@ class Match:
     chunk_id: str
     pattern: str
     excerpt: str
-
-
-def scan(text: str) -> tuple[str, str] | None:
-    """The pure rule: `(pattern_name, excerpt)` for the first pattern that matches, else `None`.
-
-    First match wins and the scan stops: the verdict is binary — the chunk is quarantined or it is
-    not — and naming one pattern keeps the span readable. The excerpt is capped so a span payload
-    never carries a document.
-    """
-    for name, pattern in PATTERNS:
-        found = pattern.search(text)
-        if found is not None:
-            return name, found.group(0)[:200]
-    return None
 
 
 def scan_all(chunks: Iterable[Scannable]) -> list[Match]:

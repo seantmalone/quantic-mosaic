@@ -15,9 +15,13 @@ under `_trace`. Three things about it are load-bearing:
   116 deployed retrievals were longer than it (median 974), so 10 act steps across 7 turns existed
   only to call `get_policy_section` for text the search had already read. `Hit.text` comes off the
   same `retrieve()` call, clamped by `CHUNK_MAX_CHARS`, so the server does zero extra work. The
-  §7.4 injection shield is what decides whether it may be *sent on*: the agent's `call_tool` scans
-  every hit before the `tool_call` span is written, and a chunk whose text gives the assistant
-  orders is handed to the loop as its snippet alone with `quarantined: true`.
+  §7.4 injection shield is what decides whether it may be *sent on*, and it decides **here**, in
+  `_hit`, before the body is serialised: a chunk whose text gives the assistant orders leaves this
+  process as its snippet alone with `quarantined: true`, so the text is not on the wire even for an
+  MCP Inspector session attached to the public `/mcp-server/mcp` (§15, R-12). The scan is
+  `core/injection.py`'s, which `agent/guardrails/g4.py` re-exports; the agent runs its own copy on
+  the way in, because a client that trusts a server to police its own output has no shield against
+  any other server it is pointed at.
 * **`topic` is a SOFT filter** (P10 fix round; §8.4). It used to restrict the candidate pool
   outright, which made the model's own topic guess the ceiling on what the answer could cite: a
   `pto` search can never see `manager-approval-matrix`, which is tagged `approvals`, however
@@ -39,6 +43,7 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hrmosaic.core.db import now_micros
+from hrmosaic.core.injection import scan as scan_for_injection
 from hrmosaic.core.models import RetrievalPayload, RetrievedChunk
 from hrmosaic.mcpserver.server import (
     READ_ONLY,
@@ -250,6 +255,40 @@ def merge_backfill(filtered: list[Any], unfiltered: list[Any], *, k: int, reason
     return (keep + ordered)[:k]
 
 
+def _hit(hit: Any, rank: int) -> SearchHit:
+    """One ranked chunk as the wire carries it — with the §7.4 decision already taken.
+
+    The quarantine is applied **here**, before the hit is serialised, because W2-C's BLOCKING
+    requirement is that a quarantined chunk's full text is never put on the wire and the MCP
+    endpoint is deliberately publicly reachable (§15, R-12): the agent's own shield protects the
+    agent's conversation, not an MCP Inspector session someone attaches to `/mcp-server/mcp`. What
+    survives is the 320-character display snippet and `quarantined: true`.
+
+    The scan is `core/injection.py`'s, which `agent/guardrails/g4.py` re-exports — one table, two
+    readers, and no `mcpserver → agent` import (§4.2). `snippet` is scanned too: it is a prefix of
+    the same chunk, so an imperative inside the first 320 characters would otherwise ride out on the
+    field the quarantine leaves behind.
+    """
+    dirty_snippet = scan_for_injection(hit.snippet) is not None
+    quarantined = dirty_snippet or scan_for_injection(hit.text) is not None
+    return SearchHit(
+        chunk_id=hit.chunk_id,
+        doc_id=hit.doc_id,
+        doc_title=hit.doc_title,
+        heading_path=hit.heading_path,
+        section=hit.section,
+        rank=rank,
+        dense_score=round(hit.dense_score, 4),
+        bm25_rank=hit.bm25_rank,
+        rrf_score=round(hit.rrf_score, 6),
+        text=None if quarantined else hit.text[:CHUNK_MAX_CHARS],
+        snippet="" if dirty_snippet else hit.snippet,
+        char_start=hit.char_start,
+        char_end=hit.char_end,
+        quarantined=quarantined,
+    )
+
+
 def _search(
     deps: ServerDeps,
     *,
@@ -307,24 +346,7 @@ def _search(
     # `rank` is renumbered over the merged list, not carried from whichever retrieval produced the
     # hit: two searches each number their own hits from 1, and a citation's rank has to mean its
     # position in what the model was actually shown.
-    hits = [
-        SearchHit(
-            chunk_id=hit.chunk_id,
-            doc_id=hit.doc_id,
-            doc_title=hit.doc_title,
-            heading_path=hit.heading_path,
-            section=hit.section,
-            rank=rank,
-            dense_score=round(hit.dense_score, 4),
-            bm25_rank=hit.bm25_rank,
-            rrf_score=round(hit.rrf_score, 6),
-            text=hit.text[:CHUNK_MAX_CHARS],
-            snippet=hit.snippet,
-            char_start=hit.char_start,
-            char_end=hit.char_end,
-        )
-        for rank, hit in enumerate(ranked, start=1)
-    ]
+    hits = [_hit(hit, rank) for rank, hit in enumerate(ranked, start=1)]
     candidates = set(retrieval.dense_candidates) | set(retrieval.bm25_candidates)
     if backfill is not None:
         candidates |= set(backfill.dense_candidates) | set(backfill.bm25_candidates)
