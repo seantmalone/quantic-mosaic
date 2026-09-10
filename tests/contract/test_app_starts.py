@@ -13,8 +13,9 @@ from hrmosaic.web.main import create_app
 
 pytestmark = pytest.mark.anyio
 
-#: Every path §11.8 lists that P8 owns. The dashboard pages and the rest of `/api/*` are P9's, and
-#: their prefixes are refused by the persona check until then.
+#: Every path §11.8 lists. P8 owns the chat, access and health half; P9's `web/dashboard.py` adds
+#: the eleven pages and the whole `/api/*` layer, including the full
+#: `GET /api/traces/turns/{turn_id}` the 202 fallback and `scripts/demo_task_*.sh` poll.
 EXPECTED_ROUTES = {
     ("GET", "/"),
     ("POST", "/chat"),
@@ -26,7 +27,40 @@ EXPECTED_ROUTES = {
     ("POST", "/access"),
     ("POST", "/access/logout"),
     ("POST", "/session/actor"),
+    # the eleven dashboard pages (§11.6)
+    ("GET", "/dashboard"),
+    ("GET", "/dashboard/sessions"),
+    ("GET", "/dashboard/sessions/{session_id}"),
+    ("GET", "/dashboard/turns"),
+    ("GET", "/dashboard/llm"),
+    ("GET", "/dashboard/retrieval"),
+    ("GET", "/dashboard/tools"),
+    ("GET", "/dashboard/safety"),
+    ("GET", "/dashboard/mcp"),
+    ("GET", "/dashboard/corpus"),
+    ("GET", "/dashboard/corpus/{doc_id}"),
+    ("GET", "/dashboard/evals"),
+    ("GET", "/dashboard/evals/{run_id}"),
+    # the `/api/*` layer each page renders from (§11.8)
+    ("GET", "/api/traces/overview"),
+    ("GET", "/api/traces/sessions"),
+    ("GET", "/api/traces/sessions/{session_id}"),
+    ("GET", "/api/traces/turns"),
     ("GET", "/api/traces/turns/{turn_id}"),
+    ("GET", "/api/traces/llm"),
+    ("GET", "/api/traces/retrieval"),
+    ("GET", "/api/traces/tools"),
+    ("GET", "/api/traces/safety"),
+    ("GET", "/api/eval/runs"),
+    ("POST", "/api/eval/runs"),
+    ("GET", "/api/eval/runs/{run_id}"),
+    ("GET", "/api/eval/compare"),
+    ("GET", "/api/corpus/documents"),
+    ("GET", "/api/corpus/documents/{doc_id}"),
+    ("GET", "/api/corpus/chunks/{chunk_id}"),
+    ("GET", "/api/mcp/discovery"),
+    ("POST", "/api/mcp/rediscover"),
+    ("POST", "/api/dev/reset-sandbox"),
 }
 
 
@@ -43,7 +77,7 @@ def _routes(app) -> set[tuple[str, str]]:
     }
 
 
-def test_the_route_table_is_exactly_the_endpoint_list_p8_owns():
+def test_the_route_table_is_exactly_the_endpoint_list_of_the_spec():
     app = create_app()
     assert _routes(app) == EXPECTED_ROUTES
 

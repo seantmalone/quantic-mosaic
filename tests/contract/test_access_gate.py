@@ -137,14 +137,19 @@ async def test_render_with_no_token_fails_closed_and_health_says_so(web):
 
 
 async def test_the_dashboard_prefix_is_gated_before_it_is_admin_checked(web):
-    """The dashboard pages are P9's; the prefix answers the gate from P8 (§11.8)."""
+    """The gate runs before the persona check, and both run before the page (§11, §11.8)."""
     async with web(**_gated()) as client:
         anonymous = await client.get("/dashboard")
+        employee = await client.get("/dashboard", headers={"Authorization": f"Bearer {TOKEN}"})
         as_admin = await client.get("/dashboard", headers={"Authorization": f"Bearer {TOKEN}", "X-Actor": "admin"})
 
+    # No token at all is a 401 from the gate — the persona is never even consulted.
     assert anonymous.status_code == 401
-    # Past the gate and past the persona check, the page itself does not exist until P9.
-    assert as_admin.status_code == 404
+    # Past the gate, the employee persona is refused by the admin check with §11's code.
+    assert employee.status_code == 403
+    assert employee.json() == {"code": "ADMIN_REQUIRED"}
+    # Past both, page 1 renders.
+    assert as_admin.status_code == 200
 
 
 async def test_the_per_ip_rate_limit_covers_post_chat(web):

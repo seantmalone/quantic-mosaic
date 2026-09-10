@@ -1,0 +1,64 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{# Page 9 — the live MCP catalog exactly as `tools/list` returned it, with the admin-only
+   **Re-discover now** control that opens a synthetic `maintenance` session for its span (§11.6). #}
+
+{% block content %}
+<section class="panel" id="mcp-server">
+  <h3>Server</h3>
+  <dl class="facts">
+    <div><dt>Connected</dt>
+      <dd><span class="flag flag-{{ 'yes' if view.connected else 'no' }}">{{ 'yes' if view.connected else 'no' }}</span></dd></div>
+    <div><dt>Name</dt><dd>{{ view.server.name if view.server else '—' }}</dd></div>
+    <div><dt>Version</dt><dd>{{ view.server.version if view.server else '—' }}</dd></div>
+    <div><dt>Transport</dt><dd><span class="pill">{{ view.transport }}</span></dd></div>
+    <div><dt>URL</dt><dd class="mono">{{ view.url or '—' }}</dd></div>
+    <div><dt>Protocol</dt><dd class="mono">{{ view.protocol_version or '—' }}</dd></div>
+    <div><dt>Handshake</dt><dd>{{ view.handshake_ms|ms }}</dd></div>
+    <div><dt>Discovered</dt><dd>{{ view.discovered_at|ts }}</dd></div>
+    <div><dt>Tools</dt><dd>{{ view.tools|length }}</dd></div>
+  </dl>
+  {% if view.last_error %}<p class="alert">{{ view.last_error }}</p>{% endif %}
+  <form id="rediscover-form" hx-post="/api/mcp/rediscover" hx-swap="none"
+        hx-on::after-request="window.location.reload()">
+    <button id="rediscover" class="button button-send" type="submit">Re-discover now</button>
+    <span class="note">Drops the cached handshake and runs <code>initialize</code> +
+      <code>tools/list</code> again, recording the <code>mcp_discovery</code> span in a synthetic
+      <code>maintenance</code> session.</span>
+  </form>
+</section>
+
+<section class="panel">
+  <h3>Discovered tools</h3>
+  <ul id="mcp-tools" class="tool-list">
+    {% for tool in view.tools %}
+    <li class="tool-card">
+      <h4 class="mono">{{ tool.name }}</h4>
+      <p>{{ tool.description }}</p>
+      <details><summary>input_schema</summary><pre class="mono">{{ tool.input_schema|pretty }}</pre></details>
+      {% if tool.output_schema %}
+      <details><summary>output_schema</summary><pre class="mono">{{ tool.output_schema|pretty }}</pre></details>
+      {% endif %}
+      {% if tool.annotations %}
+      <details><summary>annotations</summary><pre class="mono">{{ tool.annotations|pretty }}</pre></details>
+      {% endif %}
+    </li>
+    {% else %}
+    <li class="muted">The catalog is empty — the MCP server did not answer.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="panel">
+  <h3>Handshake history</h3>
+  {{ t.table('handshake-history', [
+      {'label': 'Span', 'key': 'span_id', 'kind': 'code'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Discovered', 'key': 'discovered_at', 'kind': 'time'},
+      {'label': 'Handshake', 'key': 'handshake_ms', 'kind': 'ms'},
+      {'label': 'Tools', 'key': 'tool_count', 'kind': 'num'},
+      {'label': 'Cached', 'key': 'cached', 'kind': 'bool'},
+      {'label': 'Catalog sha', 'key': 'catalog_sha', 'kind': 'code'}],
+      view.handshake_history, 'No discovery span recorded yet.') }}
+</section>
+{% endblock %}

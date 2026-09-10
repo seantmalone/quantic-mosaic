@@ -4,12 +4,20 @@ Runs at boot and every six hours (the schedule belongs to `web/`; this module is
 It keeps the newest `TRACE_RETENTION_SESSIONS` sessions and **never prunes**:
 
 * a session with a non-null `eval_run_id`;
-* a session whose `client_label` is `eval_judge` or `maintenance`;
+* a session whose `client_label` is `eval_judge`;
+* the newest `MAINTENANCE_SESSIONS_KEPT` `maintenance` sessions;
 * a session that owns a `mock_writes` row — a ticket created live on camera stays resolvable;
 
 and it never deletes a `confirmations` row that a `mock_writes` row references, because
 `mock_writes.confirmation_token` is `NOT NULL REFERENCES confirmations(token)`: no mock write
 may ever be left without the human decision that authorised it.
+
+**`maintenance` sessions are capped, not immortal.** `/ready`'s warm-up opens one per boot and
+`POST /api/mcp/rediscover` opens one per click, so a blanket exemption would grow the table without
+bound on a long-lived instance — the very thing §10.5 exists to prevent — while the sweep's real
+purpose there is only to keep the recent re-discovery spans page 9 shows. So they are kept by their
+own window instead of the shared one: the newest `MAINTENANCE_SESSIONS_KEPT` survive and the rest
+prune through the same cascade, subject to the `mock_writes` protection like any other session.
 
 The cascade runs children-first — `llm_messages` → `spans` → `confirmations` → `turns` →
 `sessions` — so no delete can strand a foreign key.
@@ -25,12 +33,26 @@ from hrmosaic.settings import settings as default_settings
 
 logger = logging.getLogger(__name__)
 
+#: How many `maintenance` sessions survive a sweep — one per boot plus one per re-discovery click,
+#: which is plenty of history for page 9's handshake table and bounded for an instance that stays up.
+MAINTENANCE_SESSIONS_KEPT = 20
+
 PRUNABLE_SESSIONS = """
 SELECT id FROM sessions
 WHERE eval_run_id IS NULL
   AND client_label NOT IN ('eval_judge', 'maintenance')
   AND id NOT IN (SELECT session_id FROM mock_writes WHERE session_id IS NOT NULL)
   AND id NOT IN (SELECT id FROM sessions ORDER BY created_at DESC LIMIT ?)
+ORDER BY created_at
+"""
+
+PRUNABLE_MAINTENANCE_SESSIONS = """
+SELECT id FROM sessions
+WHERE client_label = 'maintenance'
+  AND eval_run_id IS NULL
+  AND id NOT IN (SELECT session_id FROM mock_writes WHERE session_id IS NOT NULL)
+  AND id NOT IN (SELECT id FROM sessions WHERE client_label = 'maintenance'
+                 ORDER BY created_at DESC LIMIT ?)
 ORDER BY created_at
 """
 
@@ -46,12 +68,16 @@ class RetentionReport:
     confirmations_deleted: int = 0
 
 
-def sweep(*, store: Store | None = None, keep: int | None = None) -> RetentionReport:
+def sweep(
+    *, store: Store | None = None, keep: int | None = None, keep_maintenance: int | None = None
+) -> RetentionReport:
     """Prune everything outside the retention window that is not protected."""
     store = store or get_store()
     keep = keep if keep is not None else default_settings.trace_retention_sessions
+    keep_maintenance = keep_maintenance if keep_maintenance is not None else MAINTENANCE_SESSIONS_KEPT
 
     doomed = [row["id"] for row in store.execute(PRUNABLE_SESSIONS, (keep,))]
+    doomed += [row["id"] for row in store.execute(PRUNABLE_MAINTENANCE_SESSIONS, (keep_maintenance,))]
     if not doomed:
         return RetentionReport()
 

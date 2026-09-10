@@ -1,0 +1,47 @@
+{# The dashboard chrome: the eleven-page nav, the title bar and the Export JSON button §11.6
+   requires on every page. Each page extends this and fills `filters` and `content`. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} · Mosaic HR Copilot</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body class="dashboard" data-page="{{ page_number }}">
+<header class="masthead">
+  <div class="masthead-title">
+    <h1>Mosaic HR Copilot — observability</h1>
+    <p class="tagline">Every session, turn, model call, retrieval, tool call, guardrail and
+      confirmation, read back from the one trace store.</p>
+  </div>
+  <nav class="masthead-nav">
+    <a class="nav-link" href="/">Chat</a>
+    <span class="persona-chip" title="The whole dashboard is admin-only">HR admin</span>
+  </nav>
+</header>
+
+<nav id="dash-nav" class="dash-nav" aria-label="Dashboard pages">
+  {% for number, label, href in nav %}
+  {% if number in detail_only_pages and number != page_number %}
+  <span class="dash-nav-link is-detail" data-nav="{{ number }}"
+        title="Opened from Sessions">{{ number }}. {{ label }}</span>
+  {% else %}
+  <a class="dash-nav-link{% if number == page_number %} is-current{% endif %}"
+     data-nav="{{ number }}" href="{{ href }}">{{ number }}. {{ label }}</a>
+  {% endif %}
+  {% endfor %}
+</nav>
+
+<main class="dash-main">
+  <div class="dash-head">
+    <h2 class="dash-title">{{ page_title }}</h2>
+    <a id="export-json" class="button export-json" href="{{ api_url }}">Export JSON</a>
+  </div>
+  {% block filters %}{% endblock %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

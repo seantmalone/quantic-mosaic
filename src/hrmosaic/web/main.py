@@ -53,7 +53,7 @@ from hrmosaic.mcpserver.asgi import mcp_lifespan, mount_mcp
 from hrmosaic.mcpserver.server import ServerDeps, build_hr_server
 from hrmosaic.settings import Settings, secret_value
 from hrmosaic.settings import settings as default_settings
-from hrmosaic.web import api
+from hrmosaic.web import api, dashboard
 from hrmosaic.web.sse import broker
 
 logger = logging.getLogger(__name__)
@@ -268,6 +268,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     _install_error_handlers(app)
     app.include_router(api.router)
+    # P9's eleven pages and the whole `/api/*` layer (§11.6–§11.8), behind the same gate.
+    app.include_router(dashboard.router)
     app.mount("/static", StaticFiles(directory=str(PACKAGE_DIR / "static")), name="static")
     mount_mcp(app, server)
     app.add_middleware(api.AccessGateMiddleware, settings=resolved)

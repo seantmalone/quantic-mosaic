@@ -9,7 +9,7 @@ GET  /health · /ready        always-200 status · 503 until warm       open
 GET  · POST /access          the key page and its form                open
 POST /access/logout          clears both cookies                      open
 POST /session/actor          the act-as selector                      gated
-GET  /api/traces/turns/{id}  the single-turn view-model               gated · admin
+GET  /api/traces/turns/{id}  the single-turn view-model               gated · admin (P9: web/dashboard.py)
 ```
 
 **Two levels of identity, and they are not the same thing (§17).** *Authentication* is one shared
@@ -991,70 +991,6 @@ async def ready(request: Request) -> JSONResponse:
     if state.ready:
         return JSONResponse({"ready": True, "reason": None})
     return JSONResponse({"ready": False, "reason": state.ready_reason}, status_code=503)
-
-
-# -- the one `/api/*` route P8 owns ------------------------------------------------------
-
-
-@router.get("/api/traces/turns/{turn_id}")
-async def turn_view(request: Request, turn_id: str) -> JSONResponse:
-    """The single-turn view-model page 3 renders — and what the 202 fallback polls (§11.8).
-
-    P8 ships the fields the demo scripts and the fallback need; P9 grows it into page 3's full
-    view-model. It is admin-only, like every `/api/*` route, and the middleware already refused a
-    caller without the persona.
-    """
-    store = _store(request)
-    row = store.execute(
-        "SELECT id, session_id, seq, started_at, ended_at, duration_ms, user_message, final_answer, "
-        "answer_blocks_json, citations_json, outcome, stop_reason, intent, workflow, resumed_count, "
-        "llm_calls, tool_calls, retrievals, guardrail_hits FROM turns WHERE id = ?",
-        (turn_id,),
-    ).one()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "UNKNOWN_TURN", "turn_id": turn_id})
-    spans = _spans_of(store, turn_id)
-    started_at = int(row["started_at"])
-    return JSONResponse(
-        {
-            "turn_id": row["id"],
-            "session_id": row["session_id"],
-            "seq": row["seq"],
-            "started_at": started_at,
-            "ended_at": row["ended_at"],
-            "duration_ms": row["duration_ms"],
-            "user_message": row["user_message"],
-            "final_answer": row["final_answer"],
-            "answer_blocks": json.loads(row["answer_blocks_json"] or "[]"),
-            "citations": json.loads(row["citations_json"] or "[]"),
-            "outcome": row["outcome"],
-            "stop_reason": row["stop_reason"],
-            "intent": row["intent"],
-            "workflow": row["workflow"],
-            "resumed_count": row["resumed_count"],
-            "rollups": {
-                "llm_calls": row["llm_calls"],
-                "tool_calls": row["tool_calls"],
-                "retrievals": row["retrievals"],
-                "guardrail_hits": row["guardrail_hits"],
-            },
-            "spans": [
-                {
-                    "span_id": span["id"],
-                    "parent_span_id": span["parent_span_id"],
-                    "seq": span["seq"],
-                    "kind": span["kind"],
-                    "name": span["name"],
-                    "status": span["status"],
-                    "duration_ms": span["duration_ms"],
-                    "offset_ms": max(0, (int(span["started_at"]) - started_at) // 1000),
-                    "payload": span["payload"],
-                }
-                for span in spans
-            ],
-            "dashboard_url": f"/dashboard/sessions/{row['session_id']}#turn-{row['seq']}",
-        }
-    )
 
 
 # --------------------------------------------------------------------------------------

@@ -1,0 +1,142 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 11 (list + compare tab) — every imported run, the grouped ablation bars and the zero-LLM
+   chunk-size sweep, plus the admin-only bounded **Run smoke eval** control (§11.6, §11.7). #}
+
+{% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'variant', 'label': 'Variant', 'type': 'select',
+     'options': ['baseline', 'dense_only_k2', 'no_structured_tools']}],
+    filters, '/dashboard/evals') }}
+{% endblock %}
+
+{% block content %}
+<nav class="tabs" id="eval-tabs">
+  <button class="tab is-current" type="button" data-tab="runs">Runs</button>
+  <button class="tab" type="button" data-tab="compare">Compare</button>
+</nav>
+
+<section class="panel tab-panel" id="tab-runs">
+  <h3>Runs</h3>
+  {{ t.table('eval-runs-table', [
+      {'label': 'Run', 'key': 'run_id', 'kind': 'code', 'href_prefix': '/dashboard/evals/'},
+      {'label': 'Label', 'key': 'label'},
+      {'label': 'Variant', 'key': 'variant', 'kind': 'badge'},
+      {'label': 'Target', 'key': 'target', 'kind': 'badge'},
+      {'label': 'Build', 'key': 'git_sha', 'kind': 'code'},
+      {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
+      {'label': 'Items', 'key': 'n_items', 'kind': 'num'},
+      {'label': 'Judged', 'key': 'judged', 'kind': 'bool'},
+      {'label': 'Judge', 'key': 'judge_model'},
+      {'label': 'Duration (s)', 'key': 'duration_s'},
+      {'label': 'Estimated cost', 'key': 'est_cost_usd', 'kind': 'usd'}],
+      view.runs, 'No evaluation run has been imported yet.') }}
+
+  <h4>Headline metrics</h4>
+  <div class="table-scroll">
+    <table id="eval-headline-table" class="data-table">
+      <thead><tr><th scope="col">Run</th>{% for metric in ['groundedness_mean', 'citation_accuracy_mean',
+        'cit_resolve_mean', 'blocks_dropped_by_g2', 'tool_selection_accuracy', 'arg_correctness_rate',
+        'partial_match_mean', 'strict_pass_rate'] %}<th data-col="{{ metric }}" scope="col">{{ metric }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for run in view.runs %}
+        <tr>
+          <td><a href="/dashboard/evals/{{ run.run_id }}">{{ run.variant }}</a></td>
+          {% for metric in ['groundedness_mean', 'citation_accuracy_mean', 'cit_resolve_mean',
+            'blocks_dropped_by_g2', 'tool_selection_accuracy', 'arg_correctness_rate',
+            'partial_match_mean', 'strict_pass_rate'] %}
+          <td data-col="{{ metric }}">
+            {% if run.headline[metric] is not none %}{{ run.headline[metric] }}
+            {% elif metric in judged_metrics %}
+              <span class="not-judged" title="not judged on this variant">not judged</span>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+      {% else %}
+        <tr class="empty-row"><td class="muted" colspan="9">No run to summarise.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form id="smoke-eval-form" class="control-form" hx-post="/api/eval/runs" hx-swap="none"
+        hx-on::after-request="window.location.reload()">
+    <label>Variant
+      <select name="variant">
+        <option value="baseline">baseline</option>
+        <option value="dense_only_k2">dense_only_k2</option>
+        <option value="no_structured_tools">no_structured_tools</option>
+      </select>
+    </label>
+    <label>Items
+      <input type="number" name="n_items" value="3" min="1" max="{{ smoke_max_items }}">
+    </label>
+    <button id="run-smoke-eval" class="button button-send" type="submit">Run smoke eval</button>
+    <span class="note">Bounded to at most <strong>{{ smoke_max_items }}</strong> items and one
+      variant (<code>EVAL_SMOKE_MAX_ITEMS</code>); anything larger is refused, never trimmed. It
+      drives the same <code>POST /chat</code> path the offline runner drives.</span>
+  </form>
+</section>
+
+<section class="panel tab-panel" id="tab-compare" hidden>
+  <h3>Ablation — three variants over the identical items</h3>
+  <canvas id="chart-ablation" height="120" aria-label="Grouped ablation bars"></canvas>
+  <script id="chart-ablation-data" type="application/json">{{ compare.variants|tojson }}</script>
+  <p class="note">Judged metrics are computed on <code>baseline</code> only (§13.9): the two
+    ablation arms report <span class="not-judged">not judged on this variant</span> rather than a
+    zero, and the chart omits those series.</p>
+
+  <h4>Pass flips against baseline</h4>
+  {{ t.table('flips-table', [
+      {'label': 'Item', 'key': 'item_id'},
+      {'label': 'Variant', 'key': 'variant', 'kind': 'badge'},
+      {'label': 'Baseline passed', 'key': 'baseline_passed', 'kind': 'bool'},
+      {'label': 'Variant passed', 'key': 'variant_passed', 'kind': 'bool'}],
+      compare.flips, 'No item changed its pass state.') }}
+
+  <h4>Chunk size — the zero-LLM sweep</h4>
+  {{ t.table('chunk-size-table', [
+      {'label': 'Chunk chars', 'key': 'chunk_chars', 'kind': 'num'},
+      {'label': 'DocRecall mean', 'key': 'doc_recall_mean'}],
+      compare.chunk_size, 'The chunk-size sweep has not been run yet.') }}
+</section>
+
+<script>
+  (function () {
+    "use strict";
+    document.querySelectorAll("#eval-tabs .tab").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll("#eval-tabs .tab").forEach(function (other) {
+          other.classList.toggle("is-current", other === button);
+        });
+        document.querySelectorAll(".tab-panel").forEach(function (panel) {
+          panel.hidden = panel.id !== "tab-" + button.dataset.tab;
+        });
+      });
+    });
+    window.addEventListener("load", function () {
+      if (typeof Chart === "undefined") { return; }
+      var variants = JSON.parse(document.getElementById("chart-ablation-data").textContent);
+      var series = ["cit_resolve_mean", "tool_selection_accuracy", "arg_correctness_rate", "strict_pass_rate",
+                    "groundedness_mean", "citation_accuracy_mean"];
+      var palette = ["#1f6f6b", "#3b6fb0", "#7a5bb5", "#8a5a00", "#2f7d32", "#9b2c2c"];
+      var datasets = [];
+      series.forEach(function (metric, index) {
+        var values = variants.map(function (row) { return row.metrics[metric]; });
+        // A judged metric that is null on a variant is omitted entirely — never plotted as zero.
+        if (values.every(function (value) { return value === null || value === undefined; })) { return; }
+        datasets.push({ label: metric, backgroundColor: palette[index % palette.length], data: values });
+      });
+      new Chart(document.getElementById("chart-ablation"), {
+        type: "bar",
+        data: { labels: variants.map(function (row) { return row.variant; }), datasets: datasets },
+        options: { scales: { y: { beginAtZero: true } } }
+      });
+    });
+  })();
+</script>
+{% endblock %}

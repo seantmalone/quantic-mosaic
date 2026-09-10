@@ -1,0 +1,49 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 5 — every `llm_call` span, and the per-model rollup with its estimated cost (§9.8). #}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'date_from', 'label': 'From', 'type': 'date'},
+    {'name': 'date_to', 'label': 'To', 'type': 'date'},
+    {'name': 'model', 'label': 'Model', 'placeholder': 'claude-haiku-4-5'},
+    {'name': 'purpose', 'label': 'Purpose', 'type': 'select',
+     'options': ['route', 'act', 'synthesize', 'repair', 'judge', 'decompose']},
+    {'name': 'failover', 'label': 'Failover only', 'type': 'checkbox'}],
+    filters, '/dashboard/llm') }}
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h3>By model</h3>
+  {{ t.table('by-model-table', [
+      {'label': 'Model', 'key': 'model'},
+      {'label': 'Calls', 'key': 'calls', 'kind': 'num'},
+      {'label': 'Tokens in', 'key': 'tokens_in', 'kind': 'num'},
+      {'label': 'Tokens out', 'key': 'tokens_out', 'kind': 'num'},
+      {'label': 'Estimated cost', 'key': 'est_cost_usd', 'kind': 'usd'}],
+      view.by_model, 'No model call recorded yet.') }}
+  <p class="note">Cost is an estimate from the recorded token counts and the committed price table.</p>
+</section>
+
+<section class="panel">
+  <h3>Calls <span class="muted">(newest {{ row_limit }})</span></h3>
+  {{ t.table('llm-table', [
+      {'label': 'Span', 'key': 'span_id', 'kind': 'code'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Provider', 'key': 'provider'},
+      {'label': 'Model', 'key': 'model'},
+      {'label': 'Purpose', 'key': 'purpose', 'kind': 'badge'},
+      {'label': 'Tokens in', 'key': 'prompt_tokens', 'kind': 'num'},
+      {'label': 'Tokens out', 'key': 'completion_tokens', 'kind': 'num'},
+      {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms'},
+      {'label': 'TTFB', 'key': 'ttfb_ms', 'kind': 'ms'},
+      {'label': 'Finish', 'key': 'finish_reason'},
+      {'label': 'Retries', 'key': 'retry_count', 'kind': 'num'},
+      {'label': 'Cache hit', 'key': 'cache_hit', 'kind': 'bool'},
+      {'label': 'Limiter wait', 'key': 'limiter_wait_ms', 'kind': 'ms'},
+      {'label': 'Failover', 'key': 'provider_failover', 'kind': 'bool'}],
+      view.rows, 'No model call matches these filters.') }}
+</section>
+{% endblock %}

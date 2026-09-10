@@ -1,0 +1,57 @@
+{# The shared table partial (§11.6). Wide tables scroll inside their own container, never the page.
+
+   `columns` is a list of dicts: {label, key, kind, cls?, href_prefix?, href_suffix?, link_key?}.
+   `rows` are the plain dicts of the view-model — the very dict the matching `/api/*` route
+   returns — so the table and the Export JSON button can never disagree. #}
+
+{% macro cell(row, column) %}
+  {%- set value = row.get(column.key) -%}
+  {%- set kind = column.get('kind', 'text') -%}
+  {%- if column.get('href_prefix') -%}
+    {%- set target = row.get(column.get('link_key', column.key)) -%}
+    {%- if target -%}
+      <a href="{{ column.href_prefix }}{{ target }}{{ column.get('href_suffix', '') }}">{{ value|string|truncate(70) }}</a>
+    {%- else -%}<span class="muted">—</span>{%- endif -%}
+  {%- elif value is none -%}<span class="muted">—</span>
+  {%- elif kind == 'time' -%}<time datetime="{{ value }}">{{ value|ts }}</time>
+  {%- elif kind == 'ms' -%}{{ value|ms }}
+  {%- elif kind == 'num' -%}{{ value|num }}
+  {%- elif kind == 'pct' -%}{{ value|pct }}
+  {%- elif kind == 'usd' -%}{{ value|usd }}
+  {%- elif kind == 'bool' -%}
+    <span class="flag flag-{{ 'yes' if value else 'no' }}">{{ 'yes' if value else 'no' }}</span>
+  {%- elif kind == 'list' -%}
+    {%- for item in value %}<span class="pill">{{ item }}</span>{% endfor -%}
+    {%- if not value %}<span class="muted">—</span>{% endif -%}
+  {%- elif kind == 'badge' -%}<span class="pill pill-{{ value }}">{{ value }}</span>
+  {%- elif kind == 'code' -%}<code class="mono">{{ value|compact(60) }}</code>
+  {%- else -%}{{ value|string|truncate(120) }}
+  {%- endif -%}
+{% endmacro %}
+
+{% macro table(id, columns, rows, empty='Nothing recorded yet.') %}
+<div class="table-scroll">
+  <table id="{{ id }}" class="data-table">
+    <thead>
+      <tr>{% for column in columns %}<th data-col="{{ column.key }}" scope="col">{{ column.label }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>{% for column in columns %}<td data-col="{{ column.key }}"
+          class="{{ column.get('cls', '') }} cell-{{ column.get('kind', 'text') }}">{{ cell(row, column) }}</td>{% endfor %}</tr>
+      {% else %}
+      <tr class="empty-row"><td class="muted" colspan="{{ columns|length }}">{{ empty }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{% macro pager(page, total, page_size, filters_query) %}
+<nav class="pager" aria-label="Pagination">
+  {% set pages = ((total / page_size)|round(0, 'ceil')|int) or 1 %}
+  <span class="pager-state">Page {{ page }} of {{ pages }} · {{ total }} row(s)</span>
+  {% if page > 1 %}<a class="button" href="?{{ filters_query }}{% if filters_query %}&{% endif %}page={{ page - 1 }}">Previous</a>{% endif %}
+  {% if page < pages %}<a class="button" href="?{{ filters_query }}{% if filters_query %}&{% endif %}page={{ page + 1 }}">Next</a>{% endif %}
+</nav>
+{% endmacro %}

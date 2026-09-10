@@ -1,0 +1,107 @@
+{% extends "dashboard/_base.html" %}
+{# Page 3 — the demo's centrepiece: one session, every turn, every span, in `seq` order, with
+   proportional CSS duration bars and a span-kind toggle (§11.6). #}
+
+{% block content %}
+<section class="panel" id="session-summary">
+  <h3>Session</h3>
+  <dl class="facts">
+    <div><dt>Session</dt><dd class="mono">{{ view.session.session_id }}</dd></div>
+    <div><dt>Started</dt><dd>{{ view.session.created_at|ts }}</dd></div>
+    <div><dt>Persona</dt><dd>{{ view.session.employee_id or 'admin' }}</dd></div>
+    <div><dt>auth_mode</dt><dd><span class="pill">{{ view.session.auth_mode }}</span></dd></div>
+    <div><dt>actor_role</dt><dd><span class="pill">{{ view.session.actor_role }}</span></dd></div>
+    <div><dt>Client</dt><dd><span class="pill">{{ view.session.client_label }}</span></dd></div>
+    <div><dt>Turns</dt><dd>{{ view.session.n_turns }}</dd></div>
+    <div><dt>Transport</dt><dd>{{ view.session.mcp_transport }}</dd></div>
+    <div><dt>Build</dt><dd class="mono">{{ view.session.app_version[:12] }}</dd></div>
+    <div><dt>Eval run</dt><dd class="mono">{{ view.session.eval_run_id or '—' }}</dd></div>
+  </dl>
+</section>
+
+<section class="panel" id="kind-toggles">
+  <h3>Span kinds</h3>
+  <div class="toggle-row">
+    {% for kind in kinds %}
+    <label class="toggle"><input type="checkbox" class="kind-toggle" value="{{ kind }}" checked>
+      <span class="pill pill-{{ kind }}">{{ kind }}</span></label>
+    {% endfor %}
+    {% if not kinds %}<span class="muted">This session recorded no spans.</span>{% endif %}
+  </div>
+</section>
+
+<div id="span-waterfall">
+{% for turn in view.turns %}
+<article class="panel turn-card" id="turn-{{ turn.seq }}">
+  <a class="anchor" id="turn-{{ turn.turn_id }}"></a>
+  <header class="turn-head">
+    <h3>Turn {{ turn.seq }}</h3>
+    <span class="pill pill-{{ turn.outcome }}">{{ turn.outcome or 'open' }}</span>
+    {% if turn.stop_reason %}<span class="pill">stop: {{ turn.stop_reason }}</span>{% endif %}
+    {% if turn.intent %}<span class="pill">intent: {{ turn.intent }}</span>{% endif %}
+    {% if turn.workflow %}<span class="pill">workflow: {{ turn.workflow }}</span>{% endif %}
+    {% if turn.resumed_count %}<span class="pill">resumed ×{{ turn.resumed_count }}</span>{% endif %}
+    <span class="turn-duration">{{ turn.duration_ms|ms }}</span>
+  </header>
+
+  <p class="turn-question"><strong>Asked:</strong> {{ turn.user_message }}</p>
+  {% if turn.final_answer %}<p class="turn-answer">{{ turn.final_answer }}</p>{% endif %}
+
+  {% if turn.citations %}
+  <ul class="citation-chips">
+    {% for citation in turn.citations %}
+    <li><a class="citation-chip" href="{{ citation.source_url }}">{{ citation.doc_id }} · {{ citation.section }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <dl class="facts rollups">
+    <div><dt>LLM calls</dt><dd>{{ turn.rollups.llm_calls|num }}</dd></div>
+    <div><dt>Tool calls</dt><dd>{{ turn.rollups.tool_calls|num }}</dd></div>
+    <div><dt>Retrievals</dt><dd>{{ turn.rollups.retrievals|num }}</dd></div>
+    <div><dt>Guardrail hits</dt><dd>{{ turn.rollups.guardrail_hits|num }}</dd></div>
+    <div><dt>Tokens</dt><dd>{{ turn.rollups.tokens_in|num }} → {{ turn.rollups.tokens_out|num }}</dd></div>
+    <div><dt>LLM ms</dt><dd>{{ turn.rollups.llm_ms|ms }}</dd></div>
+  </dl>
+
+  <ol class="waterfall">
+    {% set span_total = turn.duration_ms or 1 %}
+    {% for span in turn.spans %}
+    <li class="span-row" data-kind="{{ span.kind }}" data-status="{{ span.status }}">
+      <span class="span-seq mono">{{ span.seq }}</span>
+      <span class="pill pill-{{ span.kind }}">{{ span.kind }}</span>
+      <span class="span-name">{{ span.name }}</span>
+      <span class="span-summary">{{ span|span_summary }}</span>
+      <span class="span-track">
+        <span class="span-bar" style="margin-left: {{ (100.0 * span.offset_ms / span_total)|clamp }}%;
+              width: {{ (100.0 * (span.duration_ms or 0) / span_total)|clamp(1) }}%;"></span>
+      </span>
+      <span class="span-duration mono">{{ span.duration_ms|ms }}</span>
+      <details class="span-payload">
+        <summary>payload</summary>
+        <pre class="mono">{{ span.payload|pretty }}</pre>
+      </details>
+    </li>
+    {% else %}
+    <li class="muted">No spans on this turn.</li>
+    {% endfor %}
+  </ol>
+</article>
+{% else %}
+<p class="muted">This session has no turns yet.</p>
+{% endfor %}
+</div>
+
+<script>
+  (function () {
+    "use strict";
+    document.querySelectorAll(".kind-toggle").forEach(function (box) {
+      box.addEventListener("change", function () {
+        document.querySelectorAll('.span-row[data-kind="' + box.value + '"]').forEach(function (row) {
+          row.hidden = !box.checked;
+        });
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,36 @@
+{# The shared filter-bar partial (§11.6). One GET form per page: the filters live in the query
+   string, so every filtered view is a URL a grader can paste, and the Export JSON button carries
+   exactly the same filters through to the `/api/*` endpoint. #}
+
+{% macro bar(fields, filters, reset_url) %}
+<form id="filter-bar" class="filter-bar" method="get" action="">
+  {% for field in fields %}
+  <label class="filter-field filter-{{ field.get('type', 'text') }}">
+    <span>{{ field.label }}</span>
+    {% if field.get('type') == 'select' %}
+      <select name="{{ field.name }}">
+        <option value="">any</option>
+        {% for option in field.options %}
+        <option value="{{ option }}" {% if filters.get(field.name) == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    {% elif field.get('type') == 'checkbox' %}
+      <input type="checkbox" name="{{ field.name }}" value="true"
+             {% if filters.get(field.name) %}checked{% endif %}>
+    {% elif field.get('type') == 'date' %}
+      <input type="date" name="{{ field.name }}" value="{{ filters.get(field.name) or '' }}">
+    {% elif field.get('type') == 'number' %}
+      <input type="number" name="{{ field.name }}" min="0" step="100"
+             value="{{ filters.get(field.name) if filters.get(field.name) is not none else '' }}">
+    {% else %}
+      <input type="search" name="{{ field.name }}" value="{{ filters.get(field.name) or '' }}"
+             placeholder="{{ field.get('placeholder', '') }}">
+    {% endif %}
+  </label>
+  {% endfor %}
+  <div class="filter-actions">
+    <button class="button button-send" type="submit">Apply</button>
+    <a class="button" href="{{ reset_url }}">Reset</a>
+  </div>
+</form>
+{% endmacro %}

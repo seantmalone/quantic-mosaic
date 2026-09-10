@@ -1,0 +1,42 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 7 — the per-tool rollup and the recent calls, with the arguments each was made with. #}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'date_from', 'label': 'From', 'type': 'date'},
+    {'name': 'date_to', 'label': 'To', 'type': 'date'},
+    {'name': 'tool', 'label': 'Tool', 'placeholder': 'check_pto_balance'},
+    {'name': 'errors_only', 'label': 'Errors only', 'type': 'checkbox'}],
+    filters, '/dashboard/tools') }}
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h3>By tool</h3>
+  {{ t.table('by-tool-table', [
+      {'label': 'Tool', 'key': 'tool_name'},
+      {'label': 'Calls', 'key': 'calls', 'kind': 'num'},
+      {'label': 'Error rate', 'key': 'error_rate', 'kind': 'pct'},
+      {'label': 'p50', 'key': 'p50_ms', 'kind': 'ms'},
+      {'label': 'p95', 'key': 'p95_ms', 'kind': 'ms'},
+      {'label': 'Last called', 'key': 'last_called_at', 'kind': 'time'}],
+      view.by_tool, 'No tool has been called yet.') }}
+</section>
+
+<section class="panel">
+  <h3>Recent calls <span class="muted">(newest {{ row_limit }})</span></h3>
+  {{ t.table('recent-tools-table', [
+      {'label': 'Span', 'key': 'span_id', 'kind': 'code'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Tool', 'key': 'tool_name'},
+      {'label': 'Arguments', 'key': 'arguments', 'kind': 'code'},
+      {'label': 'Result', 'key': 'result_preview', 'kind': 'code'},
+      {'label': 'Error', 'key': 'is_error', 'kind': 'bool'},
+      {'label': 'Error code', 'key': 'error_code'},
+      {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms'},
+      {'label': 'Actor', 'key': 'actor_employee_id'}],
+      view.recent, 'No tool call matches these filters.') }}
+</section>
+{% endblock %}

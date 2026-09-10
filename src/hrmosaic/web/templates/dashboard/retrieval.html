@@ -1,0 +1,53 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 6 — every `retrieval` span, the documents that keep surfacing, and the queries that
+   surfaced nothing (the ones G1 refuses on). #}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'date_from', 'label': 'From', 'type': 'date'},
+    {'name': 'date_to', 'label': 'To', 'type': 'date'},
+    {'name': 'strategy', 'label': 'Strategy', 'type': 'select', 'options': ['hybrid_rrf', 'dense_only']},
+    {'name': 'doc_id', 'label': 'Document', 'placeholder': 'pto-and-holidays'},
+    {'name': 'zero_evidence', 'label': 'Zero evidence only', 'type': 'checkbox'}],
+    filters, '/dashboard/retrieval') }}
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h3>Top documents</h3>
+  {{ t.table('top-documents', [
+      {'label': 'Document', 'key': 'doc_id', 'kind': 'code', 'href_prefix': '/dashboard/corpus/'},
+      {'label': 'Title', 'key': 'doc_title'},
+      {'label': 'Chunks returned', 'key': 'hits', 'kind': 'num'}],
+      view.top_documents, 'No retrieval recorded yet.') }}
+</section>
+
+<section class="panel">
+  <h3>Zero-evidence queries</h3>
+  {{ t.table('zero-evidence', [
+      {'label': 'Span', 'key': 'span_id', 'kind': 'code'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Query', 'key': 'query'},
+      {'label': 'When', 'key': 'started_at', 'kind': 'time'}],
+      view.zero_evidence_queries, 'Every retrieval returned evidence.') }}
+</section>
+
+<section class="panel">
+  <h3>Retrievals <span class="muted">(newest {{ row_limit }})</span></h3>
+  {{ t.table('retrieval-table', [
+      {'label': 'Span', 'key': 'span_id', 'kind': 'code'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Query', 'key': 'query'},
+      {'label': 'Strategy', 'key': 'strategy', 'kind': 'badge'},
+      {'label': 'k', 'key': 'k', 'kind': 'num'},
+      {'label': 'k source', 'key': 'k_source'},
+      {'label': 'Max dense', 'key': 'max_dense_score'},
+      {'label': 'Hits', 'key': 'n_hits', 'kind': 'num'},
+      {'label': 'Documents', 'key': 'docs', 'kind': 'list'},
+      {'label': 'Embed', 'key': 'embed_ms', 'kind': 'ms'},
+      {'label': 'Search', 'key': 'search_ms', 'kind': 'ms'}],
+      view.rows, 'No retrieval matches these filters.') }}
+</section>
+{% endblock %}

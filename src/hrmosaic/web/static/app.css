@@ -181,3 +181,175 @@ body {
 .access-form input { flex: 1 1 14rem; padding: 0.45rem 0.6rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; }
 .access-error { color: var(--danger); font-size: 0.9rem; }
 .access-note { font-size: 0.82rem; color: var(--ink-soft); }
+
+/* ==================================================================================== */
+/* The observability dashboard (spec §11.6). Same stylesheet, same no-build rule.        */
+/* It is demo material shown on a projector, so the type is a step larger than the chat  */
+/* page, contrast is high, and every wide table scrolls inside its own container rather  */
+/* than pushing the page sideways.                                                       */
+/* ==================================================================================== */
+
+body.dashboard { font-size: 17px; background: #eef1f4; }
+body.dashboard .masthead h1 { font-size: 1.35rem; }
+.persona-chip {
+  font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 0.2rem 0.6rem; border-radius: 999px; color: var(--accent); background: var(--accent-soft);
+}
+
+.dash-nav {
+  display: flex; flex-wrap: wrap; gap: 0.25rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--card); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5;
+}
+.dash-nav-link {
+  padding: 0.35rem 0.7rem; border-radius: 6px;
+  font-size: 0.9rem; text-decoration: none; color: var(--ink-soft);
+}
+.dash-nav-link:hover { background: var(--paper); color: var(--ink); }
+.dash-nav-link.is-current { background: var(--accent); color: #fff; font-weight: 600; }
+
+.dash-main { max-width: 96rem; margin: 1.25rem auto 4rem; padding: 0 1.25rem; }
+.dash-head { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; justify-content: space-between; }
+.dash-title { margin: 0 0 0.75rem; font-size: 1.6rem; }
+.export-json { text-decoration: none; }
+
+.panel {
+  margin: 0 0 1.25rem; padding: 1rem 1.15rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.panel h3 { margin: 0 0 0.75rem; font-size: 1.1rem; }
+.panel h4 { margin: 1.25rem 0 0.5rem; font-size: 0.98rem; color: var(--ink-soft); }
+.note { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--ink-soft); }
+.note.local-note { color: var(--warn); }
+.alert { margin: 0.5rem 0; padding: 0.5rem 0.7rem; border-radius: 6px; background: #fdeaea; color: var(--danger); }
+.muted { color: var(--ink-soft); }
+.mono { font-family: var(--mono); font-size: 0.85em; }
+
+/* -- the filter bar ------------------------------------------------------------------ */
+.filter-bar {
+  display: flex; flex-wrap: wrap; gap: 0.6rem 0.9rem; align-items: end;
+  margin: 0 0 1.25rem; padding: 0.85rem 1rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.filter-field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: var(--ink-soft); }
+.filter-field input, .filter-field select {
+  padding: 0.35rem 0.5rem; font: inherit; font-size: 0.88rem;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink);
+}
+.filter-checkbox { flex-direction: row; align-items: center; gap: 0.4rem; }
+.filter-actions { display: flex; gap: 0.5rem; margin-left: auto; }
+
+/* -- tables -------------------------------------------------------------------------- */
+.table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+.data-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+.data-table th, .data-table td {
+  padding: 0.45rem 0.65rem; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.data-table thead th {
+  position: sticky; top: 0;
+  background: var(--paper); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--ink-soft);
+}
+.data-table tbody tr:nth-child(even) { background: #fbfcfd; }
+.data-table tbody tr:hover { background: var(--accent-soft); }
+.cell-num, .cell-ms, .cell-usd, .cell-pct { text-align: right; font-variant-numeric: tabular-nums; }
+.empty-row td { padding: 1rem; text-align: center; }
+
+.pager { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.75rem; font-size: 0.88rem; }
+.pager-state { color: var(--ink-soft); margin-right: auto; }
+
+.pill {
+  display: inline-block; margin: 0 0.2rem 0.2rem 0; padding: 0.05rem 0.45rem;
+  font-size: 0.76rem; border-radius: 999px;
+  background: var(--paper); border: 1px solid var(--line); color: var(--ink-soft);
+}
+.pill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
+.pill-tool_call, .pill-answered, .pill-judged { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pill-retrieval { background: #e6eefa; color: #3b6fb0; border-color: transparent; }
+.pill-llm_call { background: #efe9f8; color: #7a5bb5; border-color: transparent; }
+.pill-guardrail, .pill-confirmation, .pill-awaiting_confirmation { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.pill-error, .pill-escalated, .pill-refused { background: #fdeaea; color: var(--danger); border-color: transparent; }
+.flag { font-weight: 600; font-size: 0.8rem; }
+.flag-yes { color: var(--accent); }
+.flag-no { color: var(--ink-soft); }
+
+.facts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 0; }
+.facts > div { display: flex; flex-direction: column; }
+.facts dt { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.facts dd { margin: 0; font-size: 0.95rem; }
+
+/* -- page 1 -------------------------------------------------------------------------- */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.kpi {
+  display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 0.8rem 0.9rem; background: var(--card);
+  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px;
+}
+.kpi-value { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); }
+
+/* -- page 3, the waterfall ----------------------------------------------------------- */
+.toggle-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.toggle { display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
+.turn-card { border-left: 4px solid var(--accent); }
+.turn-head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.turn-head h3 { margin: 0; }
+.turn-duration { margin-left: auto; font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); }
+.turn-question { margin: 0.6rem 0 0.3rem; }
+.turn-answer { margin: 0 0 0.6rem; padding: 0.6rem 0.8rem; background: var(--paper); border-radius: 8px; }
+.rollups { margin: 0.6rem 0; }
+.anchor { display: block; position: relative; top: -4rem; visibility: hidden; }
+
+.waterfall { list-style: none; margin: 0.75rem 0 0; padding: 0; }
+.span-row {
+  display: grid; align-items: center; gap: 0.5rem;
+  grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem;
+  padding: 0.3rem 0; border-top: 1px solid var(--line); font-size: 0.85rem;
+}
+.span-row[data-status="error"] .span-name { color: var(--danger); font-weight: 600; }
+.span-seq { color: var(--ink-soft); }
+.span-name { font-weight: 600; overflow-wrap: anywhere; }
+.span-summary { color: var(--ink-soft); overflow-wrap: anywhere; }
+.span-track { display: block; height: 0.6rem; background: var(--paper); border-radius: 999px; }
+.span-bar { display: block; height: 0.6rem; min-width: 2px; background: var(--accent); border-radius: 999px; }
+.span-duration { text-align: right; color: var(--ink-soft); }
+.span-payload { grid-column: 1 / -1; }
+.span-payload pre { max-height: 22rem; overflow: auto; margin: 0.4rem 0 0.6rem; padding: 0.6rem;
+  background: #f3f5f7; border-radius: 6px; font-size: 0.76rem; }
+@media (max-width: 70rem) { .span-row { grid-template-columns: 2rem 6rem 1fr; } .span-track, .span-duration { display: none; } }
+
+/* -- pages 9 and 10 ------------------------------------------------------------------- */
+.tool-list, .chunk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.tool-card, .chunk { padding: 0.7rem 0.85rem; background: var(--paper); border-radius: 8px; }
+.tool-card h4 { margin: 0 0 0.25rem; font-size: 0.95rem; color: var(--accent); }
+.tool-card p, .chunk-text { margin: 0.25rem 0; }
+.tool-card pre, .chunk-text { overflow: auto; }
+.chunk-head { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; font-size: 0.8rem; }
+.chunk-path { color: var(--ink-soft); }
+.full-text { max-height: 34rem; overflow: auto; padding: 0.8rem; background: var(--paper);
+  border-radius: 8px; font-size: 0.82rem; white-space: pre-wrap; }
+
+/* -- page 11 --------------------------------------------------------------------------- */
+.tabs { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; }
+.tab {
+  padding: 0.4rem 0.9rem; font: inherit; font-size: 0.9rem; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-soft);
+}
+.tab.is-current { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.metric-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+.metric { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.8rem;
+  background: var(--paper); border-radius: 8px; }
+.metric-value { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.metric-label { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-soft); }
+.not-judged { font-size: 0.82rem; font-style: italic; font-weight: 400; color: var(--warn); }
+.control-form { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; margin-top: 1rem;
+  padding: 0.85rem 1rem; background: var(--paper); border-radius: 8px; }
+.control-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: var(--ink-soft); }
+.control-form input, .control-form select { padding: 0.35rem 0.5rem; font: inherit; font-size: 0.88rem;
+  border: 1px solid var(--line); border-radius: 6px; }
+.button-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.trace-link { color: var(--accent); }
+canvas { max-width: 100%; margin: 0.5rem 0 1rem; }
+.dash-nav-link.is-detail { color: #9aa7b3; cursor: default; }

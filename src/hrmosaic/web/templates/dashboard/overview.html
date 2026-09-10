@@ -1,0 +1,98 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{# Page 1 — the KPI strip, the turns-per-hour sparkline (Chart.js) and the latest sessions. #}
+
+{% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
+
+{% block content %}
+<section id="kpi-strip" class="kpi-strip">
+  {% for key, label in [
+      ('sessions_24h', 'Sessions (24 h)'), ('sessions_total', 'Sessions total'), ('turns', 'Turns'),
+      ('tool_calls', 'Tool calls'), ('guardrail_blocks', 'Guardrail blocks'), ('escalations', 'Escalations'),
+      ('pending_confirmations', 'Pending confirmations'), ('llm_calls_today', 'LLM calls today')] %}
+  <div class="kpi" data-kpi="{{ key }}">
+    <span class="kpi-value">{{ view.kpis[key]|num }}</span>
+    <span class="kpi-label">{{ label }}</span>
+  </div>
+  {% endfor %}
+  <div class="kpi" data-kpi="error_rate"><span class="kpi-value">{{ view.kpis.error_rate|pct }}</span>
+    <span class="kpi-label">Error rate</span></div>
+  <div class="kpi" data-kpi="p50_ms"><span class="kpi-value">{{ view.kpis.p50_ms|ms }}</span>
+    <span class="kpi-label">Turn p50</span></div>
+  <div class="kpi" data-kpi="p95_ms"><span class="kpi-value">{{ view.kpis.p95_ms|ms }}</span>
+    <span class="kpi-label">Turn p95</span></div>
+  <div class="kpi" data-kpi="tokens_in"><span class="kpi-value">{{ view.kpis.tokens_in|num }}</span>
+    <span class="kpi-label">Tokens in</span></div>
+  <div class="kpi" data-kpi="tokens_out"><span class="kpi-value">{{ view.kpis.tokens_out|num }}</span>
+    <span class="kpi-label">Tokens out</span></div>
+  <div class="kpi" data-kpi="est_cost_usd"><span class="kpi-value">{{ view.kpis.est_cost_usd|usd }}</span>
+    <span class="kpi-label">Estimated spend (all)</span></div>
+  <div class="kpi" data-kpi="spend_today_usd"><span class="kpi-value">{{ view.kpis.spend_today_usd|usd }}</span>
+    <span class="kpi-label">Estimated spend today</span></div>
+  <div class="kpi" data-kpi="spend_7d_usd"><span class="kpi-value">{{ view.kpis.spend_7d_usd|usd }}</span>
+    <span class="kpi-label">Estimated spend, 7 days</span></div>
+  <div class="kpi" data-kpi="llm_daily_call_cap"><span class="kpi-value">{{ view.kpis.llm_daily_call_cap|num }}</span>
+    <span class="kpi-label">Daily call cap</span></div>
+</section>
+<p class="note">Every cost figure is an <strong>estimate</strong> from the per-call token counts and
+  the committed price table (§9.8) — never a billed amount.</p>
+
+<section class="panel">
+  <h3>Turns per hour — the last 24 hours</h3>
+  <canvas id="chart-turns-per-hour" height="90" aria-label="Turns per hour"></canvas>
+  <script id="chart-turns-per-hour-data" type="application/json">{{ view.turns_per_hour|tojson }}</script>
+</section>
+
+<section class="panel" id="health-block">
+  <h3>Health</h3>
+  <dl class="facts">
+    <div><dt>MCP</dt><dd><span class="flag flag-{{ 'yes' if view.health.mcp_up else 'no' }}">{{ 'up' if view.health.mcp_up else 'down' }}</span></dd></div>
+    <div><dt>Tools</dt><dd>{{ view.health.tool_count }}</dd></div>
+    <div><dt>Documents</dt><dd>{{ view.health.doc_count }}</dd></div>
+    <div><dt>Chunks</dt><dd>{{ view.health.chunk_count }}</dd></div>
+    <div><dt>Store</dt><dd>{{ view.health.store_backend }}</dd></div>
+    <div><dt>Build</dt><dd class="mono">{{ view.health.git_sha[:12] }}</dd></div>
+    <div><dt>Uptime</dt><dd>{{ view.health.uptime_ms|ms }}</dd></div>
+    <div><dt>RSS</dt><dd>{{ view.health.rss_mb }} MB</dd></div>
+    <div><dt>Data as of</dt><dd>{{ view.health.data_as_of }}</dd></div>
+  </dl>
+</section>
+
+<section class="panel">
+  <h3>Latest sessions</h3>
+  {{ t.table('latest-sessions', [
+      {'label': 'Session', 'key': 'session_id', 'kind': 'code', 'href_prefix': '/dashboard/sessions/'},
+      {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
+      {'label': 'Persona', 'key': 'employee_id'},
+      {'label': 'auth_mode', 'key': 'auth_mode', 'kind': 'badge'},
+      {'label': 'actor_role', 'key': 'actor_role', 'kind': 'badge'},
+      {'label': 'Client', 'key': 'client_label', 'kind': 'badge'},
+      {'label': 'Turns', 'key': 'n_turns', 'kind': 'num'},
+      {'label': 'Outcomes', 'key': 'outcomes', 'kind': 'list'},
+      {'label': 'Total', 'key': 'total_ms', 'kind': 'ms'},
+      {'label': 'Tokens', 'key': 'tokens', 'kind': 'num'},
+      {'label': 'Error', 'key': 'has_error', 'kind': 'bool'}],
+      view.latest_sessions, 'No sessions yet — run `make demo1`.') }}
+</section>
+
+<script>
+  (function () {
+    "use strict";
+    window.addEventListener("load", function () {
+      if (typeof Chart === "undefined") { return; }
+      var data = JSON.parse(document.getElementById("chart-turns-per-hour-data").textContent);
+      new Chart(document.getElementById("chart-turns-per-hour"), {
+        type: "line",
+        data: {
+          labels: data.map(function (b) { return b.hour.slice(11, 16); }),
+          datasets: [{ label: "turns", data: data.map(function (b) { return b.turns; }),
+                       borderColor: "#1f6f6b", backgroundColor: "rgba(31,111,107,0.15)",
+                       fill: true, tension: 0.3, pointRadius: 2 }]
+        },
+        options: { plugins: { legend: { display: false } },
+                   scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+    });
+  })();
+</script>
+{% endblock %}

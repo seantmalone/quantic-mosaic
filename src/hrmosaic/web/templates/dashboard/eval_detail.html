@@ -1,0 +1,221 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 11 (detail + metrics tab) — the whole metric block of §11.6, every scored item with a
+   one-click link to its full audit trace, and the latency / cold / RSS views of §13.5. #}
+
+{% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'category', 'label': 'Category', 'type': 'select',
+     'options': ['simple_policy', 'multi_doc', 'tool_task', 'ambiguous', 'out_of_scope',
+                 'unsafe_action', 'sensitive']},
+    {'name': 'failures_first', 'label': 'Failures first', 'type': 'checkbox'},
+    {'name': 'cold_only', 'label': 'Cold only', 'type': 'checkbox'}],
+    filters, '/dashboard/evals/' ~ view.run.run_id) }}
+{% endblock %}
+
+{% block content %}
+<nav class="tabs" id="eval-tabs">
+  <button class="tab is-current" type="button" data-tab="metrics">Metrics</button>
+  <button class="tab" type="button" data-tab="items">Items</button>
+  <button class="tab" type="button" data-tab="system">System</button>
+</nav>
+
+<section class="panel tab-panel" id="tab-metrics">
+  <h3>{{ view.run.label }}</h3>
+  <dl class="facts">
+    <div><dt>Variant</dt><dd><span class="pill">{{ view.run.variant }}</span></dd></div>
+    <div><dt>Target</dt><dd><span class="pill">{{ view.run.target }}</span></dd></div>
+    <div><dt>Items</dt><dd>{{ view.run.n_items }}</dd></div>
+    <div><dt>Judged</dt><dd>{{ 'yes' if view.metrics.judged else 'no' }}</dd></div>
+    <div><dt>Judge model</dt><dd>{{ view.run.judge_model or '—' }}</dd></div>
+    <div><dt>Duration</dt><dd>{{ view.run.duration_s or '—' }} s</dd></div>
+    <div><dt>Estimated cost</dt><dd>{{ view.metrics.est_cost_usd|usd }} <span class="muted">(estimate)</span></dd></div>
+    <div><dt>Build</dt><dd class="mono">{{ view.run.git_sha[:12] }}</dd></div>
+  </dl>
+
+  <div id="metric-block" class="metric-strip">
+    {% for metric in headline_metrics %}
+    <div class="metric" data-metric="{{ metric }}">
+      <span class="metric-value">
+        {% if view.metrics[metric] is not none %}{{ view.metrics[metric] }}
+        {% elif metric in judged_metrics %}
+          <span class="not-judged">not judged on this variant</span>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </span>
+      <span class="metric-label">{{ metric }}</span>
+      {% if metric in judged_metrics %}<span class="pill pill-judged">judged</span>{% endif %}
+      {% if metric in deterministic_metrics %}<span class="pill">deterministic</span>{% endif %}
+    </div>
+    {% endfor %}
+    <div class="metric" data-metric="clarification_accuracy">
+      <span class="metric-value">
+        {% if view.metrics.clarification_accuracy is none %}
+          <span class="not-judged">not judged on this variant</span>
+        {% else %}{{ view.metrics.clarification_accuracy }}{% endif %}
+      </span>
+      <span class="metric-label">clarification_accuracy</span>
+      <span class="pill pill-judged">judged</span>
+    </div>
+  </div>
+
+  <h4>Escalation matrix <span class="muted">({{ view.metrics.escalation_n_excluded }} excluded)</span></h4>
+  <div class="table-scroll">
+    <table id="escalation-matrix" class="data-table">
+      <thead><tr><th scope="col">gold ↓ / predicted →</th>
+        {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}<th scope="col">{{ predicted }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for gold in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
+        <tr><th scope="row">{{ gold }}</th>
+          {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
+          <td class="cell-num">{{ view.metrics.escalation_matrix.get(gold, {}).get(predicted, 0) }}</td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Behaviour and safety</h4>
+  <dl class="facts" id="behaviour-metrics">
+    <div><dt>over_refusal_rate</dt><dd>{{ view.metrics.over_refusal_rate|orna }} <span class="muted">n={{ view.metrics.over_refusal_n }}</span></dd></div>
+    <div><dt>missed_refusal_rate</dt><dd>{{ view.metrics.missed_refusal_rate|orna }} <span class="muted">n={{ view.metrics.missed_refusal_n }}</span></dd></div>
+    <div><dt>action_safety_pass_rate</dt><dd>{{ view.metrics.action_safety_pass_rate|orna }}</dd></div>
+    <div><dt>recommendation_labeled_rate</dt><dd>{{ view.metrics.recommendation_labeled_rate|orna }}</dd></div>
+    <div><dt>catalog_reopened_rate</dt><dd>{{ view.metrics.catalog_reopened_rate|orna }}</dd></div>
+    <div><dt>judge_agreement_rate</dt><dd>{{ view.metrics.judge_agreement_rate|orna }} <span class="muted">n={{ view.metrics.judge_agreement_n }}</span></dd></div>
+  </dl>
+
+  <h4>Workflow completion</h4>
+  <ul id="workflow-completion" class="pill-list">
+    {% for workflow, value in view.metrics.workflow_completion_by_workflow.items() %}
+    <li><span class="pill">{{ workflow }}</span> {{ value }}</li>
+    {% else %}<li class="muted">No item defines a workflow end state.</li>{% endfor %}
+  </ul>
+
+  <h4>Router matrix</h4>
+  <div class="table-scroll">
+    <table id="router-matrix" class="data-table">
+      <tbody>
+      {% for gold, row in view.metrics.router_matrix.items() %}
+        <tr><th scope="row">{{ gold }}</th>
+          {% for predicted, count in row.items() %}<td>{{ predicted }}: {{ count }}</td>{% endfor %}</tr>
+      {% else %}<tr class="empty-row"><td class="muted">No routing decision recorded.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h4>n_scored</h4>
+  <ul id="n-scored" class="pill-list">
+    {% for metric, count in view.metrics.n_scored.items() %}
+    <li><span class="pill">{{ metric }}</span> {{ count }}</li>
+    {% else %}<li class="muted">No denominators reported.</li>{% endfor %}
+  </ul>
+</section>
+
+<section class="panel tab-panel" id="tab-items" hidden>
+  <h3>Items</h3>
+  {{ t.table('eval-items-table', [
+      {'label': 'Item', 'key': 'item_id'},
+      {'label': 'Category', 'key': 'category', 'kind': 'badge'},
+      {'label': 'Question', 'key': 'question'},
+      {'label': 'Gold', 'key': 'gold'},
+      {'label': 'Answer', 'key': 'answer'},
+      {'label': 'Scores', 'key': 'scores', 'kind': 'code'},
+      {'label': 'Verdicts', 'key': 'verdicts', 'kind': 'code'},
+      {'label': 'Latency', 'key': 'latency_ms', 'kind': 'ms'},
+      {'label': 'Cold', 'key': 'cold', 'kind': 'bool'},
+      {'label': 'Phase', 'key': 'run_phase', 'kind': 'badge'},
+      {'label': 'Passed', 'key': 'passed', 'kind': 'bool'},
+      {'label': 'Trace', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'}],
+      view['items'], 'This run recorded no items.') }}
+  <ul id="trace-links" class="pill-list">
+    {% for item in view['items'] %}{% if item.trace_url %}
+    <li><a class="trace-link" href="{{ item.trace_url }}">{{ item.item_id }} → full audit trace</a></li>
+    {% endif %}{% endfor %}
+  </ul>
+</section>
+
+<section class="panel tab-panel" id="tab-system" hidden>
+  <h3>Latency</h3>
+  <dl class="facts" id="latency-block">
+    <div><dt>p50</dt><dd>{{ view.latency.p50|ms }}</dd></div>
+    <div><dt>p90</dt><dd>{{ view.latency.p90|ms }}</dd></div>
+    <div><dt>p95</dt><dd>{{ view.latency.p95|ms }}</dd></div>
+    <div><dt>p99</dt><dd>{{ view.latency.p99|ms }}</dd></div>
+    <div><dt>n warm</dt><dd>{{ view.latency.n_warm }}</dd></div>
+    <div><dt>n cold</dt><dd>{{ view.latency.n_cold }}</dd></div>
+    <div><dt>cold p50</dt><dd>{{ view.latency.cold_p50|ms }}</dd></div>
+    <div><dt>cold p95</dt><dd>{{ view.latency.cold_p95|ms }}</dd></div>
+  </dl>
+  {% if view.run.target == 'local' %}
+  <p class="note local-note">Local runner — <strong>not representative</strong> of the 0.1-CPU
+    deployed instance (§13.2).</p>
+  {% endif %}
+
+  <canvas id="chart-latency" height="110" aria-label="Latency histogram"></canvas>
+  <canvas id="chart-cold-warm" height="110" aria-label="Cold versus warm latency"></canvas>
+  <canvas id="chart-rss" height="110" aria-label="RSS at the end of each turn"></canvas>
+  <script id="chart-eval-data" type="application/json">{{
+      {'items': view['items'], 'latency': view['latency'], 'rss_series': view['rss_series']}|tojson }}</script>
+
+  <h4>Latency by span kind</h4>
+  <ul id="latency-by-kind" class="pill-list">
+    {% for kind, value in view.latency.by_kind.items() %}
+    <li><span class="pill">{{ kind }}</span> {{ value|ms }}</li>
+    {% else %}<li class="muted">No trace rows for this run are present in this store.</li>{% endfor %}
+  </ul>
+</section>
+
+<script>
+  (function () {
+    "use strict";
+    document.querySelectorAll("#eval-tabs .tab").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll("#eval-tabs .tab").forEach(function (other) {
+          other.classList.toggle("is-current", other === button);
+        });
+        document.querySelectorAll(".tab-panel").forEach(function (panel) {
+          panel.hidden = panel.id !== "tab-" + button.dataset.tab;
+        });
+      });
+    });
+    window.addEventListener("load", function () {
+      if (typeof Chart === "undefined") { return; }
+      var data = JSON.parse(document.getElementById("chart-eval-data").textContent);
+      var scored = data.items.filter(function (item) { return item.run_phase === "scored"; });
+      var latencies = scored.map(function (item) { return item.latency_ms || 0; });
+      var buckets = [0, 0, 0, 0, 0, 0], edges = [1000, 2000, 4000, 8000, 16000];
+      latencies.forEach(function (value) {
+        var index = edges.findIndex(function (edge) { return value < edge; });
+        buckets[index < 0 ? edges.length : index] += 1;
+      });
+      new Chart(document.getElementById("chart-latency"), {
+        type: "bar",
+        data: { labels: ["<1 s", "1–2 s", "2–4 s", "4–8 s", "8–16 s", "≥16 s"],
+                datasets: [{ label: "items", data: buckets, backgroundColor: "#1f6f6b" }] },
+        options: { plugins: { title: { display: true, text: "Latency histogram" } },
+                   scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+      new Chart(document.getElementById("chart-cold-warm"), {
+        type: "bar",
+        data: { labels: ["warm p50", "warm p95", "cold p50", "cold p95"],
+                datasets: [{ label: "ms", backgroundColor: ["#1f6f6b", "#1f6f6b", "#8a5a00", "#8a5a00"],
+                             data: [data.latency.p50, data.latency.p95,
+                                    data.latency.cold_p50, data.latency.cold_p95] }] },
+        options: { plugins: { title: { display: true, text: "Cold versus warm" } },
+                   scales: { y: { beginAtZero: true } } }
+      });
+      new Chart(document.getElementById("chart-rss"), {
+        type: "line",
+        data: { labels: data.rss_series.map(function (point) { return point.turn_id.slice(0, 8); }),
+                datasets: [{ label: "RSS MB", borderColor: "#3b6fb0", tension: 0.25,
+                             data: data.rss_series.map(function (point) { return point.rss_mb; }) }] },
+        options: { plugins: { title: { display: true, text: "RSS at the end of each turn" } } }
+      });
+    });
+  })();
+</script>
+{% endblock %}

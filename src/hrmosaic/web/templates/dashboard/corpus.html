@@ -1,0 +1,24 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 10 — the corpus browser: the 14 documents behind every citation. #}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'topic', 'label': 'Topic', 'type': 'select', 'options': view.topics},
+    {'name': 'source_format', 'label': 'Format', 'type': 'select', 'options': view.formats},
+    {'name': 'q', 'label': 'Text contains', 'placeholder': 'accrual'}],
+    filters, '/dashboard/corpus') }}
+{% endblock %}
+
+{% block content %}
+{{ t.table('corpus-documents', [
+    {'label': 'Document', 'key': 'doc_id', 'kind': 'code', 'href_prefix': '/dashboard/corpus/'},
+    {'label': 'Title', 'key': 'doc_title'},
+    {'label': 'Format', 'key': 'source_format', 'kind': 'badge'},
+    {'label': 'Topics', 'key': 'topics', 'kind': 'list'},
+    {'label': 'Sections', 'key': 'section_count', 'kind': 'num'},
+    {'label': 'Chunks', 'key': 'chunk_count', 'kind': 'num'},
+    {'label': 'Pages', 'key': 'estimated_pages'}],
+    view.documents, 'No document matches these filters (or the index is not built).') }}
+{% endblock %}

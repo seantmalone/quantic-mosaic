@@ -1,0 +1,40 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 2 — every session, filterable on the whole §11.6 filter bar including auth_mode and
+   actor_role, the two columns §11 records on every session. #}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'date_from', 'label': 'From', 'type': 'date'},
+    {'name': 'date_to', 'label': 'To', 'type': 'date'},
+    {'name': 'client_label', 'label': 'Client', 'type': 'select',
+     'options': ['web', 'api', 'eval', 'demo', 'eval_judge', 'maintenance']},
+    {'name': 'persona', 'label': 'Persona', 'placeholder': 'E1042'},
+    {'name': 'auth_mode', 'label': 'auth_mode', 'type': 'select', 'options': ['cookie', 'bearer', 'open']},
+    {'name': 'actor_role', 'label': 'actor_role', 'type': 'select', 'options': ['employee', 'admin']},
+    {'name': 'outcome', 'label': 'Outcome', 'type': 'select',
+     'options': ['answered', 'clarify', 'refused', 'escalated', 'awaiting_confirmation', 'partial',
+                 'error', 'configuration_required', 'maintenance']},
+    {'name': 'has_error', 'label': 'Errors only', 'type': 'checkbox'},
+    {'name': 'min_duration_ms', 'label': 'Min duration (ms)', 'type': 'number'},
+    {'name': 'q', 'label': 'Message contains', 'placeholder': 'Berlin'}],
+    filters, '/dashboard/sessions') }}
+{% endblock %}
+
+{% block content %}
+{{ t.table('sessions-table', [
+    {'label': 'Session', 'key': 'session_id', 'kind': 'code', 'href_prefix': '/dashboard/sessions/'},
+    {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
+    {'label': 'Persona', 'key': 'employee_id'},
+    {'label': 'auth_mode', 'key': 'auth_mode', 'kind': 'badge'},
+    {'label': 'actor_role', 'key': 'actor_role', 'kind': 'badge'},
+    {'label': 'Client', 'key': 'client_label', 'kind': 'badge'},
+    {'label': 'Turns', 'key': 'n_turns', 'kind': 'num'},
+    {'label': 'Outcomes', 'key': 'outcomes', 'kind': 'list'},
+    {'label': 'Total', 'key': 'total_ms', 'kind': 'ms'},
+    {'label': 'Tokens', 'key': 'tokens', 'kind': 'num'},
+    {'label': 'Error', 'key': 'has_error', 'kind': 'bool'}],
+    view.rows, 'No session matches these filters.') }}
+{{ t.pager(view.page, view.total, page_size, filter_query) }}
+{% endblock %}

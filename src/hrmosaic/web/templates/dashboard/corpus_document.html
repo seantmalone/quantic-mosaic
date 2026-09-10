@@ -1,0 +1,41 @@
+{% extends "dashboard/_base.html" %}
+{# Page 10 detail — one document, its full text, and every chunk a citation can point at. #}
+
+{% block content %}
+<section class="panel" id="corpus-document">
+  <h3>{{ view.document.doc_title }}</h3>
+  <dl class="facts">
+    <div><dt>Id</dt><dd class="mono">{{ view.document.doc_id }}</dd></div>
+    <div><dt>Format</dt><dd><span class="pill">{{ view.document.source_format }}</span></dd></div>
+    <div><dt>Topics</dt><dd>{% for topic in view.document.topics %}<span class="pill">{{ topic }}</span>{% endfor %}</dd></div>
+    <div><dt>Sections</dt><dd>{{ view.document.section_count }}</dd></div>
+    <div><dt>Chunks</dt><dd>{{ view.document.chunk_count }}</dd></div>
+    <div><dt>Pages</dt><dd>{{ view.document.estimated_pages }}</dd></div>
+    <div><dt>Effective</dt><dd>{{ view.document.effective_date }}</dd></div>
+    <div><dt>Version</dt><dd>{{ view.document.version }}</dd></div>
+  </dl>
+</section>
+
+<section class="panel">
+  <h3>Chunks</h3>
+  <ol id="corpus-chunks" class="chunk-list">
+    {% for chunk in view.chunks %}
+    <li class="chunk" id="{{ chunk.chunk_id }}">
+      <header class="chunk-head">
+        <code class="mono">{{ chunk.chunk_id }}</code>
+        <span class="chunk-path">{{ chunk.heading_path }}</span>
+        <span class="muted">{{ chunk.char_start }}–{{ chunk.char_end }} · {{ chunk.n_chars }} chars</span>
+      </header>
+      <p class="chunk-text">{{ chunk.text }}</p>
+    </li>
+    {% else %}
+    <li class="muted">This document has no chunks.</li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="panel">
+  <h3>Full text</h3>
+  <pre id="corpus-full-text" class="full-text">{{ view.document.full_text }}</pre>
+</section>
+{% endblock %}

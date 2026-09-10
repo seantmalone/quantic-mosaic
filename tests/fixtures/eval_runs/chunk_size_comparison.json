@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-09-09T00:00:00Z",
+  "note": "Hand-authored at P9; scripts/chunk_size_sweep.py replaces it at P10 (\u00a713.9).",
+  "variants": [
+    {
+      "chunk_chars": 700,
+      "doc_recall_mean": 0.71
+    },
+    {
+      "chunk_chars": 1100,
+      "doc_recall_mean": 0.83
+    },
+    {
+      "chunk_chars": 1600,
+      "doc_recall_mean": 0.78
+    }
+  ]
+}

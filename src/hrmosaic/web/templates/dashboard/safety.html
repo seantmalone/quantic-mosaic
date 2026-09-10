@@ -1,0 +1,107 @@
+{% extends "dashboard/_base.html" %}
+{% import "dashboard/_table.html" as t %}
+{% import "dashboard/_filters.html" as f %}
+{# Page 8 — the six guardrails, the injection quarantines, every human confirmation decision and
+   the mock-write sandbox, with the admin-only **Reset sandbox** control (§11.6). #}
+
+{% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
+
+{% block filters %}
+{{ f.bar([
+    {'name': 'date_from', 'label': 'From', 'type': 'date'},
+    {'name': 'date_to', 'label': 'To', 'type': 'date'},
+    {'name': 'rule', 'label': 'Rule', 'type': 'select', 'options': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6']},
+    {'name': 'verdict', 'label': 'Verdict', 'type': 'select',
+     'options': ['allow', 'refuse', 'redirect', 'warn', 'repair', 'strip', 'escalate']},
+    {'name': 'user_response', 'label': 'Confirmation', 'type': 'select',
+     'options': ['confirmed', 'declined']}],
+    filters, '/dashboard/safety') }}
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h3>Verdicts by rule</h3>
+  <canvas id="chart-verdicts" height="110" aria-label="Guardrail verdict counts by rule"></canvas>
+  <script id="chart-verdicts-data" type="application/json">{{ view.by_rule|tojson }}</script>
+  {{ t.table('by-rule-table', [
+      {'label': 'Rule', 'key': 'rule_id', 'kind': 'badge'},
+      {'label': 'Name', 'key': 'rule_name'},
+      {'label': 'Verdict', 'key': 'verdict', 'kind': 'badge'},
+      {'label': 'Count', 'key': 'count', 'kind': 'num'}],
+      view.by_rule, 'No guardrail has run yet.') }}
+</section>
+
+<section class="panel">
+  <h3>Prompt-injection quarantines (G4)</h3>
+  {{ t.table('injection-hits', [
+      {'label': 'Span', 'key': 'span_id', 'kind': 'code'},
+      {'label': 'Chunk', 'key': 'chunk_id', 'kind': 'code'},
+      {'label': 'Document', 'key': 'doc_id', 'kind': 'code', 'href_prefix': '/dashboard/corpus/'},
+      {'label': 'Matched pattern', 'key': 'matched_pattern', 'kind': 'code'}],
+      view.injection_hits, 'No retrieved chunk has been quarantined.') }}
+</section>
+
+<section class="panel">
+  <h3>Confirmations</h3>
+  {{ t.table('confirmations-table', [
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Action', 'key': 'action'},
+      {'label': 'What the human saw', 'key': 'human_summary'},
+      {'label': 'Decision', 'key': 'user_response', 'kind': 'badge'},
+      {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
+      {'label': 'Used', 'key': 'used_at', 'kind': 'time'}],
+      view.confirmations, 'No write has been proposed yet.') }}
+</section>
+
+<section class="panel" id="sandbox">
+  <h3>Mock-write sandbox</h3>
+  <form id="reset-sandbox-form" hx-post="/api/dev/reset-sandbox" hx-swap="none"
+        hx-on::after-request="window.location.reload()">
+    <button id="reset-sandbox" class="button button-danger" type="submit">Reset sandbox</button>
+    <span class="note">Clears every <code>mock_writes</code> row. Admin only — reaching this page
+      already proved the persona.</span>
+  </form>
+  {{ t.table('mock-writes-table', [
+      {'label': 'Id', 'key': 'id', 'kind': 'code'},
+      {'label': 'Kind', 'key': 'kind', 'kind': 'badge'},
+      {'label': 'Employee', 'key': 'employee_id'},
+      {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Payload', 'key': 'payload', 'kind': 'code'}],
+      view.mock_writes, 'The sandbox is empty.') }}
+</section>
+
+<script>
+  (function () {
+    "use strict";
+    window.addEventListener("load", function () {
+      if (typeof Chart === "undefined") { return; }
+      var rows = JSON.parse(document.getElementById("chart-verdicts-data").textContent);
+      var rules = [], verdicts = [];
+      rows.forEach(function (row) {
+        if (rules.indexOf(row.rule_id) < 0) { rules.push(row.rule_id); }
+        if (verdicts.indexOf(row.verdict) < 0) { verdicts.push(row.verdict); }
+      });
+      rules.sort();
+      var palette = ["#1f6f6b", "#8a5a00", "#9b2c2c", "#3b6fb0", "#7a5bb5", "#4a5b6b", "#2f7d32"];
+      new Chart(document.getElementById("chart-verdicts"), {
+        type: "bar",
+        data: {
+          labels: rules,
+          datasets: verdicts.map(function (verdict, index) {
+            return {
+              label: verdict,
+              backgroundColor: palette[index % palette.length],
+              data: rules.map(function (rule) {
+                var hit = rows.filter(function (row) { return row.rule_id === rule && row.verdict === verdict; })[0];
+                return hit ? hit.count : 0;
+              })
+            };
+          })
+        },
+        options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+    });
+  })();
+</script>
+{% endblock %}
