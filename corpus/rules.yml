@@ -18,14 +18,17 @@
 #   scenario      title · topics · escalate_to · requirements · approvals_required · next_steps
 #
 # ---------------------------------------------------------------------------------------------------
-# HOW A REQUIREMENT IS EVALUATED — decided at P5, which owns the rule engine.
+# HOW A REQUIREMENT IS EVALUATED — spec §8.4 is authoritative; this header restates it for a reader of
+# the data.
 #
-# §8.4 fixes the tool's input and output schemas and says the rules come from this file. It does not say
-# how `met`, `unmet`, `verdict` (`compliant` | `conditional` | `non_compliant` | `insufficient_evidence`),
-# the applicable subset of `approvals_required` or the applicable subset of `next_steps` are derived.
-# P2 authored a candidate grammar, removed it at its own gate rather than pre-committing a user-facing
-# contract, and preserved it as a non-binding proposal (P2 report §9.3). **P5 adopted it**, with the two
-# subject corrections P2 flagged (`computed.tenure_days` and `pto_balance.remaining_days`).
+# §8.4 fixes the tool's input and output schemas and says the rules come from this file. How `met`,
+# `unmet`, `verdict` (`compliant` | `conditional` | `non_compliant` | `insufficient_evidence`), the
+# applicable subset of `approvals_required` and the applicable subset of `next_steps` are derived is
+# stated there too, under "How a requirement is evaluated" and "How the verdict is derived". P2 authored
+# the candidate grammar, removed it at its own gate rather than pre-committing a user-facing contract,
+# and preserved it as a non-binding proposal (P2 report §9.3); P5 adopted it with the two subject
+# corrections P2 flagged (`computed.tenure_days` and `pto_balance.remaining_days`), and wrote it into
+# §8.4 at its third fix round.
 #
 # Requirement grammar — a small, closed vocabulary; `mcpserver/rules.py` implements exactly these and
 # raises on anything else, and `tests/unit/test_rules_engine.py` asserts the file stays inside it.
@@ -80,14 +83,14 @@
 #   * a requirement whose subject is **absent** is `met: false` with a `"Not stated: …"` reason and
 #     lands in `unmet[]`, but is not evaluable, so it too cannot make a verdict `non_compliant`.
 #
-# STATUS: adopted at P5 and awaiting controller ratification — spec §8.4 fixes this tool's input and
-# output schemas but not its verdict semantics, and these six rules are a user-facing MCP contract
-# that P7's guardrails and P10's gold answers will be written against. See the fix round in
-# `.superpowers/sdd/2026-09-08-implementation-roadmap/P5-report.md` §9 and §10. If ratified they
-# belong in spec §8.4, not only here.
+# WHERE THIS CONTRACT LIVES: spec §8.4, not this comment. These six rules are a user-facing MCP contract
+# that P7's guardrails and P10's gold answers are written against, so they are published in the spec;
+# `tests/contract/test_rules_grammar_matches_spec.py` fails if §8.4 and `mcpserver/rules.py` ever drift
+# apart. Provenance and the decision record, including what to revert if the controller rejects the
+# grammar: `.superpowers/sdd/2026-09-08-implementation-roadmap/P5-report.md` §9, §10 and §11.
 #
-# Each of the six is pinned by a named test, so ratification is a decision about checked behaviour
-# rather than about this comment (`tests/unit/test_rules_engine.py`):
+# Each of the six is also pinned by a named behaviour test, so the contract is checked behaviour rather
+# than prose (`tests/unit/test_rules_engine.py`):
 #
 #   insufficient_evidence    test_no_parameters_at_all_is_insufficient_evidence
 #   non_compliant            test_a_blocking_requirement_makes_the_verdict_non_compliant

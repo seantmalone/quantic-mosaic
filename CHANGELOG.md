@@ -265,3 +265,14 @@ rather than assumed.
 - **Suite after P5: 771 tests, `make lint` clean, `pytest -q` pristine** (from 590 at P6). The nine
   tool schemas are generated from a live `tools/list` and committed under `mcp/tools/`, and
   `python scripts/gen_tool_schemas.py && git diff --exit-code mcp/tools/` is clean.
+- **`check_policy_compliance`'s requirement grammar and verdict ladder are now in spec §8.4.** §8.4
+  fixed the tool's input and output schemas and the four verdict *names*, but not how a verdict is
+  derived; the grammar P2 authored and set aside, which P5 adopted, lived only in `corpus/rules.yml`'s
+  header and the P5 report. Two new §8.4 paragraphs — "How a requirement is evaluated" and "How the
+  verdict is derived" — publish the closed vocabularies (`check.subject`, `check.operator`,
+  `check.compare_to`, `applies_when`), the two rules that stop an unmet requirement proving a violation
+  (`manual` is never blocking; an absent subject is not evaluable) and the precedence
+  `insufficient_evidence → non_compliant → conditional → compliant`. `rules.yml`'s header now restates
+  §8.4 instead of defining the contract, and `tests/contract/test_rules_grammar_matches_spec.py` fails
+  if the spec and `mcpserver/rules.py`'s own vocabularies ever drift apart — in either direction. No
+  runtime behaviour changed; `src/` is byte-identical.

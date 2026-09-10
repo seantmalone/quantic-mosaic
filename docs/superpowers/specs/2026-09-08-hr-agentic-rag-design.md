@@ -871,6 +871,26 @@ Rules come from `corpus/rules.yml`, hand-authored at P2, each requirement naming
 **pure function** — the most heavily unit-testable component in the build. For `pto_request` the engine computes notice days itself, from `start_date`
 against the mock-data `as_of` snapshot, and ignores any caller-supplied `notice_business_days`, so the verdict cannot swing on a model's guess.
 
+**How a requirement is evaluated.** Each requirement carries a `check{subject, operator, compare_to}`, an optional `applies_when` guard and an optional
+`blocking` flag; `approvals_required[]` and `next_steps[]` entries carry the same guard. The vocabularies are closed and `mcpserver/rules.py` raises on
+anything outside them rather than ignoring a rule quietly. `check.subject` is `parameters.<name>`, `employee.<field>`, `pto_balance.remaining_days`
+(read from the `check_pto_balance` result, never from the employee profile), or one of the engine-derived `computed.tenure_days`,
+`computed.notice_business_days`, `computed.notice_calendar_days`, `computed.overlaps_blackout` and `computed.claim_age_days`. `check.operator` is
+`lte`, `lt`, `gte`, `gt`, `eq`, `in`, `date_lte`, `date_gte`, or one of the two unverifiable operators `manual` and `informational`.
+`check.compare_to` is `fact` (the default: the `facts.yml` value this requirement's own `fact_key` names), `parameters.<name>` or `literal:<value>`.
+`applies_when` is `always` (the default), `unmet:<id>`, `met:<id>`, `parameter_eq:<name>:<value>`, `parameter_gte:<name>:<fact_key>` or
+`employee_eq:<field>:<value>`; a requirement whose guard is false is omitted from `requirements[]` entirely, and the same guard selects which
+`approvals_required` and `next_steps` entries the result carries.
+
+**How the verdict is derived.** Two kinds of unmet requirement cannot prove a violation. A `manual` check is `met:false` with a confirm-before-you-act
+reason and is **never** blocking, whatever its own `blocking` says — but it is still *evaluable*, as an `informational` check is, so neither needs a
+supplied subject to keep a scenario off `insufficient_evidence`. A requirement whose subject or comparison value is absent is `met:false` with a
+`"Not stated: …"` reason and is **not** evaluable, so merely omitting a parameter can never be reported as a violation. Both land in `unmet[]`. The
+verdict is then the first rung that holds: `insufficient_evidence` (no applicable requirement was evaluable at all) → `non_compliant` (an evaluable
+`blocking` requirement is unmet) → `conditional` (anything applicable is unmet) → `compliant`. This grammar and these rules were adopted at P5 from
+the candidate P2 authored and set aside (P2 report §9.3); `tests/unit/test_rules_engine.py` pins each rule and
+`tests/contract/test_rules_grammar_matches_spec.py` pins this section against `mcpserver/rules.py`'s own closed vocabularies, so the two cannot drift.
+
 **How a rule's `(doc_id, heading_path)` becomes a real `chunk_id`.** `rules.yml` cannot contain a chunk id, because ids are content hashes computed at
 ingest. `mcpserver/rules.py` resolves the pair at call time via `core.corpusread.list_chunks(doc_id)` filtered on the exact `" > "`-joined heading
 path, taking the lowest `char_start` when a leaf was windowed. A stale id would be silently stripped by G2, so `tests/unit/test_rules_engine.py`

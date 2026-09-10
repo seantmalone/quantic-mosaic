@@ -264,6 +264,53 @@ async def test_no_parameters_at_all_is_insufficient_evidence():
     assert body["verdict"] == "insufficient_evidence"
 
 
+async def test_manual_and_informational_need_no_parameter_to_be_evaluable():
+    """§8.4: neither needs a supplied subject to keep a scenario off `insufficient_evidence`.
+
+    The same empty `parameters` that leaves `expense_claim` with nothing evaluable (the test above)
+    still produces a real verdict for `conduct_escalation`, whose four requirements are one `manual`
+    and three `informational`. That is the whole difference between "unmet" and "not evaluable", and
+    it is the rung `conduct.not_automated` — `blocking: true` in the data — would otherwise reach.
+    """
+    body = await compliance("conduct_escalation", {})
+    assert [item["id"] for item in body["requirements"]] == [
+        "conduct.not_automated",
+        "conduct.acknowledgement",
+        "conduct.severity_response",
+        "conduct.retaliation_protection",
+    ]
+    assert body["unmet"] == ["conduct.not_automated"]
+    assert body["verdict"] == "conditional"
+
+
+def test_a_manual_requirement_alone_keeps_a_scenario_off_insufficient_evidence():
+    """The isolating case for §8.4's "as an `informational` check is": `manual` on its own.
+
+    No scenario in `corpus/rules.yml` is manual-only, so the rule set is narrowed to the one
+    `manual` requirement — `blocking: true` in the data — and run with no parameters at all. If
+    `manual` were treated as not evaluable, this would answer `insufficient_evidence`; if the
+    `blocking` flag were honoured for it, `non_compliant`.
+    """
+    spec = dict(RULE_SET.scenarios["conduct_escalation"])
+    spec["requirements"] = [item for item in spec["requirements"] if item["id"] == "conduct.not_automated"]
+    assert spec["requirements"][0]["blocking"] is True
+    assert spec["requirements"][0]["check"]["operator"] == "manual"
+
+    body = rules.evaluate(
+        "conduct_escalation",
+        employee={},
+        balance={},
+        parameters={},
+        holidays=(),
+        as_of="2026-09-01",
+        rule_set=rules.RuleSet(
+            rules_version=RULE_SET.rules_version, scenarios={"conduct_escalation": spec}, facts=RULE_SET.facts
+        ),
+    )
+    assert body["unmet"] == ["conduct.not_automated"]
+    assert body["verdict"] == "conditional"
+
+
 async def test_an_unknown_employee_is_a_successful_not_found():
     body = await compliance("pto_request", FIXTURES["pto_request"], employee_id="E1999")
     assert body["code"] == "EMPLOYEE_NOT_FOUND"
