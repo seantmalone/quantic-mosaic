@@ -11,6 +11,13 @@ under `_trace`. Three things about it are load-bearing:
   use, so an anonymous caller of the public URL cannot ask for `k=10000` on a 0.1-CPU instance.
 * **`strategy` is validated here**, because `retrieve()` treats anything that is not `dense_only` as
   hybrid: a typo would silently retrieve hybrid and record the typo in the audit trail.
+* **A hit carries the whole chunk** (W2-C). `snippet` is a 320-character *display* subset and 116 of
+  116 deployed retrievals were longer than it (median 974), so 10 act steps across 7 turns existed
+  only to call `get_policy_section` for text the search had already read. `Hit.text` comes off the
+  same `retrieve()` call, clamped by `CHUNK_MAX_CHARS`, so the server does zero extra work. The
+  §7.4 injection shield is what decides whether it may be *sent on*: the agent's `call_tool` scans
+  every hit before the `tool_call` span is written, and a chunk whose text gives the assistant
+  orders is handed to the loop as its snippet alone with `quarantined: true`.
 * **`topic` is a SOFT filter** (P10 fix round; §8.4). It used to restrict the candidate pool
   outright, which made the model's own topic guess the ceiling on what the answer could cite: a
   `pto` search can never see `manager-approval-matrix`, which is tagged `approvals`, however
@@ -82,6 +89,13 @@ TOPIC_DESCRIPTION = (
 #: Why an unfiltered search was run underneath the topic-filtered one. `null` means it was not.
 BackfillReason = Literal["fewer_than_k", "single_document"]
 
+#: The most chunk text one hit may carry. 1,500 sits above the longest committed chunk (1,384), so
+#: it truncates nothing today and is a bound on a future corpus rather than a live edit to policy
+#: text: a hit's `text` is re-billed as input on **every** subsequent act step, so an unbounded
+#: chunk would be an unbounded per-step cost. At the schema's ceiling of `k = 10` it caps one
+#: search at 15,000 characters.
+CHUNK_MAX_CHARS = 1500
+
 #: How many hits the unfiltered backfill search asks for. Twice `k` because the filtered hits are
 #: deduped out of it first: the same query without a topic returns many of the same chunks, and a
 #: pool of exactly `k` could dedupe down to nothing to backfill with.
@@ -89,7 +103,13 @@ BACKFILL_POOL_FACTOR = 2
 
 
 class SearchHit(BaseModel):
-    """One ranked chunk, carrying every field a citation needs (R2.5)."""
+    """One ranked chunk, carrying every field a citation needs (R2.5) and the chunk itself.
+
+    `text` is the stored chunk, clamped to `CHUNK_MAX_CHARS`; `snippet` stays the 320-character
+    display subset a citation shows a reader. It is `null` — and `quarantined` is `true` — for a
+    chunk the §7.4 injection shield has quarantined, because a chunk whose text gives the assistant
+    orders must not be readable in the model's own context.
+    """
 
     chunk_id: str
     doc_id: str
@@ -100,6 +120,7 @@ class SearchHit(BaseModel):
     dense_score: float
     bm25_rank: int | None = None
     rrf_score: float
+    text: str | None = None
     snippet: str
     char_start: int
     char_end: int
@@ -142,10 +163,12 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
         name="search_policy_documents",
         description=(
             "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with "
-            "the ids and heading paths a citation needs. Use it to find the passage that answers a "
-            "policy question; use get_policy_section to read one in full. topic prioritises one "
-            "corpus topic; when the topic alone yields fewer than k hits or a single document, "
-            "results are backfilled from the whole corpus."
+            "the ids and heading paths a citation needs, each carrying the chunk's full text as "
+            "well as a 320-character snippet, so a hit can be quoted without a second call; text "
+            "is null on a hit marked quarantined, which carries its snippet only. Use "
+            "get_policy_section for the sections AROUND a hit (include_neighbors) or for a section "
+            "no search returned. topic prioritises one corpus topic; when the topic alone yields "
+            "fewer than k hits or a single document, results are backfilled from the whole corpus."
         ),
         annotations=ToolAnnotations(**READ_ONLY),
     )
@@ -292,6 +315,7 @@ def _search(
             dense_score=round(hit.dense_score, 4),
             bm25_rank=hit.bm25_rank,
             rrf_score=round(hit.rrf_score, 6),
+            text=hit.text[:CHUNK_MAX_CHARS],
             snippet=hit.snippet,
             char_start=hit.char_start,
             char_end=hit.char_end,
@@ -363,6 +387,7 @@ def _search(
 
 __all__ = [
     "BACKFILL_POOL_FACTOR",
+    "CHUNK_MAX_CHARS",
     "TOPIC_DESCRIPTION",
     "BackfillReason",
     "SearchHit",

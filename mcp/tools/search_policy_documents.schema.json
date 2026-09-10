@@ -1,6 +1,6 @@
 {
   "name": "search_policy_documents",
-  "description": "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with the ids and heading paths a citation needs. Use it to find the passage that answers a policy question; use get_policy_section to read one in full. topic prioritises one corpus topic; when the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus.",
+  "description": "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with the ids and heading paths a citation needs, each carrying the chunk's full text as well as a 320-character snippet, so a hit can be quoted without a second call; text is null on a hit marked quarantined, which carries its snippet only. Use get_policy_section for the sections AROUND a hit (include_neighbors) or for a section no search returned. topic prioritises one corpus topic; when the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus.",
   "input_schema": {
     "properties": {
       "query": {
@@ -83,7 +83,7 @@
   "output_schema": {
     "$defs": {
       "SearchHit": {
-        "description": "One ranked chunk, carrying every field a citation needs (R2.5).",
+        "description": "One ranked chunk, carrying every field a citation needs (R2.5) and the chunk itself.\n\n`text` is the stored chunk, clamped to `CHUNK_MAX_CHARS`; `snippet` stays the 320-character\ndisplay subset a citation shows a reader. It is `null` — and `quarantined` is `true` — for a\nchunk the §7.4 injection shield has quarantined, because a chunk whose text gives the assistant\norders must not be readable in the model's own context.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -128,6 +128,18 @@
           "rrf_score": {
             "title": "Rrf Score",
             "type": "number"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text"
           },
           "snippet": {
             "title": "Snippet",

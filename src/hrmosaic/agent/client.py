@@ -47,6 +47,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
+from hrmosaic.agent.guardrails import g4
 from hrmosaic.core.db import now_micros
 from hrmosaic.core.llm.base import ToolSchema
 from hrmosaic.core.models import (
@@ -469,6 +470,11 @@ class McpClient:
 
         body = read_body(result)
         envelope = body.pop(TRACE_KEY, None) or {}
+        if name == g4.SEARCH_TOOL:
+            # §7.4's injection shield, before the span and before the conversation: a search hit
+            # carries the whole chunk now, and a chunk that gives the assistant orders must not be
+            # readable anywhere downstream of here (W2-C).
+            g4.quarantine_search_hits(body)
         actor = envelope.get("actor") or {}
         is_error = bool(getattr(result, "is_error", False))
         text = json.dumps(body, ensure_ascii=False)

@@ -1020,12 +1020,16 @@ class Runner:
 # --------------------------------------------------------------------------------------
 
 
-#: Which §8.4 tool's result envelope counts as which class of evidence (§13.3, ratified 2026-09-10).
-#: `search_policy_documents` and `list_policy_documents` are deliberately absent: the first's
-#: envelope is a list of 320-character display snippets of chunks this function already returns in
-#: full, so including it would show the judge a worse copy of what it already has, and the second
-#: returns titles and grounds nothing (`act.j2` rule 6 says so on the wire). The two write tools
-#: propose an action; they assert no fact.
+#: Which §8.4 tool's result envelope counts as which class of evidence (§13.3, ratified 2026-09-10,
+#: restated 2026-09-10 for W2-C). `search_policy_documents` and `list_policy_documents` are
+#: deliberately absent. The second returns titles and grounds nothing (`act.j2` rule 6 says so on
+#: the wire). The first used to be absent because its envelope was a list of 320-character display
+#: snippets of chunks this function already returns in full — a worse copy of what the judge has.
+#: A hit now carries the whole chunk, so that reason had to be re-derived rather than assumed:
+#: `agent/orchestrator.py::_envelope_text` strips `text` back out of the search envelope before the
+#: synthesis prompt renders it, so the banner-marked `<document>` block stays the single copy of a
+#: passage and what the envelope still contributes is metadata about chunks the `retrieval` class
+#: already carries verbatim. The two write tools propose an action; they assert no fact.
 ENVELOPE_KINDS: dict[str, str] = {
     "get_policy_section": "section",
     "check_policy_compliance": "compliance",

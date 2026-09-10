@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from hrmosaic.agent.guardrails import emit
 
@@ -64,6 +64,34 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("chat_template_frame", re.compile(r"<\|im_start\|>")),
     ("long_base64_run", re.compile(r"[A-Za-z0-9+/]{201,}={0,2}")),
 )
+
+
+#: The one §8.4 tool whose result carries chunk text (W2-C).
+SEARCH_TOOL = "search_policy_documents"
+
+
+def quarantine_search_hits(body: dict[str, Any]) -> dict[str, Any]:
+    """Strip the chunk text of any search hit that gives the assistant orders, in place (W2-C).
+
+    A `search_policy_documents` hit carries the whole stored chunk so the loop need not spend an act
+    step re-reading it. The corpus's one quarantinable chunk is 630 characters and its imperative
+    begins at character 355 — past `SNIPPET_CHARS` — so before W2-C `scan()` over the snippet never
+    saw it and it never reached the act conversation. It would now, one `json.dumps` later.
+
+    The shield runs **here**, in the agent, rather than in the tool: §4.2's dependencies run
+    downward and `mcpserver/` may not import a guardrail, and a client that trusted the server to
+    scan its own output would have no shield at all against any other MCP server it is pointed at.
+    `agent/client.py` calls it on the way in, before the `tool_call` span is written and long before
+    the result is appended to the conversation, so neither the record nor the model ever holds the
+    text. What survives is the 320-character snippet and `quarantined: true` — the same flag `_mark`
+    puts on the lifted `retrieval` span, on the copy the model reads.
+    """
+    for hit in body.get("hits") or []:
+        text = hit.get("text")
+        if text and scan(text) is not None:
+            hit["text"] = None
+            hit["quarantined"] = True
+    return body
 
 
 @dataclass(frozen=True)
@@ -134,4 +162,4 @@ def check(
     return matches
 
 
-__all__ = ["PATTERNS", "Match", "Scannable", "check", "scan", "scan_all"]
+__all__ = ["PATTERNS", "SEARCH_TOOL", "Match", "Scannable", "check", "quarantine_search_hits", "scan", "scan_all"]

@@ -2035,8 +2035,12 @@ on and a reader of a `judge` span can tell a policy passage from a record lookup
 **A claim is supported if any item of any class supports it.** Restricting `E_i` to `retrieval` scored a correct fact the agent had read out of the
 employee's own benefits record as *unsupported*, which penalises precisely the behaviour §9.6's workflows require — and it made the blind reference
 labels of §13.7 disagree with the judge by construction, since the two were being shown different evidence. `search_policy_documents` and
-`list_policy_documents` envelopes are excluded: the first is a list of display snippets of chunks already present in full, and the second returns titles
-and grounds nothing. The **citation-support** pass (`CitPrecision`/`CitRecall` below) still indexes the `retrieval` class alone, because a chunk id is
+`list_policy_documents` envelopes are excluded: the second returns titles and grounds nothing, and the first is excluded for a reason **restated at
+P15**. Until W2-C a search hit carried only the 320-character display snippet of a chunk this function already returns in full, so including it would
+have shown the judge a worse copy of what it already had. A hit now carries the whole chunk (§8.4 tool 1), so that sentence would be false — except that
+`agent/orchestrator.py::_envelope_text` strips `text` out of the search envelope before the synthesis prompt renders it, precisely so the banner-marked
+`<document>` block stays the single copy of a passage. The exclusion therefore still holds on its original ground: what reaches the model through that
+envelope is metadata about chunks the `retrieval` class already carries verbatim. The **citation-support** pass (`CitPrecision`/`CitRecall` below) still indexes the `retrieval` class alone, because a chunk id is
 the only thing an answer can cite. `evaluation/runner.py::_evidence_of` is the one definition: the judge calls it, and the §13.7 labelling packet calls
 the same function, so the two cannot drift.
 
