@@ -659,6 +659,17 @@ not a blanket "do not restate policy": three in-conversation consumers read that
 reminder's `continue`, the G1 recovery reopen, and `_rehydrate_messages` on resume), so the sentence
 must still name the ground already covered or a nudged step re-searches it.
 
+`synthesize.j2` rule 7 gains the second: `next_steps` is at most 3 items of at most 20 words each and
+`rationale_summary` is capped at **120** characters rather than 200 — a **prompt** cap only, since
+§9.7's `MAX_RATIONALE_CHARS` clamp stays at 200 and exists to guarantee no reasoning hides in the
+field. Two clauses of that proposal were rejected and must stay rejected: **citation ordinals**
+(`g2.resolve` strips a citation when `corpusread.get_chunk(chunk_id)` is `None`, so a hallucinated
+16-hex id resolves to nothing, while an ordinal in `[1..n]` always maps to a real in-prompt chunk and
+an off-by-one would ship a wrong-but-resolvable citation on the wrong passage) and lowering
+`max_tokens['synthesize']`, which is 0 ms by its own basis and turns the tail into
+`_degraded(synthesis_failed)`. Rule 8's per-document walk is untouched: 13 of 16 gradeable answered
+turns sit at exactly `min_distinct_docs`.
+
 The assembled prompt is stored **verbatim** so the dashboard shows the exact bytes sent to the model for every turn (USER.2). A realistic act-loop
 prompt is 20–40 KB, larger than the general 32 KB payload cap of §10.5, so the `messages[]` array is **not** stored inside `payload_json`: it goes to
 the `llm_messages` side table (§10.1), which is exempt from the cap, and the `llm_call` payload carries `messages_ref: {span_id, n_messages,

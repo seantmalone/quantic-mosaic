@@ -297,3 +297,33 @@ def test_the_closing_act_step_is_capped_to_one_short_sentence():
     assert "which documents, which values" in rule
     assert "later step" not in system and "separate step" not in system
     assert "restate" not in system
+
+
+def test_the_synthesis_output_is_capped_where_capping_costs_nothing():
+    """W2-B: rule 7 only — `next_steps` <= 3 items of <= 20 words, `rationale_summary` <= 120 chars.
+
+    Two clauses of the original proposal are **dropped and must stay dropped**. *Citation ordinals*
+    disarm the only deterministic mis-citation detector in the system: `g2.resolve` strips on
+    `corpusread.get_chunk(chunk_id) is None`, so a hallucinated 16-hex id resolves to nothing, but
+    an ordinal in `[1..n]` always maps to a real in-prompt chunk and an off-by-one would ship a
+    wrong-but-resolvable citation on the wrong passage. And rule 8's per-document walk stays whole:
+    13 of 16 gradeable answered turns sit at **exactly** `min_distinct_docs` and 2 are below it, so
+    trimming the coverage instruction spends breadth the run does not have.
+
+    The 120 characters is a **prompt** cap. §9.7's clamp (`MAX_RATIONALE_CHARS`) stays at 200: it is
+    the guarantee no reasoning hides in the field, and lowering it would truncate a summary the
+    model was asked for rather than shorten it.
+    """
+    system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
+    rule = system[system.index("7. `rationale_summary`") : system.index("8. The evidence")]
+
+    assert "`rationale_summary` is ONE operational line of at most 120 characters" in rule
+    assert "`next_steps` is at most 3 items, each of at most 20 words" in rule
+    assert "200 characters" not in system, "the prompt cap moved; §9.7's clamp did not"
+    assert "ordinal" not in system.lower()
+    assert "Work through CITATION COVERAGE" in system
+    assert "CITATION COVERAGE" in system[system.index("8. The evidence") :]
+
+    from hrmosaic.agent.router import MAX_RATIONALE_CHARS
+
+    assert MAX_RATIONALE_CHARS == 200
