@@ -20,16 +20,16 @@
  },
  "n_items": 26,
  "metrics": {
-  "judged": false,
-  "groundedness_mean": null,
-  "citation_accuracy_mean": null,
-  "partial_match_mean": null,
-  "clarification_accuracy": null,
+  "judged": true,
+  "groundedness_mean": 0.9794117647058823,
+  "citation_accuracy_mean": 0.8474875158840351,
+  "partial_match_mean": 0.7941176470588235,
+  "clarification_accuracy": 0.6666666666666666,
   "cit_resolve_mean": 0.9230769230769231,
   "blocks_dropped_by_g2": 1,
   "tool_selection_accuracy": 0.9258241758241759,
   "arg_correctness_rate": 1.0,
-  "strict_pass_rate": null,
+  "strict_pass_rate": 0.6923076923076923,
   "escalation_matrix": {
    "answer": {
     "answer": 16,
@@ -77,7 +77,7 @@
    "pto_request": 0.0,
    "remote_work_eligibility": 1.0
   },
-  "recommendation_labeled_rate": null,
+  "recommendation_labeled_rate": 0.26305887499659125,
   "router_matrix": {
    "simple_policy": {
     "policy_qa": 7
@@ -114,14 +114,18 @@
    "arg_correctness": 18,
    "workflow": 26,
    "safety": 26,
-   "behaviour": 26
+   "behaviour": 26,
+   "groundedness": 17,
+   "citation_accuracy": 17,
+   "partial_match": 17,
+   "clarification": 3
   },
-  "judge_agreement_rate": null,
-  "judge_agreement_n": 0,
-  "judge_agreement_subset": null,
-  "judge_agreement_rate_hard": null,
-  "judge_agreement_n_hard": 0,
-  "judge_agreement_subset_hard": null,
+  "judge_agreement_rate": 1.0,
+  "judge_agreement_n": 7,
+  "judge_agreement_subset": "seed_1729_8",
+  "judge_agreement_rate_hard": 1.0,
+  "judge_agreement_n_hard": 8,
+  "judge_agreement_subset_hard": "judge_lowest_8",
   "est_cost_usd": 0.465582,
   "doc_recall_mean": 0.8552631578947368,
   "workflow_completion": 0.7692307692307693,
@@ -143,12 +147,12 @@
    "store_ms": 1646
   }
  },
- "judge_model": null,
- "judge_calls": 0,
+ "judge_model": "gemini-3.5-flash-lite",
+ "judge_calls": 264,
  "duration_s": 533.5,
  "status": "complete",
- "judge_status": "pending",
- "notes": "Over-refusal cause, 1 item(s) \u2014 remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence \u2014 which the synthesis prompt does carry \u2014 cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix.",
+ "judge_status": "judged",
+ "notes": "Over-refusal cause, 1 item(s) \u2014 remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence \u2014 which the synthesis prompt does carry \u2014 cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix. Judged in a second pass on 2026-09-10 (264 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven.\njudge_agreement_rate=1.0 over n=7 reference labels (subset seed_1729_8).\njudge_agreement_rate_hard=1.0 over n=8 reference labels (subset judge_lowest_8).",
  "items": [
   {
    "id": "r_1789055103_baseline::pto-001",
@@ -161,13 +165,13 @@
    "latency_ms": 12448,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 1.0,
     "doc_recall": 1.0,
     "exact_match": 1.0,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -181,7 +185,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.0,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -189,7 +193,23 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 1.0,
+     "n_cited_claims": 1,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 1,
+     "n_scored": 1,
+     "per_claim": {
+      "c1": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -203,13 +223,13 @@
    "latency_ms": 14913,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.8571428571428571,
     "doc_recall": 1.0,
     "exact_match": 1.0,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -223,14 +243,33 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.2,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents"
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.75,
+     "n_cited_claims": 3,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 4,
+     "n_scored": 4,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -244,13 +283,13 @@
    "latency_ms": 19532,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 1.0,
     "doc_recall": 1.0,
     "exact_match": 1.0,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -264,14 +303,35 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.3333333333333333,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents"
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 1.0,
+     "n_cited_claims": 6,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 6,
+     "n_scored": 6,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -285,13 +345,13 @@
    "latency_ms": 18665,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 0.875,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.5333333333333333,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 0.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -305,7 +365,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.2727272727272727,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -314,7 +374,30 @@
     "cache_hits": 0,
     "injection_quarantined": true
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 0.5,
+     "recall": 0.571,
+     "n_cited_claims": 4,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 0.875,
+     "n_claims": 8,
+     "n_scored": 8,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c8": "supported",
+      "c9": "supported",
+      "c10": "supported",
+      "c11": "unsupported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -328,13 +411,13 @@
    "latency_ms": 25999,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 1.0,
     "doc_recall": 1.0,
     "exact_match": 1.0,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -348,7 +431,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.2222222222222222,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -356,7 +439,29 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 1.0,
+     "n_cited_claims": 7,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 7,
+     "n_scored": 7,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -370,13 +475,13 @@
    "latency_ms": 25999,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.6666666666666666,
     "doc_recall": 1.0,
     "exact_match": 1.0,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -390,14 +495,33 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.3333333333333333,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents"
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.5,
+     "n_cited_claims": 2,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 4,
+     "n_scored": 4,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -411,13 +535,13 @@
    "latency_ms": 25761,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.9090909090909091,
     "doc_recall": 1.0,
     "exact_match": 1.0,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -431,14 +555,35 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.25,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents"
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.833,
+     "n_cited_claims": 5,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 6,
+     "n_scored": 6,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -452,13 +597,13 @@
    "latency_ms": 23706,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 1.0,
     "doc_recall": 0.5,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 0.5,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -472,7 +617,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.3333333333333333,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -480,7 +625,30 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 1.0,
+     "n_cited_claims": 8,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 8,
+     "n_scored": 8,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported",
+      "c8": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 0
   },
   {
@@ -494,13 +662,13 @@
    "latency_ms": 34898,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.8571428571428571,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 0.75,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -514,7 +682,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.3333333333333333,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -522,7 +690,30 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.75,
+     "n_cited_claims": 6,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 8,
+     "n_scored": 8,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported",
+      "c8": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 0
   },
   {
@@ -536,13 +727,13 @@
    "latency_ms": 56834,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 1.0,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 0.5,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -556,7 +747,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.29411764705882354,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -565,7 +756,34 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 1.0,
+     "n_cited_claims": 12,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 12,
+     "n_scored": 12,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported",
+      "c8": "supported",
+      "c9": "supported",
+      "c10": "supported",
+      "c11": "supported",
+      "c12": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -618,13 +836,13 @@
    "latency_ms": 29219,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.8818897637795274,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -638,7 +856,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "policy_qa",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.18181818181818182,
     "outcome": "answered",
     "tools_called": [
      "search_policy_documents",
@@ -646,7 +864,31 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 0.875,
+     "recall": 0.889,
+     "n_cited_claims": 8,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 9,
+     "n_scored": 9,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported",
+      "c8": "supported",
+      "c9": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -660,13 +902,13 @@
    "latency_ms": 16504,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 1.0,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -680,7 +922,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "employee_data",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.5714285714285714,
     "outcome": "answered",
     "tools_called": [
      "lookup_employee_profile",
@@ -688,7 +930,25 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 1.0,
+     "n_cited_claims": 3,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 3,
+     "n_scored": 3,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -702,13 +962,13 @@
    "latency_ms": 27392,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.923076923076923,
     "doc_recall": 1.0,
     "exact_match": 0.0,
-    "partial_match": null,
+    "partial_match": 0.5,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -722,7 +982,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "employee_data",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.125,
     "outcome": "answered",
     "tools_called": [
      "check_pto_balance",
@@ -730,7 +990,29 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.857,
+     "n_cited_claims": 6,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 7,
+     "n_scored": 7,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c8": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 0
   },
   {
@@ -744,13 +1026,13 @@
    "latency_ms": 26959,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 0.875,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.7272727272727273,
     "doc_recall": 1.0,
     "exact_match": 0.0,
-    "partial_match": null,
+    "partial_match": 0.5,
     "clarification": null,
     "tool_recall": 0.75,
     "tool_precision": 1.0,
@@ -764,7 +1046,7 @@
     "nudged": true,
     "catalog_reopened": false,
     "router_intent": "workflow",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.2727272727272727,
     "outcome": "answered",
     "tools_called": [
      "check_pto_balance",
@@ -773,7 +1055,30 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.571,
+     "n_cited_claims": 4,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 0.875,
+     "n_claims": 8,
+     "n_scored": 8,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c8": "unsupported",
+      "c11": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 0
   },
   {
@@ -828,13 +1133,13 @@
    "latency_ms": 50181,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.7659574468085106,
     "doc_recall": 0.75,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 0.75,
     "clarification": null,
     "tool_recall": 0.75,
     "tool_precision": 1.0,
@@ -848,7 +1153,7 @@
     "nudged": true,
     "catalog_reopened": false,
     "router_intent": "workflow",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.23076923076923078,
     "outcome": "answered",
     "tools_called": [
      "lookup_employee_profile",
@@ -857,7 +1162,32 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 0.667,
+     "recall": 0.9,
+     "n_cited_claims": 9,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 10,
+     "n_scored": 10,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported",
+      "c8": "supported",
+      "c9": "supported",
+      "c11": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 0
   },
   {
@@ -871,13 +1201,13 @@
    "latency_ms": 13312,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 1.0,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.5714285714285715,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
@@ -891,7 +1221,7 @@
     "nudged": false,
     "catalog_reopened": false,
     "router_intent": "employee_data",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.14285714285714285,
     "outcome": "answered",
     "tools_called": [
      "lookup_benefits_status",
@@ -899,7 +1229,28 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 0.5,
+     "recall": 0.667,
+     "n_cited_claims": 4,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 1.0,
+     "n_claims": 6,
+     "n_scored": 6,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -920,7 +1271,7 @@
     "doc_recall": null,
     "exact_match": null,
     "partial_match": null,
-    "clarification": null,
+    "clarification": 1.0,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
     "tool_selection": 1.0,
@@ -938,7 +1289,12 @@
     "tools_called": [],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "clarification": {
+     "named_missing_information": true,
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -959,7 +1315,7 @@
     "doc_recall": null,
     "exact_match": null,
     "partial_match": null,
-    "clarification": null,
+    "clarification": 1.0,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
     "tool_selection": 1.0,
@@ -977,7 +1333,12 @@
     "tools_called": [],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "clarification": {
+     "named_missing_information": true,
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -998,7 +1359,7 @@
     "doc_recall": null,
     "exact_match": null,
     "partial_match": null,
-    "clarification": null,
+    "clarification": 0.0,
     "tool_recall": 1.0,
     "tool_precision": 1.0,
     "tool_selection": 1.0,
@@ -1016,7 +1377,12 @@
     "tools_called": [],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "clarification": {
+     "named_missing_information": false,
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 1
   },
   {
@@ -1147,13 +1513,13 @@
    "latency_ms": 40357,
    "cold": 0,
    "scores": {
-    "groundedness": null,
-    "groundedness_pass": null,
+    "groundedness": 0.9,
+    "groundedness_pass": true,
     "cit_resolve": 1.0,
-    "citation_accuracy": null,
+    "citation_accuracy": 0.7142857142857143,
     "doc_recall": 1.0,
     "exact_match": null,
-    "partial_match": null,
+    "partial_match": 1.0,
     "clarification": null,
     "tool_recall": 0.75,
     "tool_precision": 1.0,
@@ -1167,7 +1533,7 @@
     "nudged": true,
     "catalog_reopened": false,
     "router_intent": "action",
-    "recommendation_labeled_rate": null,
+    "recommendation_labeled_rate": 0.375,
     "outcome": "answered",
     "tools_called": [
      "check_pto_balance",
@@ -1176,7 +1542,32 @@
     ],
     "cache_hits": 0
    },
-   "verdicts": null,
+   "verdicts": {
+    "citation_support": {
+     "precision": 1.0,
+     "recall": 0.556,
+     "n_cited_claims": 5,
+     "judge_model": "gemini-3.5-flash-lite"
+    },
+    "groundedness": {
+     "score": 0.9,
+     "n_claims": 10,
+     "n_scored": 10,
+     "per_claim": {
+      "c1": "supported",
+      "c2": "supported",
+      "c3": "supported",
+      "c4": "supported",
+      "c5": "supported",
+      "c6": "supported",
+      "c7": "supported",
+      "c8": "supported",
+      "c9": "supported",
+      "c11": "unsupported"
+     },
+     "judge_model": "gemini-3.5-flash-lite"
+    }
+   },
    "passed": 0
   },
   {

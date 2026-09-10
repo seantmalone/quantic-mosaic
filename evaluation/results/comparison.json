@@ -1,23 +1,23 @@
 {
- "generated_at": 1789058724225335,
+ "generated_at": 1789066554338408,
  "target": "deployed",
  "dataset_sha": "a501f288a6589730bc570507bbce06080876fa192a31d2ef821b1bc74d776758",
  "variants": [
   {
    "variant": "baseline",
    "run_id": "r_1789055103_baseline",
-   "judged": false,
-   "judge_status": "pending",
+   "judged": true,
+   "judge_status": "judged",
    "metrics": {
-    "groundedness_mean": null,
-    "citation_accuracy_mean": null,
+    "groundedness_mean": 0.9794117647058823,
+    "citation_accuracy_mean": 0.8474875158840351,
     "cit_resolve_mean": 0.9230769230769231,
     "doc_recall_mean": 0.8552631578947368,
     "tool_selection_accuracy": 0.9258241758241759,
     "arg_correctness_rate": 1.0,
     "workflow_completion": 0.7692307692307693,
     "over_refusal_rate": 0.1111111111111111,
-    "strict_pass_rate": null
+    "strict_pass_rate": 0.6923076923076923
    },
    "deltas": {}
   },
@@ -46,7 +46,7 @@
     "arg_correctness_rate": 0.0,
     "workflow_completion": 0.0385,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": null
+    "strict_pass_rate": 0.0385
    }
   },
   {
@@ -74,7 +74,7 @@
     "arg_correctness_rate": 0.0,
     "workflow_completion": -0.1538,
     "over_refusal_rate": 0.0556,
-    "strict_pass_rate": null
+    "strict_pass_rate": -0.0769
    }
   }
  ],
@@ -86,6 +86,37 @@
   "delta": -0.1538,
   "threshold": 0.25
  },
- "flips": null,
+ "flips": [
+  {
+   "item_id": "expenses-002",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
+   "item_id": "conduct-001",
+   "variant": "dense_only_k2",
+   "baseline_passed": true,
+   "variant_passed": false
+  },
+  {
+   "item_id": "pto-002",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
+   "item_id": "profile-001",
+   "variant": "no_structured_tools",
+   "baseline_passed": true,
+   "variant_passed": false
+  },
+  {
+   "item_id": "benefits-002",
+   "variant": "no_structured_tools",
+   "baseline_passed": true,
+   "variant_passed": false
+  }
+ ],
  "note": "Judged metrics are computed on `baseline` only (\u00a713.9); a `null` on an ablation arm means not judged, never zero."
 }
