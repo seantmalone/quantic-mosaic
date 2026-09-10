@@ -228,25 +228,48 @@ def _tool_payload(tool: ToolSchema) -> dict[str, Any]:
     }
 
 
+def _flatten(blocks: list[dict[str, Any]]) -> Any:
+    """One text block travels as a plain string; anything else stays a block list."""
+    if not blocks:
+        return ""
+    if len(blocks) == 1 and blocks[0].get("type") == "text" and set(blocks[0]) == {"type", "text"}:
+        return blocks[0]["text"]
+    return blocks
+
+
 def _split_system(messages: Sequence[Message]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Anthropic carries the system prompt outside `messages`; the last block gets the breakpoint."""
+    """Anthropic carries the system prompt outside `messages`; the last block gets the breakpoint.
+
+    Roles must **alternate** on the Messages API, and every `tool_use` block must be answered by a
+    `tool_result` block in the *immediately following* message. The provider-neutral `Message`
+    carries one tool result each (`tool_call_id` is singular), so an act step that asked for two
+    tools produces two neutral `tool` messages — and one user message per result would break both
+    rules at once. Consecutive same-role messages are therefore **coalesced** into a single message
+    whose content is the concatenation of their blocks, which puts every `tool_result` of a step in
+    the one user turn that answers the assistant's `tool_use` blocks, in order, results first.
+    """
     system_blocks: list[dict[str, Any]] = []
-    conversation: list[dict[str, Any]] = []
+    conversation: list[tuple[str, list[dict[str, Any]]]] = []
+
+    def emit(role: str, blocks: list[dict[str, Any]]) -> None:
+        if conversation and conversation[-1][0] == role:
+            conversation[-1][1].extend(blocks)
+        else:
+            conversation.append((role, list(blocks)))
+
     for message in messages:
         if message.role == "system":
             system_blocks.append({"type": "text", "text": message.content})
         elif message.role == "tool":
-            conversation.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": message.tool_call_id or "",
-                            "content": message.content,
-                        }
-                    ],
-                }
+            emit(
+                "user",
+                [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": message.tool_call_id or "",
+                        "content": message.content,
+                    }
+                ],
             )
         elif message.role == "assistant" and message.tool_calls:
             blocks: list[dict[str, Any]] = []
@@ -256,10 +279,10 @@ def _split_system(messages: Sequence[Message]) -> tuple[list[dict[str, Any]], li
                 {"type": "tool_use", "id": call.id, "name": call.name, "input": call.args}
                 for call in message.tool_calls
             ]
-            conversation.append({"role": "assistant", "content": blocks})
+            emit("assistant", blocks)
         else:
-            conversation.append({"role": message.role, "content": message.content})
+            emit(message.role, [{"type": "text", "text": message.content}] if message.content else [])
     if system_blocks:
         # One breakpoint, on the LAST system block: the cached prefix is then tools → system.
         system_blocks[-1] = {**system_blocks[-1], "cache_control": CACHE_CONTROL}
-    return system_blocks, conversation
+    return system_blocks, [{"role": role, "content": _flatten(blocks)} for role, blocks in conversation]

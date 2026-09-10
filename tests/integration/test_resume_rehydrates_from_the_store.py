@@ -16,6 +16,7 @@ not exist yet.
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pytest
 
@@ -161,3 +162,94 @@ async def test_the_resumed_response_carries_the_whole_turn(gated_then_confirmed,
     assert {entry.seq for entry in resumed.trace} == set(persisted)
     assert {entry.seq for entry in parked.trace} < {entry.seq for entry in resumed.trace}
     assert [entry.seq for entry in parked.trace] == sorted(entry.seq for entry in parked.trace)
+
+
+@pytest.fixture
+async def write_failed_after_confirmation(writer, store, mounted_mcp_url, monkeypatch):
+    """The same flow, with the ticket write failing **after** its token validated.
+
+    Fault injection, not a mock of the thing under test: `confirm.consume` is the last step of tool
+    8 and the one that touches `mock_writes`, so making it raise produces a genuine `isError` result
+    from the shipped server over the real transport — the class of failure `_resume` has to branch
+    on and could not otherwise be reached, because bad arguments never park in the first place.
+    """
+    orchestrator = Orchestrator(
+        client=McpClient(transport="http", url=mounted_mcp_url),
+        model=StubAdapter(script_path=LLM_SCRIPTS / "confirm_resume.json"),
+    )
+    try:
+        parked = await orchestrator.run_turn(ChatRequest(message=QUESTION, employee_id="E1042"))
+        assert parked.outcome == "awaiting_confirmation"
+        gated = json.loads(
+            store.execute(
+                "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq DESC LIMIT 1",
+                (parked.turn_id,),
+            ).scalar()
+        )
+        token = confirm.mint(
+            store,
+            session_id=parked.session_id,
+            turn_id=parked.turn_id,
+            span_id="0" * 16,
+            tool_name=gated["tool_name"],
+            arguments=gated["arguments"],
+            human_summary="Open an HR ticket.",
+        )
+        writer.reopen_turn(parked.turn_id, awaiting_ms=0)
+
+        def explode(*args, **kwargs):
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(confirm, "consume", explode)
+        resumed = await orchestrator.resume_turn(parked.session_id, parked.turn_id, token)
+        return parked, resumed
+    finally:
+        await orchestrator.aclose()
+
+
+async def test_a_write_that_fails_after_confirmation_does_not_close_the_turn_answered(
+    write_failed_after_confirmation, store
+):
+    """The token validated and the ticket still did not exist; §9.4's partial, never "answered"."""
+    parked, resumed = write_failed_after_confirmation
+
+    assert store.execute("SELECT count(*) FROM mock_writes").scalar() == 0, "nothing was created"
+    assert resumed.outcome == "partial"
+    closed = store.execute("SELECT outcome, stop_reason FROM turns WHERE id = ?", (parked.turn_id,)).one()
+    assert (closed["outcome"], closed["stop_reason"]) == ("partial", "tool_failed")
+    assert resumed.answer_blocks[0].text.startswith("The confirmation was accepted but the action")
+
+    errors = [
+        json.loads(row["payload_json"])
+        for row in store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'error' ORDER BY seq", (parked.turn_id,)
+        ).dicts()
+    ]
+    assert [error["error_kind"] for error in errors] == ["tool_failed"]
+    assert errors[0]["component"] == "mcp" and "create_mock_hr_ticket" in errors[0]["message"]
+
+
+async def test_the_failure_reaches_the_model_and_no_ticket_id_is_invented(write_failed_after_confirmation, store):
+    """`_act`'s rule on the resume path: the body goes to the envelopes, not into `LoopState`.
+
+    The half that is observable from outside is asserted here — the model is shown what went wrong,
+    so it can say so, and no `MOCK-HR-…` id appears anywhere, because none was ever allocated. The
+    other half, that the result never satisfies `pto_request`'s gated slot, is what
+    `outcome == "partial"` above records.
+    """
+    parked, resumed = write_failed_after_confirmation
+    span_id = json.loads(
+        store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'llm_call' "
+            "AND json_extract(payload_json, '$.purpose') = 'synthesize' ORDER BY seq DESC LIMIT 1",
+            (parked.turn_id,),
+        ).scalar()
+    )["messages_ref"]["span_id"]
+    prompt = "\n".join(
+        row["content"]
+        for row in store.execute("SELECT content FROM llm_messages WHERE span_id = ? ORDER BY seq", (span_id,)).dicts()
+    )
+
+    assert "MOCK-HR-" not in prompt, "no ticket id was ever allocated"
+    assert "create_mock_hr_ticket" in prompt, "the failure itself is still shown to the model"
+    assert not any(block.text.startswith("MOCK-HR-") for block in resumed.answer_blocks)

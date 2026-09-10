@@ -1,0 +1,52 @@
+{
+  "scenario": "repair_round_trip",
+  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. Used by tests/integration/test_repair_round_trip.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\", \"search_policy_documents\"], \"rationale_summary\": \"A balance question that also needs the accrual policy.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 980,
+      "completion_tokens": 64
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_rep_1",
+          "name": "check_pto_balance",
+          "args": { "employee_id": "me" }
+        },
+        {
+          "id": "toolu_rep_2",
+          "name": "search_policy_documents",
+          "args": { "query": "PTO accrual rate for full-time employees per month", "k": 5 }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 90
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"tool_name\": \"check_pto_balance\", \"arguments\": {\"employee_id\": \"E1042\"}, \"rationale_summary\": \"employee_id must be the E1xxx form, not a pronoun.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1290,
+      "completion_tokens": 40
+    },
+    {
+      "purpose": "act",
+      "response_text": "The balance and the accrual table together answer this.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2480,
+      "completion_tokens": 18
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}], \"next_steps\": [\"Book the days in MosaicOne once you have chosen them.\"], \"rationale_summary\": \"Balance plus the accrual table.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 2610,
+      "completion_tokens": 92
+    }
+  ]
+}

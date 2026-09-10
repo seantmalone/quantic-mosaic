@@ -110,6 +110,18 @@ SYNTHESIS_CAVEAT = (
 #: the reason — never a hang and never a 5xx.
 BUDGET_STOPS = ("max_steps", "max_tool_calls", "timeout")
 
+#: The placeholder result a repair round trip hands the other calls of the same act step. They have
+#: not run — the loop is still inside the failed one — but their `tool_use` blocks are already in the
+#: assistant message the request replays, and an unanswered `tool_use` is a 400 on the pinned model.
+NOT_RUN_YET = json.dumps({"status": "not_run", "hint": "an earlier call in this step was rejected"})
+
+#: The write a confirmed resume re-issued came back `isError`: the token validated, the write did
+#: not. §9.4's graceful partial, not a silent success.
+WRITE_FAILED_NOTE = (
+    "The confirmation was accepted but the action itself did not complete, so nothing was created. "
+    "Here is what I established; try again or contact the owning team."
+)
+
 BUDGET_NOTE = {
     "max_steps": "I reached my step limit for this turn; here is what I established before stopping.",
     "max_tool_calls": "I reached my tool-call limit for this turn; here is what I established before stopping.",
@@ -386,6 +398,8 @@ class _Turn:
     stop_reason: str = "answered"
     pending: ConfirmationCard | None = None
     clarification: str | None = None
+    #: A confirmed write came back `isError`: the turn closes `partial`, never `answered` (§9.4).
+    write_failed: bool = False
     #: The gated `tool_call` span payload a resumed turn re-issues (§8.6 step 4).
     gated: dict[str, Any] | None = None
 
@@ -576,6 +590,18 @@ class Orchestrator:
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
+        if turn.write_failed:
+            # §9.4's graceful partial for the other way a turn falls short of what it was asked to
+            # do: the action was authorised and did not happen. The note goes first, and states no
+            # policy, so it is a `recommendation`.
+            answer = answer.model_copy(
+                update={
+                    "blocks": [
+                        AnswerBlock(type="recommendation", text=WRITE_FAILED_NOTE, citations=[]),
+                        *answer.blocks,
+                    ]
+                }
+            )
         budget_limited = turn.stop_reason in BUDGET_STOPS
         if budget_limited:
             # §9.4: a budget stop is a graceful partial answer plus an `error` span naming the
@@ -595,7 +621,7 @@ class Orchestrator:
                     ]
                 }
             )
-        outcome: TurnOutcome = "partial" if budget_limited else "answered"
+        outcome: TurnOutcome = "partial" if budget_limited or turn.write_failed else "answered"
         return self._finish(
             turn,
             answer,
@@ -792,14 +818,26 @@ class Orchestrator:
         )
 
     async def _repair(self, turn: _Turn, call: ToolCall, failed: ToolResult) -> ToolCallRepair | None:
-        """Ask once for corrected arguments. Never twice — the second failure degrades (§9.1)."""
-        messages = list(turn.messages) + [
-            Message(role="assistant", content="", tool_calls=[call]),
-            Message(
-                role="tool",
-                tool_call_id=call.id,
-                name=call.name,
-                content=failed.text,
+        """Ask once for corrected arguments. Never twice — the second failure degrades (§9.1).
+
+        `turn.messages` **already ends with** the assistant message that carries this `tool_use`
+        (`_act` appends it before it runs the step's calls), so re-appending it would send the same
+        id twice in two consecutive assistant messages and leave the first pair unanswered — a
+        request the Messages API rejects, which would make the one repair round trip §9.1 mandates
+        impossible against the pinned model. Only the results and the corrective ask are added, and
+        every *other* `tool_use` of that step still awaiting a result gets a placeholder: a
+        `tool_use` block with no `tool_result` in the next message is the same 400.
+        """
+        answered = {message.tool_call_id for message in turn.messages if message.role == "tool"}
+        outstanding = [
+            pending for pending in self._step_calls(turn) if pending.id != call.id and pending.id not in answered
+        ]
+        messages = [
+            *turn.messages,
+            Message(role="tool", tool_call_id=call.id, name=call.name, content=failed.text),
+            *(
+                Message(role="tool", tool_call_id=pending.id, name=pending.name, content=NOT_RUN_YET)
+                for pending in outstanding
             ),
             Message(
                 role="user",
@@ -814,6 +852,14 @@ class Orchestrator:
         )
         repair = ToolCallRepair.model_validate(completion.parsed_json())
         return repair if repair.tool_name == call.name else None
+
+    @staticmethod
+    def _step_calls(turn: _Turn) -> list[ToolCall]:
+        """The tool calls of the act step now in flight — the last assistant message's."""
+        for message in reversed(turn.messages):
+            if message.role == "assistant" and message.tool_calls:
+                return list(message.tool_calls)
+        return []
 
     async def _synthesize(self, turn: _Turn) -> dict[str, Any]:
         req = turn.request
@@ -1331,7 +1377,22 @@ class Orchestrator:
         if result.confirmation_required:
             self._error(turn, "confirmation_rejected", "the confirmation token was refused", component="mcp")
             return self._refuse(turn, "the confirmation could not be validated", cold_start=False)
-        self._absorb(turn, result)
+        if result.is_error:
+            # The token validated and the write still failed. Mirroring `_act`: the body goes to the
+            # synthesis envelopes so the answer can say what happened, and **nowhere near**
+            # `state.record`, or a rejected `create_mock_hr_ticket` would count as a created ticket
+            # and the turn would close "answered" over a write that never happened.
+            self._error(
+                turn,
+                "tool_failed",
+                f"{result.tool_name} failed after the confirmation was accepted",
+                component="mcp",
+            )
+            turn.envelopes.append(_ToolEnvelope(name=result.tool_name, result_json=result.text))
+            turn.write_failed = True
+            turn.stop_reason = "tool_failed"
+        else:
+            self._absorb(turn, result)
         return await self._answer(turn, cold_start=False)
 
 

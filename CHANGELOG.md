@@ -315,3 +315,39 @@ rather than assumed.
   the write the user asked for in words — otherwise `pto_request.is_complete`, which a cited answer
   alone satisfies, would end demo task 2 one step before its confirmation gate.
 - **Suite after P7: 923 tests, `make lint` clean, `pytest -q` pristine, ~33 s** (from 781 at P5).
+
+## 2026-09-10 — P7 fix round 1 (agent/, and two accepted cross-phase fix-ups)
+
+- **Accepted cross-phase fix-up, P6-owned `core/llm/`.** P7's scope is `src/hrmosaic/agent/**`, but
+  three P6 files carry production changes made during P7 and they are kept deliberately, not by
+  oversight. P6's owner and any later reader should treat these as P6 surface that already moved:
+  - `core/llm/base.py` grew the shared `ROOT_COMBINATOR_KEYS` / `without_root_combinators()`, and
+    **both** adapters call it, so `get_policy_section`'s root `oneOf` (§8.4) is stripped on the
+    Anthropic path *and* on the Gemini OpenAI-compatible path — which is both the judge and the
+    agent's failover, so a stripper in one adapter would have sent the refused schema on exactly the
+    path a live demo falls back to (commit `c0b4dd5`, ratified in the roadmap ledger).
+  - `core/llm/anthropic.py`'s `_split_system` now **coalesces consecutive same-role messages** into
+    one message with a block list. The Messages API requires alternating roles and requires every
+    `tool_use` block to be answered by a `tool_result` block in the *immediately following* message;
+    the provider-neutral `Message` carries one tool result each, so an act step that asked for two
+    tools produced two consecutive `user` messages and left the second `tool_use` unanswered. The
+    committed `demo_task_1.json` groups its act steps 2 + 2 + 1, so demo task 1's second act call
+    would have been a 400 against live `claude-haiku-4-5`. `StubAdapter` never reads the message
+    array, so nothing in the suite could see it; `tests/unit/test_wire_message_alternation.py` and
+    `tests/integration/test_act_loop_wire_shape.py` now assert the wire bytes.
+  - `scripts/probe_provider.py`'s `SYSTEM_PROMPT` is `agent/prompts/act.j2`'s rendered system block
+    rather than a hand-written stand-in, so the measured cacheable prefix is the one that ships.
+- **Accepted cross-phase fix-up, P0-owned `pyproject.toml`** — and **P11 needs to know**:
+  `[tool.setuptools.package-data] "hrmosaic.agent.prompts" = ["*.j2"]`. The prompts are loaded from
+  disk relative to `prompts/__init__.py`. The repo installs `-e .`, so **no test can catch its
+  absence**; without it the P11 Docker image, which installs the package properly, would ship
+  `agent/prompts/` with no templates in it and every turn would fail at `render()`.
+- **The synthesis evidence envelope carries the whole chunk, not the snippet.** §7.2's template
+  renders `c.text`; `synthesize.j2` had `{{ chunk.snippet }}`, and `rag/chunk.py` caps a snippet at
+  320 characters while 199 of the 204 committed chunks are longer than that (median 995) — so the
+  synthesis model was seeing roughly a third of every chunk it was asked to ground an answer in.
+  Now `{{ chunk.text }}`. `tests/fixtures/prompts/synthesize.user.txt` was re-recorded, and the two
+  chunks it pins are now **real** chunks read out of the committed index (as G2's tests read them),
+  so the golden file pins the untruncated bytes and a regression to `snippet` is a diff. One
+  consequence to know: a corpus edit that moves either of those two chunks now also re-records that
+  golden, which is the same deliberate re-review the manifest already demands.
