@@ -45,6 +45,7 @@ from evaluation import deterministic as det
 from evaluation.judges import VERDICT_SCORES, Claim, Judge
 from evaluation.schema import (
     COLD_PROBE_IDS,
+    REFERENCE_LABELS_PATH,
     REPORT_PATH,
     RESULTS_DIR,
     VARIANT_OPTIONS,
@@ -326,7 +327,6 @@ class Runner:
         *,
         run_phase: str,
     ) -> ScoredItem:
-        scores: dict[str, Any] = {}
         verdicts: dict[str, Any] = {}
         if turn is None:
             # The turn row is not visible to this store: `deployed` mode with the wrong database, or
@@ -774,17 +774,26 @@ class Runner:
             ),
             n_scored={
                 "items": len(run_phase_scored),
-                "groundedness": len(groundedness),
-                "citation_accuracy": len(cit_accuracy),
                 "cit_resolve": len(cit_resolve),
                 "doc_recall": len(doc_recall),
-                "partial_match": len(partial),
-                "clarification": len(clarification),
                 "tool_selection": len(selection),
                 "arg_correctness": len(arg_rates),
                 "workflow": len(workflow),
                 "safety": len(safety),
                 "behaviour": len(pairs),
+                # A judged denominator is published only on a run that was judged. Publishing
+                # `groundedness: 0` on an ablation arm would read as "nothing was grounded" rather
+                # than "this arm was not judged", and §13.9 judges `baseline` only.
+                **(
+                    {
+                        "groundedness": len(groundedness),
+                        "citation_accuracy": len(cit_accuracy),
+                        "partial_match": len(partial),
+                        "clarification": len(clarification),
+                    }
+                    if self._judge_enabled
+                    else {}
+                ),
             },
             judge_agreement_rate=agreement_rate,
             judge_agreement_n=agreement_n,
@@ -1267,12 +1276,68 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-judge", action="store_true", help="skip the judged metrics entirely")
     parser.add_argument("--cold-probes", action="store_true", help="run the three §13.5 cold probes")
     parser.add_argument("--results-dir", default=str(RESULTS_DIR))
+    parser.add_argument(
+        "--recompute-agreement",
+        metavar="RUN_ID",
+        default=None,
+        help=(
+            "recompute `judge_agreement_rate` / `judge_agreement_n` on an existing run file from "
+            "`evaluation/reference_labels.yaml` and rewrite REPORT.md. Drives nothing and spends "
+            "nothing: the blind reference labels can only be authored *after* the answers exist "
+            "(§13.7), so this is the step that folds them in."
+        ),
+    )
     return parser
+
+
+def recompute_agreement(run_id: str, *, results_dir: Path = RESULTS_DIR) -> RunFile:
+    """Fold the blind reference labels into a finished run — the §13.7 ordering, made honest.
+
+    The labeller sees only the questions, the answers and the evidence, and it can only see those
+    once the run has produced them; the judge's verdicts are never shown to it. So the agreement
+    rate is computed here, over the run file's committed per-item groundedness, rather than during
+    the run that produced them. Nothing is re-driven and nothing is re-judged.
+    """
+    path = Path(results_dir) / f"{run_id}.json"
+    run = RunFile.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    labels = load_reference_labels()
+    if labels is None:
+        raise SystemExit(f"{REFERENCE_LABELS_PATH} does not exist; there is nothing to compare against")
+    rate, n, disagreements = det.judge_agreement(
+        labels.labels,
+        {item.item_id: item.scores.get("groundedness") for item in run.items if item.run_phase == "scored"},
+    )
+    run.metrics.judge_agreement_rate = rate
+    run.metrics.judge_agreement_n = n
+    note = f"judge_agreement_rate={rate} over n={n} reference labels."
+    if disagreements:
+        note += " disagreements: " + "; ".join(
+            f"{row['item_id']} (reference {row['reference']}, judge {row['judge']})" for row in disagreements
+        )
+    # Idempotent: a second fold-in replaces the first note rather than stacking another copy of it.
+    previous = re.sub(r"\s*judge_agreement_rate=.*$", "", run.notes or "").strip()
+    run.notes = f"{previous} {note}".strip() if previous else note
+    path.write_text(json.dumps(run.model_dump(mode="json"), indent=1) + "\n", encoding="utf-8")
+    write_report(run, results_dir=Path(results_dir))
+    return run
 
 
 async def _main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.recompute_agreement:
+        run = recompute_agreement(args.recompute_agreement, results_dir=Path(args.results_dir))
+        print(  # noqa: T201 — this is a CLI
+            json.dumps(
+                {
+                    "run_id": run.run_id,
+                    "judge_agreement_rate": run.metrics.judge_agreement_rate,
+                    "judge_agreement_n": run.metrics.judge_agreement_n,
+                },
+                indent=1,
+            )
+        )
+        return 0
     store = get_store(default_settings)
     migrate(store)
     trace_module.set_writer(TraceWriter(store))
@@ -1331,6 +1396,7 @@ __all__ = [
     "build_parser",
     "fmt",
     "main",
+    "recompute_agreement",
     "render_report",
     "resolve_target",
     "run_id_for",

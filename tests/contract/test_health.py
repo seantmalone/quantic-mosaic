@@ -11,6 +11,8 @@ is what a deploy gate should wait on and what a liveness probe must not.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from hrmosaic.web.api import DEGRADATIONS
@@ -37,7 +39,19 @@ async def test_health_reports_every_block_of_the_payload(web):
     assert body["data"] == {"as_of": "2026-09-01", "employees": 24}
     assert body["trace_store"]["backend"] == "sqlite"
     assert body["trace_store"]["reachable"] is True
-    assert body["trace_store"]["eval_runs_imported"] == 0
+    # Every committed `evaluation/results/<run_id>.json` is imported at boot (§10.3), so this is
+    # the number of committed run objects — three from P10's local proving runs — not zero.
+    assert body["trace_store"]["eval_runs_imported"] == _committed_run_count()
+
+
+def _committed_run_count() -> int:
+    """`evaluation/results/*.json` minus the three aggregates `core/archive.py` skips (§10.3)."""
+    results = Path(__file__).resolve().parents[2] / "evaluation" / "results"
+    return sum(
+        1
+        for path in results.glob("*.json")
+        if path.name not in {"latest.json", "comparison.json", "chunk_size_comparison.json"}
+    )
 
 
 async def test_health_reports_the_live_mcp_catalog(web):

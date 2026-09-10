@@ -458,3 +458,106 @@ rather than assumed.
   says what only a search can give it: *"Only a passage retrieved by SEARCHING the policy corpus can
   be cited: a section fetched by its exact heading is not scored, grounds nothing, and an answer
   resting on one is refused."* Still no tool name — the capability, not the call.
+
+## 2026-09-10 — P10 `evaluation/` (dataset, scorers, judges, ablation, the first real runs)
+
+- **Step 0, live provider facts, read 2026-09-09** and pasted with their dates into `deployed.md`.
+  Anthropic `claude-haiku-4-5` is **$1.00 / $5.00 / $1.25 / $0.10 per MTok** (input / output /
+  cache-write / cache-read) — `core/models.py::MODEL_PRICES` already matched exactly, so nothing
+  changed — and the **minimum cacheable prefix is 4,096 tokens**, confirmed on
+  `platform.claude.com/docs/en/build-with-claude/prompt-caching`. The **Gemini free-tier RPM/TPM/RPD
+  table is no longer published in the API documentation**: `ai.google.dev/gemini-api/docs/rate-limits`
+  now says limits "can be viewed in Google AI Studio" and links to an authenticated page this
+  environment cannot read. The observed behaviour is recorded instead (below), and P11 step 0
+  re-reads the row from a signed-in session.
+
+- **`MIN_EVIDENCE_SCORE` and `MIN_SUPPORT_SCORE` calibrated from the observed score distribution,
+  measured 2026-09-09** (§7.4, §21, R-15). Retrieval only, no model: the 26 dataset questions plus
+  8 extra out-of-corpus probes against the committed index. The two populations separate cleanly on
+  `max_dense_score` —
+
+  | population | n | min | median | max |
+  |---|---|---|---|---|
+  | in-scope (23 questions) | 23 | **0.6218** | 0.7273 | 0.9173 |
+  | out-of-scope (3 dataset items + 8 probes) | 11 | 0.4662 | 0.5195 | **0.5835** |
+
+  — leaving a clean gap of `[0.5835, 0.6218]`. The second-ranked score separates the same way
+  (`[0.5705, 0.6038]`), and the noise floor across every out-of-scope top-5 hit is 0.2907 against an
+  in-scope floor of 0.5742. **`MIN_EVIDENCE_SCORE` 0.32 → 0.60** (the midpoint of the gap) and
+  **`MIN_SUPPORT_SCORE` 0.26 → 0.45** (above the noise floor, below every in-scope top-5 score, so
+  no in-scope retrieval loses a chunk and `retrieve()`'s default `min_dense_score` still admits
+  everything it admitted before). At `(0.60, 0.45)` the gate admits **23/23** in-scope questions and
+  rejects **11/11** out-of-scope probes. **The shipped 0.32 / 0.26 sat below this embedding model's
+  cosine floor over this corpus, so neither G1 score clause could ever fire** — the rule was a
+  no-op, and out-of-scope questions were being caught by the router's flag alone. The published
+  `min_dense_score` default on `search_policy_documents` stays **0.26**: it is a tool-schema
+  contract (§8.4) and is not a G1 threshold.
+
+- **The first real runs, 2026-09-10, `target: local`, all three variants** (§13.2, §13.9). One
+  locally running app (real `claude-haiku-4-5`, real `gemini-3.5-flash-lite` judge on a separate
+  `JUDGE_API_KEY`), the runner driving `POST /chat` sequentially with
+  `Authorization: Bearer $APP_ACCESS_TOKEN` and `X-Actor: admin`.
+
+  | variant | strict pass | groundedness | cit. accuracy | cit. resolve | doc recall | tool selection | workflow | over-refusal | nudge rate | judge calls | est. cost | wall clock |
+  |---|---|---|---|---|---|---|---|---|---|---|---|---|
+  | `baseline` | 0.538 | **0.912** | 0.862 | 0.923 | 0.746 | 0.918 | 0.731 | 0.111 | 0.077 | 252 | $0.432 | 3 335 s |
+  | `dense_only_k2` | 0.692 | not judged | not judged | 0.923 | 0.759 | 0.926 | 0.731 | 0.111 | 0.115 | 0 | $0.402 | 531 s |
+  | `no_structured_tools` | 0.577 | not judged | not judged | 0.885 | 0.746 | 0.840 | **0.615** | 0.167 | 0.115 | 0 | $0.434 | 530 s |
+
+  `strict_pass_rate` is **not comparable across the rows**: §13.8 makes the groundedness clause
+  vacuous on an unjudged variant, which is why the two arms score *higher* than the judged baseline.
+  Baseline latency p50 **11 267 ms**, p95 **36 317 ms** — greyed out and labelled *local runner, not
+  representative* everywhere it appears; 348 s of the run's 350 s of measured span time is provider
+  time. `judge_agreement_rate` **1.00** over `judge_agreement_n` **7** of the 8 SEED-selected items
+  (`remote-003` refused, so the judge produced no groundedness verdict and the item left the
+  denominator). Action safety: **zero violations** across all **125** real turns in the local store,
+  including 2 confirmed mock writes. `injection_quarantined` **true** on `inj-001` (G4's only eval
+  evidence). `tool_discovery_ok` **true**. **Total P10 spend, everything included: $1.59** over 328
+  Anthropic calls and 256 free judge calls.
+
+- **The ablation's null result is published as a null result** (§13.9). `make ablation` exits
+  non-zero and `evaluation/REPORT.md` carries the *not supported by this run* banner:
+  `workflow_completion(no_structured_tools)` is **0.615** against a baseline of **0.731**, a delta
+  of **−0.115** where §13.9 predicts worse than −0.25. The arm does move `tool_selection_accuracy`
+  (0.918 → 0.840) and `over_refusal_rate` (0.111 → 0.167).
+
+- **The zero-LLM chunk-size sweep found nothing, which is the finding.** 700 / 1 100 / 1 600
+  characters all score `DocRecall` **0.8947** over the 19 dataset items that name `expected_docs`
+  (235 / 204 / 180 chunks respectively). On a 14-document corpus at k = 5 the window does not change
+  which documents come back. Each index was built into a temporary directory;
+  `data/index/chunks.manifest.jsonl` is untouched.
+
+- **Observed Gemini free-tier behaviour, in place of the quota page.** 256 judge calls over the
+  sweep, paced by the shared token bucket at `LLM_RPM = 10`. **75 provider retries** were recorded,
+  every one of them on the judge path and none on the Anthropic path; **no failover** to the
+  fallback provider ever fired. 14 judge calls needed §13.7's one repair round trip and 12 of those
+  recovered; **2 recorded a `null` verdict**, which is the designed behaviour — the item leaves that
+  metric's denominator and `n_scored` says so — observed live rather than asserted.
+
+- **Prompt caching never engaged, and the span data says why.** Across 328 Anthropic calls,
+  `cache_creation_input_tokens` and `cache_read_input_tokens` were **0 every time**. Anthropic
+  renders a request as *tools → system → messages* and the breakpoint sits on the last system block,
+  so the cacheable prefix is the nine tool schemas plus the system prompt — and that prefix does not
+  clear `claude-haiku-4-5`'s **4 096-token** minimum (observed whole-request `prompt_tokens` ran
+  1 164 / 3 204 / 14 422 for min / median / max, with the growth coming from the *messages*, which
+  are after the breakpoint). §9.8 anticipates exactly this: caching is best-effort, nothing asserts
+  it, and the sweep's cost estimate holds either way. It also means the $2–4 sweep estimate was
+  conservative — the real figure was **$1.27** for the three 26-item runs.
+
+- **The agent retrieves across four documents and cites across two.** The single most actionable
+  finding of the phase, and it shows up in three independent places: `remote-004` failed its
+  `min_distinct_docs: 3` end state after searching four times across four documents; the same is
+  true of `remote-002`, `expenses-002` and `onboarding-001`; and a live demo-task-1 recording cited
+  `remote-and-hybrid-work` and `tax-and-location-addendum` only. `DocRecall` (retrieval) is 0.746
+  while the citation-based end states fail — so this is a synthesis-side behaviour, not a retrieval
+  one.
+
+- **The demo stub scripts were NOT re-recorded, deliberately.** Three identical live recordings of
+  demo task 1 and one of demo task 2 (2026-09-10) show that `claude-haiku-4-5` reproducibly does
+  *not* follow §18's documented sequences: `get_policy_section` is never called on demo 1,
+  `lookup_employee_profile` is never called on demo 2, `check_policy_compliance` is called *before*
+  the searches rather than after them, demo 1 cites 2 documents where §18 requires ≥ 3, and
+  `check_policy_compliance` is passed `destination_country: "Germany"` where §18.1 documents `"DE"`.
+  Adopting those recordings as the committed fixtures would have required weakening
+  `min_distinct_docs_cited` — R3.5's multi-document evidence — which is not a call this phase should
+  make alone. The P7 fixtures stand; the measurement is recorded here and in the P10 report.

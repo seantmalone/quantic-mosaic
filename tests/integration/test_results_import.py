@@ -36,7 +36,7 @@ def test_a_committed_run_is_imported_into_both_tables(store, results_dir):
     assert run["id"] == "r_p1sample_baseline"
     assert (run["variant"], run["target"], run["status"]) == ("baseline", "local", "complete")
     assert run["n_items"] == 3
-    assert json.loads(run["metrics_json"])["pass_rate"] == 0.667
+    assert json.loads(run["metrics_json"])["strict_pass_rate"] == 0.667
     assert json.loads(run["config_json"])["retrieval_k"] == 5
 
     rows = store.execute("SELECT * FROM eval_results ORDER BY item_id").dicts()
@@ -63,7 +63,7 @@ def test_a_changed_file_is_re_imported_without_duplicating_rows(store, results_d
     archive.import_results(store=store, results_dir=results_dir)
     path = results_dir / "r_p1sample_baseline.json"
     run = json.loads(path.read_text(encoding="utf-8"))
-    run["metrics"]["pass_rate"] = 1.0
+    run["metrics"]["strict_pass_rate"] = 1.0
     run["items"][2]["passed"] = 1
     run["items"] = run["items"][:2] + [run["items"][2]]
     path.write_text(json.dumps(run), encoding="utf-8")
@@ -73,7 +73,7 @@ def test_a_changed_file_is_re_imported_without_duplicating_rows(store, results_d
     assert report.imported == ["r_p1sample_baseline.json"]
     assert store.execute("SELECT COUNT(*) AS n FROM eval_runs").scalar() == 1
     assert store.execute("SELECT COUNT(*) AS n FROM eval_results").scalar() == 3
-    assert json.loads(store.execute("SELECT metrics_json FROM eval_runs").scalar())["pass_rate"] == 1.0
+    assert json.loads(store.execute("SELECT metrics_json FROM eval_runs").scalar())["strict_pass_rate"] == 1.0
     assert store.execute("SELECT SUM(passed) AS n FROM eval_results").scalar() == 3
     assert store.execute("SELECT n_records FROM import_state").scalar() == 3
 

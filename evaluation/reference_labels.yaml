@@ -1,0 +1,104 @@
+# evaluation/reference_labels.yaml — the blind reference groundedness labels (spec §13.7).
+#
+# Eight items, selected with `SEED = 1729` by `evaluation.schema.reference_subset()` — the only
+# place in the project where sampling exists (§13.6), and asserted stable under two different
+# `PYTHONHASHSEED` values by `tests/unit/test_reference_subset_deterministic.py`.
+#
+# `evaluation/deterministic.py::judge_agreement()` reports `judge_agreement_rate` — the fraction of
+# these on which the reference label and the judge agree, after binarising the judge's per-item
+# groundedness at §13.8's 0.85 threshold — plus `judge_agreement_n` and the per-item disagreements.
+# **There is no Cohen's κ and no inter-annotator machinery** (§22): at n = 8 a κ's confidence
+# interval is wide enough to be meaningless, while an agreement rate with its n stated is honest.
+# The methodology is named accurately everywhere it appears — "reference labels authored by an
+# independent model, blind to the judge's verdicts; agreement rate on 8 items" — and **never**
+# "human-vs-judge".
+#
+# An item whose judge verdict is `null` (a twice-failed judge call) or whose turn produced no answer
+# leaves the denominator rather than scoring 0, which is why `judge_agreement_n` is published beside
+# the rate and is usually smaller than 8.
+
+protocol:
+  labeller: >-
+    Claude Opus 5 — a third model family, independent of both the agent (Anthropic
+    claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)
+  labelled_on: "2026-09-10"
+  blinding: >-
+    Each label was authored from a packet containing only the item's question, the answer the agent
+    produced, and the verbatim retrieved policy passages the agent saw. The packet carried no judge
+    output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score.
+    ⚠ Disclosed rather than claimed away: before the labelling packet was built, the labeller had
+    incidentally seen the run-level per-item groundedness *scores* (not the verdicts, per-claim
+    verdicts or rationales) for three of these eight items — `benefits-002`, `remote-002` and
+    `remote-003` — while triaging which items failed the composite. The blinding is therefore
+    complete for five of the eight and partial for three, and `judge_agreement_rate` should be read
+    with that in mind.
+  selection: >-
+    `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer` — a
+    refusal, a clarification and an escalation carry no policy claims to ground.
+  seed: 1729
+  method: >-
+    Binary, answer-level: `grounded` iff every statement of company policy in the answer is
+    supported by the passages shown, and `not_grounded` otherwise. Evidence is the retrieval set
+    only, as §13.3 defines it ("read from the `retrieval` spans"), so a fact the agent took from a
+    structured-data tool result is not supported by this evidence — a limitation of the rubric that
+    the rationales below name where it bites.
+
+labels:
+  - item_id: benefits-001
+    verdict: grounded
+    rationale: >-
+      All three policy claims are verbatim in the passages: the 90-day waiting period with coverage
+      beginning on the day it ends, life and AD&D cover beginning when the medical waiting period
+      ends, and 401(k) contributions from the first payroll run with no waiting period.
+
+  - item_id: benefits-002
+    verdict: not_grounded
+    rationale: >-
+      The general 90-day rule is verbatim in the evidence, but the answer also asserts a specific
+      date — "your 90-day waiting period ends on 2026-11-13" — which appears nowhere in the
+      retrieved passages. It came from a `lookup_benefits_status` tool result, so it is a correct
+      statement rather than a hallucination; under §13.3's rubric, which scores against the
+      retrieval set alone, it is nonetheless unsupported.
+
+  - item_id: conduct-001
+    verdict: grounded
+    rationale: >-
+      The three published timelines the answer states — acknowledgement within 2 business days,
+      investigations targeted at 30 calendar days, and a Severity-1 response within 4 business
+      hours — are each verbatim in the passages, from two different documents.
+
+  - item_id: expenses-001
+    verdict: grounded
+    rationale: >-
+      The USD 750 annual home-office allowance, the 1 January reset with no carry-over, the list of
+      eligible items and the exclusion of laptops, monitors and headsets are all verbatim in the
+      Annual Home Office Allowance passage.
+
+  - item_id: pto-001
+    verdict: grounded
+    rationale: >-
+      The single claim — 1.50 days of PTO per month for full-time employees with three or more
+      years of service — is a verbatim sentence of the Standard Accrual Rates passage.
+
+  - item_id: remote-001
+    verdict: grounded
+    rationale: >-
+      The 3-days-a-week onsite requirement, the team (not individual) choice of days and the
+      Tuesday–Thursday anchoring are one verbatim paragraph of the Required Onsite Days passage;
+      the closing suggestion is advice, not a policy statement.
+
+  - item_id: remote-002
+    verdict: grounded
+    rationale: >-
+      Every claim — Tax & Legal review before travel above 30 consecutive days, what the review
+      determines, the 21-calendar-day filing lead time, the contents of the request, director rather
+      than manager approval, three separate records before departure, and the three review
+      outcomes — is in the Stays Exceeding 30 Days passage.
+
+  - item_id: remote-003
+    verdict: grounded
+    rationale: >-
+      The turn retrieved nothing and the answer declines: it asserts no company policy at all, and
+      names the corpus instead. Nothing stated is unsupported. The judge produces no groundedness
+      verdict for a refused turn, so this item leaves the agreement denominator rather than
+      counting as an agreement.

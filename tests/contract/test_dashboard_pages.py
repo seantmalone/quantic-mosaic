@@ -320,8 +320,10 @@ async def test_the_eval_row_deep_link_resolves_to_the_session_page(seeded, store
     store.batch(
         [
             Statement(
+                # Any row of the fixture run will do — the assertion is about the link, not the
+                # item. `remote-004` is one of the six the P10-refreshed fixture carries.
                 "UPDATE eval_results SET session_id = ?, turn_id = ? "
-                "WHERE run_id = 'r_p9fixture_baseline' AND item_id = 'pto-003'",
+                "WHERE run_id = 'r_p9fixture_baseline' AND item_id = 'remote-004'",
                 (session_id, turn_id),
             )
         ]
