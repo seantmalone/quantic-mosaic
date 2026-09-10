@@ -1,7 +1,7 @@
 """The OpenAI-compatible adapter — the judge, the failover path and the free agent path (§9.8).
 
 One adapter covers Gemini, OpenRouter, Cerebras and OpenAI, because they all speak
-`POST /chat/completions`. Two details are the whole reason it exists as its own file:
+`POST /chat/completions`. Three details are the whole reason it exists as its own file:
 
 * **tool-call arguments arrive as a JSON string.** They are always `json.loads`-ed here, never
   string-matched, so `ToolCall.args` is the same dict the Anthropic adapter produces (§3 row 5);
@@ -13,6 +13,11 @@ One adapter covers Gemini, OpenRouter, Cerebras and OpenAI, because they all spe
   logical call's, passed down from `RecordingAdapter` — because three unbounded 25 s round trips
   would be 75 s on their own, more than the 52 s the whole call is allowed. Each request is capped
   at what is left, and a step with nothing left is not sent at all.
+
+* **a root combinator is refused here too.** `get_policy_section` publishes a root `oneOf` (§8.4),
+  which Gemini's compatibility layer rejects on `tools[].function.parameters` exactly as the
+  Messages API rejects it on `input_schema` — and Gemini is *both* the judge and the agent's
+  failover, so `base.without_root_combinators()` is shared rather than owned by one adapter.
 
 The sync client is called through `asyncio.to_thread` for the same reason the Anthropic adapter is
 (§2.1), and with `max_retries=0` so `RecordingAdapter` remains the single retry layer.
@@ -44,6 +49,7 @@ from hrmosaic.core.llm.base import (
     round_trip_timeout,
     status_error,
     strip_json_fences,
+    without_root_combinators,
 )
 from hrmosaic.core.llm.limiter import TokenBucket
 from hrmosaic.core.models import strict_json_schema
@@ -195,7 +201,11 @@ class OpenAICompatAdapter(RecordingAdapter):
                     "function": {
                         "name": tool.name,
                         "description": tool.description,
-                        "parameters": tool.input_schema,
+                        # Gemini's compatibility layer refuses a root combinator on
+                        # `parameters` exactly as the Messages API does, and the Gemini model is
+                        # both the judge and the agent's failover — so the stripping cannot live
+                        # in one adapter only (§9.8).
+                        "parameters": without_root_combinators(tool.input_schema),
                     },
                 }
                 for tool in tools

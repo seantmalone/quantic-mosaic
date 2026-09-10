@@ -206,6 +206,28 @@ def _retry_after_seconds(headers: Mapping[str, str] | None) -> float | None:
         return MAX_BACKOFF_S + 1.0
 
 
+#: JSON Schema's top-level combinators. **Neither** provider accepts one at the root of a tool's
+#: parameter schema: the Anthropic Messages API answers 400 `input_schema does not support oneOf,
+#: allOf, or anyOf at the top level` (verified live 2026-09-09), and Gemini's OpenAI-compatible
+#: layer rejects a root combinator on `tools[].function.parameters` the same way. `get_policy_section`
+#: publishes a root `oneOf` because §8.4 requires its exactly-one-selector rule *in the schema*, so
+#: every adapter drops these three keys on the way out — and none of them rewrites what the server
+#: publishes: the committed schema stays the one the MCP server validates arguments against.
+ROOT_COMBINATOR_KEYS = ("oneOf", "allOf", "anyOf")
+
+
+def without_root_combinators(input_schema: dict[str, Any]) -> dict[str, Any]:
+    """A tool's parameter schema minus the top-level combinators no provider accepts.
+
+    Nothing else is touched: `default` values and open sub-schemas travel as published, nested
+    combinators are untouched, and the selector rule is still enforced where §8.4 says it is —
+    server-side, where neither selector returns `isError {"code": "INVALID_ARGUMENTS"}`.
+    """
+    if not any(key in input_schema for key in ROOT_COMBINATOR_KEYS):
+        return input_schema
+    return {key: value for key, value in input_schema.items() if key not in ROOT_COMBINATOR_KEYS}
+
+
 def strip_json_fences(text: str) -> str:
     """Drop a ```json … ``` wrapper — some OpenAI-compatible endpoints add one under prompted JSON."""
     body = text.strip()

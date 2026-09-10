@@ -49,6 +49,7 @@ from hrmosaic.core.llm.base import (
     ToolSchema,
     round_trip_timeout,
     status_error,
+    without_root_combinators,
 )
 from hrmosaic.core.llm.limiter import TokenBucket
 from hrmosaic.core.models import LlmPurpose, strict_json_schema
@@ -68,14 +69,6 @@ DEFAULT_MAX_TOKENS = 1024
 MIN_CACHEABLE_PREFIX_TOKENS = 4096
 
 CACHE_CONTROL: dict[str, str] = {"type": "ephemeral"}
-
-#: Verified live on 2026-09-09: `tools[n].custom.input_schema: input_schema does not support oneOf,
-#: allOf, or anyOf at the top level` — a 400 from the Messages API. `get_policy_section` publishes a
-#: root `oneOf` (§8.4), so the adapter drops these three keys from the **top level** of a tool schema
-#: on the way out. Nothing else is touched: `default` values and open sub-schemas travel as published,
-#: nested combinators are untouched, and the selector rule is still enforced where §8.4 says it is —
-#: server-side, where neither selector returns `isError {"code": "INVALID_ARGUMENTS"}`.
-UNSUPPORTED_TOOL_SCHEMA_KEYS = ("oneOf", "allOf", "anyOf")
 
 
 class AnthropicAdapter(RecordingAdapter):
@@ -228,10 +221,11 @@ def _tool_payload(tool: ToolSchema) -> dict[str, Any]:
     No `strict` — the nine published schemas keep their defaults and their open sub-schema, none of
     which strict tool use admits, and arguments are validated server-side instead (§8.4, §9.8).
     """
-    input_schema = tool.input_schema
-    if any(key in input_schema for key in UNSUPPORTED_TOOL_SCHEMA_KEYS):
-        input_schema = {key: value for key, value in input_schema.items() if key not in UNSUPPORTED_TOOL_SCHEMA_KEYS}
-    return {"name": tool.name, "description": tool.description, "input_schema": input_schema}
+    return {
+        "name": tool.name,
+        "description": tool.description,
+        "input_schema": without_root_combinators(tool.input_schema),
+    }
 
 
 def _split_system(messages: Sequence[Message]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
