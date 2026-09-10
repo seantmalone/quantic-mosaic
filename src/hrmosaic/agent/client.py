@@ -211,7 +211,8 @@ def prompt_body(name: str, body: Mapping[str, Any]) -> dict[str, Any]:
     Only `search_policy_documents` differs, and only by subtraction: ten telemetry keys off the
     result and six off each hit, ~9 % of the input tokens of a turn that searches twice. What is
     left is what a citation needs — the ids, the heading path, the chunk and its snippet — plus the
-    quarantine flag on any hit that carries one.
+    quarantine flag on any hit that carries one. **Subtraction only**: an error body carries no
+    `hits` and does not grow one here.
 
     `ToolResult.text` stays whole, because three readers need the whole thing: the §11.1 `tool_call`
     span (and the dashboard drill-down over it), G4, and the eval's scorers.
@@ -225,7 +226,12 @@ def prompt_body(name: str, body: Mapping[str, Any]) -> dict[str, Any]:
         if not kept.get("quarantined"):
             kept.pop("quarantined", None)
         hits.append(kept)
-    reduced["hits"] = hits
+    if "hits" in body:
+        # Set only when the tool returned one. An `isError` body is `{code, message, fields}` and
+        # nothing else, and it is exactly what `_repair` shows the model as `failed.prompt_text` on
+        # the one repair round trip — the path where the model has to work out what went wrong. A
+        # fabricated `"hits": []` would tell it, falsely, that the search also returned nothing.
+        reduced["hits"] = hits
     return reduced
 
 

@@ -685,7 +685,10 @@ unchanged — the §11.1 `tool_call` span, G4 and the eval scorers read the whol
 `search_policy_documents` it drops the ten result-level telemetry keys (`query_used`, `k_effective`,
 `k_source`, `strategy`, `total_candidates`, `embed_ms`, `search_ms`, `index_version`,
 `topic_backfilled`, `backfill_reason`) and six ranking/offset keys from every hit. `quarantined` is
-kept whenever it is **true**: it is §7.4's banner, not telemetry. `topic`'s published description no
+kept whenever it is **true**: it is §7.4's banner, not telemetry. The reduction is **subtraction
+only** — an `isError` body carries no `hits` and does not grow an empty one, because that body is
+what `_repair` shows the model on the one repair round trip and a fabricated `"hits": []` would tell
+it, falsely, that the search also returned nothing. `topic`'s published description no
 longer points the model at `topic_backfilled` for the same reason. And `synthesize.j2`'s EMPLOYEE
 CONTEXT loop renders every envelope except `core/models.py::UNRENDERED_ENVELOPES` — the search and
 list envelopes, and nothing else. That set lives beside §13.3's `ENVELOPE_KINDS` in one module,

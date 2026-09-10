@@ -132,3 +132,24 @@ def test_a_non_search_result_shows_the_same_bytes_twice_over():
     plain = result("check_pto_balance", {"remaining_days": 13.5, "as_of": "2026-09-01"})
 
     assert plain.prompt_text == plain.text
+
+
+def test_an_error_body_never_grows_a_hits_key():
+    """`prompt_body` subtracts; it does not fabricate a field the tool never returned.
+
+    An `isError` `search_policy_documents` body is `{code, message, fields}` — and it is exactly
+    what `_repair` shows the model as `failed.prompt_text` on the one repair round trip, the path
+    where the model has to work out what went wrong. A `"hits": []` invented here would tell it,
+    falsely, that the search also came back empty.
+    """
+    error = {"code": "INVALID_ARGUMENT", "message": "k must be 1..10", "fields": ["k"]}
+
+    assert prompt_body("search_policy_documents", error) == error
+    assert prompt_body("search_policy_documents", error) is not error, "never the caller's own dict"
+
+
+def test_an_empty_hit_list_is_still_reported_as_empty():
+    """The other half of the same rule: a search that really returned nothing still says so."""
+    empty = {"hits": [], "query_used": "nothing matches this", "k_effective": 5}
+
+    assert prompt_body("search_policy_documents", empty) == {"hits": []}
