@@ -34,6 +34,11 @@ protocol:
     `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer` — a
     refusal, a clarification and an escalation carry no policy claims to ground.
   seed: 1729
+  subset: seed_1729_8
+  # The sample was fixed by SEED before any judge verdict existed, so no judge output — not even
+  # the ordering of one — informed which items are in it. The hard-case subset of
+  # `reference_labels_hard.yaml` is the opposite and says so.
+  selection_disclosed: false
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
     supported by the evidence shown, and `not_grounded` otherwise. The evidence set is §13.3's:

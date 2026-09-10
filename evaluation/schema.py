@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -30,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATASET_PATH = REPO_ROOT / "evaluation" / "dataset.yaml"
 RESULTS_DIR = REPO_ROOT / "evaluation" / "results"
 REFERENCE_LABELS_PATH = REPO_ROOT / "evaluation" / "reference_labels.yaml"
+REFERENCE_LABELS_HARD_PATH = REPO_ROOT / "evaluation" / "reference_labels_hard.yaml"
 REPORT_PATH = REPO_ROOT / "evaluation" / "REPORT.md"
 
 #: The seven §13.1 labels and the count each must carry.
@@ -265,8 +267,21 @@ class RunMetrics(BaseModel):
     router_matrix: dict[str, dict[str, int]] = Field(default_factory=dict)
     catalog_reopened_rate: float | None = None
     n_scored: dict[str, int] = Field(default_factory=dict)
+    #: §13.7's judge validation on the **blind** subset: 8 items drawn by `reference_subset()`
+    #: before any judge verdict existed. `judge_agreement_subset` names the selection rule, because
+    #: an agreement rate whose population is unstated is not a claim about anything.
     judge_agreement_rate: float | None = None
     judge_agreement_n: int = 0
+    judge_agreement_subset: str | None = None
+    #: The **disclosed hard-case** second subset (§13.7, added 2026-09-10): the 8 items with the
+    #: lowest judge groundedness in this run, ties broken by item id. The blind subset came out 8/8
+    #: `grounded` on both sides, so its agreement matrix has no discriminating cell and a rate of
+    #: 1.000 over it says only that the judge agrees on the easy half of the decision. This subset
+    #: is chosen *by judge score*, so it is **not blind** — `selection_disclosed: true` in the
+    #: labels file — and the two figures are published side by side, never merged.
+    judge_agreement_rate_hard: float | None = None
+    judge_agreement_n_hard: int = 0
+    judge_agreement_subset_hard: str | None = None
     est_cost_usd: float | None = None
     # -- beyond §11.6's list, each earning its place --------------------------------------
     #: The run-level mean of `DocRecall_i` — the number `dense_only_k2` moves most (§13.3).
@@ -369,8 +384,18 @@ class ReferenceProtocol(BaseModel):
     labelled_on: str
     blinding: str
     selection: str
-    seed: int
+    #: The sampling seed, when the subset was sampled at all. `judge_lowest_8` is a *sort*, not a
+    #: sample — there is no randomness in it — so it records `null` rather than borrowing a seed it
+    #: never used.
+    seed: int | None
     method: str
+    #: Which subset these labels cover — `seed_1729_8` or `judge_lowest_8`. It is checked against
+    #: the metric being computed, so the blind labels can never be folded into the hard-case figure
+    #: (or the reverse) by passing the wrong `--labels`.
+    subset: str = "seed_1729_8"
+    #: `true` when the items were chosen using information the labeller must not see — the judge's
+    #: own scores. It is `false` for the blind subset and the report says which is which.
+    selection_disclosed: bool = False
 
 
 class ReferenceLabels(BaseModel):
@@ -381,7 +406,7 @@ class ReferenceLabels(BaseModel):
 
 
 def load_reference_labels(path: Path | str = REFERENCE_LABELS_PATH) -> ReferenceLabels | None:
-    """The blind reference set, or `None` before it is authored."""
+    """A reference label set, or `None` before it is authored."""
     source = Path(path)
     if not source.exists():
         return None
@@ -389,15 +414,111 @@ def load_reference_labels(path: Path | str = REFERENCE_LABELS_PATH) -> Reference
     return ReferenceLabels.model_validate(document)
 
 
+# --------------------------------------------------------------------------------------
+# §13.7 — the two judge-validation subsets
+# --------------------------------------------------------------------------------------
+
+
+def judge_lowest_subset(
+    run: RunFile,
+    *,
+    size: int = REFERENCE_SUBSET_SIZE,
+    dataset: Dataset | None = None,
+) -> list[str]:
+    """The `size` scored items with the **lowest judge groundedness** in `run`, hardest first.
+
+    The second, *disclosed* judge-validation subset of §13.7. It exists because the blind
+    `SEED`-sampled subset came out 8/8 `grounded` on both sides: every cell of its agreement matrix
+    but one is empty, so `judge_agreement_rate = 1.000` over it is a measurement of the easy half of
+    the decision and of nothing else. Sorting the judged population by the judge's own score and
+    taking the bottom `size` puts whatever disagreement exists inside the sample, at the price of
+    the selection no longer being blind — which is why the labels file records
+    `selection_disclosed: true` and the report never merges the two figures.
+
+    Two rules make it reproducible from the committed run file alone:
+
+    * **the population** is the same as `reference_subset()`'s — items whose gold behaviour is
+      `answer` — further restricted to those the judge actually scored, so the only difference
+      between the two subsets is *how* the 8 are chosen, not what they are chosen from;
+    * **the order** is `(groundedness, item_id)` ascending, so ties — and at 1.000 there are many —
+      break deterministically by item id and never by dictionary or file order.
+
+    Returned lowest-first, which is the order the labelling packet renders and the labels file
+    records.
+    """
+    population = dataset or load_dataset()
+    eligible = {item.id for item in population.items if item.expected_behavior == "answer"}
+    scored: list[tuple[float, str]] = []
+    for row in run.items:
+        if row.run_phase != "scored" or row.item_id not in eligible:
+            continue
+        value = row.scores.get("groundedness")
+        if value is None:
+            continue
+        scored.append((float(value), row.item_id))
+    return [item_id for _, item_id in sorted(scored, key=lambda pair: (pair[0], pair[1]))[:size]]
+
+
+@dataclass(frozen=True)
+class AgreementMetric:
+    """One judge-validation figure: which fields it writes, and which labels file it may read.
+
+    The table below is the whole of the second metric's wiring. `--metric` on
+    `python -m evaluation.runner --recompute-agreement` chooses a row; nothing else in the harness
+    knows there is more than one agreement figure.
+    """
+
+    name: str
+    n_field: str
+    subset_field: str
+    labels_path: Path
+    subset: str
+    #: One sentence, printed in REPORT.md beside the figure: what population it was computed over.
+    definition: str
+
+
+#: The two subsets, keyed by the metric name `--metric` takes.
+AGREEMENT_METRICS: dict[str, AgreementMetric] = {
+    "judge_agreement_rate": AgreementMetric(
+        name="judge_agreement_rate",
+        n_field="judge_agreement_n",
+        subset_field="judge_agreement_subset",
+        labels_path=REFERENCE_LABELS_PATH,
+        subset="seed_1729_8",
+        definition=(
+            "8 items sampled with `SEED = 1729` by `evaluation.schema.reference_subset()` over the "
+            "items whose gold behaviour is `answer`. **Blind**: the sample was fixed before any "
+            "judge verdict existed and the labeller saw no score"
+        ),
+    ),
+    "judge_agreement_rate_hard": AgreementMetric(
+        name="judge_agreement_rate_hard",
+        n_field="judge_agreement_n_hard",
+        subset_field="judge_agreement_subset_hard",
+        labels_path=REFERENCE_LABELS_HARD_PATH,
+        subset="judge_lowest_8",
+        definition=(
+            "the 8 gold-`answer` items with the **lowest judge groundedness in this run**, ties "
+            "broken by item id (`evaluation.schema.judge_lowest_subset()`). **Selection disclosed, "
+            "labelling still blind**: the items were picked using the judge's scores, which the "
+            "labeller never saw"
+        ),
+    ),
+}
+
+
 __all__ = [
+    "AGREEMENT_METRICS",
     "CATEGORY_COUNTS",
     "COLD_PROBE_IDS",
     "DATASET_PATH",
+    "REFERENCE_LABELS_HARD_PATH",
     "REFERENCE_LABELS_PATH",
     "REFERENCE_SUBSET_SIZE",
     "REPORT_PATH",
     "RESULTS_DIR",
     "VARIANT_OPTIONS",
+    "AgreementMetric",
     "Behavior",
     "Category",
     "Dataset",
@@ -412,6 +533,7 @@ __all__ = [
     "RunMetrics",
     "Target",
     "Variant",
+    "judge_lowest_subset",
     "load_dataset",
     "load_reference_labels",
     "reference_subset",

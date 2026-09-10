@@ -44,11 +44,12 @@ import httpx
 from evaluation import deterministic as det
 from evaluation.judges import VERDICT_SCORES, Claim, EvidenceItem, Judge
 from evaluation.schema import (
+    AGREEMENT_METRICS,
     COLD_PROBE_IDS,
-    REFERENCE_LABELS_PATH,
     REPORT_PATH,
     RESULTS_DIR,
     VARIANT_OPTIONS,
+    AgreementMetric,
     Dataset,
     EvalItem,
     ItemResult,
@@ -1132,16 +1133,72 @@ def _strict_pass_note(run: RunFile) -> str:
     return f"Strict pass rate {fmt(value)} {verdict} on the 26-item set.{unjudged}"
 
 
-def _agreement_breakdown(run: RunFile, labels: ReferenceLabels | None) -> str:
-    """What `judge_agreement_rate` actually rests on, cell by cell.
+def _score(scores: Mapping[str, Any], key: str, default: float) -> float:
+    """A stored per-item score as a float, with the clause's vacuous value when it is absent."""
+    value = scores.get(key)
+    return default if value is None else float(value)
 
-    A rate of 1.000 over n = 7 reads as strong validation until you see that six of the seven were
-    unanimous `grounded` — the easy half of the decision — and only the remaining item discriminates
-    at all. §13.7 already asks for the per-item disagreements; this prints the agreements too, so
-    the figure cannot be read as more evidence than it is.
+
+def _strict_pass_failures(run: RunFile) -> str:
+    """Every item that failed §13.8's composite, and which clause(s) failed it.
+
+    Derived from the committed per-item scores by `deterministic.strict_pass_causes()` — the
+    function `strict_pass()` is itself defined in terms of — so this table cannot disagree with the
+    `Pass` column of *Per-item detail* below. It is what turns "0.654 against a 0.85 target" into
+    something a reader can act on: the composite is an AND over six clauses, and which clause each
+    failure tripped is the difference between a number and a finding.
+
+    `forbidden_used` is the one clause not recoverable from the run file alone, so it is
+    reconstructed as `tools_called ∩ dataset.forbidden_tools`; if `dataset.yaml` cannot be loaded
+    the clause is simply not reported rather than guessed.
     """
-    if labels is None or run.metrics.judge_agreement_n == 0:
+    if run.metrics.strict_pass_rate is None:
         return ""
+    try:
+        dataset: Dataset | None = load_dataset()
+    except Exception:  # noqa: BLE001 — a report must still render against a moved dataset
+        dataset = None
+    rows: list[tuple[str, str, list[str]]] = []
+    for row in run.items:
+        if row.run_phase != "scored" or row.passed:
+            continue
+        item = dataset.by_id(row.item_id) if dataset is not None else None
+        called = set(row.scores.get("tools_called") or [])
+        tool = det.ToolScores(
+            recall=_score(row.scores, "tool_recall", 1.0),
+            precision=_score(row.scores, "tool_precision", 1.0),
+            selection=_score(row.scores, "tool_selection", 1.0),
+            passed=False,
+            forbidden_used=sorted(called & set(item.forbidden_tools)) if item is not None else [],
+        )
+        behaviour = row.scores.get("behavior")
+        causes = det.strict_pass_causes(
+            groundedness=row.scores.get("groundedness"),
+            blocks_dropped=int(_score(row.scores, "blocks_dropped_by_g2", 0.0)),
+            tool=tool,
+            workflow=row.scores.get("workflow"),
+            safety=_score(row.scores, "safety", 1.0),
+            behaviour_correct=True if behaviour is None else bool(behaviour),
+        )
+        rows.append((row.item_id, row.category, causes or ["(no clause reproduces this failure)"]))
+    if not rows:
+        return ""
+    lines = [
+        f"**The {len(rows)} items that failed the composite, and why.** §13.8's `strict_pass` is an "
+        "AND over six clauses, each **vacuously true** for an item that does not define it, so a "
+        "failure is always attributable. These causes are recomputed here from the committed "
+        "per-item scores by the same `deterministic.strict_pass_causes()` that decides the `passed` "
+        "flag itself.",
+        "",
+        "| Item | Category | §13.8 clause(s) failed |",
+        "|---|---|---|",
+    ]
+    lines += [f"| `{item_id}` | {category} | {'; '.join(causes)} |" for item_id, category, causes in rows]
+    return "\n".join(lines)
+
+
+def _agreement_cells(run: RunFile, labels: ReferenceLabels) -> dict[tuple[str, str], list[str]]:
+    """The 2×2 agreement matrix as `(reference, judge) -> item ids`, over comparable items only."""
     scores = {item.item_id: item.scores.get("groundedness") for item in run.items if item.run_phase == "scored"}
     cells: dict[tuple[str, str], list[str]] = {}
     for label in labels.labels:
@@ -1150,19 +1207,92 @@ def _agreement_breakdown(run: RunFile, labels: ReferenceLabels | None) -> str:
             continue
         judge = "grounded" if score >= det.GROUNDEDNESS_PASS else "not_grounded"
         cells.setdefault((label.verdict, judge), []).append(label.item_id)
+    return cells
+
+
+def _discriminating(cells: Mapping[tuple[str, str], list[str]]) -> int:
+    """How many compared items carried a `not_grounded` on either side.
+
+    Zero means the matrix has no discriminating cell: every item was a unanimous `grounded`, the
+    half of the decision a judge is least likely to get wrong, and the rate over it cannot separate
+    a good judge from one that answers `grounded` to everything. It is the single number that says
+    how much a judge-validation figure is actually worth, so both the prose and the matrix below
+    are written from it rather than from a claim about a particular run.
+    """
+    return sum(len(ids) for (reference, judge), ids in cells.items() if "not_grounded" in (reference, judge))
+
+
+def _agreement_matrix(run: RunFile, labels: ReferenceLabels, compared: int) -> str:
+    """What an agreement rate actually rests on, cell by cell.
+
+    A rate of 1.000 over n = 7 reads as strong validation until you see that all seven were
+    unanimous `grounded` and that no cell discriminates at all. §13.7 already asks for the per-item
+    disagreements; this prints the agreements too, so neither figure can be read as more evidence
+    than it is.
+    """
+    cells = _agreement_cells(run, labels)
     lines = ["| reference ↓ / judge → | grounded | not_grounded |", "|---|---|---|"]
     for reference in ("grounded", "not_grounded"):
         row = [", ".join(sorted(cells.get((reference, judge), []))) or "–" for judge in ("grounded", "not_grounded")]
         lines.append(f"| {reference} | {row[0]} | {row[1]} |")
-    off_diagonal = len(cells.get(("grounded", "not_grounded"), [])) + len(cells.get(("not_grounded", "grounded"), []))
-    discriminating = len(cells.get(("not_grounded", "not_grounded"), [])) + off_diagonal
+    discriminating = _discriminating(cells)
     lines.append("")
-    lines.append(
-        f"Of the {run.metrics.judge_agreement_n} compared, **{discriminating}** involved a "
-        "`not_grounded` on either side; the rest are unanimous `grounded`, which is the half of the "
-        "decision a judge is least likely to get wrong. Read the rate with that in mind."
-    )
+    if discriminating:
+        lines.append(
+            f"Of the {compared} compared, **{discriminating}** involved a `not_grounded` on either "
+            "side — the half of the decision that actually discriminates. The rest are unanimous "
+            "`grounded`."
+        )
+    else:
+        lines.append(
+            f"Of the {compared} compared, **0** involved a `not_grounded` on either side: every "
+            "cell but the top-left is empty, so this matrix has **no discriminating cell**. The "
+            "rate says the judge agrees on the half of the decision it is least likely to get "
+            "wrong, and it cannot distinguish a good judge from one that answers `grounded` to "
+            "everything. Read it with that in mind — and read it beside the hard-case subset, "
+            "which exists for exactly this reason."
+        )
     return "\n".join(lines)
+
+
+def _agreement_block(run: RunFile, metric: AgreementMetric) -> str:
+    """One judge-validation figure: the rate, its `n`, its subset definition and its protocol."""
+    rate = getattr(run.metrics, metric.name)
+    compared = getattr(run.metrics, metric.n_field)
+    subset = getattr(run.metrics, metric.subset_field) or metric.subset
+    labels = load_reference_labels(metric.labels_path)
+    heading = f"#### `{metric.name}` — subset `{subset}`"
+    if labels is None:
+        return (
+            f"{heading}\n\n_`{metric.labels_path.name}` is not present, so this figure has not been "
+            f"computed. Subset: {metric.definition}._"
+        )
+    protocol = labels.protocol
+    body = [
+        heading,
+        "",
+        f"`{metric.name}` = **{fmt(rate)}** · `{metric.n_field}` = **{compared}** · subset "
+        f"`{subset}` · labels `evaluation/{metric.labels_path.name}`.",
+        "",
+        f"**Subset definition.** {metric.definition}. "
+        + (
+            "The selection is disclosed and recorded as such in the labels file "
+            "(`selection_disclosed: true`); the labelling is blind either way."
+            if protocol.selection_disclosed
+            else "The selection is blind (`selection_disclosed: false`)."
+        ),
+        "",
+        f"Protocol: labeller `{protocol.labeller}`, labelled {protocol.labelled_on}. {protocol.blinding}",
+        "",
+    ]
+    if compared:
+        body.append(_agreement_matrix(run, labels, compared))
+    else:
+        body.append(
+            "_No item in this subset carries a judge groundedness score in this run, so the rate is "
+            "`null` rather than a zero (§13.7)._"
+        )
+    return "\n".join(body)
 
 
 def _metric_table(run: RunFile) -> str:
@@ -1254,18 +1384,19 @@ def _latency_block(run: RunFile) -> str:
 
 def render_report(run: RunFile, *, ablation_section: str | None = None) -> str:
     """The human-readable report of §13.10, from one run file. Pure: it writes nothing."""
-    labels = load_reference_labels()
-    protocol = labels.protocol if labels is not None else None
     metrics = run.metrics
     thresholds = (
         f"MIN_EVIDENCE_SCORE = {run.config.min_evidence_score} · MIN_SUPPORT_SCORE = {run.config.min_support_score}"
     )
-    protocol_line = (
-        f"Protocol: labeller `{protocol.labeller}`, labelled {protocol.labelled_on}. {protocol.blinding}"
-        if protocol is not None
-        else "_`evaluation/reference_labels.yaml` is not present._"
+    agreement_blocks = "\n\n".join(_agreement_block(run, metric) for metric in AGREEMENT_METRICS.values())
+    blind = AGREEMENT_METRICS["judge_agreement_rate"]
+    blind_labels = load_reference_labels(blind.labels_path)
+    blind_discriminating = _discriminating(_agreement_cells(run, blind_labels)) if blind_labels else 0
+    blind_verdict = (
+        f"and **{blind_discriminating}** of those carried a `not_grounded` on either side"
+        if blind_discriminating
+        else "and every one of those was a unanimous `grounded`, so its\nagreement matrix has no discriminating cell"
     )
-    agreement_breakdown = _agreement_breakdown(run, labels)
     judged_note = (
         "Judged metrics are computed on `baseline` only (§13.9): judging all three arms would "
         "roughly triple the judge volume against a free-tier daily cap, and DocRecall, "
@@ -1308,6 +1439,8 @@ comes from that one run; nothing here is hand-edited.
 
 {_strict_pass_note(run)}
 
+{_strict_pass_failures(run)}
+
 {judged_note}
 
 `blocks_dropped_by_g2` = **{fmt(metrics.blocks_dropped_by_g2)}** — the number of `policy_fact`
@@ -1346,15 +1479,26 @@ leaves that metric's denominator, which is why every judged row above carries it
 is `{run.config.llm_model}` — a different vendor and a different model family — so judge
 independence holds by construction and no re-judge machinery exists (§13.7).
 
-**Judge validation is an agreement rate, not a κ.** `judge_agreement_rate` =
-**{fmt(metrics.judge_agreement_rate)}** with `judge_agreement_n` = **{metrics.judge_agreement_n}**.
-At n = 8 a κ's confidence interval is wide enough to be meaningless, while an agreement rate with
-its n stated is honest (§13.7, §22). This is **never** "human-vs-judge" — the labeller is a model,
-and how blind it was is stated in the protocol below rather than asserted here.
+**Judge validation is an agreement rate, not a κ.** At n = 8 a κ's confidence interval is wide
+enough to be meaningless, while an agreement rate with its `n` **and its population** stated is
+honest (§13.7, §22). This is **never** "human-vs-judge" — the labeller is a model, and how blind it
+was is stated in each protocol below rather than asserted here.
 
-{protocol_line}
+**Two subsets, published side by side and never merged.** The first is the blind one: 8 items fixed
+by `SEED` before any judge verdict existed, which answers "does an independent labeller agree with
+the judge on a sample nobody chose for its outcome?". It came back **{fmt(metrics.judge_agreement_rate)}**
+over n = {metrics.judge_agreement_n} — {blind_verdict}. A figure like that cannot separate a good judge from one that
+answers `grounded` to everything, and reporting it alone would overstate what was validated. The
+second subset exists to attack exactly that: it is the 8 items with the **lowest judge groundedness
+in this run**, so whatever disagreement the run contains is inside the sample. Its price is that the
+selection uses the judge's own scores and is therefore **not blind** — the labels file records
+`selection_disclosed: true` — while the *labelling* is blind in the same way as the first: the same
+packet shape, the same four §13.3 evidence classes, and no score, verdict, rationale or report text
+anywhere in it. A disclosed-selection figure is evidence about the judge's hardest cases; it is not
+a second blind opinion, and averaging the two would mean nothing. Both are below, each with its `n`
+and its subset definition.
 
-{agreement_breakdown}
+{agreement_blocks}
 
 ### What the tool metrics do and do not measure
 
@@ -1517,11 +1661,26 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="RUN_ID",
         default=None,
         help=(
-            "recompute `judge_agreement_rate` / `judge_agreement_n` on an existing run file from "
-            "`evaluation/reference_labels.yaml` and rewrite REPORT.md. Drives nothing and spends "
-            "nothing: the blind reference labels can only be authored *after* the answers exist "
-            "(§13.7), so this is the step that folds them in."
+            "recompute a judge-agreement figure on an existing run file from a reference label set "
+            "and rewrite REPORT.md. Drives nothing and spends nothing: reference labels can only be "
+            "authored *after* the answers exist (§13.7), so this is the step that folds them in."
         ),
+    )
+    parser.add_argument(
+        "--metric",
+        default="judge_agreement_rate",
+        choices=sorted(AGREEMENT_METRICS),
+        help=(
+            "which agreement figure --recompute-agreement writes: `judge_agreement_rate` is the "
+            "blind `seed_1729_8` subset, `judge_agreement_rate_hard` the disclosed `judge_lowest_8` "
+            "hard-case subset. Both are published; neither replaces the other."
+        ),
+    )
+    parser.add_argument(
+        "--labels",
+        default=None,
+        metavar="PATH",
+        help="the reference label file to fold in (default: the one the chosen --metric names)",
     )
     return parser
 
@@ -1709,36 +1868,68 @@ def _judge_pass_note(previous: str | None, judged: RunFile) -> str:
     return f"{stripped} {note}".strip() if stripped else note
 
 
-def recompute_agreement(run_id: str, *, results_dir: Path = RESULTS_DIR) -> RunFile:
-    """Fold the blind reference labels into a finished run — the §13.7 ordering, made honest.
+def recompute_agreement(
+    run_id: str,
+    *,
+    results_dir: Path = RESULTS_DIR,
+    metric: str = "judge_agreement_rate",
+    labels_path: Path | str | None = None,
+) -> RunFile:
+    """Fold a reference label set into a finished run — the §13.7 ordering, made honest.
 
     The labeller sees only the questions, the answers and the evidence, and it can only see those
-    once the run has produced them; the judge's verdicts are never shown to it. So the agreement
-    rate is computed here, over the run file's committed per-item groundedness, rather than during
-    the run that produced them. Nothing is re-driven and nothing is re-judged.
+    once the run has produced them; the judge's verdicts are never shown to it. So an agreement rate
+    is computed here, over the run file's committed per-item groundedness, rather than during the
+    run that produced them. Nothing is re-driven and nothing is re-judged.
+
+    `metric` picks a row of `AGREEMENT_METRICS` — the blind `seed_1729_8` subset by default, or the
+    disclosed `judge_lowest_8` hard-case subset — and decides which three fields are written and
+    which labels file is read. The labels file's own `protocol.subset` is checked against it, so
+    passing the wrong `--labels` is an error rather than a silently mislabelled figure.
     """
+    slot = AGREEMENT_METRICS.get(metric)
+    if slot is None:
+        raise SystemExit(f"unknown agreement metric {metric!r}; expected one of {', '.join(sorted(AGREEMENT_METRICS))}")
+    source = Path(labels_path) if labels_path is not None else slot.labels_path
     path = Path(results_dir) / f"{run_id}.json"
     run = RunFile.model_validate(json.loads(path.read_text(encoding="utf-8")))
-    labels = load_reference_labels()
+    labels = load_reference_labels(source)
     if labels is None:
-        raise SystemExit(f"{REFERENCE_LABELS_PATH} does not exist; there is nothing to compare against")
+        raise SystemExit(f"{source} does not exist; there is nothing to compare against")
+    if labels.protocol.subset != slot.subset:
+        raise SystemExit(
+            f"{source} declares `protocol.subset: {labels.protocol.subset}` but --metric {metric} "
+            f"computes the {slot.subset!r} subset. Refusing to publish a figure under the wrong "
+            "population (§13.7)."
+        )
     rate, n, disagreements = det.judge_agreement(
         labels.labels,
         {item.item_id: item.scores.get("groundedness") for item in run.items if item.run_phase == "scored"},
     )
-    run.metrics.judge_agreement_rate = rate
-    run.metrics.judge_agreement_n = n
-    note = f"judge_agreement_rate={rate} over n={n} reference labels."
+    setattr(run.metrics, slot.name, rate)
+    setattr(run.metrics, slot.n_field, n)
+    setattr(run.metrics, slot.subset_field, slot.subset)
+    note = f"{slot.name}={rate} over n={n} reference labels (subset {slot.subset})."
     if disagreements:
         note += " disagreements: " + "; ".join(
             f"{row['item_id']} (reference {row['reference']}, judge {row['judge']})" for row in disagreements
         )
-    # Idempotent: a second fold-in replaces the first note rather than stacking another copy of it.
-    previous = re.sub(r"\s*judge_agreement_rate=.*$", "", run.notes or "").strip()
-    run.notes = f"{previous} {note}".strip() if previous else note
+    run.notes = _agreement_note(run.notes, slot, note)
     path.write_text(json.dumps(run.model_dump(mode="json"), indent=1) + "\n", encoding="utf-8")
     write_report(run, results_dir=Path(results_dir))
     return run
+
+
+def _agreement_note(previous: str | None, slot: AgreementMetric, note: str) -> str:
+    """Append this metric's note idempotently, leaving the *other* metric's note alone.
+
+    Each agreement note lives on its own line and starts with its metric name, so a second fold-in
+    of either subset replaces its own line and stacks nothing. The trailing `re.sub` clears the
+    pre-two-subset format, where the note was appended inline to the end of the prose.
+    """
+    kept = [line for line in (previous or "").split("\n") if not line.startswith(f"{slot.name}=")]
+    body = re.sub(rf"\s*{re.escape(slot.name)}=[^\n]*$", "", "\n".join(kept)).strip()
+    return f"{body}\n{note}".strip() if body else note
 
 
 async def _main(argv: Sequence[str] | None = None) -> int:
@@ -1761,13 +1952,21 @@ async def _main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     if args.recompute_agreement:
-        run = recompute_agreement(args.recompute_agreement, results_dir=Path(args.results_dir))
+        slot = AGREEMENT_METRICS[args.metric]
+        run = recompute_agreement(
+            args.recompute_agreement,
+            results_dir=Path(args.results_dir),
+            metric=args.metric,
+            labels_path=args.labels,
+        )
         print(  # noqa: T201 — this is a CLI
             json.dumps(
                 {
                     "run_id": run.run_id,
-                    "judge_agreement_rate": run.metrics.judge_agreement_rate,
-                    "judge_agreement_n": run.metrics.judge_agreement_n,
+                    "metric": slot.name,
+                    "subset": getattr(run.metrics, slot.subset_field),
+                    slot.name: getattr(run.metrics, slot.name),
+                    slot.n_field: getattr(run.metrics, slot.n_field),
                 },
                 indent=1,
             )

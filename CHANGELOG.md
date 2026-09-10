@@ -831,3 +831,50 @@ need an account was built, run and measured here.
 - **Render publishes no deploy-hook endpoint either.** `provision_render.py` sets the other two
   repository secrets and prints copying the hook from Service → Settings → Deploy Hook as the single
   remaining manual step, rather than pretending to have retrieved it.
+
+## 2026-09-10 — P10 fix round 4 (judged fixtures, the label-packet builder, a disclosed hard-case judge subset)
+
+- **The dashboard's eval fixtures are regenerated from the judged runs, by a committed script.**
+  `scripts/refresh_eval_fixtures.py` rebuilds `tests/fixtures/eval_runs/r_p9fixture_<variant>.json`
+  from the three committed P10 runs: six item rows copied verbatim, the run-level metrics re-derived
+  over exactly those six by `Runner.assemble()` — the shipped aggregation, not a second description
+  of it — and three synthetic `cold_probe` rows that each fixture's own note declares as the file's
+  only invented content. The baseline fixture now carries `judge_status: judged` and real judged
+  aggregates, so page 11's "not judged on this variant" assertions test the real distinction rather
+  than a hand-set flag. Promoting the script is the point: the fixtures were derived artifacts that
+  nobody could re-derive.
+
+- **The blind labelling packet is built by a script in the repository too.**
+  `scripts/gen_label_packet.py` reads three things and nothing else — the dataset, the run file's
+  served answers, and the trace store — and calls `evaluation.runner._evidence_of` rather than
+  re-deriving the evidence, because there is exactly one definition of "what the judge scores
+  against" and a builder that re-implements it has already been wrong twice. `--subset seed`
+  (default, `SEED = 1729`, unchanged) or `--subset judge_lowest`, with `--n`.
+
+- **`judge_agreement_rate = 1.000 (n = 7)` was not the validation it looked like, and the report now
+  says so from the data.** All seven compared items were a unanimous `grounded`: the agreement
+  matrix had no discriminating cell, so the figure could not separate a good judge from one that
+  answers `grounded` to everything. `evaluation.schema.judge_lowest_subset()` adds a second subset —
+  the 8 gold-`answer` items with the **lowest judge groundedness in the run**, ties broken by item
+  id — labelled blind from the same packet shape by the same independent model, and published as its
+  own metric: **`judge_agreement_rate_hard` = 0.875 over n = 8**, one disagreement (`inj-001`:
+  reference `grounded`, judge `not_grounded` at 0.833). The price is that the *selection* uses the
+  judge's own scores and is therefore not blind. That is disclosed rather than smoothed over —
+  `protocol.selection_disclosed: true` in `evaluation/reference_labels_hard.yaml`, both figures side
+  by side in REPORT.md with their `n` and their subset definition, and never merged or averaged. The
+  packet itself withholds the criterion and renders the items in item-id order: told "these are the
+  eight the judge liked least", a labeller drifts toward `not_grounded` and manufactures the very
+  disagreement the subset exists to detect.
+
+- **`python -m evaluation.runner --recompute-agreement` takes `--metric` and `--labels`**, driven by
+  a two-row table in `evaluation/schema.py`; it refuses to fold one subset's labels into the other's
+  metric (`protocol.subset` is checked against the metric), and each figure's note in the run file is
+  replaced idempotently without disturbing the other's.
+
+- **REPORT.md attributes every §13.8 failure instead of only reporting the gap.** Strict pass rate
+  0.654 is 0.196 below the ≥ 0.85 target, and the nine failing items now carry the clause each of
+  them tripped — `inj-001` groundedness 0.83 < 0.85, `pto-002` a `policy_fact` block dropped by G2,
+  five tool-recall shortfalls, five incomplete workflows, two behaviour mismatches. They are
+  recomputed from the committed per-item scores by `deterministic.strict_pass_causes()`, which
+  `strict_pass()` is itself now defined in terms of, so the cause column and the `passed` flag are
+  one computation and cannot disagree.

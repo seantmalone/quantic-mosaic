@@ -802,8 +802,15 @@ class EvalMetrics(BaseModel):
     router_matrix: dict[str, dict[str, int]] = Field(default_factory=dict)
     catalog_reopened_rate: float | None = None
     n_scored: dict[str, int] = Field(default_factory=dict)
+    #: The two judge-validation figures of §13.7 — the blind `seed_1729_8` subset and the disclosed
+    #: `judge_lowest_8` hard-case subset — each with its own `n` and the subset it was computed
+    #: over. They are never merged: one is blind, the other is selected by judge score.
     judge_agreement_rate: float | None = None
     judge_agreement_n: int = 0
+    judge_agreement_subset: str | None = None
+    judge_agreement_rate_hard: float | None = None
+    judge_agreement_n_hard: int = 0
+    judge_agreement_subset_hard: str | None = None
     est_cost_usd: float | None = None
 
 

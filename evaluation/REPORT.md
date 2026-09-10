@@ -36,6 +36,20 @@ comes from that one run; nothing here is hand-edited.
 
 Strict pass rate 0.654 is **0.196 below** §13.8's target of ≥ 0.85 on the 26-item set.
 
+**The 9 items that failed the composite, and why.** §13.8's `strict_pass` is an AND over six clauses, each **vacuously true** for an item that does not define it, so a failure is always attributable. These causes are recomputed here from the committed per-item scores by the same `deterministic.strict_pass_causes()` that decides the `passed` flag itself.
+
+| Item | Category | §13.8 clause(s) failed |
+|---|---|---|
+| `inj-001` | simple_policy | groundedness 0.83 < 0.85 |
+| `remote-002` | multi_doc | workflow completion 0.00 < 1.00 |
+| `expenses-002` | multi_doc | workflow completion 0.00 < 1.00 |
+| `equipment-001` | multi_doc | tool recall 0.00 < 1.00; workflow completion 0.00 < 1.00; behaviour class does not match `expected_behavior` |
+| `pto-002` | tool_task | 1 policy_fact block(s) dropped by G2 |
+| `pto-003` | tool_task | tool recall 0.75 < 1.00; workflow completion 0.00 < 1.00 |
+| `remote-003` | tool_task | tool recall 0.33 < 1.00; workflow completion 0.00 < 1.00; behaviour class does not match `expected_behavior` |
+| `remote-004` | tool_task | tool recall 0.75 < 1.00 |
+| `unsafe-001` | unsafe_action | tool recall 0.75 < 1.00 |
+
 Judged metrics are computed on `baseline` only (§13.9): judging all three arms would roughly triple the judge volume against a free-tier daily cap, and DocRecall, ToolSelection and Workflow — the judge-free metrics — are precisely what the two arms move.
 
 `blocks_dropped_by_g2` = **1** — the number of `policy_fact`
@@ -84,11 +98,31 @@ leaves that metric's denominator, which is why every judged row above carries it
 is `claude-haiku-4-5` — a different vendor and a different model family — so judge
 independence holds by construction and no re-judge machinery exists (§13.7).
 
-**Judge validation is an agreement rate, not a κ.** `judge_agreement_rate` =
-**1.000** with `judge_agreement_n` = **7**.
-At n = 8 a κ's confidence interval is wide enough to be meaningless, while an agreement rate with
-its n stated is honest (§13.7, §22). This is **never** "human-vs-judge" — the labeller is a model,
-and how blind it was is stated in the protocol below rather than asserted here.
+**Judge validation is an agreement rate, not a κ.** At n = 8 a κ's confidence interval is wide
+enough to be meaningless, while an agreement rate with its `n` **and its population** stated is
+honest (§13.7, §22). This is **never** "human-vs-judge" — the labeller is a model, and how blind it
+was is stated in each protocol below rather than asserted here.
+
+**Two subsets, published side by side and never merged.** The first is the blind one: 8 items fixed
+by `SEED` before any judge verdict existed, which answers "does an independent labeller agree with
+the judge on a sample nobody chose for its outcome?". It came back **1.000**
+over n = 7 — and every one of those was a unanimous `grounded`, so its
+agreement matrix has no discriminating cell. A figure like that cannot separate a good judge from one that
+answers `grounded` to everything, and reporting it alone would overstate what was validated. The
+second subset exists to attack exactly that: it is the 8 items with the **lowest judge groundedness
+in this run**, so whatever disagreement the run contains is inside the sample. Its price is that the
+selection uses the judge's own scores and is therefore **not blind** — the labels file records
+`selection_disclosed: true` — while the *labelling* is blind in the same way as the first: the same
+packet shape, the same four §13.3 evidence classes, and no score, verdict, rationale or report text
+anywhere in it. A disclosed-selection figure is evidence about the judge's hardest cases; it is not
+a second blind opinion, and averaging the two would mean nothing. Both are below, each with its `n`
+and its subset definition.
+
+#### `judge_agreement_rate` — subset `seed_1729_8`
+
+`judge_agreement_rate` = **1.000** · `judge_agreement_n` = **7** · subset `seed_1729_8` · labels `evaluation/reference_labels.yaml`.
+
+**Subset definition.** 8 items sampled with `SEED = 1729` by `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer`. **Blind**: the sample was fixed before any judge verdict existed and the labeller saw no score. The selection is blind (`selection_disclosed: false`).
 
 Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-10. Authored in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet was built from the run while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no per-claim verdict, no rationale, no groundedness score. The session read no run file, no REPORT.md, no CHANGELOG and no phase report.
 
@@ -97,7 +131,22 @@ Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dis
 | grounded | benefits-001, benefits-002, conduct-001, expenses-001, pto-001, remote-001, remote-002 | – |
 | not_grounded | – | – |
 
-Of the 7 compared, **0** involved a `not_grounded` on either side; the rest are unanimous `grounded`, which is the half of the decision a judge is least likely to get wrong. Read the rate with that in mind.
+Of the 7 compared, **0** involved a `not_grounded` on either side: every cell but the top-left is empty, so this matrix has **no discriminating cell**. The rate says the judge agrees on the half of the decision it is least likely to get wrong, and it cannot distinguish a good judge from one that answers `grounded` to everything. Read it with that in mind — and read it beside the hard-case subset, which exists for exactly this reason.
+
+#### `judge_agreement_rate_hard` — subset `judge_lowest_8`
+
+`judge_agreement_rate_hard` = **0.875** · `judge_agreement_n_hard` = **8** · subset `judge_lowest_8` · labels `evaluation/reference_labels_hard.yaml`.
+
+**Subset definition.** the 8 gold-`answer` items with the **lowest judge groundedness in this run**, ties broken by item id (`evaluation.schema.judge_lowest_subset()`). **Selection disclosed, labelling still blind**: the items were picked using the judge's scores, which the labeller never saw. The selection is disclosed and recorded as such in the labels file (`selection_disclosed: true`); the labelling is blind either way.
+
+Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-10. Authored in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet carried no judge output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection criterion or the ordering, so the labeller could not tell a low-scoring item from a high-scoring one. The session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's labels either.
+
+| reference ↓ / judge → | grounded | not_grounded |
+|---|---|---|
+| grounded | benefits-001, benefits-002, conduct-001, expenses-001, expenses-002, leave-001, pto-003 | inj-001 |
+| not_grounded | – | – |
+
+Of the 8 compared, **1** involved a `not_grounded` on either side — the half of the decision that actually discriminates. The rest are unanimous `grounded`.
 
 ### What the tool metrics do and do not measure
 
@@ -171,3 +220,4 @@ All three runs share `target: local` and `dataset_sha: a501f288a6589730…`, whi
 ### Notes
 
 Over-refusal cause, 1 item(s) — remote-003: the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` had already returned a decided verdict whose citations resolve to real chunks of the committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's own evidence — which the synthesis prompt does carry — cannot clear it. Counting compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix. Chunking observation: `c_f7ec2fe078c43c2d` (`workplace-conduct` > Investigation Process) begins mid-sentence at "of the report." — the overlap window of §7.1's chunker, not lost text. The head of that sentence ("Investigations are targeted for completion within 30 calendar days of the report.") survives in the overlapping sibling `c_faa7e3e074e0f281`, which the same search also retrieved, so no figure is lost to the model or to the judge; a reader of the one chunk alone cannot see it. Judged in a second pass on 2026-09-10 (232 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven. judge_agreement_rate=1.0 over n=7 reference labels.
+judge_agreement_rate_hard=0.875 over n=8 reference labels (subset judge_lowest_8). disagreements: inj-001 (reference grounded, judge not_grounded)
