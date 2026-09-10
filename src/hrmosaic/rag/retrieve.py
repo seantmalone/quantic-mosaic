@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from hrmosaic.rag import embed, index
@@ -78,6 +79,45 @@ class RetrievalResult:
 def rrf_score(ranks: list[int], k0: int = RRF_K0) -> float:
     """Reciprocal rank fusion over one candidate's 1-based ranks in the arms that returned it."""
     return sum(1.0 / (k0 + rank) for rank in ranks)
+
+
+def score_chunk_ids(
+    chunk_ids: Sequence[str],
+    *,
+    query: str,
+    connection: sqlite3.Connection | None = None,
+) -> dict[str, float]:
+    """The dense score chunks that are **already known** would have had, without searching for them.
+
+    §7.4's G1 scores retrieved candidates. `check_policy_compliance` cites committed chunks it
+    resolved from `corpus/rules.yml` rather than from a search, so those ids reach the turn with no
+    score at all and were invisible to the gate — a correct, cited verdict could be refused for want
+    of evidence (P13 R7). This is the one function that closes that gap, and it closes it by
+    scoring, never by admitting: it is §7.1's **fill step**, applied to an explicit id list rather
+    than to the BM25-only arrivals — `1 − cosine_distance` between the query vector and each chunk's
+    **stored** embedding, which is exactly what `retrieve()` puts on a `Hit`.
+
+    One embed call, and none at all when nothing resolves. An id that is not in the index is simply
+    absent from the result: an unknown citation is not an error here, it is nothing (§7.4 G2 makes
+    the same choice).
+    """
+    if not chunk_ids:
+        return {}
+    owned = connection is None
+    connection = connection if connection is not None else index.open_index()
+    try:
+        placeholders = ", ".join("?" for _ in chunk_ids)
+        rows = connection.execute(
+            f"SELECT rowid, chunk_id FROM chunks WHERE chunk_id IN ({placeholders})", list(chunk_ids)
+        ).fetchall()
+        vectors = index.stored_vectors(connection, [row["rowid"] for row in rows])
+    finally:
+        if owned:
+            connection.close()
+    if not vectors:
+        return {}
+    vector = embed.embed_query(query)
+    return {row["chunk_id"]: index.cosine(vectors[row["rowid"]], vector) for row in rows if row["rowid"] in vectors}
 
 
 def retrieve(

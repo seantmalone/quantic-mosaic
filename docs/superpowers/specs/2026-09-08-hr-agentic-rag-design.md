@@ -725,6 +725,16 @@ deliberately does not assert an exact count.
 Confirmation for irreversible actions is **not** a guardrail — it is a property of the MCP server (§8.6), which is why action safety can be a plain
 test rather than a reported number.
 
+**G1's candidate set includes the compliance engine's evidence (P13).** Tool 4 is deterministic and every requirement it evaluates carries an
+`evidence` block naming a **committed** chunk, resolved by `mcpserver/rules.py` from a `(doc_id, heading_path)` pair in `corpus/rules.yml`. Nothing had
+ever scored those ids, so the gate could not see them and a turn could reach a correct, cited verdict and be refused for want of evidence. The
+orchestrator now resolves each of them against the committed index, embeds the turn's query once, scores each resolved chunk on the **same dense path**
+retrieval uses (§7.1's fill step: `1 − cosine_distance` against the stored embedding), runs the resolved text through G4, and only then passes it to
+`LoopState.note_evidence` and the turn's citable set — the treatment a retrieved chunk gets, and no more. **The rule and both thresholds are unchanged**:
+a resolved chunk below `MIN_EVIDENCE_SCORE` still refuses, a quarantined one is never citable, an unknown id is nothing, and nothing is ever admitted
+unscored. The engine's top-level `citations[]` — which also carries approval evidence — stays out: those are ids the turn did not retrieve, and §9.3's
+predicates have declined to count them since P8.
+
 **Over-refusal is measured, not assumed.** `MIN_EVIDENCE_SCORE` is calibrated at P10 from the observed score distribution; `OverRefusalRate` and
 `MissedRefusalRate` are first-class metrics (§13.4); the threshold is env-configurable so the ablation can move it.
 

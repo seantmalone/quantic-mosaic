@@ -96,6 +96,10 @@ OUT_OF_CORPUS_PHRASES: tuple[str, ...] = (
 #: The gated write tools of §8.4. A `CONFIRMATION_REQUIRED` from either parks the turn.
 WRITE_TOOLS = ("create_mock_hr_ticket", "draft_hr_email")
 
+#: The deterministic compliance engine (§8.4 tool 4). Its per-requirement evidence names
+#: committed chunks, which `_engine_evidence` scores so G1 can weigh them (§7.4, P13 R7).
+COMPLIANCE_TOOL = "check_policy_compliance"
+
 CAVEAT_TEXT = (
     "The HR tool server is unreachable, so I could not read the policy corpus or your employee "
     "record for this answer. Nothing below is a statement of Mosaic Robotics policy."
@@ -1085,23 +1089,87 @@ class Orchestrator:
                 )
                 turn.evidence[chunk.chunk_id] = evidence
                 fresh.append(evidence)
-        # ⚠ Two kinds of chunk id are *not* evidence, for one reason: an answer cannot rest on
-        # them. A quarantined chunk is the second kind — G2 strips every citation to it — and it is
-        # dropped by `note_evidence` above while staying, flag and all, on the `retrieval` span.
-        # Tools 2 and 4 also cite chunk ids, and those ids used to count towards the workflow's
-        # document spread. They no longer do (P8's live check: §9.3's predicate now reads evidence
-        # the same way §7.4's G1 does). They carry no dense score, so they never enter G1's candidate
-        # set — and a completion predicate that counted them while the evidence gate did not made
-        # `is_complete` true on a turn G1 was about to refuse. Live, the model reached
-        # `check_policy_compliance` without ever searching, the act loop closed because the workflow
-        # "was complete", and both demo tasks refused for want of evidence. One meaning of
-        # "evidence", shared by the predicate and the gate, is the whole fix.
+        # ⚠ A merely *cited* chunk id is not evidence, for one reason: nothing scored it. A
+        # quarantined chunk is the same rule wearing a different hat — G2 strips every citation to
+        # it — and it is dropped by `note_evidence` above while staying, flag and all, on the
+        # `retrieval` span. Tools 2 and 4 cite ids they never retrieved, and those ids used to count
+        # towards the workflow's document spread. They no longer do (P8's live check: §9.3's
+        # predicate now reads evidence the same way §7.4's G1 does), because a completion predicate
+        # that counted them while the evidence gate did not made `is_complete` true on a turn G1 was
+        # about to refuse. One meaning of "evidence", shared by the predicate and the gate.
+        #
+        # `_engine_evidence` below does not weaken that: it does not admit tool 4's citations, it
+        # SCORES the chunks behind its per-requirement evidence and lets the same rule judge them.
         body = result.body
+        if result.tool_name == COMPLIANCE_TOOL:
+            self._engine_evidence(turn, body)
         if result.tool_name in WRITE_TOOLS:
             # §8.5's allocated ids: `MOCK-HR-…` from tool 8, `MOCK-EMAIL-…` from tool 9.
             for key in ("ticket_id", "draft_id"):
                 if body.get(key):
                     turn.state.mock_write_ids.append(str(body[key]))
+        return fresh
+
+    def _engine_evidence(self, turn: _Turn, body: dict[str, Any]) -> list[EvidenceChunk]:
+        """Score the compliance engine's own evidence and offer it to the gate (§7.4 G1, P13 R7).
+
+        `check_policy_compliance` is deterministic and every requirement it evaluates carries an
+        `evidence` block naming a **committed** chunk, resolved by `mcpserver/rules.py` from a
+        `(doc_id, heading_path)` pair in `corpus/rules.yml`. Nothing had ever scored those ids, so
+        G1 could not see them and a turn could reach a correct, cited verdict and be refused for
+        want of evidence — the judged baseline's `remote-003`.
+
+        **The candidate set widens; the rule does not.** Each id is resolved against the committed
+        index (an unknown one is nothing, exactly as it is to G2), scored on the same dense path
+        §7.1's fill step uses, run through G4, and only then handed to `note_evidence` and the turn's
+        citable set — the treatment a retrieved chunk gets, no more. A resolved chunk below
+        `MIN_EVIDENCE_SCORE` still refuses, and nothing is ever admitted unscored.
+
+        The engine's top-level `citations[]` is deliberately not read: it is a list of ids the turn
+        did not retrieve, and that is what `_absorb` has declined to count since P8. Cost: one embed
+        per compliance result that resolves something new.
+        """
+        ids: list[str] = []
+        for requirement in body.get("requirements") or []:
+            if not isinstance(requirement, dict):
+                continue
+            evidence = requirement.get("evidence") or {}
+            chunk_id = evidence.get("chunk_id") if isinstance(evidence, dict) else None
+            if chunk_id and chunk_id not in turn.evidence and chunk_id not in ids:
+                ids.append(str(chunk_id))
+        rows = {chunk_id: corpusread.get_chunk(chunk_id) for chunk_id in ids}
+        resolved = {chunk_id: row for chunk_id, row in rows.items() if row is not None}
+        if not resolved:
+            return []
+
+        # The one place `agent/**` reaches into `hrmosaic.rag` (§4.2's docstring convention, and
+        # the same lazy-import shape `web/api.py` uses for `/health`'s index block). The alternative
+        # was a tenth MCP tool whose only caller is this line, and §13.4 would then have scored an
+        # extra `tools/call` on every compliance turn.
+        from hrmosaic.rag.retrieve import score_chunk_ids
+
+        scores = score_chunk_ids(list(resolved), query=turn.request.message)
+        fresh: list[EvidenceChunk] = []
+        for chunk_id, row in resolved.items():
+            if chunk_id not in scores:
+                continue
+            chunk = EvidenceChunk(
+                chunk_id=row.chunk_id,
+                doc_id=row.doc_id,
+                doc_title=row.doc_title,
+                heading_path=row.heading_path,
+                section=row.section,
+                snippet=row.snippet,
+                dense_score=scores[chunk_id],
+                quarantined=g4.scan(row.text) is not None,
+            )
+            turn.evidence[chunk_id] = chunk
+            turn.state.note_evidence(chunk_id, row.doc_id, quarantined=chunk.quarantined)
+            if chunk.quarantined and chunk_id not in turn.quarantined:
+                turn.quarantined.append(chunk_id)
+            fresh.append(chunk)
+        if fresh:
+            g4.check(fresh, turn=turn.buffer, source="compliance_evidence")
         return fresh
 
     def _scan(self, turn: _Turn, chunks: Sequence[EvidenceChunk]) -> None:
