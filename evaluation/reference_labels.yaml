@@ -19,86 +19,87 @@
 
 protocol:
   labeller: >-
-    Claude Opus 5 — a third model family, independent of both the agent (Anthropic
-    claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)
+    blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third
+    model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google
+    gemini-3.5-flash-lite)
   labelled_on: "2026-09-10"
   blinding: >-
-    Each label was authored from a packet containing only the item's question, the answer the agent
-    produced, and the verbatim retrieved policy passages the agent saw. The packet carried no judge
-    output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score.
-    ⚠ Disclosed rather than claimed away: before the labelling packet was built, the labeller had
-    incidentally seen the run-level per-item groundedness *scores* (not the verdicts, per-claim
-    verdicts or rationales) for three of these eight items — `benefits-002`, `remote-002` and
-    `remote-003` — while triaging which items failed the composite. The blinding is therefore
-    complete for five of the eight and partial for three, and `judge_agreement_rate` should be read
-    with that in mind.
+    Authored in a fresh session that read only the labelling packet: for each item, the question,
+    the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
+    each labelled with its class. The packet was built from the run while it was still
+    `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
+    per-claim verdict, no rationale, no groundedness score. The session read no run file, no
+    REPORT.md, no CHANGELOG and no phase report.
   selection: >-
     `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer` — a
     refusal, a clarification and an escalation carry no policy claims to ground.
   seed: 1729
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
-    supported by the passages shown, and `not_grounded` otherwise. Evidence is the retrieval set
-    only, as §13.3 defines it ("read from the `retrieval` spans"), so a fact the agent took from a
-    structured-data tool result is not supported by this evidence — a limitation of the rubric that
-    the rationales below name where it bites.
+    supported by the evidence shown, and `not_grounded` otherwise. The evidence set is §13.3's:
+    everything the synthesis prompt actually carried, in four classes — the whole text of every
+    non-quarantined retrieved chunk (`retrieval`), sections fetched in full (`section`), the
+    deterministic compliance engine's requirement evidence (`compliance`) and the employee-record
+    results the agent read (`structured_data`) — and a claim is supported if any item of any class
+    supports it.
 
 labels:
   - item_id: benefits-001
     verdict: grounded
     rationale: >-
-      All three policy claims are verbatim in the passages: the 90-day waiting period with coverage
-      beginning on the day it ends, life and AD&D cover beginning when the medical waiting period
-      ends, and 401(k) contributions from the first payroll run with no waiting period.
+      Every policy claim is verbatim in the evidence — the 90-day waiting period and its
+      coverage-start, transfer and 26-week break-in-service rules in c_7566e6e377678fcd, life/AD&D
+      cover beginning with the medical waiting period in c_88f9cf68022eeaea, and week-one enrolment
+      with the no-waiting-period 401(k) in c_5892cd18e5f9cae8.
 
   - item_id: benefits-002
-    verdict: not_grounded
+    verdict: grounded
     rationale: >-
-      The general 90-day rule is verbatim in the evidence, but the answer also asserts a specific
-      date — "your 90-day waiting period ends on 2026-11-13" — which appears nowhere in the
-      retrieved passages. It came from a `lookup_benefits_status` tool result, so it is a correct
-      statement rather than a hallucination; under §13.3's rubric, which scores against the
-      retrieval set alone, it is nonetheless unsupported.
+      The 90-day rule and the 30-day election window with its employee-only default come from
+      c_7566e6e377678fcd, and the specific date claim — waiting period ending 2026-11-13 as of
+      2026-09-01 — is exactly the employee's own record in lookup_benefits_status#1.
 
   - item_id: conduct-001
     verdict: grounded
     rationale: >-
-      The three published timelines the answer states — acknowledgement within 2 business days,
-      investigations targeted at 30 calendar days, and a Severity-1 response within 4 business
-      hours — are each verbatim in the passages, from two different documents.
+      The three published timelines are each stated in the evidence: the 2-business-day
+      acknowledgement and 30-calendar-day investigation target in c_faa7e3e074e0f281, and the
+      Severity 1 definition with its 4-business-hour response in c_8befbf9c1eefd50e, with the "as
+      fast as the facts allow" Severity 1 resolution target in c_8e5b6fa6417ebbd2.
 
   - item_id: expenses-001
     verdict: grounded
     rationale: >-
-      The USD 750 annual home-office allowance, the 1 January reset with no carry-over, the list of
-      eligible items and the exclusion of laptops, monitors and headsets are all verbatim in the
-      Annual Home Office Allowance passage.
+      The USD 750 annual home-office cap and every rule attached to it — 1 January reset with no
+      carryover, hybrid/remote eligibility, the exclusion of laptops and monitors as company assets,
+      employee ownership and taxability, and the post-1-October new-hire double claim — are all in
+      c_c0b4b1d7c6436137.
 
   - item_id: pto-001
     verdict: grounded
     rationale: >-
-      The single claim — 1.50 days of PTO per month for full-time employees with three or more
-      years of service — is a verbatim sentence of the Standard Accrual Rates passage.
+      The single claim, that full-time employees with three or more years of service accrue 1.50
+      days of PTO per month, is stated word for word in c_e178629918c7cd96 and in the fetched
+      section get_policy_section#1.
 
   - item_id: remote-001
     verdict: grounded
     rationale: >-
-      The 3-days-a-week onsite requirement, the team (not individual) choice of days and the
-      Tuesday–Thursday anchoring are one verbatim paragraph of the Required Onsite Days passage;
-      the closing suggestion is advice, not a policy statement.
+      The claim that hybrid employees are on site at least 3 days a week with team-set days anchored
+      on Tuesday–Thursday is a verbatim restatement of c_cf43ea100f30ec65.
 
   - item_id: remote-002
     verdict: grounded
     rationale: >-
-      Every claim — Tax & Legal review before travel above 30 consecutive days, what the review
-      determines, the 21-calendar-day filing lead time, the contents of the request, director rather
-      than manager approval, three separate records before departure, and the three review
-      outcomes — is in the Stays Exceeding 30 Days passage.
+      The three-approval requirement (manager, director, Tax & Legal, all present before departure),
+      the 21-calendar-day filing deadline, the review's scope and its three outcomes all come from
+      c_c502ccd2ba5028f5, with the 12-month tenure, good-standing and role-ineligibility conditions
+      from c_6577bf6f392890bf and the right-to-work, device and rolling 90-day limit from
+      c_4142a3cd62ef49dd.
 
   - item_id: remote-003
     verdict: grounded
     rationale: >-
-      The turn retrieved nothing and the answer declines: it asserts no company policy at all, and
-      names the corpus instead. Nothing stated is unsupported. The judge produces no groundedness
-      verdict for a refused turn, so this item leaves the agreement denominator rather than
-      counting as an agreement.
+      The answer declines to answer and states no company policy at all — it makes no claim about
+      the 30-day Tax & Legal threshold that check_policy_compliance#1 carries — so there is no
+      policy claim that could be unsupported.

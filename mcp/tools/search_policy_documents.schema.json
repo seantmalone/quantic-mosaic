@@ -1,6 +1,6 @@
 {
   "name": "search_policy_documents",
-  "description": "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with the ids and heading paths a citation needs. Use it to find the passage that answers a policy question; use get_policy_section to read one in full.",
+  "description": "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with the ids and heading paths a citation needs. Use it to find the passage that answers a policy question; use get_policy_section to read one in full. topic prioritises one corpus topic; when the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus.",
   "input_schema": {
     "properties": {
       "query": {
@@ -62,7 +62,7 @@
           }
         ],
         "default": null,
-        "description": "Restrict the search to one corpus topic.",
+        "description": "Prioritise one corpus topic. When the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus (see topic_backfilled).",
         "title": "Topic"
       },
       "min_dense_score": {
@@ -164,7 +164,7 @@
         "type": "object"
       }
     },
-    "description": "The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.",
+    "description": "The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.\n\n`topic_backfilled` is `true` when at least one returned hit came from the unfiltered search the\nsoft `topic` filter runs underneath itself, and `backfill_reason` says what triggered it. Both\nare `false`/`null` on every search that passed no `topic`.",
     "properties": {
       "hits": {
         "items": {
@@ -213,6 +213,27 @@
       "index_version": {
         "title": "Index Version",
         "type": "string"
+      },
+      "topic_backfilled": {
+        "default": false,
+        "title": "Topic Backfilled",
+        "type": "boolean"
+      },
+      "backfill_reason": {
+        "anyOf": [
+          {
+            "enum": [
+              "fewer_than_k",
+              "single_document"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Backfill Reason"
       }
     },
     "required": [

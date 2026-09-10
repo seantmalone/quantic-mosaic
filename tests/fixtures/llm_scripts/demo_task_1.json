@@ -1,73 +1,110 @@
 {
   "scenario": "demo_task_1",
-  "_note": "Demo task 1 — international remote-work eligibility (spec §18.1). Recorded at P7 against the real act loop: one route call, three act steps grouping 2 + 2 + 1 tool calls, then synthesize, which is exactly where `remote_work_eligibility.is_complete` closes the loop (profile in state, a decided compliance verdict, evidence spanning four documents). The synthesized citations are real chunk ids from the committed index, so G2 resolves every one of them. P10 replaces this file with one real recorded exchange (§16.2).",
+  "_note": "Demo task 1 — international remote-work eligibility (spec §18.1). A REAL exchange, recorded 2026-09-10 against Anthropic claude-haiku-4-5 on the live app at http://127.0.0.1:8000 and replayed here verbatim: the provider's own purposes, texts, tool arguments, finish reasons and token counts. Only the opaque provider call ids are re-minted (ProposedToolCall is {name, args}, so the record does not keep them). The sequence is the model's, not the spec table's — one route call; an act step pairing lookup_employee_profile with check_policy_compliance; an act step that answered in prose and was pushed back into the loop by the WORKFLOW_INCOMPLETE reminder; an act step of five search_policy_documents calls; synthesize. get_policy_section is never called, which is why §18's demo-1 record makes it optional. Three identical recordings produced this sequence.",
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"remote_work_eligibility\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"search_policy_documents\", \"get_policy_section\", \"check_policy_compliance\"], \"rationale_summary\": \"An international remote-work question needing the employee record and multi-document policy evidence.\"}",
-      "finish_reason": "stop",
-      "prompt_tokens": 1180,
-      "completion_tokens": 118
+      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"remote_work_eligibility\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"employee_data_reader\", \"policy_qa\"], \"rationale_summary\": \"Remote work eligibility check for E1042 from Berlin, 3 Nov–14 Dec 2026. Requires employee record and policy rules.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1176,
+      "completion_tokens": 121
     },
     {
       "purpose": "act",
+      "response_text": "I'll check your eligibility to work from Berlin during that period. Let me gather the necessary information.",
       "tool_calls": [
-        {"id": "toolu_d1_1", "name": "lookup_employee_profile", "args": {"employee_id": "E1042"}},
+        {
+          "id": "toolu_d1_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
         {
           "id": "toolu_d1_2",
-          "name": "search_policy_documents",
-          "args": {"query": "international remote work eligibility duration approval", "k": 5}
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "international_remote",
+            "employee_id": "E1042",
+            "parameters": {
+              "destination_country": "Germany",
+              "start_date": "2026-11-03",
+              "duration_days": 42
+            }
+          }
         }
       ],
       "finish_reason": "tool_use",
-      "prompt_tokens": 1402,
-      "completion_tokens": 96
+      "prompt_tokens": 3709,
+      "completion_tokens": 186
     },
     {
       "purpose": "act",
+      "response_text": "**Short answer: Not yet—your request is conditional and requires approvals.**\n\n**Your situation (as of 2026-09-01):**\n- ✅ You meet tenure (45 months; 12 required)\n- ✅ Germany is on the approved-country list\n- ✅ You have 63 days' notice (21 required)\n- ✅ 42 days is within the 90-day annual limit\n- ❌ **Your 42-day stay exceeds 30 days, triggering Tax & Legal review** — this is mandatory before you can proceed\n- ❌ **Device requirement unverified** — you must confirm your travel laptop is company-managed, full-disk-encrypted, and on always-on VPN\n\n**What you must do:**\n\n1. **Raise the request in MosaicOne** under \"Work from another country\" with exact dates (3 Nov – 14 Dec 2026) and your Berlin workspace address.\n\n2. **File a Tax & Legal review request** at least 21 days before departure. This determines whether shadow payroll, social security coverage, or permanent-establishment mitigation is needed.\n\n3. **Confirm with IT Security** that your travel laptop meets the encryption and VPN requirements.\n\n4. **Get written approval from:**\n   - Your manager (Dana, E1007)\n   - Your director (Miguel, E1002) — required for stays over 30 days\n\nOnce Tax & Legal clears the review and your manager and director approve, you can proceed. The mobility team (mobility@mosaicrobotics.example) can help coordinate.",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 6527,
+      "completion_tokens": 372
+    },
+    {
+      "purpose": "act",
+      "response_text": "You're right. Let me search the policy corpus to retrieve citable passages from distinct documents and close the gaps.",
       "tool_calls": [
         {
           "id": "toolu_d1_3",
-          "name": "get_policy_section",
+          "name": "search_policy_documents",
           "args": {
-            "doc_id": "remote-and-hybrid-work",
-            "heading_path": "Working Outside Your Home Country > Approval"
+            "query": "international remote work tenure eligibility 12 months continuous service",
+            "topic": "remote_work",
+            "k": 5
           }
         },
         {
           "id": "toolu_d1_4",
           "name": "search_policy_documents",
-          "args": {"query": "data security working abroad device VPN encryption", "k": 5}
-        }
-      ],
-      "finish_reason": "tool_use",
-      "prompt_tokens": 2610,
-      "completion_tokens": 104
-    },
-    {
-      "purpose": "act",
-      "tool_calls": [
+          "args": {
+            "query": "stays exceeding 30 days tax legal review shadow payroll",
+            "topic": "tax_location",
+            "k": 5
+          }
+        },
         {
           "id": "toolu_d1_5",
-          "name": "check_policy_compliance",
+          "name": "search_policy_documents",
           "args": {
-            "scenario": "international_remote",
-            "employee_id": "E1042",
-            "parameters": {"duration_days": 42, "destination_country": "DE", "start_date": "2026-11-03"},
-            "policy_topics": ["remote_work", "tax_location", "data_security", "approvals"]
+            "query": "approved countries Germany Ireland Netherlands Portugal Spain Canada Mexico",
+            "topic": "tax_location",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_d1_6",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "company-managed laptop full-disk encryption always-on VPN device requirements",
+            "topic": "remote_work",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_d1_7",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "90 days rolling 12-month period work outside home country annual limit",
+            "topic": "remote_work",
+            "k": 5
           }
         }
       ],
       "finish_reason": "tool_use",
-      "prompt_tokens": 3418,
-      "completion_tokens": 132
+      "prompt_tokens": 7061,
+      "completion_tokens": 470
     },
     {
       "purpose": "synthesize",
-      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Berlin from 3 November to 14 December 2026 is 42 consecutive days, which is more than 30, so the stay needs approval from your director and from Tax & Legal rather than from your manager alone.\", \"citations\": [\"c_0d2c84e4df38b6a0\", \"c_4142a3cd62ef49dd\"]}, {\"type\": \"policy_fact\", \"text\": \"You must have completed at least 12 months of continuous service, be in good standing, and hold the right to work in Germany for the whole period requested.\", \"citations\": [\"c_6577bf6f392890bf\"]}, {\"type\": \"policy_fact\", \"text\": \"Work outside your home country must use a company-managed, full-disk-encrypted laptop with always-on VPN, and IT Security must be told the destination country at least 5 business days before you leave.\", \"citations\": [\"c_57b2015388bbf7d4\"]}, {\"type\": \"recommendation\", \"text\": \"Send the written approval request at least 21 calendar days before departure, which is the notice the approval matrix sets for a stay of this length.\", \"citations\": [\"c_0d2c84e4df38b6a0\"]}, {\"type\": \"escalation\", \"text\": \"Questions about international approvals go to the People Operations mobility team: mobility@mosaicrobotics.example.\", \"citations\": []}], \"next_steps\": [\"Ask Dana Whitfield and your director to approve 3 November to 14 December 2026, at least 21 calendar days before departure.\", \"Open the Tax & Legal review for a stay over 30 consecutive days.\", \"Tell IT Security you will be working from Germany at least 5 business days before you travel.\"], \"rationale_summary\": \"Conditional: an approved country, but 42 days is over the 30-day threshold.\"}",
-      "finish_reason": "stop",
-      "prompt_tokens": 4906,
-      "completion_tokens": 318
+      "response_text": "{\"blocks\":[{\"type\":\"policy_fact\",\"text\":\"You have completed 45 months of continuous service as of 2026-09-01, exceeding the 12-month minimum required to work outside your home country.\",\"citations\":[\"c_6577bf6f392890bf\"]},{\"type\":\"policy_fact\",\"text\":\"Germany is an approved destination for temporary work abroad.\",\"citations\":[\"c_b189d36f26fb7c60\"]},{\"type\":\"policy_fact\",\"text\":\"Your proposed stay from 3 November to 14 December is 42 consecutive calendar days. Stays exceeding 30 consecutive days require director approval and a Tax & Legal review before travel begins, filed at least 21 calendar days before departure.\",\"citations\":[\"c_c502ccd2ba5028f5\",\"c_0d2c84e4df38b6a0\"]},{\"type\":\"policy_fact\",\"text\":\"The 42-day stay falls within the rolling 90-day annual limit for work outside your home country.\",\"citations\":[\"c_864fb910f46475a7\"]},{\"type\":\"policy_fact\",\"text\":\"Work performed outside your home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. You must notify IT Security of the destination country at least 5 business days before departure.\",\"citations\":[\"c_57b2015388bbf7d4\"]},{\"type\":\"recommendation\",\"text\":\"Raise your request in MosaicOne under 'Work from another country' with exact dates (3 November – 14 December 2026) and your workspace address in Berlin at least 21 calendar days before departure to allow time for director and Tax & Legal approvals.\",\"citations\":[\"c_c502ccd2ba5028f5\"]},{\"type\":\"recommendation\",\"text\":\"Confirm with IT Security that your travel laptop meets the encryption and VPN requirements, and notify them of your Berlin destination at least 5 business days before 3 November.\",\"citations\":[\"c_57b2015388bbf7d4\"]}],\"next_steps\":[\"File the work-from-another-country request in MosaicOne by 13 September 2026 (21 days before 3 November)\",\"Obtain written approval from your director (Dana, E1007)\",\"Submit Tax & Legal review request with destination, exact dates, workspace address, and description of work to be performed\",\"Confirm device and VPN setup with IT Security by 27 October 2026 (5 business days before departure)\",\"Monitor Tax & Legal review outcome: approved, approved with conditions (e.g., no customer-facing activity), or not approved\"],\"rationale_summary\":\"Tenure and destination approved; 42-day stay requires director + Tax & Legal review filed ≥21 days ahead. Conditional on approvals and device compliance.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 13512,
+      "completion_tokens": 648
     }
   ]
 }

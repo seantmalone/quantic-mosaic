@@ -22,6 +22,10 @@ pytestmark = pytest.mark.anyio
 
 HTMX = {"HX-Request": "true"}
 TOOL_USING_QUESTION = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
+PTO_QUESTION = (
+    "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
+    "— and can you open the request for me?"
+)
 RECOMMENDATION_BADGE = "Recommendation — not company policy"
 
 
@@ -63,12 +67,40 @@ async def test_a_rendered_turn_shows_typed_blocks_badges_and_citation_chips(web)
     assert 'class="badge badge-policy_fact"' in html
     assert 'class="badge badge-recommendation"' in html
     assert RECOMMENDATION_BADGE in html
-    assert 'class="badge badge-escalation"' in html
 
     chips = re.findall(r'<a class="citation-chip" href="([^"]+)"', html)
     assert chips, "at least one citation chip"
     assert all(href.startswith("/dashboard/corpus/") and "#c_" in href for href in chips)
     assert citations == 200
+
+
+async def test_an_escalation_block_renders_its_own_badge(web):
+    """The third badge, on the turn that actually produces one.
+
+    Demo task 1's committed recording — a real exchange, not a hand-written fixture — states the
+    director approval and the Tax & Legal review as cited `policy_fact`s rather than labelling them
+    an escalation, so the `escalation` badge has to be asserted where the model does emit one:
+    demo task 2, after the human confirms, where the answer hands the reader off to their manager.
+    """
+    async with web("demo_task_2.json") as client:
+        proposal = await client.post("/chat", json={"message": PTO_QUESTION, "client_label": "web"})
+        assert proposal.status_code == 200, proposal.text
+        pending = proposal.json()
+        assert pending["outcome"] == "awaiting_confirmation"
+
+        confirmed = await client.post(
+            "/chat/confirm",
+            json={
+                "session_id": pending["session_id"],
+                "turn_id": pending["turn_id"],
+                "decision": "confirmed",
+            },
+            headers=HTMX,
+        )
+
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.headers["content-type"].startswith("text/html")
+    assert 'class="badge badge-escalation"' in confirmed.text
 
 
 async def test_a_rendered_turn_carries_the_snapshot_note_when_a_tool_result_has_an_as_of(web):

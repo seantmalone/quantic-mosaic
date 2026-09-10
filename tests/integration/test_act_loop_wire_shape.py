@@ -52,7 +52,11 @@ async def test_every_act_call_of_demo_task_1_is_a_legal_messages_request(writer)
 
     assert answered.outcome == "answered"
     act_calls = [messages for purpose, messages in recorder.calls if purpose == "act"]
-    assert len(act_calls) == 3, "demo task 1 is three act steps grouping 2 + 2 + 1 tool calls"
+    # The committed recording (P10, real): a step asking for two tools, a step that answered in
+    # prose and was pushed back into the loop by the WORKFLOW_INCOMPLETE reminder, and a step
+    # asking for five searches. Both shapes the wire rules care about are in there — a multi-tool
+    # step, and an assistant turn with neither text nor tool calls in a non-final position.
+    assert len(act_calls) == 3, "demo task 1 is three act steps: two tools, a nudged reply, five searches"
 
     adapter = AnthropicAdapter(api_key=None)
     for messages in act_calls:
@@ -61,6 +65,12 @@ async def test_every_act_call_of_demo_task_1_is_a_legal_messages_request(writer)
 
     # The step that asked for two tools is the one the old shape broke: both results have to land
     # in the single user message that follows the assistant turn carrying both `tool_use` blocks.
-    widest = adapter.request_kwargs(act_calls[-1], purpose="act")["messages"]
-    answers = [block["tool_use_id"] for block in widest[-1]["content"] if block["type"] == "tool_result"]
-    assert len(answers) == 2, answers
+    groups = [
+        [block["tool_use_id"] for block in message["content"] if block["type"] == "tool_result"]
+        for messages in act_calls
+        for message in adapter.request_kwargs(messages, purpose="act")["messages"]
+        if isinstance(message["content"], list)
+    ]
+    answered_ids = [group for group in groups if group]
+    assert answered_ids, "no step's tool results were ever translated — the test would be vacuous"
+    assert max(len(group) for group in answered_ids) == 2, answered_ids

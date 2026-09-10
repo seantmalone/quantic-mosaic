@@ -334,6 +334,18 @@ class RunFile(BaseModel):
     judge_calls: int = 0
     duration_s: float | None = None
     status: str = "complete"
+    #: Where this run stands in the **two-pass** shape of §13.2. The sweep drives the 26 items and
+    #: stores everything the judge needs (the served answer on each `ItemResult`, its `turn_id`, and
+    #: the `retrieval`/`llm_call` spans the trace store already holds); `python -m evaluation.runner
+    #: --judge <run_id>` computes the judged half afterwards and rewrites this file.
+    #:
+    #: * `not_applicable` — §13.9 judges `baseline` only, so an ablation arm is never pending.
+    #: * `pending` — a baseline that has not been judged, or one whose judge pass did not complete.
+    #:   `strict_pass_rate` is `null` on such a run: §13.8's groundedness clause would otherwise be
+    #:   *vacuously* true on every item and the composite would read high because nothing was
+    #:   checked.
+    #: * `judged` — the judge pass completed with no failed verdicts.
+    judge_status: Literal["judged", "pending", "not_applicable"] = "not_applicable"
     notes: str | None = None
     items: list[ItemResult] = Field(default_factory=list)
 

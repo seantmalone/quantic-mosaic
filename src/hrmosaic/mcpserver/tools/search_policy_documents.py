@@ -11,11 +11,20 @@ under `_trace`. Three things about it are load-bearing:
   use, so an anonymous caller of the public URL cannot ask for `k=10000` on a 0.1-CPU instance.
 * **`strategy` is validated here**, because `retrieve()` treats anything that is not `dense_only` as
   hybrid: a typo would silently retrieve hybrid and record the typo in the audit trail.
+* **`topic` is a SOFT filter** (P10 fix round; §8.4). It used to restrict the candidate pool
+  outright, which made the model's own topic guess the ceiling on what the answer could cite: a
+  `pto` search can never see `manager-approval-matrix`, which is tagged `approvals`, however
+  relevant the passage is. The topic-filtered search still runs first and still leads the ranking —
+  but when it comes back with fewer than `k` hits, or with `k` hits that all sit in ONE document,
+  the remainder is backfilled from an unfiltered search of the same query, documents not yet
+  represented first. `topic_backfilled` and `backfill_reason` are on the result and on the
+  `retrieval` span, so an audit can always tell a soft widening from a plain topic search.
 """
 
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import Context, MCPServer
@@ -63,6 +72,21 @@ MIN_DENSE_SCORE_DESCRIPTION = (
     "is ~0.033."
 )
 
+#: The published semantics of `topic` — a soft preference, not a wall. It says on the wire what the
+#: result fields report, so a model reading only the catalog knows the filter can widen under it.
+TOPIC_DESCRIPTION = (
+    "Prioritise one corpus topic. When the topic alone yields fewer than k hits or a single "
+    "document, results are backfilled from the whole corpus (see topic_backfilled)."
+)
+
+#: Why an unfiltered search was run underneath the topic-filtered one. `null` means it was not.
+BackfillReason = Literal["fewer_than_k", "single_document"]
+
+#: How many hits the unfiltered backfill search asks for. Twice `k` because the filtered hits are
+#: deduped out of it first: the same query without a topic returns many of the same chunks, and a
+#: pool of exactly `k` could dedupe down to nothing to backfill with.
+BACKFILL_POOL_FACTOR = 2
+
 
 class SearchHit(BaseModel):
     """One ranked chunk, carrying every field a citation needs (R2.5)."""
@@ -83,7 +107,12 @@ class SearchHit(BaseModel):
 
 
 class SearchOutput(BaseModel):
-    """The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won."""
+    """The §8.4 tool-1 result. `k_source` records which of the three `k` inputs won.
+
+    `topic_backfilled` is `true` when at least one returned hit came from the unfiltered search the
+    soft `topic` filter runs underneath itself, and `backfill_reason` says what triggered it. Both
+    are `false`/`null` on every search that passed no `topic`.
+    """
 
     hits: list[SearchHit]
     query_used: str
@@ -94,6 +123,8 @@ class SearchOutput(BaseModel):
     embed_ms: int
     search_ms: int
     index_version: str
+    topic_backfilled: bool = False
+    backfill_reason: BackfillReason | None = None
 
 
 def _resolve_k(supplied: bool, model_k: int, override: Any) -> tuple[int, str]:
@@ -111,7 +142,9 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
         description=(
             "Semantic + lexical search over the 14 HR policy documents. Returns ranked chunks with "
             "the ids and heading paths a citation needs. Use it to find the passage that answers a "
-            "policy question; use get_policy_section to read one in full."
+            "policy question; use get_policy_section to read one in full. topic prioritises one "
+            "corpus topic; when the topic alone yields fewer than k hits or a single document, "
+            "results are backfilled from the whole corpus."
         ),
         annotations=ToolAnnotations(**READ_ONLY),
     )
@@ -120,7 +153,7 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
         query: Annotated[str, Field(min_length=3, max_length=500, description="The question, in the user's words.")],
         k: Annotated[int, Field(ge=1, le=10, description="How many chunks to return.")] = 5,
         doc_ids: Annotated[list[str] | None, Field(description="Restrict the search to these doc_ids.")] = None,
-        topic: Annotated[Topic | None, Field(description="Restrict the search to one corpus topic.")] = None,
+        topic: Annotated[Topic | None, Field(description=TOPIC_DESCRIPTION)] = None,
         min_dense_score: Annotated[float, Field(ge=0, le=1, description=MIN_DENSE_SCORE_DESCRIPTION)] = 0.26,
     ) -> SearchOutput:
         call = read_meta(ctx)
@@ -150,6 +183,46 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
         return result(body)
 
 
+def backfill_reason_for(hits: list[Any], k: int) -> BackfillReason | None:
+    """Why a topic-filtered result needs widening, or `None` if it does not (§8.4).
+
+    Two triggers, in this order: it returned fewer than the `k` hits that were asked for, or every
+    hit it did return sits in one document. The second is the one the P10 baseline was losing
+    breadth to — `k` hits, all from `pto-and-holidays`, and the answer could only ever cite one
+    document however many rules from elsewhere applied.
+    """
+    if len(hits) < k:
+        return "fewer_than_k"
+    if len({hit.doc_id for hit in hits}) == 1:
+        return "single_document"
+    return None
+
+
+def merge_backfill(filtered: list[Any], unfiltered: list[Any], *, k: int, reason: BackfillReason) -> list[Any]:
+    """Filtered hits first, then unfiltered ones, capped at `k` (§8.4).
+
+    * `fewer_than_k` — every filtered hit is kept; the gap is filled from the unfiltered ranking.
+    * `single_document` — `k` is already full, so the top `ceil(k/2)` filtered hits keep the
+      majority of the slots and the rest go to the unfiltered ranking. Halving rather than
+      appending is what makes room: nothing can be added to a list that is already `k` long.
+
+    Within the backfill, hits from documents not yet represented come first — the whole point is
+    breadth — and the rest of the unfiltered ranking follows in its own order. Anything dropped by
+    the halving is put back last if the corpus could not fill the slots, so a soft filter never
+    returns fewer hits than the hard one would have.
+    """
+    keep = list(filtered) if reason == "fewer_than_k" else list(filtered[: math.ceil(k / 2)])
+    chosen = {hit.chunk_id for hit in keep}
+    represented = {hit.doc_id for hit in keep}
+    fresh = [hit for hit in unfiltered if hit.chunk_id not in chosen]
+    ordered = [hit for hit in fresh if hit.doc_id not in represented]
+    ordered += [hit for hit in fresh if hit.doc_id in represented]
+    ordered += [
+        hit for hit in filtered if hit.chunk_id not in chosen and hit.chunk_id not in {h.chunk_id for h in fresh}
+    ]
+    return (keep + ordered)[:k]
+
+
 def _search(
     deps: ServerDeps,
     *,
@@ -161,7 +234,11 @@ def _search(
     min_dense_score: float,
     strategy: str,
 ) -> tuple[dict[str, Any], RetrievalPayload]:
-    """The blocking half: one embed, two index arms, the fusion. Always inside `asyncio.to_thread`."""
+    """The blocking half: the topic-filtered retrieval, its unfiltered backfill, the fusion.
+
+    Always inside `asyncio.to_thread`. A search with no `topic` runs exactly one retrieval, as it
+    always did; the second one happens only when `backfill_reason_for` asks for it.
+    """
     from hrmosaic.core.corpusread import read_index_meta
     from hrmosaic.rag.retrieve import retrieve
 
@@ -176,8 +253,27 @@ def _search(
             strategy=strategy,
             connection=connection,
         )
+        ranked = list(retrieval.hits)
+        backfill_reason = backfill_reason_for(ranked, k) if topic else None
+        backfill = None
+        if backfill_reason is not None:
+            backfill = retrieve(
+                query,
+                k=k * BACKFILL_POOL_FACTOR,
+                doc_ids=doc_ids,
+                topic=None,
+                min_dense_score=min_dense_score,
+                strategy=strategy,
+                connection=connection,
+            )
+            ranked = merge_backfill(ranked, backfill.hits, k=k, reason=backfill_reason)
         index_version = read_index_meta(connection).index_version
 
+    topic_backfilled = bool({hit.chunk_id for hit in ranked} - {hit.chunk_id for hit in retrieval.hits})
+
+    # `rank` is renumbered over the merged list, not carried from whichever retrieval produced the
+    # hit: two searches each number their own hits from 1, and a citation's rank has to mean its
+    # position in what the model was actually shown.
     hits = [
         SearchHit(
             chunk_id=hit.chunk_id,
@@ -185,7 +281,7 @@ def _search(
             doc_title=hit.doc_title,
             heading_path=hit.heading_path,
             section=hit.section,
-            rank=hit.rank,
+            rank=rank,
             dense_score=round(hit.dense_score, 4),
             bm25_rank=hit.bm25_rank,
             rrf_score=round(hit.rrf_score, 6),
@@ -193,11 +289,14 @@ def _search(
             char_start=hit.char_start,
             char_end=hit.char_end,
         )
-        for hit in retrieval.hits
+        for rank, hit in enumerate(ranked, start=1)
     ]
-    total_candidates = len(set(retrieval.dense_candidates) | set(retrieval.bm25_candidates))
-    embed_ms = round(retrieval.embed_ms)
-    search_ms = round(retrieval.search_ms)
+    candidates = set(retrieval.dense_candidates) | set(retrieval.bm25_candidates)
+    if backfill is not None:
+        candidates |= set(backfill.dense_candidates) | set(backfill.bm25_candidates)
+    total_candidates = len(candidates)
+    embed_ms = round(retrieval.embed_ms + (backfill.embed_ms if backfill else 0.0))
+    search_ms = round(retrieval.search_ms + (backfill.search_ms if backfill else 0.0))
     body = SearchOutput(
         hits=hits,
         query_used=query,
@@ -208,6 +307,8 @@ def _search(
         embed_ms=embed_ms,
         search_ms=search_ms,
         index_version=index_version,
+        topic_backfilled=topic_backfilled,
+        backfill_reason=backfill_reason,
     ).model_dump(mode="json")
 
     filters: dict[str, Any] = {}
@@ -242,8 +343,21 @@ def _search(
         embed_ms=embed_ms,
         search_ms=search_ms,
         index_version=index_version,
+        topic_backfilled=topic_backfilled,
+        backfill_reason=backfill_reason,
     )
     return body, payload
 
 
-__all__ = ["SearchHit", "SearchOutput", "Strategy", "Topic", "register"]
+__all__ = [
+    "BACKFILL_POOL_FACTOR",
+    "TOPIC_DESCRIPTION",
+    "BackfillReason",
+    "SearchHit",
+    "SearchOutput",
+    "Strategy",
+    "Topic",
+    "backfill_reason_for",
+    "merge_backfill",
+    "register",
+]

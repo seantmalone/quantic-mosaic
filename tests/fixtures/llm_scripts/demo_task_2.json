@@ -1,90 +1,108 @@
 {
- "scenario": "demo_task_2",
- "_note": "Demo task 2 — a PTO request with a confirmation-gated mock write (spec §18.2). Route, three act steps (profile + balance, policy + compliance, then the gated `create_mock_hr_ticket`), and — after `POST /chat/confirm` mints the token and `resume_turn` re-issues that one call — a single synthesize. The synthesized citations are real chunk ids from the committed index, so G2 resolves every one of them. Drives `make demo2`, `scripts/demo_task_2.sh` and `tests/e2e/test_demo_tasks.py`. P10 replaces this file with one real recorded exchange (§16.2).",
- "completions": [
-  {
-   "purpose": "route",
-   "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
-   "finish_reason": "stop",
-   "prompt_tokens": 1120,
-   "completion_tokens": 96
-  },
-  {
-   "purpose": "act",
-   "tool_calls": [
+  "scenario": "demo_task_2",
+  "_note": "Demo task 2 — PTO request through the confirmation gate to a mock write (spec §18.2). A REAL exchange, recorded 2026-09-10 against Anthropic claude-haiku-4-5 on the live app and replayed verbatim; only the opaque provider call ids are re-minted. Both halves of the turn are in one script because they are one turn: POST /chat ends awaiting_confirmation at entry 6 (create_mock_hr_ticket proposed without a token), and POST /chat/confirm reopens the same turn and consumes entry 7. lookup_employee_profile is never called — the persona already carries the employee id and check_pto_balance answers the question — which is why §18's demo-2 record makes it optional.",
+  "completions": [
     {
-     "id": "toolu_cr_1",
-     "name": "lookup_employee_profile",
-     "args": {
-      "employee_id": "E1042"
-     }
+      "purpose": "route",
+      "response_text": "{\"intent\":\"action\",\"workflow\":\"pto_request\",\"needs_employee_data\":true,\"needs_clarification\":false,\"out_of_scope\":false,\"sensitive\":false,\"target_employee_id\":\"E1042\",\"selected_tools\":[\"employee_data\",\"pto_request_write\"],\"rationale_summary\":\"PTO request for E1042 Sep 15–17, 2026 (3 days). Needs balance check and write gate for filing.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1186,
+      "completion_tokens": 108
     },
     {
-     "id": "toolu_cr_2",
-     "name": "check_pto_balance",
-     "args": {
-      "employee_id": "E1042",
-      "as_of": "2026-09-15"
-     }
-    }
-   ],
-   "finish_reason": "tool_use",
-   "prompt_tokens": 1380,
-   "completion_tokens": 88
-  },
-  {
-   "purpose": "act",
-   "tool_calls": [
-    {
-     "id": "toolu_cr_3",
-     "name": "search_policy_documents",
-     "args": {
-      "query": "PTO request advance notice manager approval blackout",
-      "k": 5
-     }
+      "purpose": "act",
+      "response_text": "I'll check your PTO balance and policy compliance for those dates, then help you open the request.",
+      "tool_calls": [
+        {
+          "id": "toolu_d2_1",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_d2_2",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1042",
+            "parameters": {
+              "start_date": "2026-09-15",
+              "days": 3
+            }
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 3719,
+      "completion_tokens": 178
     },
     {
-     "id": "toolu_cr_4",
-     "name": "check_policy_compliance",
-     "args": {
-      "scenario": "pto_request",
-      "employee_id": "E1042",
-      "parameters": {
-       "days": 3,
-       "start_date": "2026-09-15"
-      }
-     }
-    }
-   ],
-   "finish_reason": "tool_use",
-   "prompt_tokens": 2410,
-   "completion_tokens": 118
-  },
-  {
-   "purpose": "act",
-   "tool_calls": [
+      "purpose": "act",
+      "response_text": "**Good news:** You can take the three days of PTO from Tuesday 15 September to Thursday 17 September 2026. Here's the summary:\n\n**PTO Balance** (as of 2026-09-01):\n- Remaining days: **13.5 days** ✓\n- Your request uses 3 days, well within your balance\n\n**Policy Compliance:**\n- ✓ **Notice requirement met**: You're submitting 8 business days in advance (policy requires 5)\n- ✓ **Balance check passed**: 3 days requested vs. 13.5 available\n- ✓ **No blackout conflict**: Your dates don't overlap the year-end blackout (22–23 December)\n- ⚠ **Manager approval required**: Your direct manager must approve the request in writing in MosaicOne\n\n**Next step:** You'll need to submit this request in MosaicOne so your manager can formally approve it. Once approved, the time off is confirmed.\n\nWould you like me to open an HR ticket to track this request?",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 5401,
+      "completion_tokens": 247
+    },
     {
-     "id": "toolu_cr_5",
-     "name": "create_mock_hr_ticket",
-     "args": {
-      "employee_id": "E1042",
-      "queue": "hr-timeoff",
-      "summary": "PTO request 15-17 Sep 2026 (3 days)",
-      "details": "Three days of PTO from 15 to 17 September 2026, requested through the HR copilot.",
-      "priority": "normal"
-     }
+      "purpose": "act",
+      "response_text": "You're right. I need to search the policy corpus to get citable passages on notice and approval requirements. Let me close those gaps.",
+      "tool_calls": [
+        {
+          "id": "toolu_d2_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO notice requirement business days advance",
+            "topic": "pto",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_d2_4",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO manager approval requirement",
+            "topic": "pto",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 5780,
+      "completion_tokens": 202
+    },
+    {
+      "purpose": "act",
+      "response_text": "Perfect. I now have two citable policy passages. Here's the complete answer:\n\n---\n\n**Good news:** You can take the three days of PTO from Tuesday 15 September to Thursday 17 September 2026.\n\n**PTO Balance** (as of 2026-09-01):\n- Remaining days: **13.5 days** ✓\n- Your request uses 3 days, well within your balance\n\n**Policy Compliance:**\n\n✓ **Notice requirement met:** According to the PTO & Holidays Policy, \"PTO requests must be submitted at least 5 business days in advance.\" You're submitting 8 business days in advance, so this requirement is satisfied.\n\n✓ **No blackout conflict:** Your dates don't overlap the year-end blackout (22–23 December).\n\n⚠ **Manager approval required:** The PTO & Holidays Policy states: \"Every PTO request requires written approval from the employee's direct manager in MosaicOne. Verbal agreement, a message in chat and an email thread are all insufficient on their own: the approval must be recorded against the request so the audit trail is complete.\"\n\n---\n\n**Next step:** Would you like me to open an HR ticket to formally submit this PTO request?",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 8086,
+      "completion_tokens": 284
+    },
+    {
+      "purpose": "act",
+      "response_text": "You're right. Let me propose opening the PTO request for you now.",
+      "tool_calls": [
+        {
+          "id": "toolu_d2_5",
+          "name": "create_mock_hr_ticket",
+          "args": {
+            "employee_id": "E1042",
+            "queue": "hr-timeoff",
+            "summary": "PTO Request: 3 days, 15–17 September 2026",
+            "details": "Employee E1042 requests 3 days of PTO from Tuesday 15 September to Thursday 17 September 2026.\n\nBalance as of 2026-09-01: 13.5 days remaining.\n\nPolicy compliance:\n- Notice requirement: 8 business days in advance (policy requires 5) ✓\n- Balance available: 3 days requested vs. 13.5 available ✓\n- No blackout conflict ✓\n- Manager approval: Required in MosaicOne\n\nNext step: Route to direct manager for written approval in MosaicOne."
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 8431,
+      "completion_tokens": 279
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\":[{\"type\":\"policy_fact\",\"text\":\"PTO requests must be submitted at least 5 business days in advance.\",\"citations\":[\"c_16186f87d12c1302\"]},{\"type\":\"policy_fact\",\"text\":\"Every PTO request requires written approval from the employee's direct manager in MosaicOne. Verbal agreement, a message in chat and an email thread are all insufficient on their own.\",\"citations\":[\"c_d57a7964d974ba44\"]},{\"type\":\"policy_fact\",\"text\":\"PTO requests of any length are approved by the employee's direct manager.\",\"citations\":[\"c_9948839107acfaaf\"]},{\"type\":\"recommendation\",\"text\":\"You have 13.5 PTO days remaining as of 2026-09-01, so a 3-day request is covered by your balance. Your request for 15–17 September meets the 5-business-day notice requirement (8 business days from submission on 2026-09-10).\",\"citations\":[]},{\"type\":\"escalation\",\"text\":\"I cannot open PTO requests in MosaicOne on your behalf. You must submit the request yourself in MosaicOne so your manager can record written approval. Contact People Operations (people-ops@mosaicrobotics.example) if you need assistance with the system.\",\"citations\":[]}],\"next_steps\":[\"Log into MosaicOne and submit your PTO request for 15–17 September 2026.\",\"Your manager will receive the request and must approve it in writing within MosaicOne.\",\"Once approved, the three days will be deducted from your PTO balance.\"],\"rationale_summary\":\"You meet notice and balance requirements. Submit the request in MosaicOne for manager approval; the system does not allow HR to file requests on your behalf.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 6255,
+      "completion_tokens": 415
     }
-   ],
-   "finish_reason": "tool_use",
-   "prompt_tokens": 3120,
-   "completion_tokens": 104
-  },
-  {
-   "purpose": "synthesize",
-   "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO is requested in MosaicOne and the standard notice is five business days ahead of the first day off, so a request made now for 15 September 2026 meets it.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"Time off is approved by your direct manager under the approval matrix, so this request goes to Dana Whitfield (E1007).\", \"citations\": [\"c_9948839107acfaaf\", \"c_d57a7964d974ba44\"]}, {\"type\": \"recommendation\", \"text\": \"Your balance is 13.5 days as of the 1 September 2026 snapshot, which covers the three days from 15 to 17 September 2026.\", \"citations\": []}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\", \"The mock ticket is visible on the dashboard's mock-action log.\"], \"rationale_summary\": \"Balance-aware and cited; the ticket was opened after confirmation.\"}",
-   "finish_reason": "stop",
-   "prompt_tokens": 4210,
-   "completion_tokens": 108
-  }
- ]
+  ]
 }

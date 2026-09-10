@@ -521,6 +521,21 @@ class TurnBuffer:
         )
         return span_id
 
+    def rearm(self) -> None:
+        """Accept spans again after a process-exit checkpoint (§10.3).
+
+        Only `flush_open_turns()` calls this, and only on a turn it has just written out. The
+        span sequence continues from where the checkpoint left it and the rollups keep
+        accumulating, so a turn that survives the checkpoint reads exactly as it would have
+        without one; a turn that does not survive keeps the `error` row the checkpoint wrote.
+
+        This is deliberately **not** `TraceWriter.reopen_turn()`: that is §10.3 step 4's
+        human-confirmation resume, which re-reads the turn from the store, bumps `resumed_count`
+        and adds to `awaiting_ms`. Nothing was awaiting anybody here.
+        """
+        with self._lock:
+            self.closed = False
+
     def _take_seq(self) -> int:
         with self._lock:
             seq = self._next_span_seq
@@ -750,11 +765,27 @@ class TraceWriter:
             return [buffer for buffer in self._open.values() if not buffer.closed]
 
     def flush_open_turns(self) -> int:
-        """Close every open turn as an error — the SIGTERM / `atexit` path (§10.3)."""
+        """Close every open turn as an error — the SIGTERM / `atexit` path (§10.3).
+
+        **A checkpoint, not a guillotine.** A SIGTERM does not end the process under uvicorn: the
+        server finishes every in-flight request and only then runs the lifespan's shutdown. So a
+        turn flushed here is very often one that is still being served, and closing it outright
+        closed it *under its own request* — the next span that request wrote raised `turn … is
+        closed`, the answer degraded to §12.3's catch-all escalation, and the turn was recorded as
+        a process exit although it had completed. On Render, where every redeploy and every
+        spin-down sends SIGTERM, that was one broken answer per shutdown.
+
+        Each buffer is therefore **re-armed** after its rows are written. If the process really is
+        about to vanish, nothing more arrives and the row stays `error` / `error` — the durability
+        guarantee §10.3 asks for, unchanged. If the request does finish, its own `close()`
+        overwrites that row with the truth, exactly as §10.3 step 4's reopen does for a
+        confirmation (minus the `resumed_count` bump: nothing was awaiting a human).
+        """
         closed = 0
         for buffer in self.open_turns():
             try:
                 buffer.close(outcome="error", stop_reason="error", error_kind="process_exit")
+                buffer.rearm()
                 closed += 1
             except Exception:  # shutdown must never raise
                 logger.warning("could not flush turn %s", buffer.turn_id, exc_info=True)

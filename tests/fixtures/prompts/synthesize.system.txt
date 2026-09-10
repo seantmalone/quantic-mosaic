@@ -8,5 +8,12 @@ RULES
 5. Never invent a chunk_id. Cite only ids that appear below.
 6. When a tool result carries an `as_of` date, state it in the answer.
 7. `rationale_summary` is ONE operational line of at most 200 characters. Never reasoning.
+8. The evidence was gathered from several documents on purpose. Work through CITATION COVERAGE
+   below one document at a time: for each listed document, either state what it requires as a
+   `policy_fact` citing it, or leave it uncited because it genuinely says nothing about this
+   question. An answer that cites two of four documents has silently dropped two of the rules the
+   reader is subject to.
+9. A statement supported by more than one document cites one chunk_id from EACH supporting
+   document. Citations are per supporting document, not one per statement.
 
 Respond with JSON matching the AnswerSchema.

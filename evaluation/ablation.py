@@ -127,6 +127,7 @@ def build_comparison(runs: dict[str, RunFile]) -> dict[str, Any]:
                 "variant": run.variant,
                 "run_id": run.run_id,
                 "judged": run.metrics.judged,
+                "judge_status": run.judge_status,
                 "metrics": {name: metrics.get(name) for name in COMPARED_METRICS},
                 "deltas": {
                     name: _delta(
@@ -218,7 +219,13 @@ def render_section(comparison: dict[str, Any]) -> str:
         cells = []
         for entry in variants:
             value = entry["metrics"].get(name)
-            cells.append("not judged" if value is None and not entry["judged"] else runner_module.fmt(value))
+            if value is not None or entry["judged"]:
+                cells.append(runner_module.fmt(value))
+            else:
+                # "not judged" and "judge pending" are different facts about an absent cell: §13.9
+                # judges `baseline` only, so an arm's blank is by design, while a baseline's blank
+                # means the judged half has not been computed **yet** (§13.2's two-pass shape).
+                cells.append("judge pending" if entry.get("judge_status") == "pending" else "not judged")
         rows.append(f"| `{name}` | " + " | ".join(cells) + " |")
     table = "\n".join([header, divider, *rows])
 

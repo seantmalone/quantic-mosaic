@@ -39,12 +39,8 @@ import jsonschema
 
 from evaluation.schema import EvalItem
 from hrmosaic.core import corpusread
+from hrmosaic.core.canonical import canonical_arguments
 from hrmosaic.core.db import Store
-
-# `canonical_arguments` is imported rather than re-derived on purpose: clause 2 of §13.4 compares
-# the bytes `web/` minted at Confirm time with the bytes of the recorded call, and a second
-# implementation of that serialisation could diverge and let a violation pass silently.
-from hrmosaic.mcpserver.confirm import canonical_arguments
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TOOL_SCHEMA_DIR = REPO_ROOT / "mcp" / "tools"
@@ -229,6 +225,36 @@ def blocks_dropped_by_g2(turn: TurnRecord) -> int:
         for span in turn.of_kind("guardrail")
         if span.payload.get("rule_id") == "G2"
     )
+
+
+def compliance_evidence_ids(turn: TurnRecord) -> list[str]:
+    """Every `chunk_id` the deterministic rule engine cited on this turn, in first-seen order.
+
+    `check_policy_compliance` returns `citations[]` and a per-requirement `evidence{chunk_id, …}`,
+    each naming a real chunk of the committed corpus, and `synthesize.j2` carries the whole result
+    in a `<tool_result>` envelope. **G1 does not see any of it**: the evidence gate weighs
+    `turn.citable()`, which is the retrieved, non-quarantined chunks and nothing else. So a turn
+    whose only evidence is the engine's — a compliance question the engine answered outright —
+    refuses for want of evidence it was holding. This function is what makes that countable
+    (§13.4's over-refusal discussion); it changes no verdict.
+    """
+    seen: list[str] = []
+    for span in turn.of_kind("tool_call"):
+        payload = span.payload
+        if payload.get("tool_name") != "check_policy_compliance" or payload.get("is_error"):
+            continue
+        try:
+            body = json.loads(payload.get("result_json") or "{}")
+        except json.JSONDecodeError:
+            continue
+        candidates = [citation.get("chunk_id") for citation in body.get("citations") or []]
+        candidates += [
+            (requirement.get("evidence") or {}).get("chunk_id") for requirement in body.get("requirements") or []
+        ]
+        for chunk_id in candidates:
+            if chunk_id and chunk_id not in seen:
+                seen.append(chunk_id)
+    return seen
 
 
 def retrieved_doc_ids(turn: TurnRecord) -> list[str]:
@@ -760,6 +786,7 @@ __all__ = [
     "action_safety_violations",
     "argument_correctness",
     "behaviour_class",
+    "compliance_evidence_ids",
     "blocks_dropped_by_g2",
     "cache_hits",
     "catalog_reopened",

@@ -11,6 +11,7 @@ migrated store, and `tests/fixtures/traces/` supplies the two turns.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
 
 import pytest
@@ -478,3 +479,96 @@ def test_the_dataset_items_all_score_without_raising(remote_turn):
         det.document_recall(det.retrieved_doc_ids(remote_turn), entry.expected_docs)
         det.workflow_completion(entry, remote_turn, usage)
         det.exact_match(entry.gold_answer_short, remote_turn.final_answer)
+
+
+# --------------------------------------------------------------------------------------------
+# The deterministic engine's own citations, which G1 does not weigh (§13.4's over-refusal note)
+# --------------------------------------------------------------------------------------------
+
+
+def _compliance_span(body: dict, *, is_error: bool = False, tool: str = "check_policy_compliance") -> det.SpanRecord:
+    return det.SpanRecord(
+        id="s1",
+        seq=1,
+        kind="tool_call",
+        name=tool,
+        status="ok",
+        payload={"tool_name": tool, "is_error": is_error, "result_json": json.dumps(body)},
+    )
+
+
+def _turn(*spans: det.SpanRecord) -> det.TurnRecord:
+    return det.TurnRecord(
+        turn_id="t",
+        session_id="s",
+        outcome="refused",
+        final_answer="",
+        answer_blocks=[],
+        citations=[],
+        spans=list(spans),
+        duration_ms=0,
+        process_uptime_ms=120_000,
+    )
+
+
+def test_compliance_evidence_ids_reads_both_places_the_engine_publishes_chunk_ids():
+    """`citations[]` and each requirement's `evidence{chunk_id}` — first-seen order, deduped."""
+    turn = _turn(
+        _compliance_span(
+            {
+                "verdict": "conditional",
+                "citations": [{"chunk_id": "c_aaa"}, {"chunk_id": "c_bbb"}],
+                "requirements": [
+                    {"id": "r1", "evidence": {"chunk_id": "c_bbb"}},
+                    {"id": "r2", "evidence": {"chunk_id": "c_ccc"}},
+                    {"id": "r3"},
+                ],
+            }
+        )
+    )
+    assert det.compliance_evidence_ids(turn) == ["c_aaa", "c_bbb", "c_ccc"]
+
+
+def test_a_failed_or_unrelated_tool_contributes_no_engine_evidence():
+    errored = _turn(_compliance_span({"citations": [{"chunk_id": "c_aaa"}]}, is_error=True))
+    other = _turn(_compliance_span({"citations": [{"chunk_id": "c_aaa"}]}, tool="search_policy_documents"))
+    assert det.compliance_evidence_ids(errored) == []
+    assert det.compliance_evidence_ids(other) == []
+
+
+def test_a_turn_with_no_compliance_call_has_no_engine_evidence():
+    assert det.compliance_evidence_ids(_turn()) == []
+
+
+def test_unparseable_engine_output_is_skipped_rather_than_raising():
+    span = det.SpanRecord(
+        id="s1",
+        seq=1,
+        kind="tool_call",
+        name="check_policy_compliance",
+        status="ok",
+        payload={"tool_name": "check_policy_compliance", "result_json": "{not json"},
+    )
+    assert det.compliance_evidence_ids(_turn(span)) == []
+
+
+def test_the_over_refusal_cause_is_exactly_engine_evidence_without_retrieval():
+    """The measured case: `remote-003` refused with eight resolvable engine citations and no chunks.
+
+    This is the predicate `runner.assemble()` counts. G1 weighs `turn.citable()` — the retrieved,
+    non-quarantined chunks — so a turn whose only evidence is the rule engine's refuses for want of
+    evidence it is holding.
+    """
+    engine_only = _turn(_compliance_span({"verdict": "conditional", "citations": [{"chunk_id": "c_aaa"}]}))
+    assert det.compliance_evidence_ids(engine_only) and not det.retrieved_doc_ids(engine_only)
+
+    retrieval = det.SpanRecord(
+        id="s2",
+        seq=2,
+        kind="retrieval",
+        name="search_policy_documents",
+        status="ok",
+        payload={"chunks": [{"chunk_id": "c_zzz", "doc_id": "pto-and-holidays"}]},
+    )
+    both = _turn(_compliance_span({"citations": [{"chunk_id": "c_aaa"}]}), retrieval)
+    assert det.compliance_evidence_ids(both) and det.retrieved_doc_ids(both) == ["pto-and-holidays"]

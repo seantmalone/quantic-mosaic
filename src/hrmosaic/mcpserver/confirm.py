@@ -5,9 +5,9 @@ lives in `mock_writes` and cannot exist without one (the column is `NOT NULL REF
 functions:
 
 * `mint()` — called only from `web/` after a human clicks Confirm or Cancel. It is here, not in
-  `web/`, so that the canonical argument serialisation the gate compares against has exactly one
-  implementation; `tests/architecture/test_conventions.py` does not police it, the constraint list
-  does, and a second serialiser would be a silent way to let a mismatched replay through.
+  `web/`, so a caller cannot mint a token without going through the gate. The canonical argument
+  serialisation it stores is `core/canonical.py`'s, re-exported below: there is exactly one
+  implementation, and a second serialiser would be a silent way to let a mismatched replay through.
 * `validate()` — token exists · `used_at IS NULL` · not expired · `user_response == "confirmed"` ·
   `tool_name` matches · the canonical arguments minus `confirmation_token` equal `arguments_json`.
 * `consume()` — sets `used_at`, then appends the `mock_writes` row carrying that token. In that
@@ -30,14 +30,28 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+# The gate's serialisation lives in `core/` and is re-exported here, so `confirm.canonical_arguments`
+# and `confirm.TOKEN_ARGUMENT` still name it at their historical call sites while `evaluation/` can
+# reach the same bytes without importing `hrmosaic.mcpserver` (§4.2).
+from hrmosaic.core.canonical import TOKEN_ARGUMENT, canonical_arguments
 from hrmosaic.core.db import Store, now_micros
 
 #: §8.6 step 3. Ten minutes is long enough to read a confirm card and short enough that a token
 #: found in a log is worthless.
 TOKEN_TTL_S = 600
 
-#: The argument every write tool accepts and no schema requires; never part of what is compared.
-TOKEN_ARGUMENT = "confirmation_token"
+__all__ = [
+    "TOKEN_ARGUMENT",
+    "TOKEN_TTL_S",
+    "Confirmation",
+    "ConfirmationRejected",
+    "canonical_arguments",
+    "consume",
+    "load",
+    "mint",
+    "rejection",
+    "validate",
+]
 
 #: `mock_writes.id` is allocated from the table's own rowid (§8.5). The insert computes it inside
 #: SQL so two concurrent writes cannot read the same maximum; the lock keeps the read-back that
@@ -64,17 +78,6 @@ class Confirmation:
     expires_at: int
     used_at: int | None
     user_response: str
-
-
-def canonical_arguments(arguments: Mapping[str, Any]) -> str:
-    """The one canonical serialisation of a proposed argument set (§8.6 step 5).
-
-    `confirmation_token` is excluded, keys are sorted and separators are tight, so the bytes minted
-    at Confirm time and the bytes computed from the resumed call are comparable without either side
-    knowing how the other built its dict.
-    """
-    body = {key: value for key, value in arguments.items() if key != TOKEN_ARGUMENT}
-    return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def rejection(action: str, human_summary: str, arguments_preview: Mapping[str, Any]) -> dict[str, Any]:

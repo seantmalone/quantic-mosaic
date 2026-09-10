@@ -151,6 +151,37 @@ def test_the_document_envelope_carries_the_whole_chunk_not_the_snippet():
         assert f"\n{chunk.text}\n</document>" in user, "the envelope body is the whole chunk"
 
 
+def test_the_citation_coverage_block_lists_every_citable_document_once():
+    """Rule 8's target list: one line per distinct citable document, quarantined ones excluded.
+
+    The measured P10 failure was one-sided — the baseline retrieved across four documents and
+    cited across two — so the synthesis prompt now renders the document inventory it is being
+    asked to cover. A quarantined chunk must never appear: G2 strips every citation to it (§7.4
+    trigger 4), so listing its document would set a target the answer is forbidden to hit.
+    """
+    _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
+    coverage = user[user.index("CITATION COVERAGE") : user.index("QUESTION:")]
+    citable = [chunk for chunk in chunks() if not chunk.quarantined]
+    quarantined = [chunk for chunk in chunks() if chunk.quarantined]
+    assert citable and quarantined, "the fixture must exercise both sides of the exclusion"
+
+    assert f"CITATION COVERAGE — {len({chunk.doc_id for chunk in citable})} citable document(s)" in coverage
+    assert coverage.count("\n- ") == len({chunk.doc_id for chunk in citable})
+    for chunk in citable:
+        assert f"- {chunk.doc_id} — {chunk.doc_title} — " in coverage
+        assert chunk.chunk_id in coverage
+    for chunk in quarantined:
+        assert chunk.doc_id not in coverage, "a quarantined document is not a citation target"
+        assert chunk.chunk_id not in coverage
+
+
+def test_the_citation_coverage_block_survives_an_empty_evidence_set():
+    """No citable chunk means no target list — rule 3's escalation, not a malformed prompt."""
+    _, user = prompts.render("synthesize.j2", **{**context("synthesize.j2"), "chunks": [], "tool_results": []})
+    assert "CITATION COVERAGE — 0 citable document(s)" in user
+    assert user.rstrip().endswith(QUESTION)
+
+
 def test_the_fusion_weight_is_never_labelled_score():
     _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
     assert 'rrf="0.0328"' in user

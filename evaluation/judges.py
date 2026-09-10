@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict
 
@@ -108,14 +108,20 @@ GROUNDEDNESS_SYSTEM = """\
 You judge whether ONE claim is supported by the EVIDENCE the assistant actually saw.
 
 RULES
-1. The evidence below is the complete set of policy passages the assistant was given. Judge against
-   it alone: outside knowledge, plausibility and your own opinion are irrelevant.
+1. The evidence below is the complete set of evidence the assistant was given, and it comes in four
+   classes: `retrieval` (a policy passage it searched up), `section` (a passage it fetched in full),
+   `compliance` (the deterministic rule engine's own requirement evidence) and `structured_data`
+   (a record it read about this employee — a balance, an eligibility date, a profile). **A claim is
+   supported if ANY item of ANY class supports it**: a correct fact taken from the employee's own
+   record is grounded, not invented. Judge against this set alone — outside knowledge, plausibility
+   and your own opinion are irrelevant.
 2. `supported` — the evidence states the claim, or states it in equivalent words.
 3. `partially_supported` — the evidence supports part of the claim, or supports it with a
    qualification the claim omits.
 4. `unsupported` — the evidence neither states nor contradicts the claim.
 5. `contradicted` — the evidence states something incompatible with the claim.
-6. `supporting_chunk_ids` lists the ids of the passages you relied on; empty for unsupported.
+6. `supporting_chunk_ids` lists the ids of the evidence items you relied on, of whatever class;
+   empty for unsupported.
 7. `rationale` is ONE sentence.
 
 Return JSON matching the schema. No prose outside the JSON."""
@@ -131,7 +137,7 @@ CITATION_SUPPORT_SYSTEM = """\
 You judge whether the CITED passages ALONE support one claim.
 
 RULES
-1. Only the passages listed below were cited for this claim. Other passages the assistant saw are
+1. Only the evidence the assistant CITED for this claim is listed below. Everything else it saw is
    deliberately not shown: the question is whether the citation the reader can follow does its job.
 2. `supported: true` — a reader who opened only these passages would find the claim stated there.
 3. `supported: false` — the claim needs a passage that is not among them, or they contradict it.
@@ -193,9 +199,25 @@ REPAIR_INSTRUCTION = (
 )
 
 
-def render_evidence(chunks: Sequence[tuple[str, str]]) -> str:
-    """The evidence block: `(chunk_id, text)` pairs in the envelope shape the assistant saw."""
-    return "\n".join(f'<passage id="{chunk_id}">\n{text}\n</passage>' for chunk_id, text in chunks)
+#: The four classes of evidence `synthesize.j2` can put in front of the model (§13.3, ratified
+#: 2026-09-10). Retrieval chunks were the whole set until then, which scored a correct fact the
+#: agent read out of the employee's own benefits record as *unsupported* — penalising exactly the
+#: behaviour the §9.6 workflows require. The class travels with the item so the judge can say what
+#: it relied on and so a reader of a `judge` span can tell a policy passage from a record lookup.
+EvidenceKind = Literal["retrieval", "section", "compliance", "structured_data"]
+
+
+class EvidenceItem(NamedTuple):
+    """One item of the evidence the synthesis prompt actually carried."""
+
+    id: str
+    kind: EvidenceKind
+    text: str
+
+
+def render_evidence(items: Sequence[EvidenceItem]) -> str:
+    """The evidence block, in the envelope shape the assistant saw, each item naming its class."""
+    return "\n".join(f'<evidence id="{item.id}" kind="{item.kind}">\n{item.text}\n</evidence>' for item in items)
 
 
 class Judge:
@@ -332,7 +354,7 @@ class Judge:
     async def groundedness(
         self,
         *,
-        evidence: Sequence[tuple[str, str]],
+        evidence: Sequence[EvidenceItem],
         claim: str,
         item_id: str,
         scored_turn_id: str,
@@ -353,7 +375,7 @@ class Judge:
     async def citation_support(
         self,
         *,
-        cited: Sequence[tuple[str, str]],
+        cited: Sequence[EvidenceItem],
         claim: str,
         item_id: str,
         scored_turn_id: str,
@@ -433,5 +455,7 @@ __all__ = [
     "GroundednessVerdict",
     "Judge",
     "SupportVerdict",
+    "EvidenceItem",
+    "EvidenceKind",
     "render_evidence",
 ]

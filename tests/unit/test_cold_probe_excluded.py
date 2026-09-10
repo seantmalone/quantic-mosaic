@@ -76,12 +76,17 @@ def _scored(item_id: str, *, run_phase: str, quality: float, latency_ms: int, co
 
 @pytest.fixture
 def runner(store):
-    return Runner(
+    built = Runner(
         RunOptions(variant="baseline", base_url="http://127.0.0.1:8000", judge=False),
         store=store,
         dataset=DATASET,
         judge=None,
     )
+    # These rows carry judged scores already, so the run is assembled as a **judged** baseline: a
+    # baseline whose judge pass has not run is `judge_status: pending` and publishes no composite
+    # at all (§13.2's two-pass shape), which would make the cold-probe assertions below vacuous.
+    built._judge_enabled = True
+    return built
 
 
 def _scored_items() -> list[ScoredItem]:

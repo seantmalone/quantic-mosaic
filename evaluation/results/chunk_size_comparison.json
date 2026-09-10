@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-09-10T07:54:47Z",
+ "generated_at": "2026-09-10T10:11:44Z",
  "note": "Zero-LLM sweep (\u00a713.9): retrieval only, scored on DocRecall against every dataset item that names expected_docs (n=19), k=5. Each index was built into a temporary directory; data/index/chunks.manifest.jsonl is untouched.",
  "k": 5,
  "dataset_sha": "a501f288a6589730bc570507bbce06080876fa192a31d2ef821b1bc74d776758",
@@ -9,14 +9,14 @@
    "doc_recall_mean": 0.8947,
    "n_questions": 19,
    "n_chunks": 235,
-   "build_s": 44.0
+   "build_s": 44.1
   },
   {
    "chunk_chars": 1100,
    "doc_recall_mean": 0.8947,
    "n_questions": 19,
    "n_chunks": 204,
-   "build_s": 39.8
+   "build_s": 39.7
   },
   {
    "chunk_chars": 1600,

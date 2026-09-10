@@ -795,7 +795,8 @@ Conventions: `employee_id` matches `^E1[0-9]{3}$`; timestamps are ISO-8601; ever
  "doc_ids":{"type":"array","items":{"type":"string"}},
  "topic":{"type":"string","enum":["pto","holidays","remote_work","tax_location","expenses","travel",
    "data_security","benefits","onboarding","equipment","leave","conduct","performance",
-   "compensation","approvals","escalation"]},
+   "compensation","approvals","escalation"],
+   "description":"Prioritise one corpus topic. When the topic alone yields fewer than k hits or a single document, results are backfilled from the whole corpus (see topic_backfilled)."},
  "min_dense_score":{"type":"number","minimum":0,"maximum":1,"default":0.26,
    "description":"Minimum DENSE score (dense_score = 1 - cosine_distance). Applied to the full fused candidate list, then the top-k is taken from the survivors. Never applied to rrf_score, whose maximum is ~0.033."}}}
 // output
@@ -804,10 +805,22 @@ Conventions: `employee_id` matches `^E1[0-9]{3}$`; timestamps are ISO-8601; ever
   "rank":1,"dense_score":0.71,"bm25_rank":3,"rrf_score":0.0325,"snippet":"Employees may work from …",
   "char_start":8214,"char_end":9033,"quarantined":false}],
  "query_used":"…","k_effective":5,"k_source":"model","strategy":"hybrid_rrf",
- "total_candidates":37,"embed_ms":8,"search_ms":3,"index_version":"2026.1+9f2c"}
+ "total_candidates":37,"embed_ms":8,"search_ms":3,"index_version":"2026.1+9f2c",
+ "topic_backfilled":false,"backfill_reason":null}
 ```
 
 That hit — `rrf_score` 0.0325 with `dense_score` 0.71, **retained** at the 0.26 default — is the fixture in `test_min_dense_score_is_not_rrf.py`.
+
+**`topic` is a SOFT filter** (ratified 2026-09-10, P10 fix round; it was a hard filter through P10's first runs). A hard `topic` made the model's own
+topic guess the ceiling on what the answer could cite: `manager-approval-matrix` is tagged `approvals` alone, so a `pto` search could never see the
+approval rule that governs a PTO request, and demo task 1 fell from four retrieved documents to two cited ones. The topic-filtered search still runs
+first and still leads the ranking; then, if it returned **fewer than `k` hits** or **`k` hits that all sit in one document**, the remainder is
+backfilled from an unfiltered search of the same query — deduped by `chunk_id`, documents not yet represented first, capped at `k`. In the
+single-document case the top `ceil(k/2)` filtered hits keep their slots and the rest go to the unfiltered ranking, because nothing can be added to a
+list already `k` long. `topic_backfilled` (did any returned hit come from the unfiltered search?) and `backfill_reason` (`fewer_than_k` |
+`single_document` | `null`) are on the tool result **and** on the §10.2 `retrieval` payload, both defaulted so rows written before the change still
+parse; `tests/unit/test_topic_soft_filter.py` pins every branch. `doc_ids` is unaffected — it stays a hard filter, because a caller naming documents
+is naming the universe, not expressing a preference.
 
 **2. `get_policy_section`** — verbatim section text. `doc_id` is required and exactly one of `heading_path` / `chunk_id`, expressed **in the schema**,
 not only in prose.
@@ -870,6 +883,13 @@ refusal path reads the same information through `core.corpusread` so an out-of-s
 Rules come from `corpus/rules.yml`, hand-authored at P2, each requirement naming a `fact_key`, a `doc_id` and a `heading_path`. The whole tool is a
 **pure function** — the most heavily unit-testable component in the build. For `pto_request` the engine computes notice days itself, from `start_date`
 against the mock-data `as_of` snapshot, and ignores any caller-supplied `notice_business_days`, so the verdict cannot swing on a model's guess.
+
+**`parameters.destination_country` is normalised to an ISO 3166-1 alpha-2 code at the wire boundary** (ratified 2026-09-10, P10 fix round).
+`corpus/rules.yml`'s `remote.intl.destination` compares it with `in` against `tax.approved_countries`, which is the code list `DE,IE,NL,PT,ES,CA,MX` —
+so a caller writing `"Germany"` was reported as travelling somewhere unapproved, a wrong verdict produced by a spelling, and live recordings show
+`claude-haiku-4-5` writing exactly that. The tool recognises the seven approved destinations by name in the spellings the corpus itself uses, upper-cases
+a bare two-letter code, and **passes anything else through untouched** — a name the table does not know is not on the approved list under any spelling
+and must keep failing the check. `rules.py` still only ever compares codes, and the `tool_call` span keeps the caller's own bytes.
 
 **How a requirement is evaluated.** Each requirement carries a `check{subject, operator, compare_to}`, an optional `applies_when` guard and an optional
 `blocking` flag; `approvals_required[]` and `next_steps[]` entries carry the same guard. The vocabularies are closed and `mcpserver/rules.py` raises on
@@ -1381,7 +1401,7 @@ The single most important type in the project (`core/models.py`).
 | `mcp_discovery` | `server, transport, url, protocol_version, server_info{name,version}, tools[{name,description,input_schema,output_schema,annotations}], tool_count, catalog_sha, mcp_session_id, cached, handshake_ms, discovered_at` |
 | `plan` | `intent, workflow, step_summaries[], selected_tools[], rationale_summary, step_index, catalog_reopened` — operational only, never raw chain-of-thought |
 | `llm_call` | `provider, model, purpose(route\|act\|synthesize\|repair\|judge\|decompose), messages_ref{span_id,n_messages,total_chars}, tools_offered[], response_text, tool_calls[{name,args}], finish_reason, prompt_tokens, completion_tokens, total_tokens, cache_creation_input_tokens, cache_read_input_tokens, cost_usd_estimate, temperature, retry_count, cache_hit, limiter_wait_ms, provider_failover, structured_output_mode, ttfb_ms` |
-| `retrieval` | `query, k, k_source(model\|override\|default), filters, strategy(hybrid_rrf\|dense_only), min_dense_score, chunks[{chunk_id,doc_id,doc_title,heading_path,section,rank,dense_score,bm25_rank,rrf_score,snippet,quarantined}], max_dense_score, embed_ms, search_ms, index_version` |
+| `retrieval` | `query, k, k_source(model\|override\|default), filters, strategy(hybrid_rrf\|dense_only), min_dense_score, chunks[{chunk_id,doc_id,doc_title,heading_path,section,rank,dense_score,bm25_rank,rrf_score,snippet,quarantined}], max_dense_score, embed_ms, search_ms, index_version, topic_backfilled, backfill_reason(fewer_than_k\|single_document\|null)` — the last two defaulted, so rows written before the §8.4 soft-`topic` change still parse |
 | `tool_call` | `server, transport, tool_name, arguments, result_json, structured_content, is_error, error_code, duration_ms, server_timing_ms, discovery_source:"tools/list", actor_employee_id, actor_source(explicit\|default)` |
 | `guardrail` | `rule_id(G1..G6), rule_name, verdict(allow\|refuse\|redirect\|warn\|repair\|strip\|escalate), reason, evidence_span_ids[], matched_pattern, details{}` |
 | `confirmation` | `action, arguments_preview, human_summary, prompt_shown, expires_at, user_response(pending\|confirmed\|declined\|expired), resolved_at` — **never the token**, and `arguments_preview` is a display subset: the exact proposed arguments live on the gated `tool_call` span |
@@ -1881,6 +1901,23 @@ Every item is an HTTP `POST {EVAL_TARGET_BASE_URL}/chat` carrying `client_label:
 variants, no `remove_tool` on the shared server. Each item therefore produces a real session and turn, `sessions.eval_run_id` is populated, and
 `eval_results.session_id`/`turn_id` link straight to the audit trace, so "one click from any eval row to its full trace" works in both modes.
 
+**Two passes, not one** (ratified 2026-09-10, P10 fix round). The harness separates *driving* the items from *judging* them:
+
+1. **Drive** — `make eval` / `python -m evaluation.runner --variant <v>` sends the 26 `POST /chat` calls, scores every deterministic metric, and writes
+   the run file with the judged metrics absent and `judge_status: "pending"` (an ablation arm is `"not_applicable"`: §13.9 judges `baseline` only).
+   Everything judging needs is stored: each item's `turn_id` and served answer in the run file, the retrieval evidence and the whole span record in the
+   trace store.
+2. **Judge** — `python -m evaluation.runner --judge <run_id>` re-scores that run from its own file plus the traces, adds the judged half, and rewrites
+   the file and `REPORT.md`. It drives nothing, sends no `/chat`, and is **idempotent**. A judge pass will not start until the judge provider has
+   answered **eight consecutive** bare probes (`JUDGE_PROBE_ATTEMPTS`).
+
+The reason is a measured one: on 2026-09-10 `gemini-3.5-flash-lite` returned HTTP 500 `INTERNAL` on almost every call for over an hour, *intermittently*
+— roughly one request in three succeeded — and later 429 `RESOURCE_EXHAUSTED` against the free tier's 500-requests-per-model-per-day cap. A one-pass
+harness offers only bad choices at that moment: throw away 26 paid Haiku turns, or keep them and publish a composite that is **higher** than a judged
+run's, because every clause of §13.8's `strict_pass` is vacuously true for an item that does not define one and an unjudged item defines no groundedness
+clause. Hence the hard rule: **`strict_pass_rate` is `null` on a `pending` run and `REPORT.md` renders "not computable — judge pending", never a
+number.** The same split is what lets P11 re-judge a deployed run the next day if the cap bites again, without re-driving it.
+
 | Mode | `EVAL_TARGET_BASE_URL` | Role |
 |---|---|---|
 | `local` | `http://127.0.0.1:8000` | Development and calibration. Timing fields are stored but rendered greyed-out and labelled *"local runner — not representative"*: a p95 from a 2-CPU laptop does not describe a 0.1-CPU instance |
@@ -1901,8 +1938,28 @@ matches the target's `/health.trace_store.backend`, failing loudly rather than w
 
 **Groundedness is claim-level, not answer-level** — answer-level scoring lets a 90 %-correct answer with one hallucinated sentence pass. One cheap
 decomposition call splits the answer into atomic claims (recommendations tagged, excluded from the denominator and counted as
-`recommendation_labeled_rate`). Evidence `E_i` is the chunk text **actually present in the synthesis prompt**, read from the `retrieval` spans — no
-re-retrieval, so the judge scores what the model saw — and returns `v_j ∈ {supported, partially_supported, unsupported, contradicted}` → `1.0, 0.5, 0.0, −0.5`:
+`recommendation_labeled_rate`). Evidence `E_i` is **everything actually present in the synthesis prompt** — no re-retrieval, so the judge scores what
+the model saw — and returns `v_j ∈ {supported, partially_supported, unsupported, contradicted}` → `1.0, 0.5, 0.0, −0.5`:
+
+**`E_i` is all four classes of evidence, not the retrieval spans alone** (ratified 2026-09-10, P10 fix round). `synthesize.j2` puts two things in front
+of the model — the whole stored text of every non-quarantined retrieved chunk, and one `<tool_result>` envelope per successful tool call — and both are
+evidence. `evaluation/runner.py::_evidence_of` therefore returns items of four classes, each labelled on the wire so the judge can say which it relied
+on and a reader of a `judge` span can tell a policy passage from a record lookup:
+
+| `kind` | What it is |
+|---|---|
+| `retrieval` | one retrieved, non-quarantined chunk, resolved through `core/corpusread.py` to the **whole** stored text — never the 320-character display snippet |
+| `section` | a `get_policy_section` result: a section fetched verbatim |
+| `compliance` | a `check_policy_compliance` result: the deterministic engine's own requirement evidence |
+| `structured_data` | a `lookup_employee_profile` / `check_pto_balance` / `lookup_benefits_status` result — a record about this employee |
+
+**A claim is supported if any item of any class supports it.** Restricting `E_i` to `retrieval` scored a correct fact the agent had read out of the
+employee's own benefits record as *unsupported*, which penalises precisely the behaviour §9.6's workflows require — and it made the blind reference
+labels of §13.7 disagree with the judge by construction, since the two were being shown different evidence. `search_policy_documents` and
+`list_policy_documents` envelopes are excluded: the first is a list of display snippets of chunks already present in full, and the second returns titles
+and grounds nothing. The **citation-support** pass (`CitPrecision`/`CitRecall` below) still indexes the `retrieval` class alone, because a chunk id is
+the only thing an answer can cite. `evaluation/runner.py::_evidence_of` is the one definition: the judge calls it, and the §13.7 labelling packet calls
+the same function, so the two cannot drift.
 
 ```
 Groundedness_i = clip_[0,1]( (1/m) Σ_{j=1..m} s_j )
@@ -2482,18 +2539,16 @@ DEMO_EXPECTATIONS = [
   DemoExpectation(id="demo-1", min_tool_calls=4, min_retrievals=1, min_structured_data_tools=1,
     requires_write=False, requires_confirmation=False, min_distinct_docs_cited=3,
     forbidden_tools=["create_mock_hr_ticket", "draft_hr_email"],
-    required_tools=["lookup_employee_profile", "search_policy_documents", "get_policy_section",
+    # `get_policy_section` is OPTIONAL for this task (P10 fix round, 2026-09-10).
+    required_tools=["lookup_employee_profile", "search_policy_documents",
                     "check_policy_compliance"],
-    precedence_edges=[("lookup_employee_profile", "search_policy_documents"),
-                      ("search_policy_documents", "get_policy_section"),
-                      ("get_policy_section", "check_policy_compliance")]),
+    precedence_edges=[("lookup_employee_profile", "search_policy_documents")]),
   DemoExpectation(id="demo-2", min_tool_calls=4, min_retrievals=1, min_structured_data_tools=1,
     requires_write=True, requires_confirmation=True, min_distinct_docs_cited=2, forbidden_tools=[],
-    required_tools=["lookup_employee_profile", "check_pto_balance", "search_policy_documents",
+    # `lookup_employee_profile` is OPTIONAL for this task (P10 fix round, 2026-09-10).
+    required_tools=["check_pto_balance", "search_policy_documents",
                     "check_policy_compliance", "create_mock_hr_ticket"],
-    precedence_edges=[("lookup_employee_profile", "check_pto_balance"),
-                      ("check_pto_balance", "search_policy_documents"),
-                      ("search_policy_documents", "check_policy_compliance"),
+    precedence_edges=[("check_pto_balance", "create_mock_hr_ticket"),
                       ("check_policy_compliance", "create_mock_hr_ticket")]),
 ]
 ```
@@ -2501,6 +2556,17 @@ DEMO_EXPECTATIONS = [
 **`required_tools`** — every name must appear in the turn's `tool_call` spans with `status == "ok"`; a set check, so repeats and extra permitted tools
 are fine. **`precedence_edges`** — for each `(a, b)`, the first `ok` span named `a` must have a lower `seq` than the first named `b` (you cannot check
 a balance before you know who the employee is), without being brittle about interleaving. **`forbidden_tools`** — a hard fail on any occurrence.
+
+**`required_tools` lists what the workflow genuinely needs, not every tool the §18.1/§18.2 tables illustrate** (ratified 2026-09-10, P10 fix round).
+`get_policy_section` is **optional** for task 1: three live recordings against `claude-haiku-4-5` show the model answering the task with repeated
+`search_policy_documents` calls instead of fetching a heading in full, which grounds the answer just as well because a search hit carries the whole
+chunk rather than the 320-character display snippet (§7.3). `lookup_employee_profile` is **optional** for task 2 for the same kind of reason: the
+persona already carries the employee id, `check_pto_balance` answers the question that was asked, and the recordings go straight to it. Task 2's
+precedence edges are cut to the two the demo is *about* — the write comes last, after the balance and after the deterministic verdict; the engine
+returns citations of its own, so searching after `check_policy_compliance` rather than before it is a legitimate order, and the recordings take it.
+The tables below remain the illustrative sequence; the expectation records assert the
+*outcome* — the profile, the corpus, the deterministic verdict, and ≥ 3 distinct cited documents on task 1 / ≥ 2 on task 2 — not the one path a model
+may take to it. A stub script recorded from a real exchange (§13, the demo-stub deliverable) must meet these records unchanged.
 
 **Both prompts use explicit dates.** There is no frozen clock, so "next Tuesday" would resolve differently on every run and the documented arguments
 would rot within a week; explicit dates are also better narration on camera (§22).
@@ -2522,8 +2588,12 @@ would rot within a week; explicit dates are also better narration on camera (§2
 **Expected outcome.** `verdict: conditional`; a cited answer spanning **≥ 3 distinct documents** (`remote-and-hybrid-work`,
 `tax-and-location-addendum`, `security-acceptable-use`, plus `manager-approval-matrix`). `policy_fact` — 42 days exceeds the **30-day** threshold so
 Tax & Legal review is required; Germany is on the approved-country list; a company-managed, encrypted device with always-on VPN is mandatory.
-`recommendation` — request written manager approval at least **21 calendar days** before departure. `escalation` — the People Operations mobility
-contact. Cited `next_steps[]`. No write, no confirmation.
+`recommendation` — request written manager approval at least **21 calendar days** before departure. Cited `next_steps[]`. No write, no confirmation.
+The committed recording (2026-09-10) cites `remote-and-hybrid-work`, `tax-and-location-addendum` and `manager-approval-matrix` and states the Tax &
+Legal review and the director approval as cited `policy_fact`s; an **`escalation` block is not asserted**, because labelling that hand-off as an
+escalation rather than a policy fact is a model preference and the substance is present either way. The model also sends
+`destination_country: "Germany"`, which `check_policy_compliance` normalises to `"DE"` at the wire boundary (§8.4 tool 4) — the span keeps the
+caller's own bytes and the engine still compares ISO codes with ISO codes.
 
 **Narration (DEMO.6):** ① the **tool names** in the live SSE rail; ② the **arguments** — expanding the `check_policy_compliance` span to show
 `duration_days: 42`; ③ the **outputs** — the requirements array with `met: false` on the duration rule; ④ the **citations** — clicking a chip into the

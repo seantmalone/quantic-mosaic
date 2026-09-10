@@ -42,7 +42,7 @@ from typing import Any
 import httpx
 
 from evaluation import deterministic as det
-from evaluation.judges import VERDICT_SCORES, Claim, Judge
+from evaluation.judges import VERDICT_SCORES, Claim, EvidenceItem, Judge
 from evaluation.schema import (
     COLD_PROBE_IDS,
     REFERENCE_LABELS_PATH,
@@ -52,6 +52,7 @@ from evaluation.schema import (
     Dataset,
     EvalItem,
     ItemResult,
+    ReferenceLabels,
     RunConfig,
     RunFile,
     RunMetrics,
@@ -520,7 +521,9 @@ class Runner:
         evidence = _evidence_of(turn)
         policy_claims = [claim for claim in claims if claim.kind == "policy_claim"]
         citations_by_claim = _citations_by_claim(claims, turn.answer_blocks)
-        chunk_text = dict(evidence)
+        # Only chunk ids can be cited, so the citation-support pass indexes the retrieval class
+        # alone: a tool envelope has no id an answer could ever name.
+        chunk_text = {item.id: item for item in evidence if item.kind == "retrieval"}
 
         verdict_by_claim: dict[str, str] = {}
         scores: list[float] = []
@@ -547,9 +550,7 @@ class Runner:
         upheld = 0
         for claim in policy_claims:
             cited = [
-                (chunk_id, chunk_text[chunk_id])
-                for chunk_id in citations_by_claim.get(claim.id, [])
-                if chunk_id in chunk_text
+                chunk_text[chunk_id] for chunk_id in citations_by_claim.get(claim.id, []) if chunk_id in chunk_text
             ]
             if not cited:
                 continue
@@ -725,6 +726,30 @@ class Runner:
                     )
                 )
 
+        # §13.4's over-refusal discussion: a turn that refused for want of evidence while holding
+        # the deterministic engine's own, resolvable citations. G1 weighs `turn.citable()` — the
+        # retrieved chunks — and `check_policy_compliance`'s `citations[]` are not in it, although
+        # the synthesis prompt carries the whole result. Counted, named, and left alone: changing
+        # what G1 counts is a guardrail change, not an evaluation one.
+        engine_only_refusals = [
+            entry.item.id
+            for entry in run_phase_scored
+            if entry.predicted_behavior == "refuse"
+            and entry.gold_behavior == "answer"
+            and entry.turn is not None
+            and det.compliance_evidence_ids(entry.turn)
+            and not det.retrieved_doc_ids(entry.turn)
+        ]
+        if engine_only_refusals:
+            self.notes.append(
+                f"Over-refusal cause, {len(engine_only_refusals)} item(s) — {', '.join(engine_only_refusals)}: "
+                "the turn refused with `no policy evidence was retrieved` while `check_policy_compliance` "
+                "had already returned a decided verdict whose citations resolve to real chunks of the "
+                "committed index. G1's evidence gate weighs the retrieved chunks only, so the engine's "
+                "own evidence — which the synthesis prompt does carry — cannot clear it. Counting "
+                "compliance-resolved chunks as citable evidence for G1 is a candidate P11/P12 fix."
+            )
+
         cache_hit_total = sum(int(entry.result.scores.get("cache_hits") or 0) for entry in run_phase_scored)
         if cache_hit_total:
             self.notes.append(
@@ -746,8 +771,17 @@ class Runner:
             else all(value for value in discovery if value is not None)
         )
 
+        # §13.9 judges `baseline` only, so an ablation arm is never "pending" — it is complete as
+        # it stands. A baseline is `judged` only when the pass actually ran AND every verdict came
+        # back: one `failures` is one item whose groundedness clause is unscored, which is exactly
+        # the case the composite must not report a number for.
+        judge_failures = self.judge.failures if self.judge is not None else 0
+        judge_status = "not_applicable"
+        if self.options.variant == "baseline":
+            judge_status = "judged" if (self._judge_enabled and judge_failures == 0) else "pending"
+
         metrics = RunMetrics(
-            judged=self._judge_enabled,
+            judged=self._judge_enabled and judge_failures == 0,
             groundedness_mean=det.mean(groundedness),
             citation_accuracy_mean=det.mean(cit_accuracy),
             partial_match_mean=det.mean(partial),
@@ -758,7 +792,16 @@ class Runner:
             ),
             tool_selection_accuracy=det.mean(selection),
             arg_correctness_rate=det.mean(arg_rates),
-            strict_pass_rate=det.mean([float(entry.result.passed) for entry in run_phase_scored]),
+            # §13.8's composite is published only when the judged half is complete. Every clause
+            # of `strict_pass` is *vacuously* true for an item that does not define it, so a run
+            # whose groundedness was never scored would report a composite that looks high
+            # precisely because nothing was checked. `judge_status` says which case this is and
+            # `render_report` prints "not computable — judge pending" rather than a number.
+            strict_pass_rate=(
+                None
+                if judge_status == "pending"
+                else det.mean([float(entry.result.passed) for entry in run_phase_scored])
+            ),
             escalation_matrix=det.escalation_matrix(pairs),
             escalation_n_excluded=excluded,
             over_refusal_rate=over_rate,
@@ -840,6 +883,7 @@ class Runner:
             judge_calls=self.judge.calls if self.judge is not None else 0,
             duration_s=round(duration_s, 1),
             status="complete",
+            judge_status=judge_status,  # type: ignore[arg-type]
             notes=" ".join(self.notes) or None,
             items=[entry.result for entry in scored],
         )
@@ -872,14 +916,39 @@ class Runner:
 # --------------------------------------------------------------------------------------
 
 
-def _evidence_of(turn: det.TurnRecord) -> list[tuple[str, str]]:
-    """The chunk text **actually present in the synthesis prompt**, read from the retrieval spans.
+#: Which §8.4 tool's result envelope counts as which class of evidence (§13.3, ratified 2026-09-10).
+#: `search_policy_documents` and `list_policy_documents` are deliberately absent: the first's
+#: envelope is a list of 320-character display snippets of chunks this function already returns in
+#: full, so including it would show the judge a worse copy of what it already has, and the second
+#: returns titles and grounds nothing (`act.j2` rule 6 says so on the wire). The two write tools
+#: propose an action; they assert no fact.
+ENVELOPE_KINDS: dict[str, str] = {
+    "get_policy_section": "section",
+    "check_policy_compliance": "compliance",
+    "lookup_employee_profile": "structured_data",
+    "check_pto_balance": "structured_data",
+    "lookup_benefits_status": "structured_data",
+}
 
-    `synthesize.j2` renders `chunk.text` — the whole stored chunk — so resolving each retrieved,
-    non-quarantined id through `core.corpusread` reproduces the evidence the model saw, byte for
-    byte, with **no re-retrieval** (§13.3).
+
+def _evidence_of(turn: det.TurnRecord) -> list[EvidenceItem]:
+    """Everything **actually present in the synthesis prompt**, in the classes §13.3 names.
+
+    `synthesize.j2` puts two things in front of the model: the whole stored text of every retrieved
+    chunk, and one `<tool_result>` envelope per successful tool call. Both are evidence, and until
+    2026-09-10 this function returned only the first — which scored a correct fact the agent had read
+    out of the employee's own benefits record as *unsupported*, penalising exactly the behaviour the
+    §9.6 workflows require. So:
+
+    * `retrieval` — each retrieved, non-quarantined chunk, resolved through `core.corpusread` to the
+      **whole** stored text rather than the 320-character display snippet the span payload carries.
+      Quarantined chunks are excluded because G2 strips every citation to them (§7.4 trigger 4).
+    * `section`, `compliance`, `structured_data` — the tool envelopes of `ENVELOPE_KINDS`, in the
+      exact bytes the prompt rendered.
+
+    No re-retrieval and no second serialisation: every byte here is read back from the trace.
     """
-    evidence: list[tuple[str, str]] = []
+    evidence: list[EvidenceItem] = []
     seen: set[str] = set()
     for span in turn.of_kind("retrieval"):
         for chunk in span.payload.get("chunks") or []:
@@ -888,7 +957,20 @@ def _evidence_of(turn: det.TurnRecord) -> list[tuple[str, str]]:
                 continue
             seen.add(chunk_id)
             row = corpusread.get_chunk(chunk_id)
-            evidence.append((chunk_id, row.text if row is not None else chunk.get("snippet") or ""))
+            text = row.text if row is not None else chunk.get("snippet") or ""
+            evidence.append(EvidenceItem(id=chunk_id, kind="retrieval", text=text))
+    counts: dict[str, int] = {}
+    for span in turn.of_kind("tool_call"):
+        payload = span.payload
+        name = str(payload.get("tool_name") or "")
+        kind = ENVELOPE_KINDS.get(name)
+        if kind is None or payload.get("is_error") or span.status != "ok":
+            continue
+        body = payload.get("result_json") or ""
+        if not body:
+            continue
+        counts[name] = counts.get(name, 0) + 1
+        evidence.append(EvidenceItem(id=f"{name}#{counts[name]}", kind=kind, text=body))  # type: ignore[arg-type]
     return evidence
 
 
@@ -973,6 +1055,90 @@ def fmt(value: Any, digits: int = 3) -> str:
     return str(value)
 
 
+#: §13.8's one published target. It is the only numeric target the evaluation section states, so it
+#: is rendered *beside* the figure it grades rather than left in the spec: a report that prints
+#: `0.538` with no reference number reads as a result instead of as a shortfall.
+STRICT_PASS_TARGET = 0.85
+
+
+#: What the composite cell says on a run whose judged half is missing. It is deliberately a
+#: sentence and not a number: §13.8's groundedness clause is *vacuously* true on an item nobody
+#: judged, so a number here would be higher precisely because less was checked.
+PENDING_COMPOSITE = "not computable — judge pending"
+
+
+def _strict_pass_cell(run: RunFile) -> str:
+    """The composite's value cell: a number, or why there is not one."""
+    if run.metrics.strict_pass_rate is None and run.judge_status == "pending":
+        return PENDING_COMPOSITE
+    return fmt(run.metrics.strict_pass_rate)
+
+
+def _strict_pass_note(run: RunFile) -> str:
+    """One sentence under the table saying whether §13.8's target was met, and by how much."""
+    if run.judge_status == "pending":
+        return (
+            f"Strict pass rate is **{PENDING_COMPOSITE}**. §13.8's composite requires a groundedness "
+            "verdict on every item that makes a policy claim, and this run has not been judged (or "
+            "its judge pass did not complete). Every clause of the composite is vacuously true for "
+            "an item that does not define it, so publishing a number here would report a figure "
+            "that is high because *less* was checked. Judge it with `python -m evaluation.runner "
+            f"--judge {run.run_id}` — it drives nothing and re-uses these same answers — and this "
+            "line becomes the real figure against the ≥ "
+            f"{STRICT_PASS_TARGET:.2f} target."
+        )
+    value = run.metrics.strict_pass_rate
+    if value is None:
+        return ""
+    gap = value - STRICT_PASS_TARGET
+    verdict = (
+        f"**meets** §13.8's target of ≥ {STRICT_PASS_TARGET:.2f} (+{gap:.3f})"
+        if gap >= 0
+        else f"is **{abs(gap):.3f} below** §13.8's target of ≥ {STRICT_PASS_TARGET:.2f}"
+    )
+    unjudged = (
+        " This run's groundedness was not judged (§13.9 judges `baseline` only), so §13.8's "
+        "groundedness clause is vacuously true for every item and the figure is **not comparable** "
+        "with a judged run's."
+        if not run.metrics.judged
+        else ""
+    )
+    return f"Strict pass rate {fmt(value)} {verdict} on the 26-item set.{unjudged}"
+
+
+def _agreement_breakdown(run: RunFile, labels: ReferenceLabels | None) -> str:
+    """What `judge_agreement_rate` actually rests on, cell by cell.
+
+    A rate of 1.000 over n = 7 reads as strong validation until you see that six of the seven were
+    unanimous `grounded` — the easy half of the decision — and only the remaining item discriminates
+    at all. §13.7 already asks for the per-item disagreements; this prints the agreements too, so
+    the figure cannot be read as more evidence than it is.
+    """
+    if labels is None or run.metrics.judge_agreement_n == 0:
+        return ""
+    scores = {item.item_id: item.scores.get("groundedness") for item in run.items if item.run_phase == "scored"}
+    cells: dict[tuple[str, str], list[str]] = {}
+    for label in labels.labels:
+        score = scores.get(label.item_id)
+        if score is None:
+            continue
+        judge = "grounded" if score >= det.GROUNDEDNESS_PASS else "not_grounded"
+        cells.setdefault((label.verdict, judge), []).append(label.item_id)
+    lines = ["| reference ↓ / judge → | grounded | not_grounded |", "|---|---|---|"]
+    for reference in ("grounded", "not_grounded"):
+        row = [", ".join(sorted(cells.get((reference, judge), []))) or "–" for judge in ("grounded", "not_grounded")]
+        lines.append(f"| {reference} | {row[0]} | {row[1]} |")
+    off_diagonal = len(cells.get(("grounded", "not_grounded"), [])) + len(cells.get(("not_grounded", "grounded"), []))
+    discriminating = len(cells.get(("not_grounded", "not_grounded"), [])) + off_diagonal
+    lines.append("")
+    lines.append(
+        f"Of the {run.metrics.judge_agreement_n} compared, **{discriminating}** involved a "
+        "`not_grounded` on either side; the rest are unanimous `grounded`, which is the half of the "
+        "decision a judge is least likely to get wrong. Read the rate with that in mind."
+    )
+    return "\n".join(lines)
+
+
 def _metric_table(run: RunFile) -> str:
     metrics = run.metrics
     rows = [
@@ -996,8 +1162,12 @@ def _metric_table(run: RunFile) -> str:
         ("Clarification accuracy", metrics.clarification_accuracy, metrics.n_scored.get("clarification")),
         ("Strict pass rate (§13.8)", metrics.strict_pass_rate, metrics.n_scored.get("items")),
     ]
-    lines = ["| Metric | Value | n |", "|---|---|---|"]
-    lines += [f"| {name} | {fmt(value)} | {fmt(n)} |" for name, value, n in rows]
+    targets = {"Strict pass rate (§13.8)": f"≥ {STRICT_PASS_TARGET:.2f}"}
+    cells = {"Strict pass rate (§13.8)": _strict_pass_cell(run)}
+    lines = ["| Metric | Value | n | Target |", "|---|---|---|---|"]
+    lines += [
+        f"| {name} | {cells.get(name, fmt(value))} | {fmt(n)} | {targets.get(name, '–')} |" for name, value, n in rows
+    ]
     return "\n".join(lines)
 
 
@@ -1069,11 +1239,23 @@ def render_report(run: RunFile, *, ablation_section: str | None = None) -> str:
         if protocol is not None
         else "_`evaluation/reference_labels.yaml` is not present._"
     )
+    agreement_breakdown = _agreement_breakdown(run, labels)
     judged_note = (
         "Judged metrics are computed on `baseline` only (§13.9): judging all three arms would "
         "roughly triple the judge volume against a free-tier daily cap, and DocRecall, "
         "ToolSelection and Workflow — the judge-free metrics — are precisely what the two arms move."
     )
+    if run.judge_status == "pending":
+        judged_note += (
+            "\n\n> ⚠ **This run has not been judged.** §13.2's harness is two-pass: the sweep drives the "
+            "26 items and stores what judging needs (each item's `turn_id` and served answer here, the "
+            "retrieval evidence in the trace store), and `python -m evaluation.runner --judge "
+            f"{run.run_id}` computes the judged half afterwards without re-driving anything. Until it "
+            "runs, `groundedness_mean`, `citation_accuracy_mean`, `partial_match_mean`, "
+            "`clarification_accuracy` and the §13.8 composite are absent rather than zero, and "
+            "`judge_agreement_rate` cannot be computed because there is no judge verdict to compare "
+            "the blind reference labels against."
+        )
     return f"""# Evaluation report — Mosaic HR Copilot
 
 Generated by `evaluation/runner.py` from `evaluation/results/{run.run_id}.json`. Every figure below
@@ -1086,7 +1268,7 @@ comes from that one run; nothing here is hand-edited.
 | Target | `{run.target}` — `{run.target_base_url}` |
 | Dataset | `evaluation/dataset.yaml` · {run.n_items} scored items · sha256 `{run.dataset_sha[:16]}…` |
 | Agent model | `{run.config.llm_model}` |
-| Judge model | `{run.judge_model or "—"}` · {run.judge_calls} judge calls |
+| Judge model | `{run.judge_model or "—"}` · {run.judge_calls} judge calls · `judge_status: {run.judge_status}` |
 | Retrieval | `{run.config.retrieval_strategy}`, k = {run.config.retrieval_k} |
 | Guardrail thresholds | {thresholds} |
 | Limiter | LLM_RPM = {run.config.llm_rpm} |
@@ -1097,6 +1279,8 @@ comes from that one run; nothing here is hand-edited.
 ## Headline metrics
 
 {_metric_table(run)}
+
+{_strict_pass_note(run)}
 
 {judged_note}
 
@@ -1138,11 +1322,13 @@ independence holds by construction and no re-judge machinery exists (§13.7).
 
 **Judge validation is an agreement rate, not a κ.** `judge_agreement_rate` =
 **{fmt(metrics.judge_agreement_rate)}** with `judge_agreement_n` = **{metrics.judge_agreement_n}**.
-The reference labels were authored by an independent model subagent, blind to the judge's verdicts;
-at n = 8 a κ's confidence interval is wide enough to be meaningless, while an agreement rate with
-its n stated is honest (§13.7, §22). This is **never** "human-vs-judge".
+At n = 8 a κ's confidence interval is wide enough to be meaningless, while an agreement rate with
+its n stated is honest (§13.7, §22). This is **never** "human-vs-judge" — the labeller is a model,
+and how blind it was is stated in the protocol below rather than asserted here.
 
 {protocol_line}
+
+{agreement_breakdown}
 
 ### What the tool metrics do and do not measure
 
@@ -1273,7 +1459,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--notes", default=None)
     parser.add_argument("--items", default="", help="comma-separated item ids; default: the whole set")
     parser.add_argument("--n-items", type=int, default=None)
-    parser.add_argument("--no-judge", action="store_true", help="skip the judged metrics entirely")
+    parser.add_argument(
+        "--judge",
+        metavar="RUN_ID",
+        default=None,
+        help=(
+            "pass (b) of §13.2: judge a run that has already been driven, from its own run file "
+            "plus the trace store. Drives nothing, sends no /chat, and is idempotent."
+        ),
+    )
+    parser.add_argument(
+        "--judge-inline",
+        action="store_true",
+        help=(
+            "judge each item as it is driven, in the same process. Off by default: the two-pass "
+            "shape survives a judge-provider outage, and an outage mid-run would otherwise leave a "
+            "half-judged run whose composite cannot be computed."
+        ),
+    )
     parser.add_argument("--cold-probes", action="store_true", help="run the three §13.5 cold probes")
     parser.add_argument("--results-dir", default=str(RESULTS_DIR))
     parser.add_argument(
@@ -1288,6 +1491,171 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     return parser
+
+
+#: How many consecutive healthy probes the judge provider must answer before a judge pass starts.
+#: The 2026-09-10 outage that made this necessary was **intermittent**: `gemini-3.5-flash-lite`
+#: answered one request in three between long runs of HTTP 500 `INTERNAL`. One probe would have
+#: waved a pass through that then failed most of its 252 calls and left the run half-judged, which
+#: is the state §13.8's composite must never be computed over. Eight in a row is a provider that is
+#: actually up.
+JUDGE_PROBE_ATTEMPTS = 8
+
+#: Seconds between probes. Eight requests fired back to back prove the provider was up for 300 ms,
+#: which is not the claim the gate is making — and it is how the first gated pass got through: it
+#: caught a good window, then met HTTP 500 again on its very first real call. Spacing them turns
+#: the gate into "up for a quarter of a minute". It stays **necessary, not sufficient**, which is
+#: why the pass is idempotent: one that loses verdicts leaves the run `pending` and is simply run
+#: again when the provider is healthy.
+JUDGE_PROBE_INTERVAL_S = 2.0
+
+#: The bare probe: no tools, no schema, no prompt of ours. It has to be able to fail for provider
+#: reasons only, so that a red gate is evidence about the provider rather than about our request.
+JUDGE_PROBE_MESSAGE = "Reply with the single word OK."
+
+#: How many lost verdicts abort a judge pass before it has spent the rest of its calls. A judged
+#: 26-item baseline costs ~252 provider calls and the free tier allows 500 per model per day, so a
+#: pass that grinds through a flapping provider losing verdicts does not merely produce a run that
+#: stays `pending` — it spends half of tomorrow's only other attempt doing it. Three is past
+#: coincidence and well short of the budget. The pass writes **nothing** when it aborts, so the run
+#: file keeps the clean `pending` state the drive pass gave it.
+JUDGE_FAILURE_BUDGET = 3
+
+
+async def judge_provider_ready(*, settings: Settings | None = None, attempts: int = JUDGE_PROBE_ATTEMPTS) -> None:
+    """Raise unless the judge provider answers `attempts` bare requests in a row (§13.7).
+
+    Deliberately outside the `Judge`: it must not consume a judge span, a run id or the repair
+    loop's one retry, and its failure must read as "the provider is down", never as "the run is
+    bad".
+    """
+    from hrmosaic.core.llm.base import CompletionRequest, Message
+    from hrmosaic.core.llm.openai_compat import OpenAICompatAdapter
+
+    resolved = settings or default_settings
+    adapter = OpenAICompatAdapter(
+        base_url=resolved.judge_base_url,
+        api_key=secret_value(resolved.judge_api_key) or secret_value(resolved.llm_api_key),
+        model=resolved.judge_model,
+    )
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            await asyncio.sleep(JUDGE_PROBE_INTERVAL_S)
+        try:
+            await adapter.invoke(
+                CompletionRequest(messages=[Message(role="user", content=JUDGE_PROBE_MESSAGE)], purpose="judge")
+            )
+        except Exception as exc:
+            raise SystemExit(
+                f"judge provider probe {attempt}/{attempts} failed against {resolved.judge_model}: {exc}. "
+                "The judge pass was NOT started; the run file keeps `judge_status: pending`."
+            ) from exc
+    logger.info("judge provider answered %d/%d probes; starting the judge pass", attempts, attempts)
+
+
+async def judge_run(run_id: str, *, results_dir: Path = RESULTS_DIR, settings: Settings | None = None) -> RunFile:
+    """Pass (b) of §13.2's two-pass shape: judge a run that has already been driven.
+
+    Nothing is re-driven and no `/chat` is sent. Every item is re-scored from **the stored run plus
+    the trace store** — the run file carries each item's `turn_id` and served answer, and the turn
+    itself carries the retrieval evidence the model saw — so the deterministic half comes out
+    byte-identical and the judged half is added to it. That makes the pass **idempotent**: running
+    it twice produces the same file, and running it after a provider outage recovers a run that was
+    left `judge_status: pending` rather than forcing 26 more Haiku turns.
+
+    It is also what P11 needs: if the judge's free-tier daily cap bites during the deployed run, the
+    deployed answers are not lost — they are judged the next day from the same command.
+    """
+    resolved = settings or default_settings
+    path = Path(results_dir) / f"{run_id}.json"
+    run = RunFile.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    if run.variant != "baseline":
+        raise SystemExit(f"{run_id} is variant {run.variant!r}; §13.9 judges `baseline` only")
+
+    dataset = load_dataset()
+    if dataset.sha256 != run.dataset_sha:
+        raise SystemExit(
+            f"{run_id} was driven against dataset {run.dataset_sha[:12]}… and evaluation/dataset.yaml "
+            f"is now {dataset.sha256[:12]}…; judging it would score answers against different questions"
+        )
+
+    await judge_provider_ready(settings=resolved)
+
+    store = get_store(resolved)
+    migrate(store)
+    trace_module.set_writer(TraceWriter(store))
+    runner = Runner(
+        RunOptions(
+            variant=run.variant,
+            base_url=run.target_base_url,
+            label=run.label,
+            judge=True,
+            results_dir=Path(results_dir),
+        ),
+        settings=resolved,
+        store=store,
+        dataset=dataset,
+    )
+    # The judge spans belong to the run they judge, not to the id `Runner.__init__` just minted:
+    # `payload.run_id` and the synthetic `eval_judge` session's `eval_run_id` are what page 11's
+    # judge-rationale drill-down joins on (§10.2), and a fresh id would orphan every one of them.
+    runner.run_id = run.run_id
+    if runner.judge is not None:
+        runner.judge.run_id = run.run_id
+    try:
+        scored: list[ScoredItem] = []
+        for index, previous in enumerate(run.items, start=1):
+            item = dataset.by_id(previous.item_id)
+            if item is None:
+                raise SystemExit(f"{run_id} carries item {previous.item_id!r}, which the dataset no longer has")
+            turn = det.read_turn(store, previous.turn_id) if previous.turn_id else None
+            if turn is None:
+                raise SystemExit(
+                    f"{run_id}: turn {previous.turn_id} is not in this trace store, so item "
+                    f"{previous.item_id} cannot be judged. Judge from the machine that drove the run."
+                )
+            logger.info("[judge %s] %d/%d %s", run.run_id, index, len(run.items), previous.item_id)
+            scored.append(
+                await runner._score(
+                    item,
+                    {"session_id": previous.session_id, "turn_id": previous.turn_id, "answer": previous.answer},
+                    turn,
+                    run_phase=previous.run_phase,
+                )
+            )
+            lost = runner.judge.failures if runner.judge is not None else 0
+            if lost > JUDGE_FAILURE_BUDGET:
+                raise SystemExit(
+                    f"judge pass aborted at item {index}/{len(run.items)} ({previous.item_id}): "
+                    f"{lost} verdicts lost, budget {JUDGE_FAILURE_BUDGET}. The provider is not "
+                    f"healthy enough to judge this run. NOTHING was written — {run.run_id} keeps "
+                    "`judge_status: pending`, and the pass is idempotent, so run it again when the "
+                    "provider recovers."
+                )
+    finally:
+        await runner.aclose()
+
+    judged = runner.assemble(scored, duration_s=run.duration_s or 0.0)
+    # The drive pass's provenance is the run's; only the judged half is new.
+    judged.created_at = run.created_at
+    judged.git_sha = run.git_sha
+    judged.label = run.label
+    judged.duration_s = run.duration_s
+    judged.notes = _judge_pass_note(run.notes, judged)
+    runner.write_artifacts(judged)
+    write_report(judged, results_dir=Path(results_dir))
+    return judged
+
+
+def _judge_pass_note(previous: str | None, judged: RunFile) -> str:
+    """Append — idempotently — the one sentence that says when the judged half was added."""
+    stripped = re.sub(r"\s*Judged in a second pass.*?$", "", previous or "", flags=re.S).strip()
+    note = (
+        f"Judged in a second pass on {time.strftime('%Y-%m-%d', time.gmtime())} "
+        f"({judged.judge_calls} judge calls, model {judged.judge_model}); the 26 answers are the "
+        "drive pass's own and were not re-driven."
+    )
+    return f"{stripped} {note}".strip() if stripped else note
 
 
 def recompute_agreement(run_id: str, *, results_dir: Path = RESULTS_DIR) -> RunFile:
@@ -1325,6 +1693,22 @@ def recompute_agreement(run_id: str, *, results_dir: Path = RESULTS_DIR) -> RunF
 async def _main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.judge:
+        run = await judge_run(args.judge, results_dir=Path(args.results_dir))
+        print(  # noqa: T201 — this is a CLI
+            json.dumps(
+                {
+                    "run_id": run.run_id,
+                    "judge_status": run.judge_status,
+                    "judge_calls": run.judge_calls,
+                    "groundedness_mean": run.metrics.groundedness_mean,
+                    "citation_accuracy_mean": run.metrics.citation_accuracy_mean,
+                    "strict_pass_rate": run.metrics.strict_pass_rate,
+                },
+                indent=1,
+            )
+        )
+        return 0
     if args.recompute_agreement:
         run = recompute_agreement(args.recompute_agreement, results_dir=Path(args.results_dir))
         print(  # noqa: T201 — this is a CLI
@@ -1346,7 +1730,7 @@ async def _main(argv: Sequence[str] | None = None) -> int:
             variant=args.variant,
             base_url=args.base_url or default_settings.eval_target_base_url,
             label=args.label,
-            judge=not args.no_judge,
+            judge=args.judge_inline,
             item_ids=[value for value in args.items.split(",") if value],
             n_items=args.n_items,
             cold_probes=args.cold_probes,

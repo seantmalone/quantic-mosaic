@@ -7,7 +7,10 @@ otherwise break silently:
 2. `rag/embed.py` is the only fastembed call site;
 3. `parallel=` appears nowhere (it hung indefinitely in the probe);
 4. `agent/**` never imports `hrmosaic.mcpserver` — it reaches the server over the MCP wire;
-5. the top-level `mcp/` directory is not an importable package (§4.1).
+5. `evaluation/**` never imports `hrmosaic.mcpserver`, `hrmosaic.agent` or `hrmosaic.web` — §4.2
+   puts the harness on `evaluation/ -> core/` and the HTTP API, so anything it needs from inside
+   the application (the canonical argument serialisation of §8.6, say) belongs in `core/`;
+6. the top-level `mcp/` directory is not an importable package (§4.1).
 """
 
 import re
@@ -20,11 +23,13 @@ TRACE_WRITER = SRC / "hrmosaic" / "core" / "trace.py"
 MIGRATIONS = SRC / "hrmosaic" / "core" / "migrations"
 EMBED_MODULE = SRC / "hrmosaic" / "rag" / "embed.py"
 AGENT_PACKAGE = SRC / "hrmosaic" / "agent"
+EVALUATION_PACKAGE = REPO_ROOT / "evaluation"
 
 SPAN_WRITE = re.compile(r"INSERT\s+INTO\s+(?:spans|turns|sessions)\b", re.IGNORECASE)
 EMBED_CALL = re.compile(r"\.(?:embed|query_embed)\(")
 PARALLEL_KWARG = "parallel="
 MCPSERVER_IMPORT = re.compile(r"^\s*(?:from|import)\s+hrmosaic\.mcpserver\b", re.MULTILINE)
+INSIDE_THE_APP_IMPORT = re.compile(r"^\s*(?:from|import)\s+hrmosaic\.(?:mcpserver|agent|web)\b", re.MULTILINE)
 
 
 def _source_files(suffixes: tuple[str, ...] = (".py",)) -> list[Path]:
@@ -70,6 +75,24 @@ def test_agent_does_not_import_mcpserver():
         str(path.relative_to(REPO_ROOT))
         for path in sorted(AGENT_PACKAGE.rglob("*.py"))
         if MCPSERVER_IMPORT.search(path.read_text(encoding="utf-8"))
+    ]
+    assert hits == []
+
+
+def test_evaluation_does_not_import_inside_the_application():
+    # §4.2: the harness drives the app over HTTP and reads what happened through `core/db.py`.
+    # The grep has a real target — `evaluation/deterministic.py` imports `hrmosaic.core.canonical`,
+    # the shared serialisation that used to live in `mcpserver/confirm.py` — so a vacuous pass
+    # (the package importing no `hrmosaic` module at all) can never be mistaken for the invariant.
+    sources = sorted(EVALUATION_PACKAGE.rglob("*.py"))
+    assert sources
+    assert any(
+        re.search(r"^\s*from\s+hrmosaic\.core\b", path.read_text(encoding="utf-8"), re.MULTILINE) for path in sources
+    )
+    hits = [
+        str(path.relative_to(REPO_ROOT))
+        for path in sources
+        if INSIDE_THE_APP_IMPORT.search(path.read_text(encoding="utf-8"))
     ]
     assert hits == []
 

@@ -180,6 +180,12 @@ class RetrievalPayload(_Payload):
     embed_ms: int | None = None
     search_ms: int | None = None
     index_version: str | None = None
+    #: `topic` is a soft filter (§8.4): when it alone yields fewer than `k` hits or a single
+    #: document, the rest is backfilled from an unfiltered search of the same query. Both fields
+    #: are defaulted so `retrieval` rows written before the P10 fix round still parse — they
+    #: predate the widening and read back as the plain topic search they were.
+    topic_backfilled: bool = False
+    backfill_reason: Literal["fewer_than_k", "single_document"] | None = None
 
 
 class ToolCallPayload(_Payload):

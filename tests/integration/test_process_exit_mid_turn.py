@@ -77,6 +77,53 @@ def test_the_sigterm_handler_flushes_and_chains_to_the_previous_handler(writer, 
     assert store.execute("SELECT COUNT(*) AS n FROM spans").scalar() == 1
 
 
+def test_a_checkpointed_turn_can_still_be_written_to_and_closes_with_the_truth(writer, store):
+    """SIGTERM is a checkpoint, not a guillotine — uvicorn drains in-flight requests after it.
+
+    The bug this pins: a redeploy's SIGTERM closed the turn a request was still writing, so the
+    request's next span raised `turn … is closed`, its answer degraded to §12.3's catch-all
+    escalation, and a turn that completed was recorded as a process exit. One broken answer per
+    Render redeploy. The flush must leave the row closed **and** the buffer writable.
+    """
+    turn = _open_turn_with_a_span(writer)
+
+    assert trace_module.flush_open_turns() == 1
+    checkpoint = store.execute("SELECT outcome, stop_reason, error_kind FROM turns").one()
+    assert (checkpoint["outcome"], checkpoint["error_kind"]) == ("error", "process_exit")
+
+    # uvicorn finishes draining: the request writes its remaining span and closes its own turn.
+    with turn.span("plan", "act_summary") as span:
+        span.set_payload(PlanPayload(intent="workflow", workflow="remote_work_eligibility"))
+    turn.close(outcome="answered", stop_reason="complete", final_answer="Berlin is approved.")
+
+    row = store.execute("SELECT outcome, stop_reason, error_kind, ended_at FROM turns").one()
+    assert (row["outcome"], row["stop_reason"]) == ("answered", "complete")
+    assert row["error_kind"] is None, "the checkpoint's error must not outlive the real outcome"
+    assert row["ended_at"] is not None
+    seqs = [row["seq"] for row in store.execute("SELECT seq FROM spans ORDER BY seq").dicts()]
+    assert seqs == [1, 2], "the span sequence continues across the checkpoint; nothing is lost"
+
+
+def test_the_sigterm_handler_leaves_an_in_flight_turn_writable(writer, store):
+    """The production shape: the installed handler runs, then the request finishes normally."""
+    chained: list[int] = []
+    previous = signal.signal(signal.SIGTERM, lambda signum, frame: chained.append(signum))
+    try:
+        trace_module.install_shutdown_handlers()
+        turn = _open_turn_with_a_span(writer)
+        signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+        with turn.span("plan", "act_summary") as span:
+            span.set_payload(PlanPayload(intent="workflow", workflow="remote_work_eligibility"))
+        turn.close(outcome="answered", stop_reason="complete")
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+        trace_module.reset_shutdown_handlers()
+
+    assert chained == [signal.SIGTERM], "the flush still chains to uvicorn's own handler"
+    assert store.execute("SELECT outcome FROM turns").scalar() == "answered"
+    assert store.execute("SELECT COUNT(*) AS n FROM spans").scalar() == 2
+
+
 def test_sweep_stale_turns_closes_what_a_hard_kill_left_open(writer, store):
     """No handler ran at all: the startup sweep closes anything open for more than five minutes."""
     stale = _open_turn_with_a_span(writer)

@@ -1,34 +1,36 @@
 {
- "generated_at": 1789027253335981,
+ "generated_at": 1789035897387115,
  "target": "local",
  "dataset_sha": "a501f288a6589730bc570507bbce06080876fa192a31d2ef821b1bc74d776758",
  "variants": [
   {
    "variant": "baseline",
-   "run_id": "r_1789021772_baseline",
-   "judged": true,
+   "run_id": "r_1789032950_baseline",
+   "judged": false,
+   "judge_status": "pending",
    "metrics": {
-    "groundedness_mean": 0.9117559523809524,
-    "citation_accuracy_mean": 0.8622474368535293,
+    "groundedness_mean": null,
+    "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.9230769230769231,
-    "doc_recall_mean": 0.7456140350877193,
-    "tool_selection_accuracy": 0.9184981684981685,
+    "doc_recall_mean": 0.8421052631578947,
+    "tool_selection_accuracy": 0.9258241758241759,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.7307692307692307,
+    "workflow_completion": 0.8076923076923077,
     "over_refusal_rate": 0.1111111111111111,
-    "strict_pass_rate": 0.5384615384615384
+    "strict_pass_rate": null
    },
    "deltas": {}
   },
   {
    "variant": "dense_only_k2",
-   "run_id": "r_1789025167_dense_only_k2",
+   "run_id": "r_1789033498_dense_only_k2",
    "judged": false,
+   "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.9230769230769231,
-    "doc_recall_mean": 0.7587719298245613,
+    "doc_recall_mean": 0.8289473684210527,
     "tool_selection_accuracy": 0.9258241758241759,
     "arg_correctness_rate": 1.0,
     "workflow_completion": 0.7307692307692307,
@@ -39,53 +41,54 @@
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.0,
-    "doc_recall_mean": 0.0132,
-    "tool_selection_accuracy": 0.0073,
+    "doc_recall_mean": -0.0132,
+    "tool_selection_accuracy": 0.0,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": 0.0,
+    "workflow_completion": -0.0769,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.1538
+    "strict_pass_rate": null
    }
   },
   {
    "variant": "no_structured_tools",
-   "run_id": "r_1789025755_no_structured_tools",
+   "run_id": "r_1789034108_no_structured_tools",
    "judged": false,
+   "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.8846153846153846,
-    "doc_recall_mean": 0.7456140350877193,
+    "doc_recall_mean": 0.8026315789473685,
     "tool_selection_accuracy": 0.8397435897435896,
     "arg_correctness_rate": 1.0,
     "workflow_completion": 0.6153846153846154,
     "over_refusal_rate": 0.16666666666666666,
-    "strict_pass_rate": 0.5769230769230769
+    "strict_pass_rate": 0.6153846153846154
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": -0.0385,
-    "doc_recall_mean": 0.0,
-    "tool_selection_accuracy": -0.0788,
+    "doc_recall_mean": -0.0395,
+    "tool_selection_accuracy": -0.0861,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": -0.1154,
+    "workflow_completion": -0.1923,
     "over_refusal_rate": 0.0556,
-    "strict_pass_rate": 0.0385
+    "strict_pass_rate": null
    }
   }
  ],
  "workflow_completion_check": {
   "supported": false,
   "reason": null,
-  "baseline": 0.7308,
+  "baseline": 0.8077,
   "no_structured_tools": 0.6154,
-  "delta": -0.1154,
+  "delta": -0.1923,
   "threshold": 0.25
  },
  "flips": [
   {
-   "item_id": "inj-001",
+   "item_id": "expenses-002",
    "variant": "dense_only_k2",
    "baseline_passed": false,
    "variant_passed": true
@@ -93,8 +96,8 @@
   {
    "item_id": "onboarding-001",
    "variant": "dense_only_k2",
-   "baseline_passed": false,
-   "variant_passed": true
+   "baseline_passed": true,
+   "variant_passed": false
   },
   {
    "item_id": "conduct-001",
@@ -103,28 +106,22 @@
    "variant_passed": false
   },
   {
-   "item_id": "profile-001",
-   "variant": "dense_only_k2",
-   "baseline_passed": false,
-   "variant_passed": true
-  },
-  {
    "item_id": "pto-002",
    "variant": "dense_only_k2",
    "baseline_passed": false,
    "variant_passed": true
   },
   {
-   "item_id": "benefits-002",
-   "variant": "dense_only_k2",
-   "baseline_passed": false,
-   "variant_passed": true
+   "item_id": "profile-001",
+   "variant": "no_structured_tools",
+   "baseline_passed": true,
+   "variant_passed": false
   },
   {
-   "item_id": "onboarding-001",
+   "item_id": "benefits-002",
    "variant": "no_structured_tools",
-   "baseline_passed": false,
-   "variant_passed": true
+   "baseline_passed": true,
+   "variant_passed": false
   }
  ],
  "note": "Judged metrics are computed on `baseline` only (\u00a713.9); a `null` on an ablation arm means not judged, never zero."
