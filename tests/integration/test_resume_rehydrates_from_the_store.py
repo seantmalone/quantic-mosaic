@@ -253,3 +253,123 @@ async def test_the_failure_reaches_the_model_and_no_ticket_id_is_invented(write_
     assert "MOCK-HR-" not in prompt, "no ticket id was ever allocated"
     assert "create_mock_hr_ticket" in prompt, "the failure itself is still shown to the model"
     assert not any(block.text.startswith("MOCK-HR-") for block in resumed.answer_blocks)
+
+
+# --------------------------------------------------------------------------------------
+# The confirmation boundary, for a turn grounded on the compliance engine (P13 R7 / review)
+# --------------------------------------------------------------------------------------
+
+#: The same request, asked of a turn that never searches: `pto_request` reaches its verdict from the
+#: engine, whose per-requirement evidence R7 scores and admits.
+ENGINE_QUESTION = QUESTION
+
+
+@pytest.fixture
+async def engine_grounded_then_confirmed(writer, store, mounted_mcp_url):
+    """A turn whose only evidence is the compliance engine's, parked at the gate and resumed.
+
+    Since R7 that evidence counts towards `is_complete` and towards G1 — but it is *scored*, not
+    retrieved, so it never reaches a `retrieval` span and `_rehydrate_retrieval` cannot bring it
+    back. `_rehydrate` therefore has to re-run the same scoring over the `tool_call` span, or the
+    evidence gate means two different things on the two sides of the park.
+    """
+    orchestrator = Orchestrator(
+        client=McpClient(transport="http", url=mounted_mcp_url),
+        model=StubAdapter(script_path=LLM_SCRIPTS / "compliance_confirm_resume.json"),
+    )
+    try:
+        parked = await orchestrator.run_turn(ChatRequest(message=ENGINE_QUESTION, employee_id="E1042"))
+        assert parked.outcome == "awaiting_confirmation"
+        gated = json.loads(
+            store.execute(
+                "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq DESC LIMIT 1",
+                (parked.turn_id,),
+            ).scalar()
+        )
+        token = confirm.mint(
+            store,
+            session_id=parked.session_id,
+            turn_id=parked.turn_id,
+            span_id="0" * 16,
+            tool_name=gated["tool_name"],
+            arguments=gated["arguments"],
+            human_summary="Open an HR ticket.",
+        )
+        writer.reopen_turn(parked.turn_id, awaiting_ms=0)
+        resumed = await orchestrator.resume_turn(parked.session_id, parked.turn_id, token)
+        return parked, resumed
+    finally:
+        await orchestrator.aclose()
+
+
+def engine_chunk_ids(store, turn_id: str) -> set[str]:
+    """The chunk ids the compliance engine put in its own per-requirement evidence blocks."""
+    payloads = [
+        json.loads(row["payload_json"])
+        for row in store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq", (turn_id,)
+        ).dicts()
+    ]
+    body = next(
+        payload["structured_content"] for payload in payloads if payload["tool_name"] == "check_policy_compliance"
+    )
+    return {
+        requirement["evidence"]["chunk_id"]
+        for requirement in body["requirements"]
+        if (requirement.get("evidence") or {}).get("chunk_id")
+    }
+
+
+async def test_the_parked_turn_never_retrieved_and_still_holds_evidence(engine_grounded_then_confirmed, store):
+    """The premise: no `retrieval` span exists, so only R7's scoring can have grounded this turn."""
+    parked, _ = engine_grounded_then_confirmed
+    kinds = [
+        row["kind"]
+        for row in store.execute("SELECT kind FROM spans WHERE turn_id = ? ORDER BY seq", (parked.turn_id,)).dicts()
+    ]
+
+    assert "retrieval" not in kinds, "nothing was searched — the engine is the only source of evidence"
+    assert engine_chunk_ids(store, parked.turn_id), "and the engine did name committed chunks"
+
+
+async def test_a_confirmed_engine_grounded_turn_is_not_refused_for_want_of_evidence(
+    engine_grounded_then_confirmed, store
+):
+    """The review's finding 1: the gate has to mean the same thing on both sides of the park.
+
+    Before the fix the resumed turn rebuilt `citable()` from `retrieval` spans alone — empty here —
+    and G1 refused with `no policy evidence was retrieved`, on a write that had already happened.
+    """
+    parked, resumed = engine_grounded_then_confirmed
+
+    assert resumed.outcome == "answered"
+    assert store.execute("SELECT count(*) FROM mock_writes").scalar() == 1
+    gates = [
+        json.loads(row["payload_json"])
+        for row in store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'guardrail' ORDER BY seq", (parked.turn_id,)
+        ).dicts()
+    ]
+    verdicts = [payload["verdict"] for payload in gates if payload["rule_id"] == "G1"]
+    assert verdicts and set(verdicts) == {"allow"}, "G1 allowed on both sides of the confirmation"
+    assert {citation.chunk_id for citation in resumed.citations} <= engine_chunk_ids(store, parked.turn_id)
+
+
+async def test_the_resumed_synthesize_prompt_still_carries_the_engine_chunks(engine_grounded_then_confirmed, store):
+    """§9.1's property, for engine evidence: the resumed prompt carries the pre-confirmation set."""
+    parked, _ = engine_grounded_then_confirmed
+    before = engine_chunk_ids(store, parked.turn_id)
+    synthesize = store.execute(
+        "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'llm_call' "
+        "AND json_extract(payload_json, '$.purpose') = 'synthesize' ORDER BY seq DESC LIMIT 1",
+        (parked.turn_id,),
+    ).scalar()
+    assert synthesize is not None, "the resumed turn reached synthesis rather than a refusal"
+    span_id = json.loads(synthesize)["messages_ref"]["span_id"]
+    prompt = "\n".join(
+        row["content"]
+        for row in store.execute("SELECT content FROM llm_messages WHERE span_id = ? ORDER BY seq", (span_id,)).dicts()
+    )
+
+    assert before
+    assert all(chunk_id in prompt for chunk_id in before), "every engine chunk survived the park"

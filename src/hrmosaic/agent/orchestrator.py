@@ -168,13 +168,22 @@ ACTION_OUTSTANDING = (
 #: reaches one or two documents — and never a tool, never a document count, and never a `k`. It is
 #: sent at most once per turn and only on a step where neither other reminder fired, so a nudged
 #: turn still costs at most one extra act step.
-SEARCH_BREADTH = (
-    "Not yet — you have searched the corpus once. This corpus is federated on purpose: duration "
-    "thresholds, approved-country lists, approval authority and device/security rules are each "
-    "written in a different document, and a single query reaches only one or two of them. Re-read "
-    "the question, and for every distinct thing it asks that your evidence does not yet cover, "
-    "search again. Then conclude."
+#:
+#: **Two forms, one debt.** The reminder fires at *at most* one search, so it also reaches a turn
+#: that has searched none — and telling that turn, in a prompt, that it "searched the corpus once"
+#: would be a false statement about the model's own history, in the one message whose whole purpose
+#: is to correct that picture. Only the opening clause moves with the count; the debt itself is one
+#: string shared by both forms, so the two cannot drift (P13 review, finding 2).
+_BREADTH_DEBT = (
+    "This corpus is federated on purpose: duration thresholds, approved-country lists, approval "
+    "authority and device/security rules are each written in a different document, and a single "
+    "query reaches only one or two of them. Re-read the question, and for every distinct thing it "
+    "asks that your evidence does not yet cover, search again. Then conclude."
 )
+
+SEARCH_BREADTH = f"Not yet — you have searched the corpus once. {_BREADTH_DEBT}"
+
+SEARCH_BREADTH_UNSEARCHED = f"Not yet — you have not searched the corpus yet. {_BREADTH_DEBT}"
 
 #: The one message §9.2's G1 recovery step sends (P13 R4). The reopen used to append nothing, so
 #: the extra step was spent blind: the model saw the same conversation that had just produced an
@@ -878,8 +887,8 @@ class Orchestrator:
         model that has stopped calling tools cannot read it either. Three reminders, each sent only
         on the step where the model tried to stop and only while the gap is real: the workflow has
         no citable evidence yet, the user asked for something to be created and nothing has been
-        proposed, or the turn searched the federated corpus once and the question spans more of it
-        than one query reaches. The first two were live failures under the real provider; the third
+        proposed, or the turn has spent at most one query on the federated corpus and the question
+        spans more of it than that reaches. The first two were live failures under the real provider; the third
         is the judged baseline's `remote-002` / `expenses-002`, which cited two documents where the
         end state required three. At most one reminder per step, so a nudged turn costs one extra
         act step and not three.
@@ -915,7 +924,8 @@ class Orchestrator:
         searches = self._searches(turn)
         if "search_breadth" not in turn.nudges and searches <= 1 and any(name in permitted for name in EVIDENCE_TOOLS):
             turn.nudges.append("search_breadth")
-            turn.messages.append(Message(role="user", content=SEARCH_BREADTH))
+            reminder = SEARCH_BREADTH if searches == 1 else SEARCH_BREADTH_UNSEARCHED
+            turn.messages.append(Message(role="user", content=reminder))
             turn.step_summaries.append(
                 f"step {turn.steps_taken}: {searches} corpus search(es), and the question may span more"
             )
@@ -1525,6 +1535,15 @@ class Orchestrator:
                     gated = payload
                     continue
                 turn.state.record(payload["tool_name"], body)
+                # The same line `_absorb` runs live (P13 R7). Engine evidence is scored, never
+                # retrieved, so it was never written to a `retrieval` span and `_rehydrate_retrieval`
+                # cannot bring it back — and since R7 it counts towards `is_complete` and G1. Without
+                # this, a turn that grounded itself on the engine, closed as complete and parked at
+                # §8.6's gate came back across the confirmation boundary with an empty citable set
+                # and was refused for want of evidence on a write that had already happened. The
+                # gate has to mean the same thing on both sides of the park (§9.1).
+                if payload["tool_name"] == COMPLIANCE_TOOL:
+                    self._engine_evidence(turn, body)
                 turn.envelopes.append(
                     _ToolEnvelope(name=payload["tool_name"], result_json=payload.get("result_json") or "{}")
                 )

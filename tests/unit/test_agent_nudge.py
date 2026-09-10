@@ -40,6 +40,7 @@ from hrmosaic.agent.guardrails import g1
 from hrmosaic.agent.orchestrator import (
     ACTION_OUTSTANDING,
     SEARCH_BREADTH,
+    SEARCH_BREADTH_UNSEARCHED,
     WORKFLOW_INCOMPLETE,
     ChatOptions,
     ChatRequest,
@@ -579,7 +580,7 @@ async def test_a_reminded_turn_takes_another_act_step_instead_of_closing(run_age
     ]
     assert reminders[0].startswith("Not yet — this turn is not finished. The pto_request workflow is incomplete")
     assert ACTION_OUTSTANDING in reminders
-    assert SEARCH_BREADTH in reminders
+    assert SEARCH_BREADTH_UNSEARCHED in reminders, "this turn searched none, and is told so"
 
     # And they manufactured nothing: no tool ran, so G1 still refuses.
     assert response.outcome == "refused"
@@ -717,7 +718,33 @@ def test_the_breadth_reminder_is_silent_when_no_tool_may_be_called_at_all():
 
 def test_the_breadth_reminder_names_no_tool_and_no_document_count():
     """The ledger's non-negotiable: the debt, never the tool, and never how many documents."""
-    for name in TOOL_NAMES:
-        assert name not in SEARCH_BREADTH
-    assert "three" not in SEARCH_BREADTH and "3 " not in SEARCH_BREADTH
-    assert "k=" not in SEARCH_BREADTH
+    for text in (SEARCH_BREADTH, SEARCH_BREADTH_UNSEARCHED):
+        for name in TOOL_NAMES:
+            assert name not in text
+        assert "three" not in text and "3 " not in text
+        assert "k=" not in text
+
+
+def test_a_turn_that_has_not_searched_at_all_is_not_told_that_it_has():
+    """The reminder is the one message whose job is to correct the model's picture of the turn.
+
+    It fires at *at most* one search, so it also reaches a turn that searched none; telling that
+    turn it "searched the corpus once" would put a false statement about its own history in the
+    prompt. Only the opening clause moves — the debt is one shared string (P13 review, finding 2).
+    """
+    turn = a_turn(intent="policy_qa", workflow=None, searches=0)
+
+    assert orchestrator()._nudge(turn) is True
+    assert turn.nudges == ["search_breadth"]
+    assert turn.messages[0].content == SEARCH_BREADTH_UNSEARCHED
+    assert "searched the corpus once" not in (turn.messages[0].content or "")
+    assert turn.step_summaries == ["step 0: 0 corpus search(es), and the question may span more"]
+
+
+def test_both_forms_of_the_breadth_reminder_state_the_same_debt():
+    """One shared string after the opening clause, so the two forms cannot drift apart."""
+    debt = SEARCH_BREADTH.split(". ", 1)[1]
+
+    assert SEARCH_BREADTH_UNSEARCHED.endswith(debt)
+    assert SEARCH_BREADTH.startswith("Not yet — you have searched the corpus once.")
+    assert SEARCH_BREADTH_UNSEARCHED.startswith("Not yet — you have not searched the corpus yet.")

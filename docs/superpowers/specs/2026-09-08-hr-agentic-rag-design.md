@@ -1132,7 +1132,9 @@ deterministic `user` message and takes another step: `workflow_incomplete` (§9.
 something to be created and nothing has been proposed) and, added at P13, `search_breadth` — the turn has searched the federated corpus at most once
 while the question spans more of it than one query reaches, which is how the judged baseline lost `remote-002` and `expenses-002` with two cited
 documents where three were required. Each is sent at most once per turn, only on a step where no other reminder fired, and only while a permitted tool
-could still settle it. **A reminder names the debt and never a tool, a document count or a `k`** — a reminder that listed the remaining calls would make
+could still settle it. `search_breadth` has **two forms of one debt**: it fires at *at most* one search, so its opening clause states the real count
+(none yet, or once) while the debt after it is a single shared string — a reminder whose job is to correct the model's picture of its own history may
+not misstate that history. **A reminder names the debt and never a tool, a document count or a `k`** — a reminder that listed the remaining calls would make
 the harness the author of the tool sequence, and §13.4's ToolSelection would be scoring the hint. The turn publishes which fired as `PlanPayload.nudges`,
 so `nudge_rate` is reported beside those scores; the breadth reminder raises it by design.
 
@@ -1147,7 +1149,10 @@ async def resume_turn(session_id: str, turn_id: str, confirmation_token: str) ->
 `POST /chat` is a thin wrapper: validate, authorise the privileged `options`, call `run_turn`, return. **`resume_turn` rehydrates from the store** —
 the act loop's state was in-process and is gone once `/chat` returned. It reconstructs the message array from that turn's `llm_messages` rows, the
 accumulated chunk set from its `retrieval` spans, prior tool results from its `tool_call` spans, and the step counter from the count of `act`-purpose
-`llm_call` spans, then re-issues the confirmed tool call and continues from step 3. `tests/integration/test_confirm_resume_lifecycle.py` asserts the
+`llm_call` spans, then re-issues the confirmed tool call and continues from step 3. **Compliance-engine evidence is re-scored on the way back**: since
+§7.4's candidate widening it counts towards §9.3's predicate and towards G1, but it is scored rather than retrieved and so has no `retrieval` span to
+rebuild it from, so rehydration re-runs the same scoring over the compliance `tool_call` span. Without it the evidence gate would mean two different
+things on the two sides of the park, and a turn grounded on the engine would be refused for want of evidence after its write had already happened. `tests/integration/test_confirm_resume_lifecycle.py` asserts the
 resumed synthesize prompt contains the pre-confirmation evidence — the same chunk ids the first attempt retrieved — so a `resume_turn` that silently
 re-retrieved fails.
 
