@@ -26,6 +26,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+from hrmosaic.core import corpusread
+
 #: The three templates of §7.2, and the only ones. A fourth would be a new prompt surface.
 TEMPLATES = ("route.j2", "act.j2", "synthesize.j2")
 
@@ -41,6 +43,23 @@ _environment = Environment(
     lstrip_blocks=False,
     keep_trailing_newline=False,
 )
+
+
+def corpus_titles() -> tuple[str, ...]:
+    """The exact titles of the indexed policy documents, by `doc_id` (§8.4 tool 3's own order).
+
+    `route.j2`'s CORPUS paragraph is rendered from this and never from a hand-typed list: it reads
+    the `documents` table `list_policy_documents` returns, which the committed manifest is built
+    from, so a corpus edit moves the router prompt with it and the two cannot drift.
+    `tests/contract/test_prompt_golden.py` asserts the rendered list equals the manifest's titles.
+    """
+    return tuple(document.doc_title for document in corpusread.list_documents())
+
+
+#: A Jinja global rather than a context key: the corpus is a property of the deployment, not of the
+#: turn, and `render()`'s callers pass only per-turn values. `system` stays byte-stable across
+#: turns because the index behind it does not move while the process runs.
+_environment.globals["corpus_titles"] = corpus_titles
 
 
 def render(template_name: str, /, **context: Any) -> tuple[str, str]:
@@ -69,4 +88,4 @@ def persona_block(*, employee_id: str, actor_source: str) -> str:
     )
 
 
-__all__ = ["PROMPT_DIR", "TEMPLATES", "persona_block", "render"]
+__all__ = ["PROMPT_DIR", "TEMPLATES", "corpus_titles", "persona_block", "render"]

@@ -638,6 +638,16 @@ Respond with JSON matching the AnswerSchema.
 The fusion weight is rendered as **`rrf=`**, never `score=`: `rrf_score` is ~0.03 while every other surface labels a ~0.7 value `score`, and letting
 the model see the two under one name is exactly the ambiguity `min_dense_score`'s naming exists to remove.
 
+**Three prompt rules were added at P13** from the trace-level analysis of the judged baseline, each against a named dataset failure. `route.j2` carries
+a **CORPUS** paragraph directly under the `out_of_scope` field: "the policy library covers, and only covers:" then the exact document titles, rendered
+from `agent.prompts.corpus_titles()` — the same `documents` table `list_policy_documents` reads, never a hand-typed list, so the router's picture of the
+library cannot drift from the library. Without it `out_of_scope` was a guess about a corpus the router had never been shown, and an equipment question
+was refused; the "and only covers" clause is what keeps a genuinely out-of-scope turn refused. The same field block tells the router to name **every**
+missing detail in `rationale_summary`, not only the first, because the clarifying question the user is shown is built from that line. And `synthesize.j2`
+gains rule **6b**: a balance, accrual, date or eligibility value that came from a `<tool_result …>` envelope is employee data, not company policy — it is
+stated with its `as_of` and carries **no** citation, because a tool result has no `chunk_id`, G2 strips a citation to one, and the dropped block takes
+the number with it.
+
 The assembled prompt is stored **verbatim** so the dashboard shows the exact bytes sent to the model for every turn (USER.2). A realistic act-loop
 prompt is 20–40 KB, larger than the general 32 KB payload cap of §10.5, so the `messages[]` array is **not** stored inside `payload_json`: it goes to
 the `llm_messages` side table (§10.1), which is exempt from the cap, and the `llm_call` payload carries `messages_ref: {span_id, n_messages,

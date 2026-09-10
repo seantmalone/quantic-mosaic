@@ -6,8 +6,11 @@ FIELDS
 - intent — `policy_qa` when the policy corpus alone can answer; `employee_data` when one employee's own record, balance or benefit is needed; `workflow` when the turn is a multi-step eligibility or request flow; `action` when the user asks for something to be created or sent.
 - workflow — `remote_work_eligibility`, `pto_request`, or null.
 - needs_employee_data — true when an employee record, balance or benefit election is needed.
-- needs_clarification — true only when a required detail is missing and cannot be inferred. Name the missing detail in rationale_summary.
+- needs_clarification — true only when a required detail is missing and cannot be inferred. Name EVERY missing detail in rationale_summary, not only the first — the question the user is shown is built from that line.
 - out_of_scope — true when the turn is not about Mosaic Robotics HR policy or the employee's own HR data.
+
+CORPUS — the policy library covers, and only covers: Benefits and Open Enrollment Guide; Equipment & Asset Policy; Expenses & Reimbursement Policy; HR Escalation & Case Handling Policy; Leave of Absence Policy; Manager Approval Matrix; Onboarding & First 90 Days; Performance & Compensation Policy; PTO & Holidays Policy; Remote & Hybrid Work Policy; Security & Acceptable Use Policy; Tax & Location Addendum; Travel Policy; Workplace Conduct Policy. Set out_of_scope only when the turn is about none of these and is not the employee's own HR data. Device refresh cycles, asset return, spend limits and approval thresholds are IN the corpus.
+
 - sensitive — true for harassment, discrimination, retaliation, a legal threat, a medical condition or a compensation dispute. These are never answered directly.
 - target_employee_id — the employee the turn is about, matching ^E1[0-9]{3}$, or null.
 - selected_tools — the tools you expect this turn to need, chosen from the offered catalog.

@@ -24,6 +24,7 @@ Beyond the snapshot, three properties the frozen ordering exists for:
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -198,3 +199,74 @@ def test_a_missing_context_key_fails_loudly():
 def test_an_unknown_template_is_refused():
     with pytest.raises(KeyError):
         prompts.render("summarise.j2", persona=PERSONA, question=QUESTION)
+
+
+# --------------------------------------------------------------------------------------
+# P13 — the three prompt rules the trace analysis of the judged baseline produced
+# --------------------------------------------------------------------------------------
+
+MANIFEST = Path(__file__).resolve().parents[2] / "data" / "index" / "chunks.manifest.jsonl"
+
+
+def manifest_titles() -> list[str]:
+    """Every document title in the committed manifest, ordered by `doc_id` as the index lists them."""
+    titles: dict[str, str] = {}
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            record = json.loads(line)
+            titles[record["doc_id"]] = record["doc_title"]
+    return [titles[doc_id] for doc_id in sorted(titles)]
+
+
+def test_the_router_is_shown_the_corpus_it_is_deciding_scope_against():
+    """R1: `out_of_scope` was a guess about a library the router had never been shown.
+
+    The judged baseline routed an equipment question out of scope and refused a policy the corpus
+    carries. The CORPUS paragraph sits directly under the field it governs and names the two
+    directions explicitly — what is in, and that nothing else is.
+    """
+    system, _ = prompts.render("route.j2", **context("route.j2"))
+    corpus = system[system.index("CORPUS —") : system.index("- sensitive")]
+
+    assert "the policy library covers, and only covers:" in corpus
+    assert "Set out_of_scope only when the turn is about none of these and is not the employee's own HR data." in corpus
+    assert "Device refresh cycles, asset return, spend limits and approval thresholds are IN the corpus." in corpus
+    assert system.index("- out_of_scope") < system.index("CORPUS —")
+
+
+def test_the_corpus_paragraph_lists_exactly_the_manifest_titles():
+    """The list is generated from the index, never typed: a corpus edit moves the prompt with it.
+
+    The manifest is the committed record of what was ingested, so comparing against it is what
+    stops the router's picture of the library drifting from the library.
+    """
+    system, _ = prompts.render("route.j2", **context("route.j2"))
+    listed = system[system.index("covers, and only covers: ") + len("covers, and only covers: ") :]
+    listed = listed[: listed.index(". Set out_of_scope")]
+
+    titles = manifest_titles()
+    assert len(titles) == 14
+    assert listed.split("; ") == titles
+    assert list(prompts.corpus_titles()) == titles
+
+
+def test_a_tool_result_value_is_stated_without_a_citation():
+    """R2: `pto-002` lost its balance to G2 — the number was cited, the citation stripped, the
+    block dropped. Rule 6b says where a tool value belongs, immediately after the as_of rule."""
+    system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
+    rule = system[system.index("6b.") : system.index("7. `rationale_summary`")]
+
+    assert "employee data, not company policy" in rule
+    assert "attach NO citation" in rule
+    assert system.index("6. When a tool result carries an `as_of` date") < system.index("6b.")
+
+
+def test_the_router_is_told_to_name_every_missing_detail():
+    """R6: `amb-003` named one of the two missing details, and the clarification the user sees is
+    built from that line."""
+    system, _ = prompts.render("route.j2", **context("route.j2"))
+
+    assert (
+        "Name EVERY missing detail in rationale_summary, not only the first — the question the "
+        "user is shown is built from that line." in system
+    )
