@@ -66,7 +66,8 @@ Item numbering follows design spec §19.1, so a number here means the same thing
 - [x] **1 — Model API keys.** Provided **2026-09-09**: an Anthropic key (`ANTHROPIC_API_KEY`, the
       agent on `claude-haiku-4-5`) and **two** Google AI Studio keys from two different Cloud
       projects, one for `JUDGE_API_KEY` and one for `LLM_FALLBACK_API_KEY`, so the judge and the
-      agent's failover path never contend for the same free quota. All three validated that day.
+      agent's failover path never contend for the same quota or bill — the judge's project moved to
+      paid billing on 2026-09-10, the failover's is still free. All three validated on 2026-09-09.
       They live only in the git-ignored `.env`.
 - [x] **5 — `quantic-grader` collaborator invite.** Scripted, **no user action**: run at P12 with
       `gh api -X PUT repos/seantmalone/quantic-mosaic/collaborators/quantic-grader`, read back
@@ -223,4 +224,4 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above |
 | The demo video, and therefore `README.md`'s `Demo video:` link | 6 | `docs/demo-script.md` |
 | The submission itself | 7 | the Quantic dashboard |
-| Gemini free-tier judge quotas | an authenticated AI Studio session | https://aistudio.google.com/rate-limit |
+| Gemini rate limits and billing state for the two Cloud projects (judge: paid since 2026-09-10; failover: free) | an authenticated AI Studio session | https://aistudio.google.com/rate-limit |

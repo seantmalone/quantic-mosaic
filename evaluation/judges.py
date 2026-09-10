@@ -42,8 +42,9 @@ logger = logging.getLogger(__name__)
 #: as per day, and the judge pass fires its calls back to back, so an unpaced pass walks straight
 #: into `429 RESOURCE_EXHAUSTED` — observed on 2026-09-10, where a sequential 10-call burst on
 #: *either* Google project answered 4 × 200 and 6 × 429, and the deployed baseline's judge pass
-#: aborted at item 2 of 26 having lost 4 verdicts against a budget of 3. The default leaves headroom
-#: under the free tier's published limit; raise it with `JUDGE_RPM` on a paid key.
+#: aborted at item 2 of 26 having lost 4 verdicts against a budget of 3. Both projects were on the
+#: free tier that day; the judge's moved to paid billing later on 2026-09-10, and the default stays
+#: 10 because the paid-tier per-minute limit has not been read (§3.1) — raise it with `JUDGE_RPM`.
 JUDGE_RPM = int(os.environ.get("JUDGE_RPM", "10"))
 
 #: How many times one judge question may be re-sent after a **rate-limit** refusal. This is not the

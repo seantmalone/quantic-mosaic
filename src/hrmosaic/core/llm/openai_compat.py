@@ -73,7 +73,7 @@ REPAIR_INSTRUCTION = (
 
 
 class OpenAICompatAdapter(RecordingAdapter):
-    """Any `/chat/completions` endpoint. Defaults to the free Gemini model of §9.8."""
+    """Any `/chat/completions` endpoint. Defaults to the Gemini model of §9.8."""
 
     provider = "openai_compat"
 

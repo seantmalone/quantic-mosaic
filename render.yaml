@@ -23,8 +23,8 @@ services:
       # GIT_SHA: Render exposes RENDER_GIT_COMMIT automatically and settings.py resolves
       # GIT_SHA -> RENDER_GIT_COMMIT -> "dev"; smoke_deployed.py asserts it is not "dev".
       - { key: ANTHROPIC_API_KEY,  sync: false }   # the agent (§9.8)
-      - { key: JUDGE_API_KEY,      sync: false }   # Gemini, free
-      - { key: LLM_FALLBACK_API_KEY, sync: false } # Gemini, free
+      - { key: JUDGE_API_KEY,      sync: false }   # Gemini judge — paid billing since 2026-09-10 (§9.8)
+      - { key: LLM_FALLBACK_API_KEY, sync: false } # Gemini failover — its own Cloud project, still free
       - { key: TURSO_DATABASE_URL, sync: false }   # REQUIRED (§19.1 item 3)
       - { key: TURSO_AUTH_TOKEN,   sync: false }   # REQUIRED (§19.1 item 3)
       - { key: APP_ACCESS_TOKEN,   sync: false }   # REQUIRED on the graded deployment; provision_render.py

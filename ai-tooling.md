@@ -12,7 +12,7 @@ parts that went badly. It is not a summary of what the tools can do; it is what 
 | **Claude Code** (CLI), coordinating session on **Claude Fable 5.1** | Held the plan, wrote each phase brief, dispatched subagents, reviewed diffs, ran the acceptance gate, committed and pushed, watched CI, and adjudicated every ruling |
 | **Claude Opus 5** subagents, in the same CLI | One subagent implemented one phase; a second, independently dispatched subagent reviewed it against that phase's definition of done. `CLAUDE.md` pins `model: "opus"` on every delegated call |
 | **Anthropic `claude-haiku-4-5`** | The *product's* agent model — not a development tool, but the model every prompt in `agent/prompts/` was iterated against |
-| **Google `gemini-3.5-flash-lite`** | The product's LLM judge and failover path, on two free Google AI Studio keys from two Cloud projects |
+| **Google `gemini-3.5-flash-lite`** | The product's LLM judge and failover path, on two Google AI Studio keys from two Cloud projects — the judge's project on paid billing since 2026-09-10 (≈ $0.16 a judge pass), the failover's still free |
 | `gh`, `ruff`, `pytest`, `gitleaks`, Docker | Ordinary tooling, driven by the sessions above rather than by hand |
 
 Everything in this repository — the corpus, the mock data, the code, the tests, the dashboard, the

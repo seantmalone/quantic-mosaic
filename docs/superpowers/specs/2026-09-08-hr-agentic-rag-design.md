@@ -88,7 +88,7 @@ flowchart TB
         TRACE["<b>Trace Writer</b> — core/trace.py<br/>redact() · buffer · ONE batched flush per turn"]
     end
     STORE[("<b>Audit / Trace Store</b><br/>sessions · turns · spans · llm_messages · confirmations<br/>mock_writes · eval_runs · eval_results · import_state<br/>Turso libSQL (prod) | SQLite (dev)")]
-    LLM["<b>LLM Providers</b> (env-configured)<br/>agent: Claude Haiku 4.5 (Anthropic)<br/>judge + failover: gemini-3.5-flash-lite (free, OpenAI-compat)<br/>stub: scripted, key-free (CI)"]
+    LLM["<b>LLM Providers</b> (env-configured)<br/>agent: Claude Haiku 4.5 (Anthropic)<br/>judge + failover: gemini-3.5-flash-lite (OpenAI-compat — judge billed, failover free)<br/>stub: scripted, key-free (CI)"]
     UI & DASH --> WEB
     WEB --> ORCH
     ORCH <--> GUARD
@@ -165,7 +165,7 @@ date into `deployed.md`. Nothing else in this spec carries a confidence label.
 
 | Fact | Where to read it | Read at |
 |---|---|---|
-| Gemini free-tier RPM / RPD / TPM for `gemini-3.5-flash-lite` — it bounds the **judge and the failover path only** (§13.9) | https://aistudio.google.com/rate-limit | P10 step 0 |
+| Gemini RPM / RPD / TPM for `gemini-3.5-flash-lite` — the **free-tier** figures bound the **failover path only** (§13.9); the judge project moved to paid billing on 2026-09-10 and reads its paid-tier limits from the same page | https://aistudio.google.com/rate-limit | P10 step 0 |
 | Anthropic `claude-haiku-4-5` per-MTok input / output / cache-write / cache-read prices, against `MODEL_PRICES` (§9.8) | https://www.anthropic.com/pricing | P10 step 0 |
 | Anthropic **minimum cacheable prefix** for `claude-haiku-4-5` (stated as **4096 tokens**, the highest of any current model) — it decides whether P6's cache assertion is armed (§9.8) | https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching | **P6** (the probe), re-read at P10 step 0 |
 | Render Hobby free-tier instance hours (750/workspace/month) and build minutes (500/month) | Render dashboard → usage | P11 step 0 |
@@ -1857,7 +1857,7 @@ returns **HTTP 200** with `outcome: "configuration_required"` and a single escal
 | `LLM_RPM` | – | `10` | Token-bucket refill rate (`LLM_RPM`/60 per second). Default 10; the deployed service is configured at **60** (2026-09-10) — see §9.4 |
 | `LLM_BURST` | – | *(unset ⇒ equals `LLM_RPM`)* | Token-bucket capacity. A full bucket admits a whole ~6-call turn with zero delay while sustained throughput stays bounded (§9.4). Default = `LLM_RPM`; the deployed service is configured at **30** |
 | `LLM_FALLBACK_PROVIDER` / `_BASE_URL` / `_MODEL` / `_API_KEY` | – | `openai_compat`; Gemini `gemini-3.5-flash-lite` (free) | Failover on repeated 429 / 5xx / timeouts, recorded as `provider_failover` |
-| `JUDGE_PROVIDER` / `_BASE_URL` / `_MODEL` | – | `openai_compat`; Gemini `gemini-3.5-flash-lite` (free) | Judge — a different vendor and family from the agent by construction (§9.8, §13.7) |
+| `JUDGE_PROVIDER` / `_BASE_URL` / `_MODEL` | – | `openai_compat`; Gemini `gemini-3.5-flash-lite` (paid billing since 2026-09-10 — $0.30 / $2.50 per MTok, §9.8) | Judge — a different vendor and family from the agent by construction (§9.8, §13.7) |
 | `JUDGE_API_KEY` | – | falls back to `LLM_API_KEY` | A Google AI Studio key on a **second** Cloud project, so a judge overrun cannot stall an agent run |
 | `EMBED_PROVIDER` | – | `fastembed` | `fastembed` \| `fake`. `fake` is for unit tests and the offline ingest smoke only; it stamps `index_meta.embed_model = fake-hash-384` |
 | `EMBED_MODEL` | – | `BAAI/bge-small-en-v1.5` | Must match `index_meta`; a mismatch degrades and never fails boot (§6.5) |
@@ -2233,8 +2233,10 @@ index into a **temporary directory** (never `data/index/`, so the committed mani
 **Judged metrics are computed on `baseline` only** — judging all three would roughly triple the judge volume (a free-tier daily cap until 2026-09-10;
 cost and wall-clock since, §9.8) on the day results must be produced, and DocRecall, ToolSelection and Workflow (judge-free) are precisely what the two arms move. Page 11's compare tab footnotes
 which metrics were judged on which variants. Budget per sweep: **~300–450 paid Haiku agent calls** across the three variants (≈ $2–4 at §9.8's prices, largely
-cache reads) plus **~260 free Gemini judge calls** on `baseline` ⇒ ~560–710 provider calls. The Gemini RPD/TPM arithmetic of §3.1 therefore bounds
-**only the judge and the failover path**; what bounds the agent is `LLM_DAILY_CALL_CAP` (1500/day) and the prompt cache (§9.8).
+cache reads) plus **~260 billed Gemini judge calls** on `baseline` (**≈ $0.16** at §9.8's paid rates, from token counts) ⇒ ~560–710 provider calls.
+The **free-tier** Gemini RPD/TPM arithmetic of §3.1 therefore bounds **only the failover path** — the judge project has been on paid billing since
+2026-09-10, so what bounds the judge is that ≈ $0.16 per pass and the wall clock, not a daily cap; what bounds the agent is `LLM_DAILY_CALL_CAP`
+(1500/day) and the prompt cache (§9.8).
 
 ### 13.10 Artifacts
 
@@ -2288,8 +2290,8 @@ services:
       # GIT_SHA: Render exposes RENDER_GIT_COMMIT automatically and settings.py resolves
       # GIT_SHA -> RENDER_GIT_COMMIT -> "dev"; smoke_deployed.py asserts it is not "dev".
       - { key: ANTHROPIC_API_KEY,  sync: false }   # the agent (§9.8)
-      - { key: JUDGE_API_KEY,      sync: false }   # Gemini, free
-      - { key: LLM_FALLBACK_API_KEY, sync: false } # Gemini, free
+      - { key: JUDGE_API_KEY,      sync: false }   # Gemini judge — paid billing since 2026-09-10 (§9.8)
+      - { key: LLM_FALLBACK_API_KEY, sync: false } # Gemini failover — its own Cloud project, still free
       - { key: TURSO_DATABASE_URL, sync: false }   # REQUIRED (§19.1 item 3)
       - { key: TURSO_AUTH_TOKEN,   sync: false }   # REQUIRED (§19.1 item 3)
       - { key: APP_ACCESS_TOKEN,   sync: false }   # REQUIRED on the graded deployment; provision_render.py
@@ -2751,7 +2753,7 @@ and `StubAdapter` means P0–P9 need no credentials at all.
 
 | # | Item | Why | When | How | If skipped |
 |---|---|---|---|---|---|
-| 1 | **Model API keys — ✅ already provided** → `ANTHROPIC_API_KEY` (agent, `claude-haiku-4-5`) plus two Google AI Studio keys for `JUDGE_API_KEY` and `LLM_FALLBACK_API_KEY` (both free) | The genuinely required credentials (§9.8). The Anthropic key is paid but capped: `LLM_DAILY_CALL_CAP`, the token bucket and prompt caching hold the total expected spend under $10. | Supplied **2026-09-09**; P0–P9 build and pass CI with `LLM_PROVIDER=stub` regardless. | Already pasted; they live only in the git-ignored `.env` and, at P11, as `sync: false` Render env vars. | No real answers. Because credential validation is deferred, the app still boots, `/health` is 200 `degraded`, the dashboard is fully browsable, and `/chat` returns 200 with `outcome: "configuration_required"` and the signup link. **Zero-cost substitute:** run the agent on the free Gemini key (`LLM_PROVIDER=openai_compat`, `LLM_MODEL=gemini-3.5-flash-lite`) — the documented free path a grader can use. |
+| 1 | **Model API keys — ✅ already provided** → `ANTHROPIC_API_KEY` (agent, `claude-haiku-4-5`) plus two Google AI Studio keys for `JUDGE_API_KEY` and `LLM_FALLBACK_API_KEY` (the judge's Cloud project on **paid billing** since 2026-09-10 — ≈ $0.16 a 264-call judge pass; the failover's project still **free**) | The genuinely required credentials (§9.8). The Anthropic key is paid but capped: `LLM_DAILY_CALL_CAP`, the token bucket and prompt caching hold the total expected spend under $10. | Supplied **2026-09-09**; P0–P9 build and pass CI with `LLM_PROVIDER=stub` regardless. | Already pasted; they live only in the git-ignored `.env` and, at P11, as `sync: false` Render env vars. | No real answers. Because credential validation is deferred, the app still boots, `/health` is 200 `degraded`, the dashboard is fully browsable, and `/chat` returns 200 with `outcome: "configuration_required"` and the signup link. **Zero-cost substitute:** run the agent on the free Gemini key (`LLM_PROVIDER=openai_compat`, `LLM_MODEL=gemini-3.5-flash-lite`) — the documented free path a grader can use. |
 | 2 | **Render account + install the Render GitHub App** on `seantmalone/quantic-mosaic` | A browser-only OAuth grant; **no API can install a GitHub App**. Without it Render cannot read the repo and no deploy is possible. | Requested at **P0** so it is never on the critical path; needed at **P11**. | https://github.com/apps/render/installations/new → grant access to the repo | No deployment ⇒ RUBRIC5.6 and much of 5.9 fail. Documented fallback: Google Cloud Run (same image, but needs a card). `make docker-run-512` proves the exact image locally regardless. |
 | 3 | **Turso account + platform token** → `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | USER.2 cannot be met for live sessions without it: Render free has no persistent disk and wipes the filesystem on every 15-minute spin-down, so any session the *grader* creates would be gone. Free, no card, provisioned unattended by `scripts/provision_turso.py` from one pasted platform token. | Requested at **P0** alongside item 2; wired any time after **P1**; a pure env-var change with zero code change. | https://turso.tech → GitHub SSO → create a Platform API token → paste to Claude Code | `SqliteStore` remains the coded fallback, and committed eval results still populate the evaluation pages. **What is then unmet is precisely this:** any chat session created after the last deploy — including every session the grader starts — is lost at the next spin-down. The UI would label live sessions "session-scoped on the free tier" and `deployed.md` would state it plainly. |
 | 4 | **Render API key** | Converts every remaining deploy operation from clicking to scripting: service creation, env-var population, deploy-hook retrieval, `gh secret set`, deploy triggering, log polling. | **P11**, right after item 2. | Render dashboard → Account Settings → API Keys → Create → paste | Avoidable at ~15 minutes of manual clicking per deploy iteration via the committed `render.yaml` Blueprint flow. |
@@ -2761,7 +2763,7 @@ and `StubAdapter` means P0–P9 need no credentials at all.
 
 **Provided by Sean on 2026-09-09.** Three model keys, all validated that day and living only in the git-ignored `.env`: an **Anthropic API key**
 (`ANTHROPIC_API_KEY`, the agent on `claude-haiku-4-5`) and **two Google AI Studio keys from two different Cloud projects** — one for `JUDGE_API_KEY`
-and one for `LLM_FALLBACK_API_KEY`, so the judge and the agent's failover path never contend for the same free quota. This settles what were
+and one for `LLM_FALLBACK_API_KEY`, so the judge and the agent's failover path never contend for the same quota or bill (the judge's project moved to paid billing on 2026-09-10; the failover's is still free). This settles what were
 previously optional items; §19.2 now holds a single non-key item.
 
 **The access gate adds nothing to this list.** `scripts/provision_render.py` generates `APP_ACCESS_TOKEN` itself with `secrets.token_urlsafe(32)` and

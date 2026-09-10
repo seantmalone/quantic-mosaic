@@ -54,7 +54,7 @@ flowchart TB
         TRACE["<b>Trace Writer</b> — core/trace.py<br/>redact() · buffer · ONE batched flush per turn"]
     end
     STORE[("<b>Audit / Trace Store</b><br/>sessions · turns · spans · llm_messages · confirmations<br/>mock_writes · eval_runs · eval_results · import_state<br/>Turso libSQL (prod) | SQLite (dev)")]
-    LLM["<b>LLM Provider</b> (env-configured)<br/>agent: claude-haiku-4-5 (Anthropic)<br/>judge + failover: gemini-3.5-flash-lite (free, OpenAI-compat)<br/>stub: scripted, key-free (CI)"]
+    LLM["<b>LLM Provider</b> (env-configured)<br/>agent: claude-haiku-4-5 (Anthropic)<br/>judge + failover: gemini-3.5-flash-lite (OpenAI-compat — judge billed, failover free)<br/>stub: scripted, key-free (CI)"]
     UI & DASH --> WEB
     WEB --> ORCH
     ORCH <--> GUARD
