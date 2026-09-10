@@ -179,6 +179,36 @@ every P13 and performance change is measured against.
 
 ---
 
+## 2026-09-10 — After the quality fixes: the P13 column (deployed, `r_1789069158_baseline`)
+
+Same 26 items, same live instance, same judge model, one code change between the columns (the seven
+mitigations) plus the rate-limiter setting on the service. 296 judge calls (≈ $0.18).
+
+| Metric | Before | After P13 |
+|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.692 | **0.808** |
+| Groundedness | 0.979 | 1.000 |
+| Citation accuracy | 0.847 | 0.914 |
+| Partial match (gold facts) | 0.794 | 0.875 |
+| Clarification accuracy (n=3) | 0.667 | 1.000 |
+| Doc recall | 0.855 | 0.974 |
+| Tool selection F1 | 0.926 | 0.987 |
+| Workflow completion | 0.769 | 0.846 |
+| Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
+| Nudge rate | 0.115 | 0.577 |
+| Latency p50 / p95 | 17.6 s / 47.7 s | 22.6 s / 39.2 s |
+| Ablation delta (tools removed, workflow completion) | −0.154 | −0.192 (threshold 0.25; arm meaning changed by R5) |
+
+**Reading it.** Every quality metric moved the right way and the over-refusals are gone; the
+remaining strict-pass gap to 0.85 is five items. The price is visible in two rows: the breadth
+reminder now fires on most single-search turns (nudge rate 0.115 → 0.577), and each of those turns
+spends one more act step, so the median turn is ~5 s slower even with the limiter raised; the tail
+improved because the worst turns no longer stall. The performance waves are what claw the median
+back. This column carries no human-agreement figure: the blind reference labels are re-authored
+once, for the final published run.
+
+---
+
 ## 2026-09-10 — Deep performance assessment: the plan
 
 Method: (1) anatomy of every LLM call in the deployed run from its traces (calls per role, tokens,
