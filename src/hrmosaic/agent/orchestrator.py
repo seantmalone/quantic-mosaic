@@ -41,9 +41,10 @@ greps the payload union for exactly that.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -840,7 +841,7 @@ class Orchestrator:
                     self._scan(turn, new_chunks)
                     return
                 if not result.is_error:
-                    new_chunks += self._absorb(turn, result)
+                    new_chunks += await self._absorb_async(turn, result)
                 # An `isError` result that survived its one repair still goes back to the model —
                 # it is the only way the model learns what went wrong — but it never enters the
                 # workflow state, or a rejected `check_policy_compliance` would count as a verdict.
@@ -1072,7 +1073,37 @@ class Orchestrator:
                 if chunk.chunk_id not in turn.quarantined:
                     turn.quarantined.append(chunk.chunk_id)
 
-    def _absorb(self, turn: _Turn, result: ToolResult) -> list[EvidenceChunk]:
+    async def _absorb_async(self, turn: _Turn, result: ToolResult) -> list[EvidenceChunk]:
+        """`_absorb` from a coroutine, with its one blocking call off the event loop (P13 p2).
+
+        `_engine_evidence` embeds the turn's question to score the compliance engine's own chunks.
+        On the 0.1-CPU instance that is ≈ 0.6 s of CPU, and it was being spent inside a synchronous
+        `_absorb` called straight from the act loop, so for that 0.6 s the process served nothing —
+        not the SSE rail, not `/health`, not another turn. Every other embed on the request path
+        already runs under `asyncio.to_thread` (§2.1). This one now does too.
+
+        The scoring moves; the rule does not. `_absorb` stays synchronous because the **rehydrate**
+        path calls it with no loop to block, and it still owns the decision about what engine
+        evidence is worth — this method only hands it a dict it would otherwise have computed
+        itself, which is why the resolution is repeated rather than passed: `corpusread.get_chunk`
+        is a handful of indexed reads, against 600 ms of ONNX.
+        """
+        scores: dict[str, float] | None = None
+        if result.tool_name == COMPLIANCE_TOOL:
+            resolved = self._engine_evidence_rows(turn, result.body)
+            if resolved:
+                from hrmosaic.rag.retrieve import score_chunk_ids
+
+                scores = await asyncio.to_thread(score_chunk_ids, list(resolved), query=turn.request.message)
+        return self._absorb(turn, result, engine_scores=scores)
+
+    def _absorb(
+        self,
+        turn: _Turn,
+        result: ToolResult,
+        *,
+        engine_scores: Mapping[str, float] | None = None,
+    ) -> list[EvidenceChunk]:
         """Fold one successful tool result into the turn's state, evidence and prompt envelopes."""
         turn.state.record(result.tool_name, result.body)
         turn.envelopes.append(_ToolEnvelope(name=result.tool_name, result_json=result.text))
@@ -1111,7 +1142,7 @@ class Orchestrator:
         # SCORES the chunks behind its per-requirement evidence and lets the same rule judge them.
         body = result.body
         if result.tool_name == COMPLIANCE_TOOL:
-            self._engine_evidence(turn, body)
+            self._engine_evidence(turn, body, scores=engine_scores)
         if result.tool_name in WRITE_TOOLS:
             # §8.5's allocated ids: `MOCK-HR-…` from tool 8, `MOCK-EMAIL-…` from tool 9.
             for key in ("ticket_id", "draft_id"):
@@ -1119,7 +1150,31 @@ class Orchestrator:
                     turn.state.mock_write_ids.append(str(body[key]))
         return fresh
 
-    def _engine_evidence(self, turn: _Turn, body: dict[str, Any]) -> list[EvidenceChunk]:
+    def _engine_evidence_rows(self, turn: _Turn, body: dict[str, Any]) -> dict[str, Any]:
+        """The chunks `_engine_evidence` will score: cited per requirement, new to this turn, real.
+
+        Split out so the async boundary can resolve them, score them in a thread and hand the
+        scores back — see `_absorb_async`. It reads nothing but `body` and `turn.evidence`, so the
+        two callers see the same set.
+        """
+        ids: list[str] = []
+        for requirement in body.get("requirements") or []:
+            if not isinstance(requirement, dict):
+                continue
+            evidence = requirement.get("evidence") or {}
+            chunk_id = evidence.get("chunk_id") if isinstance(evidence, dict) else None
+            if chunk_id and chunk_id not in turn.evidence and chunk_id not in ids:
+                ids.append(str(chunk_id))
+        rows = {chunk_id: corpusread.get_chunk(chunk_id) for chunk_id in ids}
+        return {chunk_id: row for chunk_id, row in rows.items() if row is not None}
+
+    def _engine_evidence(
+        self,
+        turn: _Turn,
+        body: dict[str, Any],
+        *,
+        scores: Mapping[str, float] | None = None,
+    ) -> list[EvidenceChunk]:
         """Score the compliance engine's own evidence and offer it to the gate (§7.4 G1, P13 R7).
 
         `check_policy_compliance` is deterministic and every requirement it evaluates carries an
@@ -1138,26 +1193,18 @@ class Orchestrator:
         did not retrieve, and that is what `_absorb` has declined to count since P8. Cost: one embed
         per compliance result that resolves something new.
         """
-        ids: list[str] = []
-        for requirement in body.get("requirements") or []:
-            if not isinstance(requirement, dict):
-                continue
-            evidence = requirement.get("evidence") or {}
-            chunk_id = evidence.get("chunk_id") if isinstance(evidence, dict) else None
-            if chunk_id and chunk_id not in turn.evidence and chunk_id not in ids:
-                ids.append(str(chunk_id))
-        rows = {chunk_id: corpusread.get_chunk(chunk_id) for chunk_id in ids}
-        resolved = {chunk_id: row for chunk_id, row in rows.items() if row is not None}
+        resolved = self._engine_evidence_rows(turn, body)
         if not resolved:
             return []
 
-        # The one place `agent/**` reaches into `hrmosaic.rag` (§4.2's docstring convention, and
-        # the same lazy-import shape `web/api.py` uses for `/health`'s index block). The alternative
-        # was a tenth MCP tool whose only caller is this line, and §13.4 would then have scored an
-        # extra `tools/call` on every compliance turn.
-        from hrmosaic.rag.retrieve import score_chunk_ids
+        if scores is None:
+            # The one place `agent/**` reaches into `hrmosaic.rag` (§4.2's docstring convention, and
+            # the same lazy-import shape `web/api.py` uses for `/health`'s index block). The
+            # alternative was a tenth MCP tool whose only caller is this line, and §13.4 would then
+            # have scored an extra `tools/call` on every compliance turn.
+            from hrmosaic.rag.retrieve import score_chunk_ids
 
-        scores = score_chunk_ids(list(resolved), query=turn.request.message)
+            scores = score_chunk_ids(list(resolved), query=turn.request.message)
         fresh: list[EvidenceChunk] = []
         for chunk_id, row in resolved.items():
             if chunk_id not in scores:
@@ -1443,32 +1490,29 @@ class Orchestrator:
         )
 
     def _rollups(self, turn: _Turn) -> tuple[Usage, Timings]:
-        """Read back the closed turn's own rollups, so the response and the dashboard agree."""
-        row = (
-            get_store()
-            .execute(
-                "SELECT total_tokens_in, total_tokens_out, llm_calls, tool_calls, retrievals, duration_ms, "
-                "llm_ms, retrieval_ms, tool_ms, store_ms FROM turns WHERE id = ?",
-                (turn.buffer.turn_id,),
-            )
-            .one()
-        )
-        if row is None:  # pragma: no cover - the row was inserted by start_turn
-            return Usage(), Timings()
+        """The closed turn's own rollups, so the response and the dashboard agree (W1-C(c)).
+
+        `TurnBuffer.close()` has just computed these and written them; they used to be read back out
+        of `turns` with a second query on the request path. `close_totals` is the mapping the
+        closing UPDATE was built from — not a copy — so this is the same identity the re-SELECT
+        provided, without the round trip. An unclosed turn has none, and reports nothing rather than
+        a number nothing wrote.
+        """
+        totals = turn.buffer.close_totals or {}
         return (
             Usage(
-                prompt_tokens=row["total_tokens_in"] or 0,
-                completion_tokens=row["total_tokens_out"] or 0,
-                llm_calls=row["llm_calls"] or 0,
-                tool_calls=row["tool_calls"] or 0,
-                retrievals=row["retrievals"] or 0,
+                prompt_tokens=totals.get("total_tokens_in", 0),
+                completion_tokens=totals.get("total_tokens_out", 0),
+                llm_calls=totals.get("llm_calls", 0),
+                tool_calls=totals.get("tool_calls", 0),
+                retrievals=totals.get("retrievals", 0),
             ),
             Timings(
-                total_ms=row["duration_ms"] or 0,
-                llm_ms=row["llm_ms"] or 0,
-                retrieval_ms=row["retrieval_ms"] or 0,
-                tool_ms=row["tool_ms"] or 0,
-                store_ms=row["store_ms"] or 0,
+                total_ms=totals.get("duration_ms", 0),
+                llm_ms=totals.get("llm_ms", 0),
+                retrieval_ms=totals.get("retrieval_ms", 0),
+                tool_ms=totals.get("tool_ms", 0),
+                store_ms=totals.get("store_ms", 0),
             ),
         )
 
@@ -1645,7 +1689,7 @@ class Orchestrator:
             turn.write_failed = True
             turn.stop_reason = "tool_failed"
         else:
-            self._absorb(turn, result)
+            await self._absorb_async(turn, result)
         return await self._answer(turn, cold_start=False)
 
 

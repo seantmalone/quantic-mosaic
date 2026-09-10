@@ -19,10 +19,15 @@ has meant since P8: a merely cited id is not evidence.
 
 from __future__ import annotations
 
+import asyncio
+import threading
+from unittest import mock
+
 import pytest
 
 from hrmosaic.agent.guardrails import g1, g4
 from hrmosaic.core import corpusread
+from hrmosaic.rag import retrieve
 from tests.unit.test_agent_nudge import a_turn, orchestrator, result
 
 #: A remote-work question, so the engine's own evidence is genuinely about what was asked.
@@ -159,3 +164,53 @@ def test_the_engines_own_citation_list_is_still_not_evidence():
 
     assert turn.evidence == {}
     assert turn.state.evidence_chunk_ids == []
+
+
+# --------------------------------------------------------------------------------------
+# …and it does not block the event loop (P13 carry-forward p2)
+# --------------------------------------------------------------------------------------
+#
+# `score_chunk_ids` embeds the turn's question. On the 0.1-CPU instance that is ≈ 0.6 s of CPU, and
+# it was being spent inside a synchronous `_absorb` called straight from the act loop — so for that
+# 0.6 s the process served nothing: not the SSE rail, not `/health`, not another turn. Every other
+# embed in the request path already runs under `asyncio.to_thread` (§2.1); this one did not.
+#
+# The unit call sites stay synchronous on purpose: `_absorb` is also called from the *rehydrate*
+# path, which has no loop to block. The async boundary does the scoring in a thread and hands the
+# result down, so there is still exactly one place that decides what engine evidence is worth.
+
+
+def test_the_compliance_embed_does_not_run_on_the_event_loop():
+    turn = a_turn_asking()
+    ids = chunk_ids("remote-and-hybrid-work")[:2]
+    scored_on: list[int] = []
+    real = retrieve.score_chunk_ids
+
+    def recording(chunk_ids_, *, query):
+        scored_on.append(threading.get_ident())
+        return real(chunk_ids_, query=query)
+
+    async def drive():
+        with mock.patch.object(retrieve, "score_chunk_ids", recording):
+            await orchestrator()._absorb_async(turn, result("check_policy_compliance", compliance(*ids)))
+        return threading.get_ident()
+
+    loop_thread = asyncio.run(drive())
+
+    citable = turn.citable()
+    assert [chunk.chunk_id for chunk in citable] == ids, "the same evidence the synchronous path admits"
+    assert all(chunk.dense_score > 0.0 for chunk in citable)
+    assert scored_on, "the embed must still happen"
+    assert all(thread != loop_thread for thread in scored_on), "and never on the thread running the loop"
+
+
+def test_a_tool_that_is_not_the_compliance_engine_costs_the_async_path_no_embed():
+    """`_absorb_async` is on every tool result; only a compliance body may reach the embedder."""
+    calls: list[object] = []
+
+    async def drive():
+        with mock.patch.object(retrieve, "score_chunk_ids", lambda *a, **k: calls.append(a) or {}):
+            await orchestrator()._absorb_async(a_turn_asking(), result("check_pto_balance", {"balance_days": 12}))
+
+    asyncio.run(drive())
+    assert calls == []

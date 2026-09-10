@@ -25,12 +25,21 @@ rejects at runtime, so a fake index can never answer a real question.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import math
 
 from hrmosaic.settings import settings
 
 EMBED_BATCH_SIZE = 8
+
+#: How many distinct query vectors the memo below keeps. Sixteen, not 256: the win it exists for is
+#: **intra-call** — `search_policy_documents._blocking_search` calls `retrieve()` a second time with
+#: the identical query string whenever the backfill fires, and 22 of 28 deployed retrievals
+#: backfilled against 2 cross-call repeats and 0 within-turn query repeats. A 256-entry cache would
+#: hold 3.16 MB of float lists on a 512 MB instance and keep 256 raw user queries alive for the
+#: process lifetime, for two more hits.
+QUERY_CACHE_SIZE = 16
 
 #: bge-small's published query instruction.
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
@@ -90,8 +99,41 @@ def embed_passages(texts: list[str]) -> list[list[float]]:
     return [vector.tolist() for vector in _get_model().embed(texts, batch_size=EMBED_BATCH_SIZE)]
 
 
-def embed_query(text: str) -> list[float]:
-    """Embed one question. The asymmetric half: the prefix of `QUERY_CONVENTION` is applied here."""
+@functools.lru_cache(maxsize=QUERY_CACHE_SIZE)
+def _embed_query_cached(model: str, convention: str, embed_dim: int, text: str) -> list[float]:
+    """The memoised half of `embed_query`. **Never call this directly** — it hands out its own list.
+
+    Every input the vector depends on is in the key, including `embed_dim`, which is not decoration:
+    `model_name()` collapses every fake-provider configuration onto `fake-hash-384` while
+    `_fake_embed` reads `settings.embed_dim`, so a dimension change would otherwise be invisible to
+    the very key that is advertised as the staleness guard. `convention` is in the key for the same
+    reason — a fastembed release that starts applying the query prefix for us changes the vector
+    without changing the model id (see the module docstring).
+    """
     if settings.embed_provider == "fake":
         return _fake_embed(QUERY_PREFIX + text)
     return [vector.tolist() for vector in _get_model().embed([QUERY_PREFIX + text], batch_size=EMBED_BATCH_SIZE)][0]
+
+
+def clear_query_cache() -> None:
+    """Forget every memoised query vector. The seam an autouse test fixture uses (`tests/conftest.py`).
+
+    A process-wide LRU makes an embed count order-dependent across a whole test session, and a test
+    that asserts "this embedded once" would pass vacuously against a cache some earlier test filled.
+    """
+    _embed_query_cached.cache_clear()
+
+
+def query_cache_hits() -> int:
+    """Cumulative hits on the query memo — what `retrieve()` reads to stamp `embed_cache_hit`."""
+    return _embed_query_cached.cache_info().hits
+
+
+def embed_query(text: str) -> list[float]:
+    """Embed one question. The asymmetric half: the prefix of `QUERY_CONVENTION` is applied here.
+
+    Memoised, and the caller gets a **copy**: the list inside an LRU entry is the cache's own
+    object, and one `sort()` or in-place scale downstream would poison every later hit for the
+    lifetime of the process.
+    """
+    return list(_embed_query_cached(model_name(), QUERY_CONVENTION, settings.embed_dim, text))

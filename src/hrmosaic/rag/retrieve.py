@@ -73,6 +73,10 @@ class RetrievalResult:
     dense_candidates: list[str] = field(default_factory=list)
     bm25_candidates: list[str] = field(default_factory=list)
     embed_ms: float = 0.0
+    #: Whether `embed_query` served this retrieval's vector from its memo rather than embedding it
+    #: (W1-B). It is the lever's own measurement hook: `embed_ms` is wall clock and moves with the
+    #: machine, this does not.
+    embed_cache_hit: bool = False
     search_ms: float = 0.0
 
 
@@ -131,8 +135,10 @@ def retrieve(
     connection = connection if connection is not None else index.open_index()
     try:
         started = time.perf_counter()
+        hits_before = embed.query_cache_hits()
         vector = embed.embed_query(query)
         embed_ms = (time.perf_counter() - started) * 1000
+        embed_cache_hit = embed.query_cache_hits() > hits_before
 
         started = time.perf_counter()
         rowids = index.allowed_rowids(connection, doc_ids, topic)
@@ -197,5 +203,6 @@ def retrieve(
         dense_candidates=[rows[rowid]["chunk_id"] for rowid, _ in dense],
         bm25_candidates=[rows[rowid]["chunk_id"] for rowid in lexical],
         embed_ms=embed_ms,
+        embed_cache_hit=embed_cache_hit,
         search_ms=search_ms,
     )

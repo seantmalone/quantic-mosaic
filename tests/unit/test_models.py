@@ -169,7 +169,15 @@ def test_the_pinned_agent_model_is_priced_and_the_buckets_add_up():
     assert combined == pytest.approx(expected)
 
 
-def test_the_free_judge_model_costs_nothing_and_an_unpriced_model_estimates_zero():
-    assert estimate_cost_usd("gemini-3.5-flash-lite", prompt_tokens=5_000_000, completion_tokens=5_000_000) == 0.0
+def test_the_judge_model_is_priced_at_the_paid_standard_rates():
+    """Paid billing was enabled on the judge project on 2026-09-10; a $0 entry under-reports spend."""
+    prices = MODEL_PRICES["gemini-3.5-flash-lite"]
+    assert prices["input"] > 0.0 and prices["output"] > 0.0, "the free-tier $0 entry is no longer true"
+    assert estimate_cost_usd("gemini-3.5-flash-lite", prompt_tokens=1_000, completion_tokens=100) == pytest.approx(
+        (1_000 * 0.30 + 100 * 2.50) / 1_000_000
+    )
+
+
+def test_an_unpriced_model_and_a_call_with_no_tokens_both_estimate_zero():
     assert estimate_cost_usd("some-model-nobody-priced", prompt_tokens=1_000_000) == 0.0
     assert estimate_cost_usd("claude-haiku-4-5") == 0.0

@@ -71,3 +71,22 @@ def test_an_unjudged_variant_says_why_its_figure_is_not_comparable():
 
 def test_no_note_at_all_when_there_is_no_composite():
     assert runner._strict_pass_note(_run(strict=None, judged=True)) == ""
+
+
+# --------------------------------------------------------------------------------------
+# The judge's cost line (P14 item 1)
+# --------------------------------------------------------------------------------------
+#
+# `MODEL_PRICES["gemini-3.5-flash-lite"]` was $0 while the judge project sat on the Gemini free
+# tier. Paid billing was enabled on 2026-09-10 and the entry now carries the paid standard rates —
+# but cost is priced at *write* time in `core/llm/base.py`, so every judge span already in the
+# store keeps the $0 it was written with. The report has to say so, or a reader adds up
+# `est_cost_usd` and concludes the judge was free.
+
+
+def test_the_judge_section_says_the_recorded_judge_cost_is_zero_and_prices_the_pass():
+    report = runner.render_report(_run(strict=0.692, judged=True))
+    section = report.split("## Judge methodology", 1)[1].split("### What the tool", 1)[0]
+    assert "$0" in section, "a reader must be told the recorded judge spans carry no cost"
+    assert "$0.16" in section, "and what the pass actually cost, from its token counts"
+    assert "$0.30" in section and "$2.50" in section, "with the rates the figure comes from"

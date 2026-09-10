@@ -303,6 +303,10 @@ def _search(
         candidates |= set(backfill.dense_candidates) | set(backfill.bm25_candidates)
     total_candidates = len(candidates)
     embed_ms = round(retrieval.embed_ms + (backfill.embed_ms if backfill else 0.0))
+    # True when *either* pass was served from the query memo — on a backfilled search the second
+    # `retrieve()` runs the identical query string, and that hit is the whole of W1-B's saving.
+    # It goes on the span only: `SearchOutput` is bytes the model reads, and this is telemetry.
+    embed_cache_hit = retrieval.embed_cache_hit or (backfill.embed_cache_hit if backfill else False)
     search_ms = round(retrieval.search_ms + (backfill.search_ms if backfill else 0.0))
     body = SearchOutput(
         hits=hits,
@@ -348,6 +352,7 @@ def _search(
         ],
         max_dense_score=max((hit.dense_score for hit in hits), default=None),
         embed_ms=embed_ms,
+        embed_cache_hit=embed_cache_hit,
         search_ms=search_ms,
         index_version=index_version,
         topic_backfilled=topic_backfilled,

@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from hrmosaic.core.db import Store, get_store, now_micros
 from hrmosaic.core.ids import new_span_id
-from hrmosaic.core.llm.limiter import DailyCapExceeded, TokenBucket, count_calls_today
+from hrmosaic.core.llm.limiter import DailyCapExceeded, TokenBucket, count_calls_today, daily_calls
 from hrmosaic.core.models import (
     LlmCallPayload,
     LlmPurpose,
@@ -384,6 +384,11 @@ def record_llm_call(
         error_message=error_message,
         messages=rows,
     )
+    # The single writer of `llm_call` spans — including the cache-hit and total-failure paths — so
+    # it is the one place the daily-cap counter can be incremented without double-counting. Keyed on
+    # `completion.provider`, never on the adapter's own: a failed-over call is billed to the
+    # fallback provider, and the cap is per provider.
+    daily_calls().record(completion.provider)
     return span_id
 
 
@@ -506,11 +511,20 @@ class RecordingAdapter:
 
         The guard needs the trace store, which a turn implies; the live probe and the unit tests
         run without one and are not metered.
+
+        `daily_calls()` is consulted **first**, and it is a fast negative only: it can say "this
+        process is demonstrably nowhere near the cap, skip the query" and nothing else. Every other
+        answer — unseeded, stale seed, or its own count at the cap — falls through to
+        `count_calls_today`, so the refusal below is always raised from the spans, and so is
+        `/health.llm.agent.calls_today`. See `DailyCallCounter` for why that keeps §9.8 literal.
         """
         if turn is None or not self._daily_call_cap:
             return
+        if daily_calls().below(self.provider, self._daily_call_cap):
+            return
         store = self._store or get_store()
         used = count_calls_today(store, self.provider)
+        daily_calls().seed(self.provider, used)
         if used >= self._daily_call_cap:
             raise DailyCapExceeded(provider=self.provider, calls_today=used, cap=self._daily_call_cap)
 

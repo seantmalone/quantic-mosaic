@@ -145,6 +145,81 @@ def resolve_target(base_url: str) -> str:
     return "local" if host in ("127.0.0.1", "localhost", "::1", "0.0.0.0") else "deployed"
 
 
+#: `RunConfig.llm_rpm` is read from the **harness's** settings, so a sweep driven against a remote
+#: target publishes the rate this process was paced at while the latency it measured was produced
+#: under the *service's* `LLM_RPM`. Since 2026-09-10 those are different numbers — the code default
+#: is 10 and the Render service is configured at 60/30 — so a `deployed` run has to say so rather
+#: than let a reader take `config.llm_rpm` for the rate behind `latency_p50_ms`. The service's
+#: effective rate cannot be read back from `/health` (§11.4 publishes no limiter settings) and the
+#: environment is not ours to introspect, so the note records it as unknown by name.
+REMOTE_RATE_NOTE = (
+    "config.llm_rpm is this harness's rate, not the target's: the run was driven against a remote "
+    "service whose own LLM_RPM/LLM_BURST are set in its environment (effective target rate: "
+    "unknown; service env). The latency in this run was produced under the target's rate (§9.4)."
+)
+
+#: What the publish gate refuses, and why each one invalidates a run rather than merely annotating
+#: it. `core/llm/base.py` puts 429 in `RETRYABLE_STATUSES` and escalates to `LLM_FALLBACK_MODEL`, so
+#: a paced or rate-limited sweep can answer some of its items on `gemini-3.5-flash-lite` while
+#: `config.llm_model` still reads `claude-haiku-4-5` — §9.8's pin, violated silently. A retry is the
+#: same problem one step earlier: it adds a backoff and a second round trip to the turn whose
+#: latency the run publishes. Neither is anywhere in the run file; both are on the `llm_call` spans.
+CONTAMINATION_SQL = """
+SELECT json_extract(payload_json, '$.model')             AS model,
+       json_extract(payload_json, '$.provider_failover') AS failover,
+       json_extract(payload_json, '$.retry_count')       AS retries
+FROM spans
+WHERE kind = 'llm_call' AND turn_id IN ({placeholders})
+"""
+
+
+def contamination_findings(run: RunFile, *, store: Store | None = None) -> list[str]:
+    """Why this run must not be published, one line per cause; empty means it is clean (W1-A).
+
+    Only the items' own turns are read. The judge's calls hang off the synthetic `eval_judge`
+    session of §13.2 and are a different model on purpose, so scoping to the item turns is what
+    lets the pin be checked against the agent's own calls without tripping over the judge's.
+
+    **Absent spans are silence, not a green light.** A committed run file carried to another machine
+    has no spans in that machine's store, and a store this process cannot open is not a verdict
+    either: both return no findings and say so in the log. The gate proves contamination; it cannot
+    prove the absence of it from rows that are not there.
+    """
+    turn_ids = [item.turn_id for item in run.items if item.turn_id]
+    if not turn_ids:
+        logger.warning("no turn ids on %s: its spans cannot be checked for contamination", run.run_id)
+        return []
+    try:
+        store = store or get_store()
+        rows = store.execute(
+            CONTAMINATION_SQL.format(placeholders=", ".join("?" for _ in turn_ids)), tuple(turn_ids)
+        ).dicts()
+    except Exception:
+        logger.warning("could not read the spans of %s; contamination is unchecked", run.run_id, exc_info=True)
+        return []
+    if not rows:
+        logger.warning("no llm_call spans for %s in this store; contamination is unchecked", run.run_id)
+        return []
+
+    findings: list[str] = []
+    failovers = sum(1 for row in rows if row["failover"])
+    if failovers:
+        findings.append(
+            f"{failovers} of {len(rows)} llm_call spans failed over to the fallback provider: the run "
+            "answered some items on a model §9.8 does not pin"
+        )
+    retried = sum(1 for row in rows if int(row["retries"] or 0) > 0)
+    if retried:
+        findings.append(
+            f"{retried} of {len(rows)} llm_call spans carry retry_count > 0: a backoff and a second "
+            "round trip are inside the latency this run publishes"
+        )
+    strays = sorted({str(row["model"]) for row in rows if row["model"] and row["model"] != run.config.llm_model})
+    if strays:
+        findings.append(f"llm_call spans name {', '.join(strays)}, not the pinned {run.config.llm_model}")
+    return findings
+
+
 def run_id_for(variant: str, *, at: int | None = None) -> str:
     """`r_<epoch seconds>_<variant>` — sortable, and it names the arm in the filename."""
     return f"r_{int((at or now_micros()) / 1_000_000)}_{variant}"
@@ -256,6 +331,8 @@ class Runner:
         self._judge_session_id: str | None = None
         self._writer: TraceWriter | None = None
         self.notes: list[str] = [options.notes] if options.notes else []
+        if self.target != "local":
+            self.notes.append(REMOTE_RATE_NOTE)
 
     # -- lifecycle ---------------------------------------------------------------------
 
@@ -1071,6 +1148,24 @@ is only ever emitted for a debt a permitted tool could settle — so the `nudge_
 above is what tells you how many turns were pushed back into the loop at all."""
 
 
+#: What the judge pass cost, and why no span says so (P14). `MODEL_PRICES` priced
+#: `gemini-3.5-flash-lite` at $0 for as long as the judge project sat on the Gemini free tier; paid
+#: billing was enabled on it on 2026-09-10 and the table now carries the paid standard rates. Cost
+#: is priced at **write** time in `core/llm/base.py`, so every judge span recorded before that
+#: change keeps its $0 and `est_cost_usd` under-reports the judged half of any earlier run. The
+#: figure below is therefore stated from the pass's own token counts rather than read back off a
+#: span, and it is deliberately arithmetic a reader can redo.
+JUDGE_COST_NOTE = """\
+**What the judge pass cost.** Judge spans recorded before 2026-09-10 carry `cost_usd_estimate` =
+**$0**: the price table held the Gemini free-tier rate when they were written, and cost is priced
+at write time, so no later change re-prices a span. Paid billing was enabled on the judge project
+on 2026-09-10 and `gemini-3.5-flash-lite` is now priced at its paid standard rates, **$0.30 per 1M
+input tokens and $2.50 per 1M output**. Stated from this pass's token counts rather than from the
+spans, a 264-call judge pass over ~369k input and ~20k output tokens cost **≈ $0.16**
+(369k × $0.30/1M + 20k × $2.50/1M). Neither cache bucket applies: the OpenAI-compatible adapter
+never asks for Gemini context caching."""
+
+
 def fmt(value: Any, digits: int = 3) -> str:
     """One metric cell: `None` renders as an em dash, never as 0."""
     if value is None:
@@ -1524,6 +1619,8 @@ anywhere in it. A disclosed-selection figure is evidence about the judge's harde
 a second blind opinion, and averaging the two would mean nothing.{subset_overlap} Both are below, each
 with its `n` and its subset definition.
 
+{JUDGE_COST_NOTE}
+
 {agreement_blocks}
 
 ### What the tool metrics do and do not measure
@@ -1690,7 +1787,8 @@ def build_parser() -> argparse.ArgumentParser:
             "rewrite evaluation/REPORT.md from an existing run file. Drives nothing, judges "
             "nothing and spends nothing. §13.10 makes REPORT.md the human-readable face of the "
             "**published** run, but every run writes it, so finishing a sweep with a variant "
-            "leaves the report describing an ablation arm."
+            "leaves the report describing an ablation arm. Refuses a run whose llm_call spans "
+            "carry a provider failover, a retry, or a model other than the pinned one."
         ),
     )
     parser.add_argument(
@@ -1972,6 +2070,12 @@ def rewrite_report(run_id: str, *, results_dir: Path = RESULTS_DIR, path: Path =
     if not source.exists():
         raise SystemExit(f"{source} does not exist; there is no run to report on")
     run = RunFile.model_validate(json.loads(source.read_text(encoding="utf-8")))
+    findings = contamination_findings(run)
+    if findings:
+        raise SystemExit(
+            f"{run.run_id} is contaminated and must not be published (§9.8, performance plan W1-A):\n  - "
+            + "\n  - ".join(findings)
+        )
     write_report(run, results_dir=Path(results_dir), path=path)
     return run
 

@@ -439,6 +439,14 @@ admits a whole interactive turn with zero delay; sustained eval throughput still
 One logical provider call is bounded independently at ≈ 52 s (`max_retries=0`, `timeout=25 s`, one
 ≤ 2 s backoff, one fallback attempt), inside the 90 s budget.
 
+The default is **10**, and the code default stays 10 — one harness process shares a single bucket
+across the agent, the failover and the Gemini judge, so raising the *default* would pace the judge
+differently. The **deployed service** is configured at `LLM_RPM=60` / `LLM_BURST=30` (set 2026-09-10
+via the Render API), because the Anthropic account's own limits, read from response headers on
+2026-09-10, are 10,000 RPM and 10M input tokens/min, and the deployed sweep recorded a 3.9 s/turn
+mean of bucket waiting at 10 (p90 12.2 s). Spend stays bounded by `LLM_DAILY_CALL_CAP`, not by the
+bucket.
+
 Four named failure paths, **each answering HTTP 200**, each with its own integration test authored
 in the phase where `POST /chat` exists:
 

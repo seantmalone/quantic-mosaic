@@ -390,6 +390,11 @@ class TurnBuffer:
         self.awaiting_ms = awaiting_ms
         self.closed = False
         self._next_span_seq = next_span_seq
+        #: What `close()` wrote into `turns`, published so the response does not have to read it
+        #: back (W1-C(c)). It is the mapping the `TURN_CLOSE` statement is built from, not a copy
+        #: of it, so §11.1's "provably the same rows" is an identity rather than a promise. `None`
+        #: until the turn is closed.
+        self.close_totals: dict[str, int] | None = None
         self._spans: list[_SpanRecord] = []
         self._messages: list[tuple[str, int, str, str]] = []
         self._lock = threading.RLock()
@@ -585,8 +590,26 @@ class TurnBuffer:
             self.closed = True
 
         ended_at = now_micros()
-        duration_ms = max(0, (ended_at - self.started_at) // 1000 - self.awaiting_ms)
         rollups = self._rollups
+        # The ten published numbers, computed once. `TURN_CLOSE` below is built from this mapping
+        # and the response reads the same one, so a turn's `usage`/`timings` cannot drift from its
+        # audit row. `store_ms` is the store time spent *before* this flush, which is exactly what
+        # the column has always held: the closing batch cannot bill itself.
+        totals = {
+            "ended_at": ended_at,
+            "duration_ms": max(0, (ended_at - self.started_at) // 1000 - self.awaiting_ms),
+            "total_tokens_in": rollups["total_tokens_in"],
+            "total_tokens_out": rollups["total_tokens_out"],
+            "llm_calls": rollups["llm_calls"],
+            "tool_calls": rollups["tool_calls"],
+            "retrievals": rollups["retrievals"],
+            "guardrail_hits": rollups["guardrail_hits"],
+            "llm_ms": rollups["llm_ms"],
+            "retrieval_ms": rollups["retrieval_ms"],
+            "tool_ms": rollups["tool_ms"],
+            "store_ms": round(rollups["store_us"] / 1000),
+        }
+        self.close_totals = totals
         statements = [
             Statement(
                 SPAN_INSERT,
@@ -615,8 +638,8 @@ class TurnBuffer:
             Statement(
                 TURN_CLOSE,
                 (
-                    ended_at,
-                    duration_ms,
+                    totals["ended_at"],
+                    totals["duration_ms"],
                     redact_text(final_answer) if final_answer else final_answer,
                     _dump_redacted_json(answer_blocks),
                     _dump_redacted_json(citations),
@@ -625,16 +648,16 @@ class TurnBuffer:
                     intent,
                     workflow,
                     error_kind,
-                    rollups["total_tokens_in"],
-                    rollups["total_tokens_out"],
-                    rollups["llm_calls"],
-                    rollups["tool_calls"],
-                    rollups["retrievals"],
-                    rollups["guardrail_hits"],
-                    rollups["llm_ms"],
-                    rollups["retrieval_ms"],
-                    rollups["tool_ms"],
-                    round(rollups["store_us"] / 1000),
+                    totals["total_tokens_in"],
+                    totals["total_tokens_out"],
+                    totals["llm_calls"],
+                    totals["tool_calls"],
+                    totals["retrievals"],
+                    totals["guardrail_hits"],
+                    totals["llm_ms"],
+                    totals["retrieval_ms"],
+                    totals["tool_ms"],
+                    totals["store_ms"],
                     rollups["provider"],
                     rollups["model"],
                     rollups["provider_failover"],

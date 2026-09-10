@@ -178,6 +178,11 @@ class RetrievalPayload(_Payload):
     chunks: list[RetrievedChunk] = Field(default_factory=list)
     max_dense_score: float | None = None
     embed_ms: int | None = None
+    #: Whether any of this retrieval's query embeds was served from `rag/embed.py`'s memo (W1-B).
+    #: `embed_ms` alone cannot say: a backfilled search sums two `retrieve()` calls into one number,
+    #: so a fall in it could be a faster machine as easily as a cache hit. **Defaulted on purpose**:
+    #: rows written before the field existed still parse as `RetrievalPayload` (§10.2).
+    embed_cache_hit: bool = False
     search_ms: int | None = None
     index_version: str | None = None
     #: `topic` is a soft filter (§8.4): when it alone yields fewer than `k` hits or a single
@@ -402,9 +407,18 @@ def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
 # --------------------------------------------------------------------------------------
 
 #: USD per million tokens. Re-verified against the live pricing page at P10 step 0 (§3.1).
+#:
+#: The judge model was priced at $0 while its project was on the Gemini free tier. Paid billing was
+#: enabled on that project on **2026-09-10**, so the free-tier entry stopped being true and started
+#: under-reporting real spend; the paid standard rates are $0.30 in / $2.50 out per 1M tokens.
+#: Both cache buckets are **0.0 on purpose**: `OpenAICompatAdapter` never asks for Gemini context
+#: caching and never reads a cached-token count back off the response, so no call it makes can bill
+#: a cache-write or a cache-read. Cost is priced at write time (`core/llm/base.py`), so judge spans
+#: recorded before this change keep the $0 they were written with — `evaluation/REPORT.md` says so
+#: beside the pass cost it states from token counts.
 MODEL_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00, "cache_write": 1.25, "cache_read": 0.10},
-    "gemini-3.5-flash-lite": {"input": 0.0, "output": 0.0, "cache_write": 0.0, "cache_read": 0.0},
+    "gemini-3.5-flash-lite": {"input": 0.30, "output": 2.50, "cache_write": 0.0, "cache_read": 0.0},
 }
 
 _PER_MTOK = 1_000_000.0

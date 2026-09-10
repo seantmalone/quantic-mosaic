@@ -40,6 +40,25 @@ def writer(store):
     trace_module.clear_span_listeners()
 
 
+@pytest.fixture(autouse=True)
+def _empty_process_caches():
+    """The two process-wide caches P14 added start empty for every test (W1-B, W1-C(a)).
+
+    `rag/embed.py`'s query memo and `core/llm/limiter.py`'s daily-call counter both outlive a test's
+    store and fixtures. Without this, "this query embedded once" passes vacuously against a cache an
+    earlier test filled, and a test's cap behaviour depends on how many calls the tests before it
+    made. Autouse at the root, so the integration and contract suites cannot leak into a unit test.
+    """
+    from hrmosaic.core.llm.limiter import daily_calls
+    from hrmosaic.rag import embed
+
+    embed.clear_query_cache()
+    daily_calls().reset()
+    yield
+    embed.clear_query_cache()
+    daily_calls().reset()
+
+
 @pytest.fixture(scope="session")
 def anyio_backend():
     """asyncio only — the MCP tests are async and the project runs no trio anywhere."""

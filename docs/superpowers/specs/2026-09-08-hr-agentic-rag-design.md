@@ -1206,6 +1206,13 @@ per-request `timeout` is **25 s**, and the adapter's one backoff (≤ 2 s) plus 
 six back-to-back calls incur < 50 ms of total limiter sleep and that the 7th–11th within the same minute begin to pace. The `llm_call` span records
 `limiter_wait_ms`, so a paced turn is visible on the dashboard rather than looking like provider latency.
 
+**The code default is 10; the deployed service is configured at 60/30.** `LLM_RPM` defaults to **10** and `LLM_BURST` to `LLM_RPM`, and those defaults
+stay — one harness process shares a single bucket across the agent, the failover and the Gemini judge, so raising the *default* would pace the judge
+differently. The Render service is configured (2026-09-10, via the Render API) at `LLM_RPM=60` / `LLM_BURST=30`, because the Anthropic account's own
+limits, read from response headers on 2026-09-10, are **10,000 RPM and 10M input tokens/min** — the bucket at 10 was pacing the deployment far below
+the account, and the deployed sweep recorded a **3.9 s/turn mean of bucket waiting at 10 (p90 12.2 s)**, which is harness self-collision inside the
+published latency rather than anything a user experiences. Spend stays bounded by `LLM_DAILY_CALL_CAP`, not by the bucket.
+
 **Two platform numbers are measured, not inferred**, both at P11 (§3.1): the wall-clock of one stubbed six-tool-call turn under `docker run -m 512m
 --cpus 0.1`, and Render's documented HTTP request timeout, below which `AGENT_WALL_CLOCK_S` is capped. If that timeout is under 90 s, the documented
 fallback is for `POST /chat` to return **202** with `{session_id, turn_id, stream_url}` and let the client consume the SSE stream to `turn_completed` —
@@ -1841,8 +1848,8 @@ returns **HTTP 200** with `outcome: "configuration_required"` and a single escal
 | `LLM_DAILY_CALL_CAP` | – | `1500` | Anthropic calls per UTC day, counted from `llm_call` spans. On reaching it `/chat` is HTTP 200 with `outcome: "error"` and an `error` span `error_kind: "daily_cap_reached"` (§9.8) |
 | `LLM_TEMPERATURE` | – | `0` | Determinism |
 | `LLM_STUB_SCRIPT` | – | `tests/fixtures/llm_scripts/demo_task_1.json` | Which script `StubAdapter` replays (§16.2) |
-| `LLM_RPM` | – | `10` | Token-bucket refill rate (`LLM_RPM`/60 per second) |
-| `LLM_BURST` | – | *(unset ⇒ equals `LLM_RPM`)* | Token-bucket capacity. A full bucket admits a whole ~6-call turn with zero delay while sustained throughput stays bounded (§9.4) |
+| `LLM_RPM` | – | `10` | Token-bucket refill rate (`LLM_RPM`/60 per second). Default 10; the deployed service is configured at **60** (2026-09-10) — see §9.4 |
+| `LLM_BURST` | – | *(unset ⇒ equals `LLM_RPM`)* | Token-bucket capacity. A full bucket admits a whole ~6-call turn with zero delay while sustained throughput stays bounded (§9.4). Default = `LLM_RPM`; the deployed service is configured at **30** |
 | `LLM_FALLBACK_PROVIDER` / `_BASE_URL` / `_MODEL` / `_API_KEY` | – | `openai_compat`; Gemini `gemini-3.5-flash-lite` (free) | Failover on repeated 429 / 5xx / timeouts, recorded as `provider_failover` |
 | `JUDGE_PROVIDER` / `_BASE_URL` / `_MODEL` | – | `openai_compat`; Gemini `gemini-3.5-flash-lite` (free) | Judge — a different vendor and family from the agent by construction (§9.8, §13.7) |
 | `JUDGE_API_KEY` | – | falls back to `LLM_API_KEY` | A Google AI Studio key on a **second** Cloud project, so a judge overrun cannot stall an agent run |
@@ -2353,7 +2360,17 @@ dashboard plots `turns.rss_mb_at_end`. **The memory gate is `make docker-run-512
 | Index open + first query embed | ~0.3–1 s |
 | First LLM round trip | 1.5–5 s |
 | **First request total** | **~35–70 s** |
-| **Warm turn** | **~1.5–5 s** (≥ 90 % provider time) |
+| **Warm turn** | **22.5 s** on the free instance (cold-start probe, 2026-09-10); turn **p50 17.6 s** on both the local and the deployed 26-item runs |
+
+**The warm-turn figure was a stub-model number and is now a measured one.** This row read "~1.5–5 s
+(≥ 90 % provider time)" until P14. That range came from turns driven by `StubAdapter`, whose mean
+turn was **292 ms** — a script replay with no provider in it — so it described the harness, not the
+product. The replacements are measured: 22.5 s is the warm turn of `scripts/measure_cold_start.py`
+against the free instance on 2026-09-10, and 17.6 s is `latency_p50_ms` from the 26-item eval, which
+came out at the same p50 locally and deployed. The "≥ 90 % provider time" share survives the
+correction — the deployed baseline spends 88.9 % of its median turn in five strictly serial provider
+round trips — and part of the published p50 is eval-harness limiter pacing rather than user-visible
+latency (§9.4).
 
 **Per-query embed cost on the deploy host is not the Mac figure.** The probe's 8 ms retrieval was measured on a 32-core Mac; on 0.1 CPU a 384-dim
 query embed is expected to cost ~100–300 ms of CPU and the KNN plus FTS5 a further ~5–20 ms — which is why each runs under `await asyncio.to_thread(…)`

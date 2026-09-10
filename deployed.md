@@ -295,7 +295,11 @@ output: 5.00, cache_write: 1.25, cache_read: 0.10}` — so no change was needed,
 **What the unverified Gemini figure does and does not affect.** §13.9 is explicit that the Gemini
 RPD/TPM arithmetic bounds **only the judge and the failover path**; what bounds the agent is
 `LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per UTC day) and the prompt cache. The P10 sweep issued
-its judge calls behind the same token-bucket limiter as everything else (`LLM_RPM = 10`, so ≤ 600
+its judge calls behind the same token-bucket limiter as everything else (`LLM_RPM = 10` — the code
+default, which is what the harness process runs; the deployed service has been configured at
+`LLM_RPM=60` / `LLM_BURST=30` since 2026-09-10, on the Anthropic account's own 10,000 RPM / 10M
+input-tokens-per-minute limits read from response headers that day, after the deployed sweep
+recorded a 3.9 s/turn mean of bucket waiting at 10, p90 12.2 s — so ≤ 600 judge
 calls/hour against a reported 15 RPM ceiling) and the observed behaviour — how many judge calls the
 run made and whether any `429` / `Retry-After` was seen — is recorded in `CHANGELOG.md` and in the
 run's `eval_runs.notes`. That observation is the honest substitute for a number this environment
