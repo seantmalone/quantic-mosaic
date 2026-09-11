@@ -11,11 +11,7 @@
 # disagreement the run contains is inside the sample.
 #
 # The price is that the SELECTION uses the judge's own scores and is therefore NOT blind. That is
-# recorded here as `selection_disclosed: true
-  run_note: >-
-    Re-authored for the final published run `r_1789086979_baseline` (deployed commit da0dca2) on
-    2026-09-11 from a score-free packet; the judge_lowest selection over that run overlaps the seed
-    subset on five of eight items because the judge scored 25 of 26 answered items 1.0.`, stated in REPORT.md beside the figure, and it is why
+# recorded here as `selection_disclosed: true`, stated in REPORT.md beside the figure, and it is why
 # `judge_agreement_rate_hard` is published as its own metric with its own n rather than merged into
 # `judge_agreement_rate`. The LABELLING is blind in exactly the same way as the first subset's: the
 # same packet shape, the same four §13.3 evidence classes, and no score, verdict, rationale or
@@ -54,6 +50,10 @@ protocol:
     supports it.
   subset: judge_lowest_8
   selection_disclosed: true
+  run_note: >-
+    Re-authored for the final published run `r_1789086979_baseline` (deployed commit da0dca2) on
+    2026-09-11 from a score-free packet; the judge_lowest selection over that run overlaps the seed
+    subset on five of eight items because the judge scored 25 of 26 answered items 1.0.
 
 labels:
   - item_id: benefits-001
