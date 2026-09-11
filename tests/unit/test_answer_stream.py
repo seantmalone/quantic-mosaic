@@ -158,3 +158,35 @@ def test_a_malformed_stream_costs_a_preview_and_nothing_else():
     delivered = _feed(AnswerAssembler(clock=_Clock()), '{"blocks": [{"type": "policy_fact", ,,, }]}', chunk=9)
 
     assert delivered == []
+
+
+def test_a_streamed_block_is_redacted_too(monkeypatch):
+    """What a listener is handed is what a listener could publish (§7.4 G6, §17).
+
+    A delta is neither a persisted span payload (`trace.prepare_payload`) nor the finished answer
+    (`g6.check`), so a secret echoed out of a corpus chunk or a tool result would otherwise reach
+    `#provisional-blocks` verbatim and stay on screen for the rest of the turn — while G6's own
+    span recorded `verdict=allow`, because the string it scrubbed is a different object.
+    """
+    monkeypatch.setenv("VENDOR_PORTAL_TOKEN", "hunter2-hunter2-hunter2")
+    raw = json.dumps(
+        {
+            "blocks": [
+                {
+                    "type": "policy_fact",
+                    "text": "The runbook chunk pastes sk-ant-api03-AAAAAAAAAAAAAAAAAAAA and "
+                    "the portal password hunter2-hunter2-hunter2 in full.",
+                    "citations": ["c_1"],
+                }
+            ],
+            "next_steps": [],
+            "rationale_summary": "x",
+        }
+    )
+
+    delivered = _feed(AnswerAssembler(clock=_Clock()), raw, chunk=11)
+
+    assert len(delivered) == 1
+    assert "sk-ant-api03-AAAAAAAAAAAAAAAAAAAA" not in delivered[0].text
+    assert "hunter2-hunter2-hunter2" not in delivered[0].text
+    assert delivered[0].text == ("The runbook chunk pastes [REDACTED] and the portal password [REDACTED] in full.")

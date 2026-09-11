@@ -1,7 +1,7 @@
 """Turning the synthesis call's token stream into `answer_delta` frames (performance plan §3 W2-E).
 
-The synthesis call answers with one constrained-JSON body (`AnswerSchema`). Two rules decide what
-of it may be shown before the turn is over, and both are safety rules rather than taste:
+The synthesis call answers with one constrained-JSON body (`AnswerSchema`). Three rules decide what
+of it may be shown before the turn is over, and all three are safety rules rather than taste:
 
 1. **Complete blocks only.** `orchestrator.render_answer()` labels a `recommendation` with
    `"Recommendation — not company policy: "` and an `escalation` with `"Escalation: "`. A block
@@ -13,6 +13,11 @@ of it may be shown before the turn is over, and both are safety rules rather tha
    reasoning, clamped to 200 characters only *after* the fact; `next_steps` is joined by
    `render_answer` from the final answer. Neither is streamed. The scanner below reads the `blocks`
    array and never looks at another key.
+3. **Redacted before it leaves the process (§7.4 G6, §17).** Every block's `text` goes through
+   `redact_text()` in `_drain`. A delta is neither a persisted span payload (`core/trace.py`'s
+   `prepare_payload`) nor the finished answer (`g6.check` over `render_answer`'s output), so
+   without this the one model-written thing on this path would be the one thing G6 never saw.
+   `redact()` is idempotent, so the finished answer and the persisted spans are unaffected.
 
 **Coalescing.** The buffer is only re-scanned once ~40 characters or ~100 ms have accumulated. A
 2,000-delta synthesis therefore costs ~50 scans rather than 2,000, and — because a frame is emitted
@@ -32,6 +37,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from hrmosaic.core.redact import redact_text
+
 #: The two coalescing thresholds. Whichever trips first ends the batch.
 COALESCE_CHARS = 40
 COALESCE_S = 0.1
@@ -43,7 +50,11 @@ BLOCKS_KEY = '"blocks"'
 
 @dataclass(frozen=True)
 class StreamedBlock:
-    """One finished answer block, in the only three fields that may leave the process."""
+    """One finished answer block, in the only three fields that may leave the process.
+
+    `text` is already redacted (§7.4 G6): the block is constructed that way in `_drain`, so no
+    consumer of a `StreamedBlock` can publish an unscrubbed secret.
+    """
 
     index: int
     type: str
@@ -178,7 +189,16 @@ class AnswerAssembler:
             StreamedBlock(
                 index=first + offset,
                 type=str(block.get("type") or "policy_fact"),
-                text=str(block.get("text") or ""),
+                # G6 (§7.4, §17) applies here too, and only here: a delta is neither a persisted
+                # span payload (`trace.prepare_payload`) nor the finished answer (`g6.check`), so
+                # this is the one place on the streaming path where the model's own prose is
+                # scrubbed before it leaves the process. A secret can reach the model through a
+                # corpus chunk or a tool result and be echoed into a synthesis block; without this
+                # the block would be rendered verbatim in `#provisional-blocks` and stay on screen
+                # for the rest of the turn while G6's span still recorded `verdict=allow`, because
+                # the string it scrubbed — the final rendered answer — is a different object.
+                # `redact()` is idempotent, so the finished answer and the spans are unchanged.
+                text=redact_text(str(block.get("text") or "")),
                 citations=[str(citation) for citation in (block.get("citations") or [])],
             )
             for offset, block in enumerate(fresh)
