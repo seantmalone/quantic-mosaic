@@ -84,6 +84,10 @@ def span_event_data(event: SpanEvent) -> dict[str, Any]:
         "status": event.status,
         "duration_ms": event.duration_ms,
         "label": narration.label_for(event.kind, event.name, event.payload),
+        # Presentation only, and deliberately not `status`: the gated write attempt is an `isError`
+        # result whose recorded status is `error`, and the rail must not paint the safety moment
+        # scarlet one beat before "Waiting for your confirmation…" (§8.6, §11.3).
+        "tone": narration.tone_for(event.kind, event.status, event.payload),
         "summary": summarise_span(event.kind, event.name, event.payload),
     }
     if event.kind == "tool_call":

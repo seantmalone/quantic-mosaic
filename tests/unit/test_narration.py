@@ -102,3 +102,35 @@ def test_a_label_never_repeats_an_argument_value():
         label = narration.label_for("tool_call", name, {"arguments": arguments})
         for value in arguments.values():
             assert value not in label, f"{name} leaked {value!r}"
+
+
+def test_the_gated_write_attempt_reads_as_pending_not_as_a_failure():
+    """The CONFIRMATION_REQUIRED shape is the gate doing its job, not the tool failing (§8.6).
+
+    The rail used to paint the first `create_mock_hr_ticket` call red — a scarlet `error` line one
+    beat before "Waiting for your confirmation…" — because the span's recorded status *is* `error`
+    (the MCP result is `isError`, and the audit record must keep saying so). Only the presentation
+    changes here: the line reads "Needs your confirmation" in the pending style.
+    """
+    gated = {"error_code": "CONFIRMATION_REQUIRED", "is_error": True, "arguments": {"employee_id": "E1042"}}
+
+    assert narration.label_for("tool_call", "create_mock_hr_ticket", gated) == narration.NEEDS_CONFIRMATION_LABEL
+    assert narration.tone_for("tool_call", "error", gated) == narration.PENDING
+    assert narration.NEEDS_CONFIRMATION_LABEL.lower().startswith("needs your confirmation")
+
+
+def test_the_recorded_status_is_not_what_the_rail_paints_but_everything_else_still_is():
+    """A real tool failure stays red, and an ok span stays neutral: only the gate is special-cased."""
+    failed = {"error_code": "UPSTREAM_TIMEOUT", "is_error": True, "arguments": {}}
+
+    assert narration.tone_for("tool_call", "error", failed) == narration.ERROR
+    assert narration.tone_for("tool_call", "ok", {"arguments": {}}) == narration.OK
+    assert narration.tone_for("llm_call", "error", {"purpose": "synthesize"}) == narration.ERROR
+    assert narration.tone_for("confirmation", "ok", {"user_response": "pending"}) == narration.OK
+
+
+def test_the_write_tool_label_before_the_gate_is_still_forward_looking():
+    """`step_started` has no result yet — its detail is the arguments — so the label is unchanged."""
+    assert narration.label_for("tool_call", "create_mock_hr_ticket", {"arguments": {"queue": "hr-timeoff"}}) == (
+        "Preparing the ticket for your confirmation…"
+    )

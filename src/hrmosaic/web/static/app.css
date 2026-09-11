@@ -175,6 +175,10 @@ body {
 .span-guardrail { border-left-color: var(--warn); }
 .span-confirmation { border-left-color: var(--warn); }
 .span-error, .span-item.span-error { border-left-color: var(--danger); color: var(--danger); }
+/* The confirmation gate refusing an untokened write is the safety moment working, not a
+   failure: amber, the colour the confirm card and the confirmation span already use. The
+   span's recorded status stays `error` — only this line's tone changes (§8.6, §11.3). */
+.span-pending, .span-item.span-pending { border-left-color: var(--warn); color: var(--warn); }
 
 /* A step that is still running: the plain-language label, a spinner and a live elapsed counter.
    The closed span replaces this whole line, label first, technical detail after it (§11.3). */

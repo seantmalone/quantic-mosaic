@@ -361,6 +361,14 @@ async def test_a_confirmation_gated_turn_streams_its_resumed_half_to_a_second_su
         gated = _frames("".join(gated_chunks))
         assert gated[-1][0] == "turn_completed"
         assert gated[-1][1]["outcome"] == "awaiting_confirmation"
+
+        # The gated attempt on the wire: an `error` status, because that is what the MCP result
+        # was and what the audit record must keep saying, painted amber and read as the gate
+        # doing its job rather than as the tool failing (P22, §8.6).
+        attempt = next(data for event, data in gated if event == "span" and data["name"] == "create_mock_hr_ticket")
+        assert attempt["status"] == "error", "the recorded status is untouched"
+        assert attempt["tone"] == "pending"
+        assert attempt["label"] == "Needs your confirmation"
         assert sse.broker.subscriber_count(TURN_ID) == 0, "the first stream is over before the click"
 
         resumed_listening, resumed_chunks = await _collect(client, TURN_ID)

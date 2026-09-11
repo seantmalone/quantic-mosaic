@@ -162,9 +162,11 @@ Tick all five on camera:
       with 8 business days against a 5-day rule.
 - [ ] **④ Retrieved citations** — at least two distinct documents (`pto-and-holidays`,
       `manager-approval-matrix`). Click through to the notice-requirement sentence.
-- [ ] **⑤ Final answer and action** — the balance-aware cited answer, then the
-      **`MOCK-HR-<n>`** ticket in the `hr-timeoff` queue, and the new row on the dashboard's
-      mock-action log.
+- [ ] **⑤ Final answer and action** — the answer **opens with the ticket id**: *"Done: HR ticket
+      `MOCK-HR-<n>` was opened in queue hr-timeoff…"*, then the balance-aware cited answer, the
+      ticket in the `hr-timeoff` queue and the new row on the dashboard's mock-action log. Say why
+      that first line is deterministic — it is built from the tool result, not from what the model
+      wrote, so a confirmed write can never be reported as something the assistant declined to do.
 
 ### The safety beat (do not rush this — it is the best 40 seconds in the demo)
 
@@ -175,6 +177,10 @@ With the Confirm card on screen:
 > minted only inside `POST /chat/confirm`, only after I click Confirm. Replay it and it is
 > refused; change one argument and it is refused; and the refusal contains no token of any kind,
 > so the model can never obtain one."*
+
+The rail line for that refused attempt reads **"Needs your confirmation"** in amber, not red: the
+span's recorded status is `error` — the MCP result really is `isError` — but the gate refusing an
+untokened write is the safety property working, and the rail says so.
 
 Then, in order:
 

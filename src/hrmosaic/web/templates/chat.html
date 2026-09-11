@@ -142,7 +142,11 @@
     function spanClosed(span) {
       var running = rail.querySelector('[data-span-id="' + span.span_id + '"]');
       var item = running || document.createElement("li");
-      item.className = "span-item span-" + span.kind + (span.status === "error" ? " span-error" : "");
+      // `tone`, not `status`: the recorded status of the gated write attempt is `error` — the MCP
+      // result is `isError` — and the rail must not paint the safety moment scarlet one beat
+      // before "Waiting for your confirmation…". `web/narration.py` owns the mapping.
+      var tone = span.tone || (span.status === "error" ? "error" : "ok");
+      item.className = "span-item span-" + span.kind + (tone === "ok" ? "" : " span-" + tone);
       item.dataset.spanId = span.span_id;
       item.replaceChildren();
       var label = document.createElement("span");

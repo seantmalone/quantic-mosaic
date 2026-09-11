@@ -16,6 +16,12 @@ document *title*, and it is read from the committed index by `doc_id` rather tha
 call — so a label can only ever name a document the corpus actually holds. `test_narration.py`
 asserts both halves: that every tool in `mcp/tools/*.schema.json` has a label, and that no label
 contains a value from the arguments it was given.
+
+**It also decides the line's tone** (`tone_for`), which is presentation and nothing else. The span's
+recorded `status` stays exactly what the trace contract says: the gated `create_mock_hr_ticket`
+attempt really is an `isError` result and really is stored as `error` (§10.1), but it is the
+confirmation gate doing its job — so the rail paints it amber and reads "Needs your confirmation"
+instead of painting the safety moment scarlet one beat before "Waiting for your confirmation…".
 """
 
 from __future__ import annotations
@@ -63,6 +69,22 @@ PURPOSE_LABELS: dict[str, str] = {
 GUARDRAIL_LABEL = "Verifying every claim against the policy text…"
 CONFIRMATION_LABEL = "Waiting for your confirmation…"
 
+#: The closed line for the gated write attempt — the one whose result is §8.4 tool 8's five-key
+#: `CONFIRMATION_REQUIRED` rejection. Not forward-looking, because that step is over: what it
+#: produced is a card waiting for a human, and "Waiting for your confirmation…" follows it.
+NEEDS_CONFIRMATION_LABEL = "Needs your confirmation"
+
+#: The three presentation tones a rail line can carry. **Presentation only**: the span's recorded
+#: `status` is the audit record and is never rewritten here (§10.1).
+OK = "ok"
+PENDING = "pending"
+ERROR = "error"
+
+#: The result code that means the gate did its job rather than the tool failing (§8.6). The MCP
+#: result is `isError` and the span's status is `error` — correctly, because the call returned no
+#: ticket — but a red line one beat before "Waiting for your confirmation…" reads as a broken demo.
+CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
+
 
 def label_for(kind: str, name: str, detail: Mapping[str, Any] | None = None) -> str:
     """The rail's line for one span. Never raises, never empty, never echoes an argument."""
@@ -70,6 +92,8 @@ def label_for(kind: str, name: str, detail: Mapping[str, Any] | None = None) -> 
     if kind == "llm_call":
         return PURPOSE_LABELS.get(str(values.get("purpose") or ""), WORKING)
     if kind == "tool_call":
+        if _gated(values):
+            return NEEDS_CONFIRMATION_LABEL
         if name == "get_policy_section":
             return _section_label(values.get("arguments"))
         return TOOL_LABELS.get(name, WORKING)
@@ -78,6 +102,22 @@ def label_for(kind: str, name: str, detail: Mapping[str, Any] | None = None) -> 
     if kind == "confirmation":
         return CONFIRMATION_LABEL
     return WORKING
+
+
+def tone_for(kind: str, status: str, detail: Mapping[str, Any] | None = None) -> str:
+    """How the rail should paint one closed span: `ok`, `pending` or `error`.
+
+    The one special case is the gated write attempt. Everything else follows the recorded status,
+    so a genuine tool failure is still red and the record itself is untouched either way.
+    """
+    if kind == "tool_call" and _gated(detail or {}):
+        return PENDING
+    return ERROR if status == "error" else OK
+
+
+def _gated(detail: Mapping[str, Any]) -> bool:
+    """Is this `tool_call` payload the confirmation gate's own rejection (§8.4 tool 8)?"""
+    return str(detail.get("error_code") or "") == CONFIRMATION_REQUIRED
 
 
 def _section_label(arguments: Any) -> str:
@@ -101,10 +141,16 @@ def _section_label(arguments: Any) -> str:
 
 __all__ = [
     "CONFIRMATION_LABEL",
+    "CONFIRMATION_REQUIRED",
+    "ERROR",
     "GUARDRAIL_LABEL",
+    "NEEDS_CONFIRMATION_LABEL",
+    "OK",
+    "PENDING",
     "PURPOSE_LABELS",
     "SECTION_FALLBACK",
     "TOOL_LABELS",
     "WORKING",
     "label_for",
+    "tone_for",
 ]
