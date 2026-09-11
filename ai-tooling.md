@@ -1,6 +1,6 @@
 # AI tooling — how Mosaic HR Copilot was actually built
 
-**Project:** `quantic-mosaic` · **Author:** Sean Malone · **Period:** 2026-09-08 → 2026-09-10
+**Project:** `quantic-mosaic` · **Author:** Sean Malone · **Period:** 2026-09-08 → 2026-09-11
 
 This is a dated, specific account of the AI tooling used to build this project, including the
 parts that went badly. It is not a summary of what the tools can do; it is what happened.

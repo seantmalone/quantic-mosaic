@@ -8,13 +8,17 @@ State-changing actions are mock and pass a one-time human confirmation gate befo
 written.
 
 Deployed: https://mosaic-hr-copilot.onrender.com/?access=FaGQUENKinWIfcD5yp3XMzD-GqH9oxJDXesOIinFKcY
-Demo video: pending: gate 6 (record the walkthrough) — see docs/demo-script.md
+Demo video: pending: gate 6 (record the walkthrough) — see [`docs/demo-script.md`](docs/demo-script.md)
 Repo: https://github.com/seantmalone/quantic-mosaic
 
-Documentation: `design-and-evaluation.md` (architecture, RAG and MCP design, evaluation results),
-`deployed.md` (the live deployment, access and cold start), `ai-tooling.md` (AI-use disclosure),
-`docs/architecture.html` (an interactive walkthrough of the architecture),
-`docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md` (the full design spec).
+Documentation: [`design-and-evaluation.md`](design-and-evaluation.md) (architecture, RAG and MCP
+design, evaluation results), [`deployed.md`](deployed.md) (the live deployment, access and cold
+start), [`ai-tooling.md`](ai-tooling.md) (AI-use disclosure),
+[`docs/architecture.html`](docs/architecture.html) (an interactive walkthrough of the architecture),
+[`docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md`](docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md)
+(the full design spec), and
+[`docs/requirements-traceability.md`](docs/requirements-traceability.md) (every rubric bullet mapped
+to the test, command or artifact that proves it).
 
 ## Setup
 
@@ -69,6 +73,16 @@ make docker            # build the image
 make docker-run-512    # run it under the 512 MB memory gate
 ```
 
+**CI/CD.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on push to `main`, on pull
+request and on `workflow_dispatch`: `lint` (`ruff check` + `ruff format --check`, then a
+full-history gitleaks scan), `test` (`check_facts.py`, `ingest --verify-manifest`, the whole
+`pytest -q` suite against the stub provider including MCP tool discovery, then `pii_check.py`),
+`docker` (builds the image and asserts sqlite-vec loads and the templates and static assets ship),
+and `deploy`, which carries `needs: [test, docker]` so a red test or a broken image blocks the
+deploy — see the skipped-deploy run in
+[`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png) and the `### CI/CD`
+section of [`design-and-evaluation.md`](design-and-evaluation.md).
+
 **Access.** The deployed instance carries one shared secret, `APP_ACCESS_TOKEN`. The link on the
 `Deployed:` line above already carries it as `?access=<token>`, which is exchanged once for an
 HttpOnly cookie and stripped from the URL; API clients and MCP Inspector send
@@ -79,8 +93,9 @@ observability dashboard. Full details, every environment variable and the measur
 **Cold start.** The free instance spins down after 15 minutes idle. Measured on the live service
 three times — n=3, 2026-09-10 and 2026-09-11, without a keep-alive, each probe after 1,000 s of
 idle — waking it took a median **44.8 s** to the first `GET /health` 200, **0.1 s** more for
-`/ready`, and **23.9 s** for the first `POST /chat`: a median **71.0 s** from cold to first answer
-(67.5–77.6 s across the three), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
+`/ready`, and **23.9 s** for the first `POST /chat` — and, as three separately measured wall clocks,
+a median **71.0 s** from cold to first answer (67.5–77.6 s across the three; the segment medians are
+taken per segment, so they do not sum to it), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
 first and wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter
 while that happens. `deployed.md` carries the per-probe table and its provenance, and a ten-minute
 GitHub Actions keep-alive (`.github/workflows/keepalive.yml`, added 2026-09-11 *after* these figures
@@ -95,9 +110,9 @@ make ablation    # compares the baseline run against the two ablation variants
 ```
 
 Results are committed under `evaluation/results/` and rendered by the dashboard's evaluation
-pages; `evaluation/REPORT.md` carries the written analysis and
-`design-and-evaluation.md` carries the methodology, the 26 questions with their expected answers,
-the judge-agreement figures and the known limitations.
+pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analysis and
+[`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 26 questions
+with their expected answers, the judge-agreement figures and the known limitations.
 
 **The published run** is `r_1789086979_baseline` — 26 items, `target: deployed`, judged by
 `gemini-3.5-flash-lite`, served by commit `da0dca2`. Beside it is the pre-optimization deployed

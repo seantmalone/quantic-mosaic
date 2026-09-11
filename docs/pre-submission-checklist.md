@@ -1,8 +1,9 @@
 # Pre-submission checklist — Mosaic HR Copilot
 
 One line per requirement that **cannot** be verified by a test, because a human has to perform or
-confirm it. Everything else in this project is asserted by the suite; these eight items and the
-two submission steps are what is left.
+confirm it. Everything else in this project is asserted by the suite; the **ten id lines** below —
+seven `DEMO.*` and three `SUB.*` — plus the un-numbered boxes on either side of them are what is
+left.
 
 Tick each box only after the thing itself is done — not after it is planned.
 `tests/contract/test_docs_completeness.py` asserts this file exists and carries exactly one line
@@ -13,13 +14,14 @@ its own box would prove nothing.
 
 ## Before recording
 
-- [ ] Gates 2, 3 and 4 of `NEEDS-FROM-USER.md` are satisfied and `scripts/smoke_deployed.py`
-      passes against the live URL.
-- [ ] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
+- [x] Gates 2, 3 and 4 of `NEEDS-FROM-USER.md` are satisfied and `scripts/smoke_deployed.py`
+      passes against the live URL. — **done 2026-09-10** (`NEEDS-FROM-USER.md`'s Discharged table).
+- [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
-      `design-and-evaluation.md`'s results table from it.
-- [ ] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
-      `grep -c 'TBD-before-submission' README.md` is `0`.
+      `design-and-evaluation.md`'s results table from it. — **done 2026-09-11**,
+      `r_1789086979_baseline`.
+- [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
+      `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the
       instance is warm (open it a minute before the take).
 - [ ] `docs/demo-script.md` rehearsed end to end at least once, with a timer.

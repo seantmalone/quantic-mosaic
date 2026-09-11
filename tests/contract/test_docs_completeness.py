@@ -384,6 +384,25 @@ def test_the_three_committed_screenshots_exist():
         assert (EVIDENCE / name).exists(), f"docs/evidence/{name} is missing"
 
 
+def test_the_gate_file_marks_a_committed_screenshot_as_committed():
+    """`NEEDS-FROM-USER.md`'s evidence table is a gate state, and a stale one is worse than none.
+
+    The table marked `ci-deploy-skipped.png` as *"needs the push in this step"* long after the file
+    was committed — contradicted 27 lines later by the same document's own deliverable table
+    (*"done — all three committed"*). A reader of the gate file saw one open piece of CI evidence
+    work that did not exist. The gate states are the one thing this file is for, so each row is
+    pinned to what is actually on disk.
+    """
+    rows = {
+        name: next((line for line in _text(NEEDS).splitlines() if f"`{name}`" in line and line.startswith("|")), None)
+        for name in EVIDENCE_SCREENSHOTS
+    }
+    for name, row in rows.items():
+        assert row is not None, f"NEEDS-FROM-USER.md has no evidence row for {name}"
+        if (EVIDENCE / name).exists():
+            assert "**committed**" in row, f"{name} is on disk but its row still reads: {row}"
+
+
 def test_the_ci_evidence_screenshot_is_referenced_with_its_run_url():
     """R8.4 — the figure and the run it was taken from travel together, in both documents."""
     for path in (DESIGN, DEPLOYED):

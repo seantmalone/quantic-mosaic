@@ -188,13 +188,13 @@ gh workflow run ci.yml --ref ci-red-evidence -f deploy_only=true
 # the branch.
 ```
 
-Three screenshots are committed to `docs/evidence/`, and after this step all three exist:
+All three screenshots are committed to `docs/evidence/`; the block above is kept as the recipe that produced the third.
 
 | File | What it shows | Status |
 |---|---|---|
 | `mcp-discovery-4-tools.png` | §13.9's `tools/list` from the separate stdio server: 4 tools, the five structured-data tools genuinely absent from discovery | **committed** |
 | `mcp-discovery-page.png` | `/dashboard/mcp` rendering live discovery: the server card (`connected yes`, protocol `2025-11-25`, 32 ms handshake, 9 tools), all nine tools with their `input_schema` / `output_schema` / `annotations`, and the handshake-history row | **committed** |
-| `ci-deploy-skipped.png` | the job graph of the red run above, `deploy` skipped with the reason "dependent job failed" | needs the push in this step |
+| `ci-deploy-skipped.png` | the job graph of the red run above, `deploy` skipped with the reason "dependent job failed" | **committed** — run [`actions/runs/34485304411`](https://github.com/seantmalone/quantic-mosaic/actions/runs/34485304411) |
 
 All three are named in the repository, in four different files: the design document names all
 three (§*Evidence*), `deployed.md` names the third, and

@@ -39,7 +39,7 @@ flowchart TB
         UI["Chat UI — Jinja2 + htmx<br/>act-as selector · citation chips<br/>live span rail (SSE) · confirm card"]
         DASH["Observability Dashboard<br/>11 pages · Chart.js · htmx filters"]
     end
-    subgraph render["Render free web service — ONE process, ONE container (294.9 MB / 512 MB)"]
+    subgraph render["Render free web service — ONE process, ONE container (293.6 MB live / 512 MB)"]
         WEB["<b>Web App</b> — FastAPI / uvicorn (1 worker)<br/>POST /chat · /chat/confirm · GET /chat/stream (SSE)<br/>GET /health · /ready · /api/traces|eval|corpus|mcp/*"]
         ORCH["<b>Agent Orchestrator</b><br/>route → act loop → synthesize<br/>≤6 steps · ≤8 tool calls · ≤90 s"]
         GUARD["<b>Guardrails G1–G6</b><br/>evidence gate · citation resolvability · fact-vs-recommendation<br/>injection shield · sensitive escalation · redaction"]
@@ -172,8 +172,9 @@ All ten topics the project description enumerates — PTO, holidays, remote work
 security, benefits, onboarding, equipment, leave, workplace conduct — map to at least one
 document, asserted by `tests/unit/test_corpus_topics.py`.
 
-**The corpus is authored, not generated.** `corpus/facts.yml` indexes ~40 facts the system
-actually depends on, each with a **verbatim quote** and the heading path it lives under.
+**The corpus is authored, not generated.** `corpus/facts.yml` indexes the facts the system actually
+depends on — **57** at this commit, the count `scripts/check_facts.py` prints beside the 14
+documents — each with a **verbatim quote** and the heading path it lives under.
 `scripts/check_facts.py` runs in CI and fails the build if any quote no longer appears in its
 document, or if a `corpus/rules.yml` requirement names a fact key that does not exist. That is
 what stops a wording edit from silently contradicting a gold answer or a compliance rule. An
@@ -1143,7 +1144,11 @@ Stated plainly, because each one is a real gap:
 1. **The strict pass rate is 0.808 against a 0.85 target**, with the five per-item causes tabled
    above — three end states short of three distinct cited documents, and two answers that lose a
    block to the citation guardrail. Two of those three are multi-document questions the model
-   answered correctly and citably from fewer sources than the workflow requires.
+   answered correctly and citably from fewer sources than the workflow requires. `remote-004` — the
+   item that mirrors demo task 1 — is the breadth case in full: it cited 2 of its 4
+   `expected_docs` (doc recall 0.50), lost one `policy_fact` block to G2, and so scored workflow
+   completion 0.00 against an end state asking for three distinct documents. Its tools were right
+   (tool recall and precision both 1.00); what it was short of was **document breadth**.
 2. **Compliance-engine evidence reaches the model truncated.** The judge/reference disagreement on
    `pto-003` traces to a requirement snippet cut off mid-word, which the model completed from
    memory, and to a calendar deadline it computed that no tool result states. Carrying the full
@@ -1151,9 +1156,13 @@ Stated plainly, because each one is a real gap:
    identified fixes; neither is implemented here.
 3. **Dataset `expected_tools` entries the model reproducibly declines.** On a small number of items
    the gold tool list names a tool the model consistently does not call because another tool
-   already settled the question — `remote-004` still scores tool recall 0.50 on the published run.
-   The dataset review is pending; the tool-recall figures above include those items unadjusted
-   rather than quietly excluding them.
+   already settled the question. On the published run `r_1789086979_baseline` this is one item:
+   `remote-003`, whose gold `expected_tools` are `lookup_employee_profile`,
+   `search_policy_documents` and `check_policy_compliance`. The model called the latter two and
+   declined `lookup_employee_profile` — persona `E1042` already carries the employee id, the same
+   reason the demo-task expectations above make that tool optional — so its tool recall is 0.67,
+   and it is the only item in the run scoring below 1.00. The dataset review is pending; the
+   tool-recall figures above include that item unadjusted rather than quietly excluding it.
 4. **26 items is a small set, and the margins here are one item wide.** A single item moves strict
    pass by 0.038, so column-to-column differences of that size are noise and are described as
    such. Latency percentiles come from the same 26 turns against a 0.1-CPU instance, so p95 and p99
