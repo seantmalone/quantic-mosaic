@@ -12,7 +12,7 @@ the approval authority the question asked for, against an end state of `min_dist
 `onboarding-001` cited two of the four documents its gold answer names. Neither is a retrieval
 defect: DocRecall is scored over the retrieval spans and read 1.000 on both.
 
-Three things keep the cost bounded and the answer honest:
+Four things keep the cost bounded and the answer honest:
 
 1. **It runs only on multi-document turns.** `RouteDecision.multi_doc` — or a workflow, which is
    multi-document by construction (§9.3) — is the only item-independent signal for the
@@ -25,6 +25,11 @@ Three things keep the cost bounded and the answer honest:
    G2 dropped nothing from it, G2 did not refuse it, and it kept every block the reader already
    had. Nothing here ever writes a citation the model did not: a fabricated citation is exactly
    what G2 exists to strip.
+4. **A turn that has already spent its budget never reaches the step at all.** That gate lives at
+   the call site, where the §9.4 budgets live (`orchestrator._answer` step 5b): a `max_steps` /
+   `max_tool_calls` / `timeout` `stop_reason`, or a wall clock already past
+   `AGENT_WALL_CLOCK_S`, means the answer below is a graceful partial, and widening it would spend
+   a second synthesis-sized call on the one turn the budget exists to bound.
 """
 
 from __future__ import annotations
@@ -68,7 +73,12 @@ class Chunk(Protocol):
 
 
 def applies(decision: Decision) -> bool:
-    """Whether this turn is one a breadth check is allowed to spend a second synthesis call on."""
+    """Whether the *routing* of this turn is one a breadth check may spend a second call on.
+
+    This is the shape half of the gate and not the whole of it: the caller also refuses a turn
+    that has already spent a §9.4 budget (item 4 above), which is a fact about the turn's clock
+    rather than about its route decision and therefore lives where the budgets do.
+    """
     return bool(decision.multi_doc) or decision.workflow is not None
 
 

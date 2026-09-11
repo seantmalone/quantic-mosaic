@@ -712,7 +712,15 @@ class Orchestrator:
         # its citable evidence buys ONE more synthesis call that names the uncited documents, and
         # the second answer replaces the first only if it is strictly broader and G2/G3 cost it
         # nothing (§7.4's citation-breadth paragraph).
-        if breadth.applies(decision):
+        #
+        # A turn that has already spent its budget never buys that call. `_act` sets a §9.4 budget
+        # `stop_reason` and returns; the answer below is the graceful partial that stop exists to
+        # produce, and widening it would spend one more synthesis-sized round trip (~15 s at the
+        # deployed p50, plus one against `LLM_DAILY_CALL_CAP`) on exactly the turn the budget was
+        # there to bound. The wall clock is re-read rather than trusted to `stop_reason` alone:
+        # the act loop can end inside 90 s and synthesis carry the turn past it.
+        inside_budget = turn.stop_reason not in BUDGET_STOPS and turn.elapsed_s < self.settings.agent_wall_clock_s
+        if breadth.applies(decision) and inside_budget:
             broadened = await self._broaden(turn, raw, relabelled.blocks)
             if broadened is not None:
                 raw, repaired, relabelled = broadened

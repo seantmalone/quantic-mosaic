@@ -175,7 +175,7 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 1,999 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
+committed suite — 2,001 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 28-item evaluation whose real
 numbers, including the ones below target, are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus

@@ -839,7 +839,7 @@ its synthesis prompt listed and lost `manager-approval-matrix` — the document 
 state of `min_distinct_docs: 3`; `onboarding-001` cited two of four. Neither is a retrieval defect (DocRecall reads 1.000 on both, and it is scored over
 the `retrieval` spans).
 
-Three clauses bound it. **It runs only on multi-document turns**: `RouteDecision.multi_doc` (§9.2) or a workflow, which is multi-document by
+Four clauses bound it. **It runs only on multi-document turns**: `RouteDecision.multi_doc` (§9.2) or a workflow, which is multi-document by
 construction — the serving path never reads `evaluation/dataset.yaml`, so the router's own signal is the only item-independent statement that the turn
 has a `min_distinct_docs` end state at all. **It costs one call, never two**: a single `purpose="repair"` round trip continues the synthesis
 conversation, names each citable document the answer does not cite together with its passage ids, and asks for it to be cited *or* declared `not used:
@@ -849,8 +849,13 @@ already had. Nothing here ever writes a citation the model did not — a fabrica
 call (provider error, unparseable body, a daily cap) keeps the answer already written. **The second answer is verified with the pure rules first, and
 only an accepted repair emits its `guardrail` spans**: a rejected repair is a draft nobody was shown, §13.3's `blocks_dropped_by_g2` sums every G2 span
 of the turn, and a discarded draft's dropped block would otherwise be published as a grounded fact the reader lost. The `repair` `llm_call` span still
-carries what the model wrote, so the extra round trip is never hidden — what is not recorded is a guardrail verdict on an answer that was never served. The price is one extra synthesis call on the minority of turns
-that are multi-document and under-cite: ~15 s at the deployed p50, visible in the trace as a second `llm_call` span with `purpose: repair`.
+carries what the model wrote, so the extra round trip is never hidden — what is not recorded is a guardrail verdict on an answer that was never served.
+**And it never runs on a turn that has already spent its budget**: a §9.4 budget `stop_reason` (`max_steps`, `max_tool_calls`, `timeout`), or a wall
+clock already past `AGENT_WALL_CLOCK_S` when synthesis returns, means the answer is the graceful partial that budget stop exists to produce, and the
+step is skipped rather than spending a second synthesis-sized call — and a second call against `LLM_DAILY_CALL_CAP` — on exactly the turn the budget was
+there to bound. The clock is re-read rather than inferred from `stop_reason` alone, because the act loop can end inside 90 s and synthesis carry the
+turn past it. The price is one extra synthesis call on the minority of turns
+that are multi-document, inside budget, and under-cite: ~15 s at the deployed p50, visible in the trace as a second `llm_call` span with `purpose: repair`.
 
 **G1's candidate set includes the compliance engine's evidence (P13).** Tool 4 is deterministic and every requirement it evaluates carries an
 `evidence` block naming a **committed** chunk, resolved by `mcpserver/rules.py` from a `(doc_id, heading_path)` pair in `corpus/rules.yml`. Nothing had
@@ -1250,9 +1255,10 @@ POST /chat  (or /chat/confirm)
  ├─ 3. G1 evidence gate over the accumulated chunk set
  ├─ 4. SYNTHESIZE  one constrained-JSON llm_call(purpose="synthesize") → AnswerSchema
  ├─ 5. G2 citation resolvability (repair) · G3 fact-vs-recommendation
- ├─ 5b. citation breadth (§7.4, P24): on a multi-document turn whose answer cites fewer documents
- │       than its citable evidence spans, ONE llm_call(purpose="repair") naming the uncited ones;
- │       the second answer replaces the first only if it is broader and G2/G3 cost it nothing
+ ├─ 5b. citation breadth (§7.4, P24): on a multi-document turn still inside its budget whose answer
+ │       cites fewer documents than its citable evidence spans, ONE llm_call(purpose="repair")
+ │       naming the uncited ones; the second answer replaces the first only if it is broader and
+ │       G2/G3 cost it nothing. A budget-stopped turn skips it: the partial is what the stop is for
  ├─ 5c. outcome consistency (§7.4, P22): a confirmed write is reported as done, from the tool result
  ├─ 6. close the turn: rollups, latency decomposition, outcome, stop_reason
  └─ 7. ONE batched flush of the turn's spans + llm_messages + the closing UPDATE

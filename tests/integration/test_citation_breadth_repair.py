@@ -17,8 +17,11 @@ import json
 
 import pytest
 
+from hrmosaic.agent import orchestrator as agent_orchestrator
 from hrmosaic.agent.client import McpClient
-from hrmosaic.agent.orchestrator import ChatRequest, Orchestrator
+from hrmosaic.agent.orchestrator import BUDGET_NOTE, ChatRequest, Orchestrator
+from hrmosaic.core.llm.stub import load_script
+from hrmosaic.settings import settings
 from tests.conftest import LLM_SCRIPTS
 from tests.integration.test_act_loop_wire_shape import _Recorder
 
@@ -88,3 +91,59 @@ async def test_a_repair_that_fails_g2_keeps_the_first_answer(writer, spans):
     assert len(g2_spans) == 1, "only the served answer's verification is recorded"
     assert g2_spans[0]["details"]["blocks_dropped"] == 0
     assert "c_0000000000000000" not in json.dumps(g2_spans)
+
+
+def clock_that_jumps_after(monkeypatch, *, steps: int) -> None:
+    """Make the turn's wall clock read past `AGENT_WALL_CLOCK_S` once `steps` act steps are done.
+
+    `tests/unit/test_agent_budgets.py` leaves the third budget unexercised because a test that
+    burned 90 s of real clock would be the slowest thing in the suite by two orders of magnitude.
+    Moving the clock instead of the limit keeps the assertion on the shipped `AGENT_WALL_CLOCK_S`
+    and drives the real `turn.elapsed_s >= settings.agent_wall_clock_s` check in `_act`.
+    """
+    past = settings.agent_wall_clock_s + 1.0
+    monkeypatch.setattr(
+        agent_orchestrator._Turn,
+        "elapsed_s",
+        property(lambda turn: 0.0 if turn.steps_taken < steps else past),
+    )
+
+
+async def test_a_timed_out_multi_document_turn_never_buys_the_repair_call(writer, spans, monkeypatch):
+    """§9.4's budget stop bounds the turn, so step 5b does not spend one more call widening it.
+
+    The clock runs out inside the act loop of a multi-document turn whose first answer is narrow —
+    exactly the shape the breadth step exists for — and the answer the reader gets is the graceful
+    partial. Widening it would cost a second synthesis-sized round trip (~15 s at the deployed p50)
+    and one more call against `LLM_DAILY_CALL_CAP` on the one turn the budget was there to bound.
+    """
+    clock_that_jumps_after(monkeypatch, steps=1)
+
+    response, recorder = await drive("citation_breadth_timeout.json")
+
+    assert [purpose for purpose, _ in recorder.calls].count("repair") == 0, "the budget stop skips the step"
+    assert load_script(LLM_SCRIPTS / "citation_breadth_timeout.json")[-1]["purpose"] == "repair", (
+        "the script must still hold the repair the gate refused, or the absence above proves nothing"
+    )
+
+    assert response.outcome == "partial"
+    errors = [payload for kind, _, payload in spans(response.turn_id) if kind == "error"]
+    assert [payload["error_kind"] for payload in errors] == ["timeout"]
+    assert response.answer_blocks[0].text == BUDGET_NOTE["timeout"]
+    assert {citation.doc_id for citation in response.citations} == {"travel-policy"}, "the narrow answer stands"
+
+
+async def test_a_turn_whose_clock_ran_out_during_synthesis_also_skips_the_step(writer, spans, monkeypatch):
+    """The other half of the gate: the loop finished inside 90 s and synthesis carried it past.
+
+    `stop_reason` is `answered` here — no budget stop was ever recorded — so the clock has to be
+    re-read at step 5b rather than inferred from the stop reason alone.
+    """
+    clock_that_jumps_after(monkeypatch, steps=2)
+
+    response, recorder = await drive("citation_breadth_repair.json")
+
+    assert [purpose for purpose, _ in recorder.calls].count("repair") == 0
+    assert response.outcome == "answered"
+    assert [kind for kind, _, _ in spans(response.turn_id) if kind == "error"] == []
+    assert {citation.doc_id for citation in response.citations} == {"travel-policy"}

@@ -1,0 +1,51 @@
+{
+ "scenario": "citation_breadth_timeout",
+ "_note": "The budget gate on the P24 citation-breadth check of spec §7.4, hand-authored (no live call is made in CI). The same multi-document travel/approval turn as citation_breadth_repair, but the wall clock runs out inside the act loop: the turn closes `partial` with stop_reason `timeout`, and step 5b is skipped rather than spending a second synthesis-sized call on the graceful partial the budget stop exists to produce. The trailing `repair` entry is deliberate — it is what the loop would have replayed had the gate not held, so the test measures the gate and not an exhausted script. Used by tests/integration/test_citation_breadth_repair.py.",
+ "completions": [
+  {
+   "purpose": "route",
+   "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"multi_doc\": true, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"Two-part travel and approval question; booking window and approval authority live in different documents.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 980,
+   "completion_tokens": 74
+  },
+  {
+   "purpose": "act",
+   "tool_calls": [
+    {
+     "id": "toolu_timeout_1",
+     "name": "search_policy_documents",
+     "args": {
+      "query": "how far ahead must flights be booked for a conference trip",
+      "k": 5
+     }
+    },
+    {
+     "id": "toolu_timeout_2",
+     "name": "search_policy_documents",
+     "args": {
+      "query": "who approves an expense report of USD 3000 approval authority",
+      "k": 5
+     }
+    }
+   ],
+   "finish_reason": "tool_use",
+   "prompt_tokens": 1240,
+   "completion_tokens": 96
+  },
+  {
+   "purpose": "synthesize",
+   "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Flights must be booked at least 14 calendar days before departure whenever the itinerary is known.\", \"citations\": [\"c_337bde2666993ccd\"]}, {\"type\": \"policy_fact\", \"text\": \"International trips are booked through MosaicOne Travel so that duty-of-care cover applies.\", \"citations\": [\"c_3c0eba56eda3852a\"]}], \"next_steps\": [\"Book the flight at least 14 days ahead in MosaicOne Travel\"], \"rationale_summary\": \"Answered the booking window from the Travel Policy.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 3200,
+   "completion_tokens": 118
+  },
+  {
+   "purpose": "repair",
+   "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Flights must be booked at least 14 calendar days before departure whenever the itinerary is known.\", \"citations\": [\"c_337bde2666993ccd\"]}, {\"type\": \"policy_fact\", \"text\": \"International trips are booked through MosaicOne Travel so that duty-of-care cover applies.\", \"citations\": [\"c_3c0eba56eda3852a\"]}, {\"type\": \"policy_fact\", \"text\": \"An expense report up to USD 2,500 is approved by the direct manager; a USD 3,000 report is approved by the director with a Finance business partner review.\", \"citations\": [\"c_02dcd1cfcb3356c6\", \"c_2731d35ac4b68304\"]}], \"next_steps\": [\"Book the flight at least 14 days ahead in MosaicOne Travel\"], \"rationale_summary\": \"Booking window from Travel Policy; approval authority from Expenses and the approval matrix.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 3400,
+   "completion_tokens": 142
+  }
+ ]
+}
