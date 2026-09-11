@@ -1,48 +1,60 @@
 # Deployment notes — Mosaic HR Copilot
 
-> **Status: the image is proven, the service is not provisioned yet.** Everything that can be built
-> and measured without an account exists and is measured below: the Dockerfile, `render.yaml`, the
-> CI `docker` and `deploy` jobs, the provisioning scripts, and the **512 MB memory gate run
-> locally on the real image**. Every value that needs a live Render or Turso account reads
-> `pending: <gate>` and names the gate from `NEEDS-FROM-USER.md` that unblocks it. Nothing here is
-> inferred or filled in from the spec's expectations — a number in this file was observed.
+> **Status: live.** The service was provisioned on 2026-09-10 and every figure below was observed
+> on it or on the image it runs. Nothing here is inferred or filled in from the spec's
+> expectations — a number in this file was measured, and it names what measured it.
 
-## What is blocked, by which gate, and the command that fills it
+## What is live, and what produced it
 
-Three gates in `NEEDS-FROM-USER.md` are still open — **2** (Render account + the Render GitHub
-App), **3** (Turso platform token) and **4** (Render API key) — and between them they block every
-`pending:` value below. Each row names the exact command that produces the value the moment the
-gate lands; the full sequence, in order, is `NEEDS-FROM-USER.md` §*The exact steps*.
+Gates **2** (Render account + the Render GitHub App), **3** (Turso platform token) and **4**
+(Render API key) all landed on 2026-09-10, plus a gate the file never had — **2a**, a payment
+method on the Render workspace, which Render demands before it will create any service, free ones
+included. Each row below names the command whose output it is; the full sequence is
+`NEEDS-FROM-USER.md` §*The exact steps*.
 
-| Blocked value | Gate | Command that produces it |
+| Value | Produced by | Observed |
 |---|---|---|
-| The live service, its URL and the tokenized `?access=` link | 2 + 4 | `python scripts/provision_render.py` |
-| Every `sync: false` env var on Render, and the `gh secret set` calls | 2 + 4 (+ 3 for `TURSO_*`) | `python scripts/provision_render.py` |
-| `RENDER_DEPLOY_HOOK_URL` — **no REST endpoint publishes it** | 2 | copy it from Service → Settings → Deploy Hook, then `gh secret set RENDER_DEPLOY_HOOK_URL` |
-| The Turso database, its token and the first live FK/parity answer | 3 | `python scripts/provision_turso.py` |
-| Measured cold start and warm turn on the live instance | 2 | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` |
-| Free-tier hours and build minutes read from the account | 2 + 4 | `python scripts/check_render_hours.py` |
-| The published `target: deployed` run, `latest.json`, `comparison.json` | 2 + 4 | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the two variants and `make ablation` |
-| `design-and-evaluation.md`'s results table, refreshed from the published run | 2 + 4 | `python scripts/paste_eval_numbers.py` |
+| The live service `mosaic-hr-copilot` (`srv-dahcsj95efls73dibqeg`), its URL and the tokenized `?access=` link | `python scripts/provision_render.py` | 2026-09-10 |
+| Every `sync: false` env var on Render, and the `gh secret set` calls (`DEPLOY_URL`, `RENDER_API_KEY`, `RENDER_SERVICE_ID`) | `python scripts/provision_render.py` | 2026-09-10 |
+| The Turso database `mosaic-hr`, its token and the first live FK/parity answer | `python scripts/provision_turso.py` | 2026-09-10 |
+| Measured cold start and warm turn on the live instance | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` | 2026-09-10 (n=1) |
+| Free-tier hours and build minutes read from the account | `python scripts/check_render_hours.py` | 2026-09-11 |
+| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the two variants and `make ablation` | 2026-09-11 |
+| `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11 |
 
-**Until `RENDER_DEPLOY_HOOK_URL` and `DEPLOY_URL` exist as repository secrets, CI's `deploy` job
-fails on its first step with a message naming `NEEDS-FROM-USER.md`** — deliberately, so a missing
-deploy is never a silently skipped job. That is the current state of `main`: `lint` ✓ `test` ✓
-`docker` ✓ `deploy` ✗, and the failure is the intended one.
+`RENDER_DEPLOY_HOOK_URL` is **optional**: no REST endpoint publishes it, so CI's `deploy` job
+triggers production through `POST /v1/services/{id}/deploys` with `RENDER_API_KEY` and
+`RENDER_SERVICE_ID` instead, and uses the hook only when that secret happens to exist. Either way
+the job carries `needs: [test, docker]`, so a red suite cannot reach production.
 
 ## Deployed URLs
 
 | Surface | Value |
 |---|---|
-| Web service | `pending: gate 2 (Render account + GitHub App) and gate 4 (Render API key)` |
-| Health | `pending: gate 2/4` — `<url>/health`, open, always 200 while the process is up |
-| Readiness | `pending: gate 2/4` — `<url>/ready`, open, 503 until the model and index are resident |
-| Tokenized link | `pending: gate 2/4` — `https://<app>.onrender.com/?access=<token>` |
+| Web service | `https://mosaic-hr-copilot.onrender.com` |
+| Health | `https://mosaic-hr-copilot.onrender.com/health` — open, always 200 while the process is up |
+| Readiness | `https://mosaic-hr-copilot.onrender.com/ready` — open, 503 until the model and index are resident |
+| Tokenized link | `https://mosaic-hr-copilot.onrender.com/?access=<token>` — the token is written out **once** in the repository, on `README.md`'s `Deployed:` line, which is the grader's entry point |
 
 The service is described by the committed **`render.yaml`**: one Render Hobby (free) web service,
-`runtime: docker`, `plan: free`, `healthCheckPath: /health`, **`autoDeploy: false`**. It is created
+`runtime: docker`, `plan: free`, `healthCheckPath: /health`, **`autoDeploy: false`**. It was created
 by `python scripts/provision_render.py`, which reads that same file so the Blueprint and the
-API-created service cannot drift.
+API-created service cannot drift. Read back from the live service on 2026-09-10: `plan: free`, one
+instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"`, `autoDeployTrigger: "off"`.
+
+**Which commit served which evaluation run.** A run file's `git_sha` is the **harness tree's** sha,
+and the harness runs on the development machine, so every deployed run records `dev` there. The sha
+that matters is the deploy that served it, and it comes from the deploy ledger rather than from the
+run file:
+
+| Run | Column | Deployed commit that served it |
+|---|---|---|
+| `r_1789055103_baseline` | before optimization | `5419ec5` |
+| `r_1789069158_baseline` | after the quality fixes (P13) | `b24ad32` |
+| **`r_1789086979_baseline`** | **published — quality + performance** | **`da0dca2`** |
+
+`scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
+before any of those runs is allowed to count, which is what keeps the two shas from being confused.
 
 **Rejected hosts**, and why (§14.1): Railway, Fly.io and Koyeb (no lasting free compute), Hugging
 Face Spaces (same), Google Cloud Run (the documented fallback — the *same image* runs there, but it
@@ -52,10 +64,13 @@ needs a card), Vercel and Cloudflare Workers (a 10 s function cap, against a ~90
 
 Two independent mechanisms, and both must hold. In the repository, the `deploy` job declares
 `needs: [test, docker]` and runs only on a push to `main` (or an explicit dispatch). On the
-platform, `render.yaml` sets **`autoDeploy: false`**, so Render never builds from a push on its
-own — the only path from a commit to the running service is the deploy hook that job curls.
-There is no branch protection: every phase of this build pushed directly to `main`, so a rule
-exempting the owner would have been decorative.
+platform, Render Auto-Deploy is **off** (`autoDeploy: "no"`, `autoDeployTrigger: "off"`, read back
+from the live service), so Render never builds from a push on its own — the only path from a commit
+to the running service is the deploy that job triggers. It triggers it through
+`POST /v1/services/{id}/deploys` with `RENDER_API_KEY` and `RENDER_SERVICE_ID`; a Deploy Hook is an
+equivalent alternative and wins when `RENDER_DEPLOY_HOOK_URL` is set. Proven live on 2026-09-10:
+deploy `dep-dahcukqfngtc7390n740`, `trigger: api`. There is no branch protection: every phase of
+this build pushed directly to `main`, so a rule exempting the owner would have been decorative.
 
 The evidence is a **recorded red run**, not an assertion: a temporary branch carrying one
 deliberately failing test, dispatched with `deploy_only: true`, whose job graph shows `test` red
@@ -89,7 +104,10 @@ follow the tokenized link, then choose **HR admin** in the act-as selector. An M
 session attaches to `/mcp-server/mcp` with the same bearer header — Inspector supports custom
 headers, and the endpoint stays deliberately reachable for exactly that.
 
-- Tokenized link: `pending: gate 2/4`. It goes here and into `README.md`'s `Deployed:` line.
+- Tokenized link: `https://mosaic-hr-copilot.onrender.com/?access=<token>`, written out in full on
+  `README.md`'s `Deployed:` line and **nowhere else in the repository**. It is the grader's entry
+  point by design: one click exchanges the parameter for the `mosaic_access` cookie and redirects
+  to a URL with the parameter stripped.
 - **Post-grading rotation:** `gh secret set` is not involved — the token is a Render env var. Rotate
   it with `RENDER_API_KEY=… python scripts/provision_render.py` after deleting `APP_ACCESS_TOKEN`
   from the service (the script generates a new one only when the service carries none, precisely so
@@ -97,13 +115,42 @@ headers, and the endpoint stays deliberately reachable for exactly that.
 
 ## Cold start
 
-`pending: gate 2 (a live Render instance to idle and then wake)`. Measured by
-`scripts/measure_cold_start.py`, which idles `EVAL_COLD_IDLE_S` (1000 s ≈ 16.7 min, past Render's
-15-minute spin-down) and then times four segments in order: `GET /health`, `/ready` polled to 200,
-the first `POST /chat`, and a second warm `POST /chat`. The published number is distinct from
-§13.5's cold-*turn* p50, which is an eval metric over a warm instance.
+Measured by `scripts/measure_cold_start.py`, which idles `EVAL_COLD_IDLE_S` (1000 s ≈ 16.7 min,
+past Render's 15-minute spin-down) and then times four segments in order: `GET /health`, `/ready`
+polled to 200, the first `POST /chat`, and a second warm `POST /chat`. The published number is
+distinct from §13.5's cold-*turn* p50, which is an eval metric over a warm instance.
 
-What is **not** pending is the part the image controls, measured locally on 2026-09-10. Both rows
+**On the live free instance — n=1, measured 2026-09-10 without keep-alive; two further probes
+queued.** The service carries no keep-alive pinger, so this is the behaviour a grader who leaves
+the tab idle for 15 minutes will actually see:
+
+| Segment | Observed | How |
+|---|---|---|
+| Spin-up → `GET /health` 200 | **44.8 s** | `measure_cold_start.py`, after 1,000 s idle |
+| `/health` 200 → `/ready` 200 | **2.8 s** | same probe |
+| First `POST /chat` (cold turn) | **23.3 s** | same probe |
+| **First request, total** | **71.0 s** | same probe |
+| Warm `POST /chat` immediately after | **22.5 s** | same probe |
+
+One sample is one sample, and it is labelled as one: two further probes are queued and each costs
+~17 minutes of a deliberately idle instance, which is why they did not run beside the evaluation
+sweeps. The figure is quoted with its `n` everywhere it appears rather than rounded into a range.
+
+Two things this probe settled beyond the numbers. The spin-down is real and observable in Render's
+own logs — its last health-check line at 17:20:59Z, ~15 minutes after the last inbound request,
+then silence until `Started server process` at 17:29:05Z. And the first attempt at this measurement
+found a **defect**, not a platform limit: `/ready` had been permanently 503 on every deploy since
+the first one, because the loopback MCP client was built with httpx2's default 5 s timeout instead
+of the SDK's 30 s connect / 300 s read, so the first embed on a 0.1-CPU instance outran it and the
+one-shot warm-up latched readiness false for the life of the process. Everything else — `/health`,
+`/chat`, the whole eval sweep — worked throughout, which is exactly why nothing had caught it. P11c
+(commit `395036d`) fixed the timeouts, gave the warm-up a bounded retry and made
+`scripts/smoke_deployed.py` fail a deploy whose `/ready` never greens; the table above is from the
+first probe after that shipped. The full account is in
+[`docs/optimization-log.md`](docs/optimization-log.md).
+
+**The part the image controls**, measured locally on 2026-09-10 — the floor the live figures above
+sit on, and the reason the gap between them is Render's, not the image's. Both rows
 are read off the **same** `make docker-run-512` run whose output is pasted verbatim under *Memory*
 below — the first segment is that run's `is up after`, the second is the gap to its `/ready is green
 after` — so the published figures and the evidence for them cannot drift apart:
@@ -116,15 +163,16 @@ after` — so the published figures and the evidence for them cannot drift apart
 A second run on the same image read 2.1 s and the same 0.5 s.
 
 Those 0.5 s are what baking the model into the image buys: without it the same segment is a 16–63 s
-download from Hugging Face on 0.1 CPU, on every spin-up. Render's own spin-up (~30–60 s) is added
-on top and is the segment gate 2 is needed to measure.
+download from Hugging Face on 0.1 CPU, on every spin-up. Render's own spin-up is added on top, and
+that is the whole of the difference: 2.2 s on the laptop against **44.8 s** on the free instance.
 
 ## Environment variables
 
 Every variable of §12.3 is in `.env.example` with its default and a `REQUIRED`/`OPTIONAL` marker;
 `tests/contract/test_env_example_covers_settings.py` asserts that bijection in both directions. What
-the **deployed service** sets is exactly the `render.yaml` list and nothing else — every other
-variable runs at its coded default:
+the **deployed service** sets is the `render.yaml` list — read back from the live service on
+2026-09-10 as exactly those ten keys — plus the two limiter variables added by a single-key PUT the
+same day. Every other variable runs at its coded default:
 
 | Variable | Deployed value | Set by |
 |---|---|---|
@@ -132,14 +180,25 @@ variable runs at its coded default:
 | `LLM_PROVIDER` | `anthropic` | `render.yaml` |
 | `LLM_MODEL` | `claude-haiku-4-5` | `render.yaml` |
 | `OMP_NUM_THREADS` | `1` | `render.yaml` |
-| `ANTHROPIC_API_KEY` | `pending: gate 2/4` (`sync: false`) | `provision_render.py` from `.env` |
-| `JUDGE_API_KEY` | `pending: gate 2/4` (`sync: false`) | `provision_render.py` from `.env` |
-| `LLM_FALLBACK_API_KEY` | `pending: gate 2/4` (`sync: false`) | `provision_render.py` from `.env` |
-| `TURSO_DATABASE_URL` | `pending: gate 3 (Turso platform token)` | `provision_turso.py` → `provision_render.py` |
-| `TURSO_AUTH_TOKEN` | `pending: gate 3` | `provision_turso.py` → `provision_render.py` |
-| `APP_ACCESS_TOKEN` | `pending: gate 2/4` — generated, never supplied | `provision_render.py` |
+| `ANTHROPIC_API_KEY` | set, `sync: false` (value never leaves the service) | `provision_render.py` from `.env` |
+| `JUDGE_API_KEY` | set, `sync: false` | `provision_render.py` from `.env` |
+| `LLM_FALLBACK_API_KEY` | set, `sync: false` | `provision_render.py` from `.env` |
+| `TURSO_DATABASE_URL` | `libsql://mosaic-hr-seantm.aws-us-west-2.turso.io` | `provision_turso.py` → `provision_render.py` |
+| `TURSO_AUTH_TOKEN` | set, `sync: false` | `provision_turso.py` → `provision_render.py` |
+| `APP_ACCESS_TOKEN` | set, `sync: false` — generated, never supplied | `provision_render.py` |
+| `LLM_RPM` / `LLM_BURST` | **`60` / `30`** (2026-09-10, single-key PUT on the live service) | operator, see below |
 | `PORT` | injected by Render | the platform |
 | `GIT_SHA` | resolved from `RENDER_GIT_COMMIT` | the platform + a `settings.py` validator |
+
+**Why the service runs `LLM_RPM=60` / `LLM_BURST=30` while the code default stays 10.** The
+pre-optimization deployed sweep recorded a **3.9 s per turn mean** of token-bucket waiting inside
+the turn latency at `LLM_RPM=10` — 20 % of the run's wall clock, p90 12.2 s, max 14.0 s. The limit
+being waited on was ours, not the provider's: the Anthropic account's own limits, read from
+response headers on 2026-09-10, are **10,000 RPM and 10M input tokens per minute**, three orders of
+magnitude above the self-imposed 10. Raising it on the service is an environment change with no
+rebuild, and spend stays bounded independently by `LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per
+UTC day). The **code** default stays 10 because one local harness process shares its bucket with
+the Gemini judge, whose account limits are much lower.
 
 ### Process environment that is not a `Settings` field
 
@@ -184,20 +243,21 @@ Dockerfile's `CMD` is proved to expand `${PORT}` at run time.
 **$0 of infrastructure.** Render Hobby free, Turso free, no paid database, embeddings computed
 locally by a baked ONNX model, and free Actions minutes because the repository is public (verified
 public 2026-09-08). The models are the only spend: the agent's Anthropic calls, and — since paid
-billing was enabled on the judge Cloud project on 2026-09-10 — the Gemini judge, at ≈ $0.16 per
-264-call judge pass.
+billing was enabled on the judge Cloud project on 2026-09-10 — the Gemini judge, at ≈ $0.16–0.18 a
+pass (249 to 296 calls, depending on how many answers the run had to decompose).
 
 | Line | Amount | Observed |
 |---|---|---|
-| Render Hobby web service | **$0** — the plan price, read from Render's pricing page 2026-09-10 | `pending: gate 2/4` — no service exists yet, so nothing has been billed to observe |
-| Turso database | **$0** — the free plan's price, read 2026-09-10 | `pending: gate 3` — no database exists yet |
+| Render Hobby web service | **$0** — `plan: free`, asserted from the API's own read-back before and after creation, not from the request. A payment method is on the workspace because Render refuses to create *any* service without one (402 `Payment information is required`); nothing on it is billable | 2026-09-10 |
+| Render free-tier budgets | **750 instance-hours** per workspace per calendar month and **500 build-pipeline minutes**. Build minutes used to date **~11.5 of 500** (`scripts/check_render_hours.py`, an upper bound derived from deploy wall-clock). Instance hours read **UNAVAILABLE**: `GET /v1/metrics/instance-count` answers 200 with no samples for a free instance type, so the dashboard's usage page is the figure to read — the script says so rather than printing zero | 2026-09-11 |
+| Turso database | **$0** — organisation `seantm` on the free **Starter** plan with `overages: false`, holding one database (`mosaic-hr`, group `default`, `aws-us-west-2`) | 2026-09-10 |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
-| Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.16 per 264-call judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates, since paid billing was enabled on the judge project. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so this figure is stated from token counts (369k in / 20k out) | 2026-09-10 |
-| Agent (Anthropic `claude-haiku-4-5`) | **estimated under $10 all-in** (§9.8) | see `CHANGELOG.md` |
+| Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.16–0.18 a judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates on the judge project since **2026-09-10**; the failover project is still on a free key. A pass is 249–296 calls over ~369k input / ~20k output tokens. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so the pass figure is stated from token counts | 2026-09-10 |
+| Agent (Anthropic `claude-haiku-4-5`) | **$6.84 across the twelve committed evaluation runs** (the sum of their `est_cost_usd`, agent plus judge spans as priced at write time), plus **≈ $0.09** for the two live demo turns — well inside §9.8's "under $10 all-in" | 2026-09-11 |
 | GitHub Actions | **$0** — public repository, no minute cap | 2026-09-08 |
 
 **Build wall-clock, measured 2026-09-10** on the development machine (macOS arm64, Docker 29.6.1,
-`linux/arm64`), so the Render figure is an estimate until gate 2 lands. A cold `docker build
+`linux/arm64`); the Render builder's own figure is the ~11.5 minutes over all deploys above. A cold `docker build
 --no-cache` took **171.5 s (2 min 52 s)**, spent as:
 
 | Build step | Wall-clock |
@@ -243,8 +303,13 @@ printed, read **290.4**, **291.3**, **292.1**, **292.1**, **292.2** and **292.9*
 spread across eight builds is 4.5 MB, the figure is stable to a few megabytes and the assertion is
 nowhere near its threshold. The reading is `/proc/self/status` `VmRSS` inside the container (a real
 Linux cgroup, under Docker Desktop's `linux/arm64` VM), not the macOS `getrusage` high-water mark
-that `CHANGELOG.md`'s P1 entry distinguishes. The figure on Render's `linux/amd64` builder is
-expected to differ slightly and is re-read at gate 2.
+that `CHANGELOG.md`'s P1 entry distinguishes.
+
+**On Render's own `linux/amd64` instance: `rss_mb` 293.6**, read from the live `/health` payload by
+`scripts/smoke_deployed.py` on 2026-09-10 alongside `status: ok`, `deploy_mode: render`,
+`mcp.connected: true`, `tool_count: 9`, 14 documents / 204 chunks, `trace_store_backend: turso` and
+an empty `degradations[]`. That is 1.3 MB from the local reading and 126 MB below the 420 MB
+assertion, so the memory budget behaves the same on the platform as it does under the local gate.
 
 ### Live provider facts — read at P11 step 0
 
@@ -258,8 +323,10 @@ Every row of §3.1 that P11 owns, read live on the date shown. Nothing here is i
 | Render documented HTTP request timeout | **"Render web services allow HTTP responses to take up to 100 minutes."** `/docs/web-services` carries no timeout section; this is the figure Render publishes. | 2026-09-10 | https://render.com/docs/render-vs-vercel-comparison |
 | Turso free-tier limits | **100 databases · 5 GB storage · 500 M rows read/month · 10 M rows written/month** | 2026-09-10 | https://turso.tech/pricing |
 | Measured container RSS under `docker run -m 512m` | **294.9 MB** on this commit's image (293.0 MB on its second run; 290.4, 291.3, 292.1, 292.1, 292.2 and 292.9 MB on six earlier runs of the same gate that day; see the memory section above) | 2026-09-10 | `make docker-run-512` |
-| Measured cold start / warm turn on the live instance | `pending: gate 2` | — | `scripts/measure_cold_start.py` |
-| Render plan details and usage from the dashboard | `pending: gate 2` — the dashboard needs an authenticated session | — | Render dashboard → usage |
+| Measured cold start / warm turn on the live instance | **71.0 s** cold to first answer (44.8 s to `/health`, 2.8 s on to `/ready`, 23.3 s for the first `POST /chat`) and **22.5 s** warm — n=1, no keep-alive | 2026-09-10 | `scripts/measure_cold_start.py` |
+| Measured `rss_mb` on the live instance | **293.6 MB** at `/health`, `status: ok`, `degradations: []` | 2026-09-10 | `scripts/smoke_deployed.py` |
+| Render plan details read back from the API | **`plan: free`**, one instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"` | 2026-09-10 | `GET /v1/services/{id}` |
+| Render usage: instance hours | **UNAVAILABLE from the API** — `GET /v1/metrics/instance-count` answers 200 with no samples for a free instance type; the dashboard's usage page needs an authenticated session | 2026-09-11 | `scripts/check_render_hours.py` |
 
 **What the 100-minute request timeout settles.** §3.1 lists it because it caps
 `AGENT_WALL_CLOCK_S`. At 90 s the agent budget is three orders of magnitude inside Render's limit,
@@ -270,14 +337,20 @@ so **no change is needed** and the platform is not what bounds a turn — `AGENT
 tier's 10 M monthly writes and 5 GB are not a constraint this project can approach, and
 `TRACE_RETENTION_SESSIONS = 300` bounds the store regardless.
 
-**One thing Turso has never been asked.** `TursoHTTPStore` has been exercised only against an httpx
-`MockTransport` (P1's carry-forward): nothing in this project has spoken to a live Turso database,
-and in particular **whether foreign keys are enforced on the Hrana `/v2/pipeline` path is unknown**
-— `SqliteStore` issues `PRAGMA foreign_keys=ON` per connection and the HTTP store has no connection
-to issue it on. `scripts/provision_turso.py`'s parity smoke asks on the first live run (a round trip
-that must return 1, and a real orphan-child INSERT that should be refused) and reports the answer
-here. An unenforced constraint is recorded as a **warning, not a failure**: every write goes through
-`core/trace.py`, which inserts parents before children by construction. `pending: gate 3`.
+**The one thing Turso had never been asked, answered.** Until 2026-09-10 `TursoHTTPStore` had been
+exercised only against an httpx `MockTransport` (P1's carry-forward), so **whether foreign keys are
+enforced on the Hrana `/v2/pipeline` path was unknown** — `SqliteStore` issues
+`PRAGMA foreign_keys=ON` per connection and the HTTP store has no connection to issue it on.
+`scripts/provision_turso.py`'s parity smoke asked on the first live run and the answer is **yes**:
+`PRAGMA foreign_keys` returned **1** and a real orphan-child `INSERT` was **refused by the server**.
+No warning was needed. (Had it come back unenforced it would have been recorded as a warning, not a
+failure: every write goes through `core/trace.py`, which inserts parents before children by
+construction.)
+
+**Turso usage on the live database**, read 2026-09-10: 379k rows read and 10.5k written since the
+period opened at 04:00Z that day — both eval sweeps plus Render's 5-second `/health` poll, which
+costs five store queries each. Against the free tier's 500M reads and 10M writes a month, no quota
+action is needed, and `TRACE_RETENTION_SESSIONS = 300` bounds the store regardless.
 
 ### Live provider facts — read at P10 step 0
 

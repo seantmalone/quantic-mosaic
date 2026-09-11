@@ -31,11 +31,12 @@ Before you start, tick [`pre-submission-checklist.md`](pre-submission-checklist.
 
 ### Wake the instance first
 
-The free instance spins down after 15 minutes idle, and a cold start is ~35–70 seconds. **Open
-`<DEPLOY_URL>/health` and wait for a 200 before you start recording** — it is an open route, so no
-token is needed. If you would rather narrate the cold start honestly on camera, do it deliberately
-in the 6:15 segment where `deployed.md`'s numbers are already on screen; do not let it happen by
-accident in the middle of task 1.
+The free instance spins down after 15 minutes idle, and a cold start was measured at **71.0 s** to
+the first answer (44.8 s of it before `/health` even answers). **Open `<DEPLOY_URL>/health` and
+wait for a 200 before you start recording** — it is an open route, so no token is needed. If you
+would rather narrate the cold start honestly on camera, do it deliberately in the 6:15 segment
+where `deployed.md`'s numbers are already on screen; do not let it happen by accident in the middle
+of task 1.
 
 ---
 
@@ -46,12 +47,48 @@ accident in the middle of task 1.
 | **0:00–0:45** | Intro, on camera, full frame | You, then the browser address bar showing the deployed URL | Your name; **hold the government ID still for ≥ 3 s at ~0:15**; one line on the project — *"an agentic HR assistant for a fictional 120-person robotics company: policy RAG over 14 documents, nine MCP tools, and a full audit trail of every step."* Then shrink the webcam to the persistent overlay and **leave it there** |
 | **0:45–1:30** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Name the seven components as you point at them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. Make the one point that matters: *"the MCP server is mounted inside the app that consumes it, and the client speaks real JSON-RPC over a real loopback socket — these are not function calls dressed up as tools."* Mention the single trace model: one writer, five readers |
 | **1:30–3:30** | **Task 1 live** — international remote-work eligibility | The chat UI, then the span rail, then the corpus browser | Click the **Demo 1** button. Narrate the five DEMO.6 elements from the live span rail as they appear (sub-checklist below). Finish by clicking a citation chip through to the highlighted 30-day sentence in the corpus browser |
-| **3:30–5:30** | **Task 2 live** — PTO request through the confirmation gate | The chat UI, the Confirm card, then dashboard page 8 | Click **Demo 2**. Narrate the five elements again, then land the safety beat (below). **Cancel once** to show `declined` recorded, re-ask, then confirm, and watch the new row appear in the mock-action log |
+| **3:30–5:30** | **Task 2 live** — PTO request through the confirmation gate | The chat UI, the Confirm card, then dashboard page 8 | Click **Demo 2**. Narrate the five elements again, then land the safety beat (below). **Cancel once** to show `declined` recorded, re-ask, then confirm, and watch the new row appear in the mock-action log. Beat ⑦ of the optimization story goes here, while the answer is streaming in and the rail is narrating each step as it starts |
 | **5:30–6:15** | Dashboard tour | `/dashboard/sessions/{id}` → `/dashboard/mcp` → `/dashboard/safety` | The span waterfall for the turn just run — *"every LLM call with its verbatim messages, every retrieval with its scored chunks, every tool call with its arguments and result."* Then the MCP page: nine tools, their JSON Schemas, the transport and the handshake. Then the safety page: guardrail verdicts by rule, the confirmation ledger, the mock-action log |
-| **6:15–7:00** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count`, `rss_mb`. Then the measured numbers: **294.9 MB** under a hard 512 MB cap, and the cold-start segments with the dates they were measured. Say the cold start out loud — *"the free tier spins down after 15 minutes; we documented it rather than hiding it behind a keep-alive cron that would eat 744 of our 750 monthly hours."* |
-| **7:00–7:40** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. Four jobs: `lint` (ruff + gitleaks over full history), `test` (the full suite — currently over 1,600 tests — offline, with no API keys), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. Then the gate: **`deploy` declares `needs: [test, docker]`**, and Render's own auto-deploy is off, so CI is the only path to production. Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
-| **7:40–8:45** | Evaluation | `/dashboard/evals` → a run detail → the compare tab | 26 items across all seven categories. Walk the metric chips: groundedness, citation accuracy, DocRecall, tool selection, workflow completion, action safety, over-refusal, latency split cold/warm. Open one item to show the **judge rationale**, then "view trace" to jump to the turn that produced it. Then the compare tab: the three-variant ablation chart |
-| **8:45–9:15** | Close | `design-and-evaluation.md`'s *Known limitations*, then the repo | Be straight about the numbers: *"strict pass is 0.654 against our own 0.85 target, and the `no_structured_tools` ablation moved workflow completion by 0.192 rather than the 0.25 we predicted — so we report it as a measurement, not as proof. The per-item causes are in the document."* Then the honest cold-start note and the repo link |
+| **6:15–7:00** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count`, `rss_mb`. Then the measured numbers: **293.6 MB** live against a hard 512 MB cap (294.9 MB under the local gate), and the cold-start segments with their date and their `n`: **71.0 s** cold to first answer, **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it once, labelled it n=1, and documented it rather than hiding it behind a keep-alive cron that would eat 744 of our 750 monthly hours."* Beat ⑥ of the optimization story belongs here |
+| **7:00–7:40** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. Four jobs: `lint` (ruff + gitleaks over full history), `test` (the full suite — 1,815 tests on 2026-09-11 — offline, with no API keys), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. Then the gate: **`deploy` declares `needs: [test, docker]`**, and Render's own auto-deploy is off, so CI is the only path to production. Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
+| **7:40–8:45** | Evaluation | `/dashboard/evals` → a run detail → the compare tab | 26 items across all seven categories. Walk the metric chips: groundedness, citation accuracy, DocRecall, tool selection, workflow completion, action safety, over-refusal, latency split cold/warm. Open one item to show the **judge rationale**, then "view trace" to jump to the turn that produced it. Then the compare tab: the three-variant ablation chart. Beats ①–③ of the optimization story land here, on screen |
+| **8:45–9:15** | Close — **the optimization story**, then the limitations | `docs/optimization-log.md`'s three-column table, then `design-and-evaluation.md`'s *Known limitations*, then the repo | Tell the story from the beat list below (four beats fit here; the other four are seeded earlier where the screen already shows them). Then be straight about the numbers: *"strict pass is 0.808 against our own 0.85 target — five items, each with its failing clause named — and the `no_structured_tools` ablation moved workflow completion by 0.231 rather than the 0.25 we predicted, so we report it as a measurement, not as proof."* Then the repo link |
+
+---
+
+## Optimization story
+
+Eight beats, drawn from [`docs/optimization-log.md`](optimization-log.md)'s talking points. **No
+new segment**: ①–③ ride the 7:40–8:45 evaluation segment where the runs are already on screen, ⑥
+rides the 6:15–7:00 deployment segment where the cold-start numbers are, ⑦ rides the 3:30–5:30 task
+where the streaming is visible, and ④⑤⑧ are the 8:45–9:15 close. Ten to fifteen seconds each — say
+the number and the run id, then move.
+
+- **① Three columns, one instance, one dataset.** *"We measured the same 26 items three times
+  against the same live service: before, after the quality fixes, after the performance work.
+  Strict pass 0.692 → 0.808 → 0.808; p50 17.6 s → 22.6 s → 16.7 s."*
+- **② Every claim has a run id.** *"Each column is a committed run file and the dashboard shows the
+  same traces the analysis used — nothing here is a remembered number."*
+- **③ The quality fixes cost latency, and we say so.** *"The breadth reminder fires on most turns
+  now — `nudge_rate` 0.115 → 0.577 — and each of those turns spends an extra step. That is the
+  five seconds the middle column lost; the performance wave is what won them back."*
+- **④ "Is it the CPU?" — the intuitive answer was wrong.** *"We assumed the 0.1 vCPU was the
+  problem. Two full runs settled it: local p50 17,670 ms, deployed 17,584 ms. Three quarters of a
+  turn is waiting on the model."*
+- **⑤ The biggest lever was our own rate limiter.** *"Not the platform — our token bucket at
+  `LLM_RPM=10` was costing 3.9 seconds a turn, against an account limit of 10,000 requests a
+  minute. One environment variable."*
+- **⑥ The readiness defect is the best story here.** *"`/ready` was wrong on every deploy since the
+  first one, and the instance passed every smoke and the whole evaluation anyway. What found it was
+  a measurement designed to fail honestly — it refused to publish a timeout as if it were a
+  number."*
+- **⑦ The last wave was about the wait, not the score.** *"Streaming and the step narration do not
+  move a single metric in that table — the harness waits for the whole answer. They change what a
+  person experiences, which is why they were worth doing anyway."*
+- **⑧ What is still short.** *"0.808 against our 0.85 bar, five items, each with its failing clause
+  named. The ablation moved 0.231 against a pre-registered 0.25, so we report it as not supported —
+  and we say that the arm's meaning changed when we made the PTO workflow require the profile
+  lookup."*
 
 ---
 

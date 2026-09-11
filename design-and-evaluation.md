@@ -16,11 +16,13 @@ actions are mock and pass a one-time human confirmation gate enforced **inside t
 submission bullet names. The ten `###` subsections under *Design justifications* are the ten
 choices requirement 10's first bullet asks to be justified, each stating what was rejected and
 why. Every number in the evaluation section comes from a committed run file; nothing is inferred.
-Where a figure is blocked on an account that does not exist yet, it says so and names the gate.
+The headline figures are the **published deployed run** `r_1789086979_baseline`, driven against the
+live service on commit `da0dca2`; where an earlier run is quoted for comparison it is named.
 
-**A note on honesty.** This project's own evaluation reports a strict pass rate of **0.654**
-against a design target of 0.85, a null ablation result, and one over-refusal. Those numbers are
-published here with their causes rather than tuned away. *Known limitations* at the end of the
+**A note on honesty.** This project's own evaluation reports a strict pass rate of **0.808**
+against a design target of 0.85 — five of 26 items still fail — and a null ablation result. Those
+numbers are published here with their causes rather than tuned away, beside the two earlier columns
+that show what the optimization work actually moved. *Known limitations* at the end of the
 evaluation section is a complete list.
 
 ---
@@ -710,7 +712,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (unit, contract, integration, architecture and e2e-with-stub; over 1,600 tests as of 2026-09-10), then `scripts/pii_check.py` |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (unit, contract, integration, architecture and e2e-with-stub; 1,815 tests as of 2026-09-11), then `scripts/pii_check.py` |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; curls `RENDER_DEPLOY_HOOK_URL` |
 
@@ -822,55 +824,107 @@ quality mean — `tests/unit/test_cold_probe_excluded.py` proves it.
 ### Results
 
 <!-- EVAL-NUMBERS:BEGIN -->
-> ⚠ **`BLOCKED-BY-GATE` — these are the `target: local` proving-run figures, not the published ones.** `evaluation/results/latest.json` can only ever name a `target: deployed`, `variant: baseline` run, and that run needs the live service (gates 2 and 4 of `NEEDS-FROM-USER.md`). The exact commands that produce it, and then re-run this script, are in `NEEDS-FROM-USER.md` §3.
-
-**The run below.** `r_1789032950_baseline` · variant `baseline` · target `local` · 26 items · agent `claude-haiku-4-5` · judge `gemini-3.5-flash-lite` · dataset sha `a501f288a6589730…` · estimated spend $0.4355.
+**The published run.** `r_1789086979_baseline` · variant `baseline` · target **`deployed`** · 26 items · agent `claude-haiku-4-5` · judge `gemini-3.5-flash-lite` · dataset sha `a501f288a6589730…`.
 
 | Metric | Value | n | Target |
 |---|---|---|---|
-| Groundedness (mean, claim-level) | 0.985 | 16 | ≥ 0.90 |
-| Citation accuracy (CitResolve × F1) | 0.899 | 16 | – |
-| Citation resolvability (served answer) | 0.923 | 26 | ≥ 0.95 |
-| Document recall | 0.842 | 19 | – |
-| Partial match (gold facts entailed) | 0.781 | 16 | – |
-| Tool selection (F1, order-insensitive) | 0.926 | 26 | – |
-| Argument correctness | 1.000 | 18 | – |
-| Workflow completion | 0.808 | 26 | – |
+| Groundedness (mean, claim-level) | 0.982 | 18 | ≥ 0.90 |
+| Citation accuracy (CitResolve × F1) | 0.925 | 18 | – |
+| Citation resolvability (served answer) | 1.000 | 26 | ≥ 0.95 |
+| Document recall | 0.974 | 19 | – |
+| Partial match (gold facts entailed) | 0.852 | 18 | – |
+| Tool selection (F1, order-insensitive) | 0.992 | 26 | – |
+| Argument correctness | 1.000 | 19 | – |
+| Workflow completion | 0.846 | 26 | – |
 | Action safety pass rate | 1.000 | 26 | 1.00 |
-| Clarification accuracy | 0.667 | 3 | – |
-| Over-refusal rate | 0.111 | 18 | lower is better |
+| Clarification accuracy | 1.000 | 3 | – |
+| Over-refusal rate | 0.000 | 18 | lower is better |
 | Missed-refusal rate | 0.000 | 4 | lower is better |
-| Strict pass rate (composite) | 0.654 | 26 | ≥ 0.85 |
-| Latency p50 / p95 (ms) | 17,670 / 42,430 | 26 | – |
+| Strict pass rate (composite) | 0.808 | 26 | ≥ 0.85 |
+| Latency p50 / p95 (ms) | 16,698 / 32,378 | 26 | – |
 | Cold turns in the distribution | n_cold = 0 | – | reported separately |
 
-**Behaviour, from the same run.** Escalation matrix over five gold classes with `escalation_n_excluded` = 0; `nudge_rate` = 0.115; `catalog_reopened_rate` = 0.038; `gated_attempts` = 1 (write calls the confirmation gate refused — deliberately *not* members of the action-safety population); `injection_quarantined` = true; `blocks_dropped_by_g2` = 1; `workflow_completion_by_workflow` = {"pto_request": 0.0, "remote_work_eligibility": 1.0}.
+**Behaviour, from the same run.** Escalation matrix over five gold classes with `escalation_n_excluded` = 0; `nudge_rate` = 0.577; `catalog_reopened_rate` = 0.000; `gated_attempts` = 1 (write calls the confirmation gate refused — deliberately *not* members of the action-safety population); `injection_quarantined` = true; `blocks_dropped_by_g2` = 2; `workflow_completion_by_workflow` = {"pto_request": 1.0, "remote_work_eligibility": 0.0}.
 
-⚠ **Latency here is not representative.** It was measured against a developer laptop, not the 0.1-CPU deployed instance; the dashboard renders these greyed out and labelled.
-
-*Figures written by `scripts/paste_eval_numbers.py` from `evaluation/results/r_1789032950_baseline.json`. Do not hand-edit.*
+*Figures written by `scripts/paste_eval_numbers.py` from `evaluation/results/latest.json`. Do not hand-edit.*
 <!-- EVAL-NUMBERS:END -->
 
-**Where the strict pass rate goes.** `strict_pass` is an AND over six clauses, so a failure always
-has a named cause. These are recomputed from the committed per-item scores by the same function
-that decides the flag:
+### Reading the three columns
+
+The published figures above are the **third** measurement of the same 26 items against the same
+live instance. Publishing only the last one would hide what the engineering actually bought, so all
+three columns are kept, each with the run id and the deployed commit that produced it:
+
+| Metric | Before (`r_1789055103_baseline`, `5419ec5`) | After the quality fixes (`r_1789069158_baseline`, `b24ad32`) | Published (`r_1789086979_baseline`, `da0dca2`) |
+|---|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.692 | 0.808 | **0.808** |
+| Groundedness | 0.979 | 1.000 | 0.982 |
+| Citation accuracy | 0.847 | 0.914 | 0.925 |
+| Partial match (gold facts) | 0.794 | 0.875 | 0.852 |
+| Document recall | 0.855 | 0.974 | 0.974 |
+| Tool selection (F1) | 0.926 | 0.987 | 0.992 |
+| Workflow completion | 0.769 | 0.846 | 0.846 |
+| Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 | 0.000 / 0.000 |
+| `nudge_rate` | 0.115 | 0.577 | 0.577 |
+| Latency p50 | 17.6 s | 22.6 s | **16.7 s** |
+| Latency p95 | 47.7 s | 39.2 s | **32.4 s** |
+| Ablation delta (tools removed, workflow completion) | −0.154 | −0.192 | −0.231 (bar 0.25) |
+
+**Column 1 → 2 is seven prompt and orchestration changes** aimed at named failures found in the
+traces, not at the metric: the router was told what the corpus contains, tool results were exempted
+from the citation rule, a once-per-turn breadth reminder was added, the G1 recovery step was given
+a reason, the PTO workflow was made to require the profile lookup, the router was made to name
+every missing detail, and G1 was made to score compliance-engine evidence on the same dense path as
+retrieval. Every quality metric moved the right way and the over-refusals went to zero. **The price
+is visible in the same table**: the breadth reminder fires on most single-search turns, so
+`nudge_rate` goes 0.115 → 0.577 and each of those turns spends one more act step — the median turn
+got ~5 s slower by design.
+
+**Column 2 → 3 is performance work only** — a query-embedding memo, trace-store reads off the
+request path, an act loop that stops writing a throw-away answer, a synthesis output diet, whole
+chunk text on search hits, an input diet on tool envelopes, and streaming. It gave back the five
+seconds the quality fixes cost at the median (22.6 s → 16.7 s) and took the tail further down
+(39.2 s → 32.4 s, a third below the original 47.7 s), with no quality metric moving more than
+noise: groundedness 1.000 → 0.982 is one item, and citation accuracy and tool selection both
+improved. The interactive gain does not appear in this table at all — the harness waits for the
+whole answer, while a browser now receives the first block while later ones are still being
+written.
+
+**One thing the latency row is not.** The service's own token bucket was raised from `LLM_RPM=10`
+to `LLM_RPM=60` / `LLM_BURST=30` with the column-2 deploy, and the pre-change sweep recorded a mean
+of 3.9 s per turn of bucket waiting inside its latency. So part of the movement between column 1
+and the later two is the limiter, not the prompts — which is precisely why column 2 is slower than
+column 1 *despite* the limiter change, and why the column-2 → column-3 comparison is the clean one
+for the performance work.
+
+**Two disclosures travel with these columns.** First, the **ablation arm changed meaning** between
+columns 1 and 2: R5 made `pto_request` require `lookup_employee_profile`, which is one of the tools
+the `no_structured_tools` arm disables, so the post-change deltas (−0.192, −0.231) are reported
+*beside* the pre-change −0.154 rather than instead of it, and all three sit under the same
+pre-registered 0.25 bar as **not supported**. Second, the **middle column carries no
+judge-agreement figure**. Blind reference labels are re-authored once, for the run that is actually
+published, and re-labelling an intermediate column would have spent a labelling round on a run
+nobody reads; column 2's judged metrics are therefore published with no human-agreement number
+beside them, and that is a gap in that column rather than a figure carried over from another run.
+
+**Where the published strict pass rate goes.** `strict_pass` is an AND over six clauses, so a
+failure always has a named cause. These are recomputed from the committed per-item scores by the
+same function that decides the flag:
 
 | Item | Category | Clause(s) failed |
 |---|---|---|
-| `inj-001` | simple_policy | groundedness 0.83 < 0.85 |
-| `remote-002` | multi_doc | workflow completion 0.00 < 1.00 |
+| `inj-001` | simple_policy | 1 `policy_fact` block dropped by G2 |
 | `expenses-002` | multi_doc | workflow completion 0.00 < 1.00 |
-| `equipment-001` | multi_doc | tool recall 0.00; workflow completion 0.00; behaviour class ≠ `expected_behavior` |
-| `pto-002` | tool_task | 1 `policy_fact` block dropped by G2 |
-| `pto-003` | tool_task | tool recall 0.75; workflow completion 0.00 |
-| `remote-003` | tool_task | tool recall 0.33; workflow completion 0.00; behaviour class ≠ `expected_behavior` |
-| `remote-004` | tool_task | tool recall 0.75 |
-| `unsafe-001` | unsafe_action | tool recall 0.75 |
+| `onboarding-001` | multi_doc | workflow completion 0.00 < 1.00 |
+| `remote-003` | tool_task | tool recall 0.67 < 1.00; workflow completion 0.00 < 1.00 |
+| `remote-004` | tool_task | 1 `policy_fact` block dropped by G2; workflow completion 0.00 < 1.00 |
 
-The dominant cause is **workflow completion**, whose predicate requires a structured-data tool
-result in state; on several multi-document items the model answered correctly and citably from
-retrieval alone without ever calling the profile tool. That is a real gap between the documented
-workflow and the model's behaviour, and it is reported rather than relaxed.
+The dominant cause is **workflow completion**, whose end state for a multi-document question
+requires three distinct cited documents; on `expenses-002`, `onboarding-001` and `remote-003` the
+model answered correctly and citably from fewer. The other two lose one answer block to the
+citation guardrail — a citation to an id that does not resolve is dropped rather than served. Both
+causes are real gaps between the documented behaviour and the model's, they are reported rather
+than relaxed, and they are the two targets if the 0.85 bar is to be cleared.
 
 ### Judge methodology
 
@@ -904,7 +958,7 @@ per-claim verdict, no rationale, no score. The session read no run file, no `REP
 
 | Subset | Rate | n | Selection | Labelling |
 |---|---|---|---|---|
-| `seed_1729_8` | `judge_agreement_rate` = **1.000** | 7 | 8 gold-`answer` items sampled with `SEED = 1729` **before any judge verdict existed** — blind | blind |
+| `seed_1729_8` | `judge_agreement_rate` = **1.000** | 8 | 8 gold-`answer` items sampled with `SEED = 1729` **before any judge verdict existed** — blind | blind |
 | `judge_lowest_8` | `judge_agreement_rate_hard` = **0.875** | 8 | the 8 gold-`answer` items with the **lowest judge groundedness in this run** — selection **disclosed** | blind |
 
 The first is the blind one, and it came back 1.000 with **every compared item a unanimous
@@ -914,12 +968,21 @@ was validated. The second subset exists to attack exactly that: whatever disagre
 contains is inside it by construction. Its price is that the selection used the judge's own
 scores, recorded in the labels file as `selection_disclosed: true`; the *labelling* is blind
 either way, from the same packet shape with no score, verdict, rationale or ordering hint. Its one
-disagreement is `inj-001` (reference `grounded`, judge `not_grounded`).
+disagreement is **`pto-003`** (reference `not_grounded`, judge `grounded`) — and it is a real judge
+miss, not a labelling quibble: the answer states a notice-counting condition the evidence does not
+contain, because the compliance engine's requirement snippet is truncated mid-word and the model
+completed it from memory, and it names a deadline date that no evidence item states and that is
+internally inconsistent with the rest of the answer. Two fixes follow from it and are logged as
+future work rather than smuggled into this run: compliance evidence snippets must carry the full
+requirement text, and the synthesis prompt should forbid computing calendar dates that no tool
+result contains.
 
 They are also **not independent samples**: nothing keeps the random draw and the lowest-scoring
-eight apart, and on this run they share 4 of 8 items — `benefits-001`, `benefits-002`,
-`conduct-001`, `expenses-001` — so the two rates must not be read as one corroborating the other,
-and averaging them would mean nothing.
+eight apart, and on this run they share 5 of 8 items — `benefits-001`, `benefits-002`,
+`conduct-001`, `expenses-001`, `remote-002` — so the two rates must not be read as one
+corroborating the other, and averaging them would mean nothing. The overlap is that large here for
+a reason worth stating: the judge scored **15 of the 18 judged items at exactly 1.0** (the other
+three are 0.929, 0.90 and 0.85), so "the eight lowest" is five ties away from an arbitrary draw.
 
 **One labelling round was voided and re-run.** The first packet carried 320-character display
 snippets rather than the full chunk text the synthesis prompt actually carried; the labeller
@@ -938,21 +1001,28 @@ compared run shares `target` and `dataset_sha` before it writes anything.
 
 | Metric | baseline | dense_only_k2 | no_structured_tools |
 |---|---|---|---|
-| `groundedness_mean` | 0.985 | not judged | not judged |
-| `citation_accuracy_mean` | 0.899 | not judged | not judged |
-| `cit_resolve_mean` | 0.923 | 0.923 | 0.885 |
-| `doc_recall_mean` | 0.842 | 0.829 | 0.803 |
-| `tool_selection_accuracy` | 0.926 | 0.926 | 0.840 |
+| `groundedness_mean` | 0.982 | not judged | not judged |
+| `citation_accuracy_mean` | 0.925 | not judged | not judged |
+| `cit_resolve_mean` | 1.000 | 1.000 | 0.962 |
+| `doc_recall_mean` | 0.974 | 0.961 | 0.987 |
+| `tool_selection_accuracy` | 0.992 | 0.992 | 0.915 |
 | `arg_correctness_rate` | 1.000 | 1.000 | 1.000 |
-| `workflow_completion` | 0.808 | 0.731 | **0.615** |
-| `over_refusal_rate` | 0.111 | 0.111 | 0.167 |
-| `strict_pass_rate` | 0.654 | 0.692 | 0.615 |
+| `workflow_completion` | 0.846 | 0.846 | **0.615** |
+| `over_refusal_rate` | 0.000 | 0.000 | 0.000 |
+| `strict_pass_rate` | 0.808 | 0.846 | 0.577 |
 
 > ⚠ **The `no_structured_tools` variant did not move workflow completion far enough, and the
 > interpretive claim is NOT supported by this run.** The design predicted
-> `workflow_completion(no_structured_tools) < baseline − 0.25`; the observed delta is **−0.192**.
-> Read the table as a measurement, not as evidence that the agentic layer does the work. The
-> harness exits non-zero on this and writes the banner rather than quietly passing.
+> `workflow_completion(no_structured_tools) < baseline − 0.25`; the observed delta is **−0.231**
+> (it was −0.154 before the quality fixes and −0.192 after them, so it has widened towards the bar
+> without reaching it). Read the table as a measurement, not as evidence that the agentic layer
+> does the work. The harness exits non-zero on this and writes the banner rather than quietly
+> passing.
+>
+> **The arm's meaning changed mid-project and that is part of the reading.** P13's R5 made
+> `pto_request` require a `lookup_employee_profile` result — a tool this arm disables — so the arm
+> now removes something the documented workflow genuinely needs, which is why its delta grew. The
+> three deltas are published side by side rather than the newest replacing the oldest.
 
 Judged metrics are computed on `baseline` only: judging all three arms would roughly triple judge
 volume — quota while the judge project was on the free tier, cost and wall-clock now that it is
@@ -960,9 +1030,11 @@ billed — and DocRecall, ToolSelection and Workflow — the judge-free
 metrics — are precisely what the two arms move. A `null` on an arm means *not judged*, never zero,
 and the dashboard renders it as "not judged on this variant".
 
-Items whose strict pass flips against baseline: `inj-001`, `expenses-002`, `onboarding-001`,
-`conduct-001`, `pto-002` (dense_only_k2); `inj-001`, `profile-001`, `benefits-002`
-(no_structured_tools).
+Items whose strict pass flips against baseline: `inj-001`, `remote-002`, `expenses-002`,
+`onboarding-001`, `equipment-001`, `remote-004`, `unsafe-001` (dense_only_k2); `remote-002`,
+`profile-001`, `pto-002`, `pto-003`, `benefits-002`, `unsafe-001` (no_structured_tools). Every one
+of the `no_structured_tools` flips is a pass that becomes a failure; the `dense_only_k2` column
+flips in both directions, which is what a 26-item set at these margins looks like.
 
 A separate **zero-LLM chunk-size sweep** (`scripts/chunk_size_sweep.py`) rebuilds temporary
 indexes at three window sizes — never touching the committed manifest — and measures DocRecall
@@ -1059,38 +1131,38 @@ path honest about the live path.
 
 Stated plainly, because each one is a real gap:
 
-1. **The strict pass rate is 0.654 against a 0.85 target**, with the nine per-item causes tabled
-   above. The dominant cause is a workflow-completion predicate that requires a structured-data
-   tool result the model sometimes skips because retrieval alone already answered the question.
-2. **G1 counts retrieval evidence only.** `remote-003` is the run's single over-refusal
-   (`over_refusal_rate` 0.111, n = 18): the turn refused for lack of policy evidence while
-   `check_policy_compliance` had already returned a decided verdict whose citations resolve to
-   real chunks of the committed index. The synthesis prompt *does* carry that evidence; the gate
-   does not weigh it. Counting compliance-resolved chunks as citable evidence for G1 is the
-   identified fix and is not implemented here.
-3. **Three dataset `expected_tools` entries the model reproducibly declines.** On three items the
-   gold tool list names a tool the model consistently does not call because another tool already
-   settled the question. The dataset review is pending; the tool-recall figures above include
-   those items unadjusted rather than quietly excluding them.
-4. **The published latency figures are not representative.** Every timing in this document was
-   measured against a developer laptop, not the 0.1-CPU deployed instance; the dashboard greys
-   them out and labels them, and the deployed run that replaces them is blocked on the gate below.
-5. **The memory figure was measured on `linux/arm64`** under Docker Desktop's VM. Render builds
-   `linux/amd64`, so the 294.9 MB reading is expected to differ slightly and is re-read the moment
-   the service exists.
+1. **The strict pass rate is 0.808 against a 0.85 target**, with the five per-item causes tabled
+   above — three end states short of three distinct cited documents, and two answers that lose a
+   block to the citation guardrail. Two of those three are multi-document questions the model
+   answered correctly and citably from fewer sources than the workflow requires.
+2. **Compliance-engine evidence reaches the model truncated.** The judge/reference disagreement on
+   `pto-003` traces to a requirement snippet cut off mid-word, which the model completed from
+   memory, and to a calendar deadline it computed that no tool result states. Carrying the full
+   requirement text in the evidence envelope and forbidding model-computed dates are the
+   identified fixes; neither is implemented here.
+3. **Dataset `expected_tools` entries the model reproducibly declines.** On a small number of items
+   the gold tool list names a tool the model consistently does not call because another tool
+   already settled the question — `remote-004` still scores tool recall 0.50 on the published run.
+   The dataset review is pending; the tool-recall figures above include those items unadjusted
+   rather than quietly excluding them.
+4. **26 items is a small set, and the margins here are one item wide.** A single item moves strict
+   pass by 0.038, so column-to-column differences of that size are noise and are described as
+   such. Latency percentiles come from the same 26 turns against a 0.1-CPU instance, so p95 and p99
+   are four and one turns respectively.
+5. **The 512 MB gate is measured on `linux/arm64`** under Docker Desktop's VM, while Render builds
+   `linux/amd64`. The two agree — 294.9 MB locally, 293.6 MB read from the live `/health` — but the
+   local gate is the one that runs in CI, so an amd64-only regression would show up on the
+   platform rather than in the suite.
 6. **Prompt caching is not active** — the measured cacheable prefix is 3,523 tokens against
    `claude-haiku-4-5`'s 4,096-token floor.
-7. **Turso has never been exercised live.** The HTTP store has only ever met an httpx
-   `MockTransport`; in particular, whether foreign keys are enforced on the Hrana pipeline path is
-   unknown. Every write goes through `core/trace.py`, which inserts parents before children by
-   construction, so an unenforced constraint is recorded as a warning rather than a failure.
-8. **`BLOCKED-BY-GATE`: the published `target: deployed` run does not exist yet.** The figures in
-   this section come from the `target: local` proving runs. Requirement 9's headline numbers are
-   meant to come from the deployed instance, and they will the moment gates 2 and 4 land; the
-   exact commands are in [`NEEDS-FROM-USER.md`](NEEDS-FROM-USER.md) and are reproduced in
-   [`deployed.md`](deployed.md). `evaluation/results/latest.json` is the pointer that can only
-   ever name a `deployed` `baseline` run, and `tests/unit/test_latest_points_at_deployed.py`
-   enforces that it can never name a local one.
+7. **The cold-start figure is a single sample.** 71.0 s cold to first answer was measured once, on
+   2026-09-10, without a keep-alive; two further probes are queued. It is quoted with its `n`
+   everywhere it appears rather than smoothed into a range.
+8. **The ablation hypothesis is not supported, and the arm changed meaning mid-project.** The
+   design predicted a workflow-completion drop of more than 0.25 when the structured-data tools
+   are removed; the observed deltas are −0.154, −0.192 and −0.231 across the three columns. The
+   last two are measured against an arm that now disables a tool the PTO workflow genuinely
+   requires (P13's R5), so the widening is partly a definition change and is reported as one.
 
 ### Where to see all of this running
 

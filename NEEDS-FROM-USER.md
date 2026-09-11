@@ -1,50 +1,22 @@
 # What Mosaic HR Copilot needs from Sean
 
-**Final, at P12.** Nothing blocked P0–P10: every phase up to the evaluation harness builds, tests
-and passes CI with `LLM_PROVIDER=stub`, and P10's real runs used the model keys already supplied.
-**P11 is where the remaining gates start to bite.** Everything P11 and P12 could build and prove
-without an account is built and proven — the Dockerfile, `render.yaml`, the CI `docker` and
-`deploy` jobs, both provisioning scripts, the deploy-time health scripts, the 512 MB memory gate
-run against the real image (294.9 MB, measured 2026-09-10), and all five documentation files.
-What is left is listed here, each with the **exact command** that runs the moment its gate is
-satisfied.
+**Updated at the publish step, 2026-09-11.** Nothing blocked P0–P10: every phase up to the
+evaluation harness builds, tests and passes CI with `LLM_PROVIDER=stub`, and P10's real runs used
+the model keys already supplied. **Every infrastructure gate has now landed.** Sean supplied the
+Render account, the GitHub App, a payment method, the Turso token and the Render API key on
+2026-09-10, and enabled paid billing on the judge Cloud project the same day; the service is live
+at `https://mosaic-hr-copilot.onrender.com`, the published evaluation sweep ran against it, and the
+cold start was measured on it. **Two gates are left, both irreducibly human:** recording the demo
+video (**gate 6**) and submitting (**gate 7**), plus one confirmation at submission time that the
+`quantic-grader` invitation shows as sent or accepted.
 
-Item numbering follows design spec §19.1, so a number here means the same thing there.
+Item numbering follows design spec §19.1, so a number here means the same thing there. A
+**letter-suffixed** item (1a, 2a) is one the build discovered that §19.1 never anticipated; it is
+numbered against the gate it belongs to rather than renumbering the list.
 
 ---
 
 ## Open gates
-
-- [ ] **2 — Render account + install the Render GitHub App on `seantmalone/quantic-mosaic`.**
-      A browser-only OAuth grant; no API can install a GitHub App. Without it Render cannot read
-      the repo and no deploy is possible. **~5 minutes.**
-      Do it at: https://github.com/apps/render/installations/new → grant access to the repo.
-      Needed by: **P11**. Requested: 2026-09-09.
-      If it never arrives: no deployment, so RUBRIC5.6 and much of 5.9 fail. The documented
-      fallback is Google Cloud Run (same image, but it needs a card), and `make docker-run-512`
-      proves the exact image locally regardless — it already has.
-
-- [ ] **3 — Turso account + platform token → `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.**
-      Render's free tier has no persistent disk and wipes the filesystem on every 15-minute
-      spin-down, so without Turso any chat session the grader creates is lost. Free, no card,
-      provisioned unattended by `scripts/provision_turso.py` from one pasted platform token.
-      **~5 minutes.**
-      Do it at: https://turso.tech → GitHub SSO → create a Platform API token → paste it in.
-      Needed by: any time after **P1**; a pure environment change with no code change.
-      Requested: 2026-09-09.
-      If it never arrives: `SqliteStore` remains the coded fallback and committed eval results
-      still populate the evaluation pages, but every session created after the last deploy —
-      including every session the grader starts — is lost at the next spin-down, and
-      `deployed.md` says so plainly.
-
-- [ ] **4 — Render API key.**
-      Turns every remaining deploy operation from clicking into scripting: service creation,
-      env-var population, deploy-hook retrieval, `gh secret set`, log polling and the free-tier
-      budget check. Needs gate 2 first. **~2 minutes.**
-      Do it at: Render dashboard → Account Settings → API Keys → Create → paste it in.
-      Needed by: **P11**, right after gate 2. Requested: 2026-09-10.
-      If it never arrives: roughly fifteen minutes of manual clicking per deploy iteration through
-      the committed `render.yaml` Blueprint flow, which stays a supported path precisely for this.
 
 - [ ] **6 — Record the 7–10 minute demo video.**
       On camera, audible narration, government ID shown, **both agentic tasks executed live
@@ -53,7 +25,8 @@ Item numbering follows design spec §19.1, so a number here means the same thing
       Follow [`docs/demo-script.md`](docs/demo-script.md), which is time-boxed segment by segment
       and carries a five-element sub-checklist per task; tick
       [`docs/pre-submission-checklist.md`](docs/pre-submission-checklist.md) as you go.
-      Needed by: submission. Blocked by gates 2 + 4 — the URL must be live first.
+      Needed by: submission. **Unblocked** — the URL has been live since 2026-09-10. Wake the
+      instance with `GET /health` before you start recording; a cold start is ~71 s.
       If it never arrives: automatic fail on every demo bullet. There is no substitute.
 
 - [ ] **7 — Submit the two links** through the Quantic dashboard's *Submit Project* button.
@@ -66,9 +39,33 @@ Item numbering follows design spec §19.1, so a number here means the same thing
 - [x] **1 — Model API keys.** Provided **2026-09-09**: an Anthropic key (`ANTHROPIC_API_KEY`, the
       agent on `claude-haiku-4-5`) and **two** Google AI Studio keys from two different Cloud
       projects, one for `JUDGE_API_KEY` and one for `LLM_FALLBACK_API_KEY`, so the judge and the
-      agent's failover path never contend for the same quota or bill — the judge's project moved to
-      paid billing on 2026-09-10, the failover's is still free. All three validated on 2026-09-09.
-      They live only in the git-ignored `.env`.
+      agent's failover path never contend for the same quota or bill. All three validated on
+      2026-09-09. They live only in the git-ignored `.env`.
+- [x] **1a — Paid billing on the judge Cloud project.** Enabled by Sean on **2026-09-10** after
+      both free projects' 500-requests-per-day quota was exhausted mid-sweep and the alternative
+      was either waiting for the 07:10 UTC reset or swapping the judge model, which would have
+      broken comparability with every earlier judged artifact. `gemini-3.5-flash-lite` now bills at
+      the paid standard rates, $0.30 / $2.50 per MTok: **≈ $0.16–0.18 a judge pass**. The failover
+      project is deliberately still on a free key — its spend would be unbounded.
+- [x] **2 — Render account + the Render GitHub App.** Granted **2026-09-10**. Service
+      `mosaic-hr-copilot` (`srv-dahcsj95efls73dibqeg`) created on `plan: free`, region `oregon`,
+      live at `https://mosaic-hr-copilot.onrender.com`.
+- [x] **2a — A payment method on the Render workspace.** A gate this file never had, discovered
+      post-gate: Render refuses to create **any** service, free ones included, without one
+      (`402 Payment information is required`). No API can add it. Provided **2026-09-10**. The
+      workspace stays on the free plan; nothing is billable, and `plan: free` is asserted from the
+      API's own read-back before and after the service was created rather than from the request.
+- [x] **3 — Turso account + platform token.** Provided **2026-09-10**. Database `mosaic-hr` in
+      organisation `seantm`, group `default`, location `aws-us-west-2`, Starter plan with
+      `overages: false`. The live parity smoke answered P1's carry-forward: foreign keys **are**
+      enforced on the Hrana `/v2/pipeline` path.
+- [x] **4 — Render API key.** Provided **2026-09-10**. Everything after it was scripted: service
+      creation, every `sync: false` env var, `gh secret set` for `DEPLOY_URL`, `RENDER_API_KEY` and
+      `RENDER_SERVICE_ID`, deploy triggering, log polling and the free-tier budget check.
+      **`RENDER_DEPLOY_HOOK_URL` turned out not to be required**: no REST endpoint publishes it, so
+      CI's `deploy` job triggers production with `POST /v1/services/{id}/deploys` instead and uses
+      the hook only when that secret exists. The last irreducibly manual deploy step is therefore
+      gone.
 - [x] **5 — `quantic-grader` collaborator invite.** Scripted, **no user action**: run at P12 with
       `gh api -X PUT repos/seantmalone/quantic-mosaic/collaborators/quantic-grader`, read back
       with `…/collaborators/quantic-grader/permission`. The repository was verified **already
@@ -83,7 +80,9 @@ change to rotate it after grading.
 
 ---
 
-## The exact steps, once the gates land
+## The exact steps — all of these have now been run
+
+Kept as the record of what was done, and as the recipe for a rebuild or a rotation.
 
 Two operator credentials are read straight from the process environment — they belong to no runtime
 surface, so they are deliberately **not** `Settings` fields and are **not** in `.env.example`:
@@ -106,17 +105,18 @@ python scripts/provision_render.py    # creates the free service from render.yam
 ```
 
 `provision_render.py` prints the tokenized `Deployed: https://<app>.onrender.com/?access=<token>`
-line. Paste it into `README.md`'s `Deployed:` line (replacing the `pending: gate 2 + 4` marker)
-and into `deployed.md`'s `## Access`, then delete `data/runtime/provision_turso.json`.
+line. It was pasted into `README.md`'s `Deployed:` line and into `deployed.md`'s `## Access`, and
+`data/runtime/provision_turso.json` was deleted afterwards.
 
-**The second step no API can do** (re-confirmed against `api-docs.render.com` on 2026-09-10, and
-ratified as an amendment to spec §14.6): Render publishes the **deploy hook URL** in the dashboard
-(Service → Settings → Deploy Hook) and exposes it through no REST endpoint — the request for one is
-still an open thread on Render's own community forum. Copy it and either export
-`RENDER_DEPLOY_HOOK_URL` before running `provision_render.py` or run `gh secret set
-RENDER_DEPLOY_HOOK_URL` afterwards; the script prints this as a `TODO` line when it cannot find it.
-Until that secret exists, CI's `deploy` job **fails on its first step with a message naming this
-file** — deliberately, so a missing deploy is never a silently skipped job.
+**There is no manual browser step left.** Render publishes the **deploy hook URL** in the dashboard
+(Service → Settings → Deploy Hook) and through no REST endpoint — re-confirmed against the live
+account on 2026-09-10, where `deploy-hook`, `deployHook`, `hooks`, `deploy-hooks` and `settings`
+under `/v1/services/{id}` all answer 404 and `GET /v1/services/{id}` carries no `deployHookUrl`. So
+CI's deploy step curls `$RENDER_DEPLOY_HOOK_URL` when that secret exists and otherwise POSTs
+`/v1/services/$RENDER_SERVICE_ID/deploys` with `RENDER_API_KEY`, and `provision_render.py` sets
+`RENDER_SERVICE_ID` itself. The hook is an **optional alternative**, not a requirement, and R8.4 is
+unchanged: `needs: [test, docker]` still gates the job and Render Auto-Deploy is still off. Proven
+live on 2026-09-10 — deploy `dep-dahcukqfngtc7390n740`, `trigger: api`.
 
 ### 2. Verify the deployment
 
@@ -206,22 +206,23 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 
 ---
 
-## Blocked by a gate, and by which
+## Which gate produced what — and what is still open
 
-| Deliverable | Gate | Command that produces it |
-|---|---|---|
-| The live service and its URL | 2 + 4 | `scripts/provision_render.py` |
-| Every `sync: false` env var on Render | 2 + 4 (+ 3 for `TURSO_*`) | `scripts/provision_render.py` |
-| `RENDER_DEPLOY_HOOK_URL` / `DEPLOY_URL` / `RENDER_API_KEY` repository secrets | 2 + 4 | `scripts/provision_render.py` (`gh secret set`) |
-| The tokenized `README.md` `Deployed:` link | 2 + 4 | printed by `scripts/provision_render.py` |
-| The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` |
-| Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` |
-| Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` |
-| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above |
-| `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` |
-| Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` |
-| `/health.trace_store.eval_runs_imported` matching the committed count | 2 + 4 | the block in step 4 above |
-| The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above |
-| The demo video, and therefore `README.md`'s `Demo video:` link | 6 | `docs/demo-script.md` |
-| The submission itself | 7 | the Quantic dashboard |
-| Gemini rate limits and billing state for the two Cloud projects (judge: paid since 2026-09-10; failover: free) | an authenticated AI Studio session | https://aistudio.google.com/rate-limit |
+| Deliverable | Gate | Produced by | State |
+|---|---|---|---|
+| The live service and its URL | 2 + 2a + 4 | `scripts/provision_render.py` | **done** 2026-09-10 |
+| Every `sync: false` env var on Render | 2 + 4 (+ 3 for `TURSO_*`) | `scripts/provision_render.py` | **done** 2026-09-10 |
+| `DEPLOY_URL` / `RENDER_API_KEY` / `RENDER_SERVICE_ID` repository secrets (`RENDER_DEPLOY_HOOK_URL` optional) | 2 + 4 | `scripts/provision_render.py` (`gh secret set`) | **done** 2026-09-10 |
+| The tokenized `README.md` `Deployed:` link | 2 + 4 | printed by `scripts/provision_render.py` | **done** 2026-09-10 |
+| The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` | **done** 2026-09-10 — FKs enforced |
+| Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 (n=1; two further probes queued) |
+| Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` | **done** 2026-09-11 — build minutes ~11.5 of 500; instance hours unavailable from the API |
+| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** — `r_1789086979_baseline`, judged |
+| `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` | **done** 2026-09-11 |
+| Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` | **done** 2026-09-10 — demo 2 wrote `MOCK-HR-000001` behind the gate |
+| `/health.trace_store.eval_runs_imported` matching the committed count | 2 + 4 | the block in step 4 above | **done** 2026-09-10 |
+| The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above | **done** — all three committed |
+| The demo video, and therefore `README.md`'s `Demo video:` link | **6** | `docs/demo-script.md` | **open** |
+| The `quantic-grader` invitation confirmed as sent or accepted | **7** | `docs/pre-submission-checklist.md` `- [ ] SUB.3` | **open** |
+| The submission itself | **7** | the Quantic dashboard | **open** |
+| Gemini rate limits for the failover project (the judge's is on paid billing since 2026-09-10) | an authenticated AI Studio session | https://aistudio.google.com/rate-limit | still unread — affects nothing a published run depends on |

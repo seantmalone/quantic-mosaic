@@ -7,7 +7,7 @@ every step it took — routing decision, retrieval, tool calls, guardrails — i
 State-changing actions are mock and pass a one-time human confirmation gate before anything is
 written.
 
-Deployed: pending: gate 2 + 4 (Render account + API key) — see NEEDS-FROM-USER.md
+Deployed: https://mosaic-hr-copilot.onrender.com/?access=FaGQUENKinWIfcD5yp3XMzD-GqH9oxJDXesOIinFKcY
 Demo video: pending: gate 6 (record the walkthrough) — see docs/demo-script.md
 Repo: https://github.com/seantmalone/quantic-mosaic
 
@@ -76,9 +76,12 @@ HttpOnly cookie and stripped from the URL; API clients and MCP Inspector send
 observability dashboard. Full details, every environment variable and the measured numbers are in
 `deployed.md`.
 
-**Cold start.** The free instance spins down after 15 minutes idle, so the first request after an
-idle period takes roughly 35–70 seconds. Open `/health` first and wait for a 200 before chatting;
-the UI shows a cold-start banner with an elapsed counter while that happens.
+**Cold start.** The free instance spins down after 15 minutes idle. Measured on the live service —
+n=1, 2026-09-10, without a keep-alive, after 1,000 s of idle — waking it took **44.8 s** to the
+first `GET /health` 200, **2.8 s** more for `/ready`, and **23.3 s** for the first `POST /chat`:
+**71.0 s** from cold to first answer, against **22.5 s** for a warm turn. Open `/health` first and
+wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter while that
+happens. `deployed.md` carries the segment table and its provenance.
 
 ## Evaluation
 
@@ -91,6 +94,28 @@ Results are committed under `evaluation/results/` and rendered by the dashboard'
 pages; `evaluation/REPORT.md` carries the written analysis and
 `design-and-evaluation.md` carries the methodology, the 26 questions with their expected answers,
 the judge-agreement figures and the known limitations.
+
+**The published run** is `r_1789086979_baseline` — 26 items, `target: deployed`, judged by
+`gemini-3.5-flash-lite`, served by commit `da0dca2`. Beside it is the pre-optimization deployed
+baseline `r_1789055103_baseline`, run on the same instance and the same dataset before any of the
+quality or performance work:
+
+| Metric | Before (`r_1789055103_baseline`) | Published (`r_1789086979_baseline`) |
+|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.692 | **0.808** |
+| Groundedness | 0.979 | 0.982 |
+| Citation accuracy | 0.847 | 0.925 |
+| Document recall | 0.855 | 0.974 |
+| Tool selection (F1) | 0.926 | 0.992 |
+| Workflow completion | 0.769 | 0.846 |
+| Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
+| Latency p50 / p95 | 17.6 s / 47.7 s | **16.7 s** / **32.4 s** |
+| Judge agreement (blind seed subset) | 1.00 (n = 7) | 1.00 (n = 8) |
+| Judge agreement (hard subset, selection disclosed) | 1.00 (n = 8) | 0.875 (n = 8) |
+
+**How it got there — and what it cost — is in [`docs/optimization-log.md`](docs/optimization-log.md)**:
+every optimization question asked, the evidence gathered, the decision taken, and the run id that
+measured it.
 
 ## Third-party components
 

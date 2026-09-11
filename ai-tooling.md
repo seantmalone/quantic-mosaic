@@ -88,10 +88,11 @@ OAuth grant, an API key paste, or the recording itself. Nothing else.
   of real `claude-haiku-4-5` exchanges. That is how we discovered the model reproducibly answers
   demo task 1 with repeated searches rather than a heading fetch — a fact that changed the
   documented expectations rather than being papered over.
-- **Refusing to tune the number.** The evaluation reports 0.654 strict pass against a 0.85 target,
-  a null ablation and one over-refusal, each with its cause. The coordinating session's standing
-  ruling was that the only permitted lever was fixing an actual defect, and that everything else
-  gets published with its cause.
+- **Refusing to tune the number.** The published evaluation reports 0.808 strict pass against a
+  0.85 target and a null ablation, each failing item with its cause — and it reports the 0.692 it
+  started from beside it, so the optimization work is visible rather than implied. The
+  coordinating session's standing ruling was that the only permitted lever was fixing an actual
+  defect, and that everything else gets published with its cause.
 - **`make` targets as the shared vocabulary.** CI runs the same targets a developer runs, so a
   macOS-only assumption fails immediately rather than at deploy time.
 
@@ -170,7 +171,7 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — over 1,600 tests, 1,652 of them when this paragraph was written on 2026-09-10 —
+committed suite — over 1,800 tests, 1,815 of them when this paragraph was last read on 2026-09-11 —
 and by a 26-item evaluation whose real numbers, including the ones below target,
 are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
