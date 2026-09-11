@@ -373,6 +373,47 @@ Final suite: 1,933 tests, pristine under `filterwarnings = error`.
 
 ---
 
+## 2026-09-11 — The independent grade, and the last two waves
+
+An independent grading pass (22 agents: inventory, one grader per rubric bullet, a skeptic on every
+score, a synthesized card — committed under `docs/evidence/`) put the project at band 5 with two
+bullets at 4.5. Everything checkable that it found was fixed in two waves:
+
+- **Grade-card fixes (P23).** The deployed MCP endpoint had been rejecting external clients with
+  HTTP 421 (the SDK's DNS-rebinding protection defaults to loopback hosts) while the documents
+  invited a grader to attach MCP Inspector; the allowlist is now a setting, set on the service, and
+  an external `initialize` answered 200 at 20:32Z. Stale test and statement counts, a 120- versus
+  420-person headcount contradiction, a stale traceability row, run files that recorded the commit as
+  "dev", an overstated labeller-independence claim, and an architecture page that loaded web fonts
+  against a "no network" claim were all corrected; the process trail (briefs, reports, ledger) is now
+  committed under `docs/process/sdd/`, and live demo transcripts are pinned under `docs/evidence/`.
+- **Model-behaviour fixes (P24, approved by Sean).** Multi-document answers now cite every document
+  their evidence spans, with one bounded repair call when they do not; two HR-adjacent
+  out-of-corpus questions (tuition reimbursement, referral bonus) joined the dataset, which is now
+  28 items; the two citation-guardrail block drops were traced to a quarantined chunk carrying a
+  citable id and a one-character transcription slip, both fixed at the root.
+
+| Metric | Before | After quality fixes | After perf waves | **Final (P24)** |
+|---|---|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.692 | 0.808 | 0.808 | **0.893** |
+| Groundedness | 0.979 | 1.000 | 0.982 | 0.984 |
+| Citation accuracy | 0.847 | 0.914 | 0.925 | 0.905 |
+| Doc recall | 0.855 | 0.974 | 0.974 | 0.961 |
+| Tool selection F1 | 0.926 | 0.987 | 0.992 | 0.993 |
+| Workflow completion | 0.769 | 0.846 | 0.846 | **0.893** |
+| Over-refusal / missed-refusal | 0.111 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| Latency p50 / p95 | 17.6 / 47.7 s | 22.6 / 39.2 s | 16.7 / 32.4 s | 19.1 / 38.7 s |
+| Judge agreement, seed / hard (n=8 each) | 1.00 / 1.00 | — | 1.00 / 0.875 | 0.875 / 0.875 |
+
+**Reading it.** The project's own strict-pass target is met for the first time; three items remain
+(remote-003, remote-004, unsafe-001). The breadth repair costs about 2.4 s at the median, a trade
+accepted for the pass rate. Both blind labellers independently caught the same judge miss, a next
+step ("submit claims by month-end") that no evidence states, which is why agreement reads 0.875
+rather than 1.0 and why "ground the next steps" is the recorded follow-up. The ablation delta
+(−0.143) stays under the pre-registered 0.25 bar and is still reported as not supported.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
