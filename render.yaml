@@ -1,8 +1,11 @@
 # Render Blueprint for the single Hobby (free) web service (spec §14.1).
 #
 # `autoDeploy: false` is half of the R8.4 argument: Render's own Auto-Deploy is off, so the ONLY
-# path from a commit to the running service is the deploy hook that CI's `deploy` job curls — and
-# that job carries `needs: [test, docker]`, so a red suite cannot reach production.
+# path from a commit to the running service is the deploy that CI's `deploy` job triggers — through
+# `POST /v1/services/{id}/deploys` with `RENDER_API_KEY` and `RENDER_SERVICE_ID`, or through the
+# deploy hook when `RENDER_DEPLOY_HOOK_URL` happens to be set (no REST endpoint publishes it, so the
+# API call is the path that actually runs). Either way that job carries `needs: [test, docker]`, so
+# a red suite cannot reach production.
 #
 # `scripts/provision_render.py` creates the service from these same values over the REST API and
 # populates every `sync: false` variable, so this file is both the committed description of the
@@ -14,7 +17,7 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    autoDeploy: false                 # deploys arrive ONLY via the CI deploy hook
+    autoDeploy: false                 # deploys arrive ONLY from CI's `deploy` job
     envVars:
       - { key: APP_ENV,         value: render }
       - { key: LLM_PROVIDER,    value: anthropic }

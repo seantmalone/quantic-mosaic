@@ -76,3 +76,29 @@ regexes = [
   '''Bearer[ \t]+ci-access-token\b''',     # .github/workflows/ci.yml, historic (removed at 05bb244)
   '''Bearer[ \t]+local-memory-gate\b''',   # Makefile, historic (removed by this commit)
 ]
+
+# ── `generic-api-key` on README.md's `Deployed:` line ───────────────────────────────────────────
+# The grader's entry point is a tokenized link — `https://…onrender.com/?access=<43 chars>` — and
+# the 43-character `secrets.token_urlsafe(32)` value in it trips `generic-api-key` on entropy
+# alone. It is **intentionally public**: spec §11 makes the token a speed bump against drive-by
+# scanners, not a secret, and the grader has to be handed it in the repository to open the
+# deployment at all. It guards nothing but synthetic HR data behind a read-mostly UI, and it is
+# **rotated after grading** — `deployed.md` § *Access* has the procedure: delete `APP_ACCESS_TOKEN`
+# from the Render service, then `RENDER_API_KEY=… python scripts/provision_render.py` mints a new
+# one. Written out exactly once in the repository, on that one line of README.md.
+#
+# `condition = "AND"` binds all three criteria: the finding must come from `generic-api-key`, in
+# `README.md`, on a line carrying `?access=<43 url-safe chars>`. Any other rule, any other file, or
+# any other high-entropy string in README.md is still reported — and every existing allowlist above
+# is untouched.
+[[allowlists]]
+description = "generic-api-key: README.md's `Deployed:` grader link, whose ?access= token is public by design (§11) and rotated after grading"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = [
+  '''^README\.md$''',
+]
+regexTarget = "line"
+regexes = [
+  '''\?access=[A-Za-z0-9_-]{43}(?:\b|$)''',
+]

@@ -82,8 +82,10 @@ idle — waking it took a median **44.8 s** to the first `GET /health` 200, **0.
 `/ready`, and **23.9 s** for the first `POST /chat`: a median **71.0 s** from cold to first answer
 (67.5–77.6 s across the three), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
 first and wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter
-while that happens. `deployed.md` carries the per-probe table and its provenance, and a keep-alive
-pinger is a queued decision rather than something already hiding these numbers.
+while that happens. `deployed.md` carries the per-probe table and its provenance, and a ten-minute
+GitHub Actions keep-alive (`.github/workflows/keepalive.yml`, added 2026-09-11 *after* these figures
+were published) now keeps the instance warm — disable that workflow and the table above is again
+exactly what a visitor sees.
 
 ## Evaluation
 

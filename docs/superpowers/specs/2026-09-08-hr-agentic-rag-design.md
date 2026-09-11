@@ -63,7 +63,9 @@ dashboard covers evaluation: runs, per-item results, all six metric families, la
 - **Node anywhere in the build.** No SPA, no bundler, no `npm ci`.
 - **User accounts, real PII, production HRIS integration.** Everything is synthetic and the requirements are silent on auth, so the deployment carries
   one shared access token plus two personas (§11, §17) and nothing more — no sign-up, no directory, no per-record permissions.
-- **A keep-alive cron.** 24/7 pinging consumes ~744 of 750 monthly workspace instance-hours; documenting the cold start scores better than hiding it.
+- **A keep-alive cron — *until the cold start had been measured and published*.** 24/7 pinging consumes ~744 of 750 monthly workspace instance-hours,
+  and documenting the cold start scores better than hiding it; the ten-minute keep-alive of §14.4 landed on 2026-09-11, after the n=3 table, and the
+  published figures stay as measured.
 - **A frozen clock.** v1's process-wide freeze entangled latency measurement, mock-data arithmetic and gold answers and generated contradictions in
   every review round; v2 uses the real wall clock and makes date-bearing data explicit instead (§5.4, §13.6, §22).
 
@@ -192,7 +194,10 @@ quantic-mosaic/
 │                                #   ⚠ the first line must be `data/index/*`, NOT `data/index/`:
 │                                #     a trailing-slash exclusion kills the negation and the
 │                                #     manifest becomes uncommittable
-├── .github/workflows/ci.yml     # ONE workflow: jobs lint · test · docker · deploy
+├── .github/workflows/           # ci.yml — ONE CI workflow: jobs lint · test · docker · deploy
+│                                # keepalive.yml — §14.4, added 2026-09-11 once the cold start had
+│                                #   been measured and published: GET /health every 10 min, no
+│                                #   secret, permissions: {}, and it never fails the repo's status
 │
 ├── corpus/                      # the 14 documents of §5.3 (11 .md, 1 .html, 1 .pdf + .src.md, 1 .txt)
 │   │                            #   — authored and committed, no generator
@@ -2500,8 +2505,12 @@ query embed is expected to cost ~100–300 ms of CPU and the KNN plus FTS5 a fur
 (§2.1), and why the retrieval-k ablation shows no latency signal. **The 8 ms figure is never published as the deployed number**; P11 measures it.
 
 Mitigations, documented rather than hidden: the `/health` preflight banner with an elapsed counter; a README instruction to open `/health` first and
-wait for 200; lazy model load so `/ready` is what turns green; cold vs warm reported separately; the demo script narrates it. **No keep-alive cron** —
-24/7 pinging would consume ~744 of the 750 monthly hours.
+wait for 200; lazy model load so `/ready` is what turns green; cold vs warm reported separately; the demo script narrates it. **A keep-alive, added
+after the measurement** (Sean's ruling of 2026-09-10 20:40Z, landed 2026-09-11): `.github/workflows/keepalive.yml` pings `/health` every ten minutes,
+so the instance normally stays warm. The ordering is the decision, not the pinger — the n=3 table in `deployed.md` is measured with nothing pinging and
+stays published exactly as measured — and the cost is stated rather than hidden: round-the-clock pinging consumes ~744 of the 750 monthly workspace
+instance-hours, and exhausting them suspends free services until the month resets rather than billing anything. Disabling the workflow (one menu, no
+commit) restores the measured behaviour.
 
 ### 14.5 CI-gated deploy mechanism (R8.4)
 
@@ -2912,7 +2921,7 @@ script. No screenshot is a user step: each is named in the P11/P12 gates, so its
 | **R-7** | **Corpus quality.** AI-authored policy prose drifts toward vagueness or internal contradiction, silently capping groundedness and citation accuracy. | High | `corpus/facts.yml` pins the ~40 facts the system actually depends on, each with a verbatim `quote`, and one test asserts every quote still appears in its document (§5.2). Gold answers and compliance rules both cite fact ids, so a corpus edit that moves a number fails that test before it can contradict a gold answer. The P2 review criterion is ≥ 6 concrete checkable statements per document. |
 | **R-8** | **Untyped template boundary.** Jinja + htmx has no compile-time contract across 11 dashboard pages authored by different subagents. | Medium | Every page renders from a typed Pydantic view-model produced by the same `/api/*` endpoint that serves its JSON; `test_dashboard_viewmodels` validates the JSON against the schema and `test_dashboard_pages` asserts each page renders it with the expected selectors. Pages 2, 4, 5, 6, 7 and 8 are thin configurations of one shared table partial plus filter bar, so the surface is far smaller than 11 bespoke pages. Page 3 is built **first** — it is the centrepiece and the demo depends on it. |
 | **R-9** | **Platform and provider facts partly unverified** — Render's plan details and request timeout, the Gemini free-tier limits the eval-feasibility argument rests on, and the Turso free-tier figures. | Medium | §3.1 is the complete list, each with where to read it and when. P10 step 0 and P11 step 0 read them live and paste the observed values with dates into `deployed.md`. `eval_runs.notes` records observed 429/`Retry-After` behaviour. Deployment is deliberately late (P11) and `make docker-run-512` runs the exact image locally first. Documented fallbacks: the same stack as a native Python service on Render, then Cloud Run with the same image. |
-| **R-10** | **Two Render budgets: 750 instance-hours/workspace/month and 500 build minutes/month.** Exhausting the first suspends every free service for the rest of the month; exhausting the second blocks every rebuild, including the republish that gets committed eval results into the live image. | Medium | One service only; no keep-alive cron; idle time is free; `autoDeploy: false` plus `paths-ignore` on `evaluation/results/**` and `docs/**` mean a results or docs commit spends no build. `scripts/check_render_hours.py` warns above 600 of 750 hours and 400 of 500 build minutes. Both figures are re-read and dated at P11 step 0, and the measured per-build wall-clock goes into `deployed.md`'s `## Cost`. |
+| **R-10** | **Two Render budgets: 750 instance-hours/workspace/month and 500 build minutes/month.** Exhausting the first suspends every free service for the rest of the month; exhausting the second blocks every rebuild, including the republish that gets committed eval results into the live image. | Medium | One service only; idle time was free until the ten-minute keep-alive of §14.4 landed on 2026-09-11, which spends ~744 of the 750 hours by design and is disabled from one Actions menu; `autoDeploy: false` plus `paths-ignore` on `evaluation/results/**` and `docs/**` mean a results or docs commit spends no build. `scripts/check_render_hours.py` warns above 600 of 750 hours and 400 of 500 build minutes. Both figures are re-read and dated at P11 step 0, and the measured per-build wall-clock goes into `deployed.md`'s `## Cost`. |
 | **R-11** | **Autonomous-build drift** across 13 phases and multiple subagents: a parallel logging path, docs falling out of sync, a prompt tweak silently invalidating the documented demo sequences. | High | The trace is built at **P1**, before anything that can log, with the conventions test in place from the same phase. Standing per-phase acceptance criterion from P4 onward: *"the expected spans were persisted, with the expected kinds and payload shapes."* `test_demo_tasks` compares the actual trace sequence against the documented one via two expectation records; `test_audit_completeness` proves the writer emits every span kind and field from a live turn; `test_chunking_deterministic` locks the manifest; `test_facts_quotes` locks the corpus; `test_tool_schemas_committed` locks the tool schemas. Docs are checked for **headings**, not diffed against a generator (§22). |
 | **R-12** | **Exposed `/mcp-server/mcp` endpoint**, deliberately reachable so a grader can attach MCP Inspector. | Low | The mount sits behind the access gate, so a caller needs `Authorization: Bearer $APP_ACCESS_TOKEN` (Inspector supports custom headers); beyond that, every read tool exposes only synthetic data; the write tools need a one-time token an external caller cannot obtain, and the rejection leaks nothing (`test_confirmation_gate`); a per-IP rate limit (`ACCESS_RATE_LIMIT_PER_MIN`) is FastAPI middleware on the mount. Whether the SDK offers a native host allowlist is checked before P5 and recorded with what was actually found. |
 | **R-13** | **Stub-vs-real divergence.** The `StubAdapter` could pass while real provider tool-call shapes differ, hiding a prompt regression. | Medium | At P10 one **real** exchange per demo task is recorded and committed as a stub script, so the stub is a recording rather than an invention (§16.2). A golden synthesis-prompt snapshot test fails on any prompt-shape change, forcing a deliberate re-review. Each `make eval` run exercises the real provider end to end. |

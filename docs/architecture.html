@@ -480,9 +480,9 @@ footer .mono{font-size:12px}
           <g class="edge" data-id="f1-e-inspect" data-from="f1-inspector" data-to="f1-mcpserver" tabindex="0" aria-label="public MCP endpoint">
             <path class="hitline" d="M940,560 H890 V521 H788"/><path class="conn dash" d="M940,560 H890 V521 H788" marker-end="url(#ar)"/>
             <text class="elab" x="818" y="545">public /mcp-server/mcp</text></g>
-          <g class="edge" data-id="f1-e-deploy" data-from="f1-ci" data-to="f1-fastapi" tabindex="0" aria-label="deploy hook">
+          <g class="edge" data-id="f1-e-deploy" data-from="f1-ci" data-to="f1-fastapi" tabindex="0" aria-label="deploy (API)">
             <path class="hitline" d="M450,878 V852"/><path class="conn" d="M450,878 V852" marker-end="url(#ar)"/>
-            <text class="elab" x="460" y="870">deploy hook &middot; autoDeploy: false</text></g>
+            <text class="elab" x="460" y="870">deploy (API) &middot; autoDeploy: false</text></g>
         </svg>
         <figcaption>All seven components the requirements name are labelled here. Everything inside the dashed boundary
           is one uvicorn worker; the agent reaches its tools only over real JSON-RPC, and every component on the ochre
@@ -1328,14 +1328,14 @@ footer .mono{font-size:12px}
   <div class="shead">
     <p class="eyebrow">Figure 6 &middot; Spec &sect;14, &sect;15</p>
     <h2>Nothing deploys that the suite has not passed</h2>
-    <p class="claim">Render auto-deploy is off, so the only route from a commit to the running service is a hook curled
-      by a job whose <code>needs:</code> clause makes a red test skip it outright.</p>
+    <p class="claim">Render auto-deploy is off, so the only route from a commit to the running service is a deploy
+      triggered by a job whose <code>needs:</code> clause makes a red test skip it outright.</p>
   </div>
   <div class="figbox">
     <div class="figscroll">
       <figure>
         <svg class="dg" id="svg6" viewBox="0 0 1180 580" role="group"
-             aria-label="CI and deployment: pushes, pull requests and a manual dispatch trigger one workflow with lint, test, docker and deploy jobs; deploy needs test and docker, curls the Render deploy hook, which builds the image with the index baked in and starts the live service. GitHub secrets feed the deploy job and Render environment variables feed the running service.">
+             aria-label="CI and deployment: pushes, pull requests and a manual dispatch trigger one workflow with lint, test, docker and deploy jobs; deploy needs test and docker and triggers the Render deploy API, which builds the image with the index baked in and starts the live service. GitHub secrets feed the deploy job and Render environment variables feed the running service.">
 
           <g class="node fam-web" data-id="f6-t1" tabindex="0" aria-label="push to main">
             <rect class="tile" x="16" y="96" width="190" height="64" rx="2"/>
@@ -1390,15 +1390,15 @@ footer .mono{font-size:12px}
             <rect class="tile" x="538" y="250" width="234" height="110" rx="2"/>
             <text class="t-title" x="550" y="272">deploy &mdash; needs: [test, docker]</text>
             <text class="t-sub" x="550" y="292">main pushes and deploy_only</text>
-            <text class="t-sub" x="550" y="308">curl -fsS -X POST $HOOK</text>
+            <text class="t-sub" x="550" y="308">POST /v1/services/$ID/deploys</text>
             <text class="t-sub" x="550" y="324">wait_for_deploy.py --timeout 900</text>
             <text class="t-sub" x="550" y="340">smoke_deployed.py</text>
           </g>
 
-          <g class="node fam-ext" data-id="f6-hook" tabindex="0" aria-label="Render deploy hook">
+          <g class="node fam-ext" data-id="f6-hook" tabindex="0" aria-label="Render deploy (API)">
             <rect class="tile" x="846" y="96" width="318" height="76" rx="2"/>
-            <text class="t-title" x="858" y="118">Render deploy hook</text>
-            <text class="t-sub" x="858" y="138">autoDeploy: false &mdash; the hook is the</text>
+            <text class="t-title" x="858" y="118">Render deploy (API)</text>
+            <text class="t-sub" x="858" y="138">autoDeploy: false &mdash; this job is the</text>
             <text class="t-sub" x="858" y="154">only path from a commit to the service</text>
           </g>
           <g class="node fam-ext" data-id="f6-build" tabindex="0" aria-label="Render build">
@@ -1458,9 +1458,9 @@ footer .mono{font-size:12px}
           <g class="edge" data-id="f6-e-need2" data-from="f6-docker" data-to="f6-deploy" tabindex="0" aria-label="needs docker">
             <path class="hitline" d="M514,305 H538"/><path class="conn" d="M514,305 H538" marker-end="url(#ar)"/>
             <text class="elab" x="526" y="297" text-anchor="middle">needs</text></g>
-          <g class="edge" data-id="f6-e-hook" data-from="f6-deploy" data-to="f6-hook" tabindex="0" aria-label="curl the hook">
+          <g class="edge" data-id="f6-e-hook" data-from="f6-deploy" data-to="f6-hook" tabindex="0" aria-label="POST the deploy">
             <path class="hitline" d="M772,290 H812 V134 H846"/><path class="conn" d="M772,290 H812 V134 H846" marker-end="url(#ar)"/>
-            <text class="elab" x="806" y="232" text-anchor="end">POST hook</text></g>
+            <text class="elab" x="806" y="232" text-anchor="end">POST deploy</text></g>
           <g class="edge" data-id="f6-e-build" data-from="f6-hook" data-to="f6-build" tabindex="0" aria-label="build">
             <path class="hitline" d="M1005,172 V196"/><path class="conn" d="M1005,172 V196" marker-end="url(#ar)"/>
             <text class="elab" x="1013" y="189">build</text></g>
@@ -1568,7 +1568,7 @@ D["f1-inspector"]={t:"External MCP client",f:"ext",p:"The mounted endpoint stays
  c:["Access gate","MCP server"]};
 D["f1-ci"]={t:"GitHub Actions — ci.yml",f:"ext",p:"One workflow with four jobs. Deployment is a job that needs test and docker, so a red suite skips it rather than racing it.",
  k:[["Jobs","lint, test, docker, deploy"],["Gate","deploy needs: [test, docker]"],["Trigger","POST /v1/services/$RENDER_SERVICE_ID/deploys with RENDER_API_KEY; curl -fsS -X POST $RENDER_DEPLOY_HOOK_URL when that secret exists"],["Platform","Render Auto-Deploy is off, so the deploy job is the only path from a commit to the service"]],
- c:["Render web service (deploy hook)"]};
+ c:["Render web service (deploy API)"]};
 
 D["f1-e-guard"]={t:"Guardrails, applied in-line",f:"edge",p:"The guardrails are not a post-processing filter: G4 runs before and during the act loop, G1 before synthesis and G2, G3 over what synthesis produced. Each evaluation emits a guardrail span carrying its verdict.",
  k:[["Order","G4 on the user message → G4 on new evidence → G1 evidence gate → synthesize → G2, G3"],["G5","decided at the router, before a single tool is burned"],["G6","runs over every trace payload before persistence"],["Audit","the safety dashboard page counts verdicts by rule_id"]],c:["Agent Orchestrator","Guardrails G1–G6"]};
@@ -1602,8 +1602,8 @@ D["f1-e-store"]={t:"One batched flush per turn",f:"edge",p:"All spans, all llm_m
  k:[["Turso","one /v2/pipeline request"],["Reopen","a confirm sets ended_at NULL, clears outcome, increments resumed_count and continues seq; a second flush closes the turn again"],["Caps","32 KB per span payload, 128 KB for llm_call, 8 KB per string; truncated=1 and payload_bytes record the truth"]],c:["Trace Writer","Audit / trace store"]};
 D["f1-e-inspect"]={t:"Public MCP endpoint",f:"edge",p:"Deliberately reachable from outside so the MCP claim can be verified independently of this app's own UI \u2014 with the bearer header, which MCP Inspector supports as a custom header.",
  k:[["Path","/mcp-server/mcp"],["Header","Authorization: Bearer $APP_ACCESS_TOKEN"],["Reads","synthetic data only"],["Writes","refused without a one-time confirmation token, and the refusal carries no token"],["Limit","per-IP rate limit on the mount, ACCESS_RATE_LIMIT_PER_MIN"]],c:["External MCP client","Access gate","MCP server"]};
-D["f1-e-deploy"]={t:"Render deploy hook",f:"edge",p:"The single path from a commit to the running service, curled by a job that cannot run unless test and docker are green.",
- k:[["Secret","RENDER_DEPLOY_HOOK_URL"],["Then","wait_for_deploy.py --timeout 900, then smoke_deployed.py"],["Platform","autoDeploy: false in render.yaml"]],c:["GitHub Actions — ci.yml","Web App — FastAPI"]};
+D["f1-e-deploy"]={t:"Render deploy (API)",f:"edge",p:"The single path from a commit to the running service, triggered by a job that cannot run unless test and docker are green.",
+ k:[["Secrets","RENDER_API_KEY and RENDER_SERVICE_ID; RENDER_DEPLOY_HOOK_URL optional"],["Then","wait_for_deploy.py --timeout 900, then smoke_deployed.py"],["Platform","autoDeploy: false in render.yaml"]],c:["GitHub Actions — ci.yml","Web App — FastAPI"]};
 
 /* ---------- Figure 2: one chat turn ---------- */
 D["f2-s1"]={t:"01 · Request",f:"web",p:"The access gate runs first \u2014 cookie or bearer \u2014 then the persona is resolved, and only then is the session row upserted and the turn row inserted synchronously, so the stream and the dashboard can see a turn in flight.",
@@ -1811,15 +1811,15 @@ D["f6-test"]={t:"Job — test",f:"agent",p:"The whole pytest suite in one comman
 D["f6-docker"]={t:"Job — docker",f:"agent",p:"Builds the real image and health-checks the running container, so “it starts” is proved on the artifact that ships.",
  k:[["Build","docker build --build-arg GIT_SHA=${{ github.sha }}"],["Probe","enable_load_extension → sqlite_vec.load → SELECT vec_version() inside python:3.12-slim, on every run"],["Run","the container with LLM_PROVIDER=stub, then wait_for_health.py"],["Assert","assert_health.py checks mcp.connected, tool_count == 9, index.loaded and doc_count == 14"],["Always","docker logs app on the way out"]],c:["deploy job"]};
 D["f6-deploy"]={t:"Job — deploy",f:"agent",p:"needs: [test, docker] is what makes “deployment only occurs if tests pass” literally true, because Actions skips a job whose needs failed.",
- k:[["Condition","a push on main, or a workflow_dispatch with deploy_only true"],["Step 1","curl -fsS -X POST $RENDER_DEPLOY_HOOK_URL"],["Step 2","python scripts/wait_for_deploy.py --url $DEPLOY_URL --timeout 900"],["Step 3","python scripts/smoke_deployed.py --url $DEPLOY_URL, which asserts GIT_SHA is not \"dev\" on the live instance"]],c:["Render deploy hook"]};
-D["f6-hook"]={t:"Render deploy hook",f:"ext",p:"Belt and braces: the CI gate makes the deploy conditional, and the platform setting makes the hook the only door.",
- k:[["Setting","autoDeploy: false in render.yaml"],["Secret","RENDER_DEPLOY_HOOK_URL, set by scripts/provision_render.py via gh secret set"],["Manual step","installing the Render GitHub App is the one thing no API can do"]],c:["Render build"]};
+ k:[["Condition","a push on main, or a workflow_dispatch with deploy_only true"],["Step 1","curl -fsS -X POST https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys with RENDER_API_KEY; the deploy hook when RENDER_DEPLOY_HOOK_URL happens to be set"],["Step 2","python scripts/wait_for_deploy.py --url $DEPLOY_URL --timeout 900"],["Step 3","python scripts/smoke_deployed.py --url $DEPLOY_URL, which asserts GIT_SHA is not \"dev\" on the live instance"]],c:["Render deploy (API)"]};
+D["f6-hook"]={t:"Render deploy (API)",f:"ext",p:"Belt and braces: the CI gate makes the deploy conditional, and the platform setting makes this the only door.",
+ k:[["Setting","autoDeploy: false in render.yaml"],["Secrets","RENDER_API_KEY and RENDER_SERVICE_ID, set by scripts/provision_render.py via gh secret set; RENDER_DEPLOY_HOOK_URL is optional, because no REST endpoint publishes it"],["Manual step","installing the Render GitHub App is the one thing no API can do"]],c:["Render build"]};
 D["f6-build"]={t:"Render build",f:"ext",p:"The index is built on the two-CPU builder and ships inside the image, so a cold start opens a file instead of indexing ~280 chunks.",
  k:[["Base","python:3.12-slim; onnxruntime and numpy wheels are manylinux"],["Model","baked with a build step, about 64 MB — a cold start must never download it"],["Verify","python -m hrmosaic.rag.ingest --verify-manifest &amp;&amp; python -m hrmosaic.rag.index --selftest"],["Selftest","a fixed query must return tax-and-location-addendum at rank 1 with a real dense score, and the index chunk count must equal the committed manifest's line count"],["Start","sh -c so ${PORT} is expanded at run time, because Render injects it"]],c:["Live service"]};
 D["f6-live"]={t:"Live service",f:"web",p:"Degradation is a status string, never a 5xx, so a provider hiccup or a slow model load never makes the platform restart-loop the instance.",
  k:[["healthCheckPath","/health, always 200 while the process is up"],["/ready","503 until the ONNX model and the index are resident; warm-up issues one loopback tools/call, not a direct import"],["degradations[]","llm_api_key_missing, index_model_mismatch, mcp_disconnected, trace_store_unreachable, access_token_missing \u2014 exactly five possible strings"],["Reports","live rss_mb and rss_peak_mb; the dashboard plots turns.rss_mb_at_end"],["Spend","llm.agent.calls_today against llm.agent.daily_call_cap, so the remaining model budget is visible without opening the dashboard — reaching the cap is an outcome, not a sixth degradation string"],["Budgets","750 instance-hours per workspace per month and 500 build minutes; a script warns above 600 and 400"]],c:["Cold start"]};
-D["f6-cold"]={t:"Cold start",f:"trace",p:"Measured and published before it is mitigated. No keep-alive cron runs today, so every figure here is the no-ping behaviour; a ten-minute /health pinger is a queued decision and would consume about 744 of the 750 monthly hours.",
- k:[["Spin-up to /health 200","44.8 s median (43.5–52.4) on the live free instance, each probe after 1,000 s idle"],["/health 200 to /ready 200","0.1 s median — 2.8 s on the readiness-fix build, 0.1 s on the final build"],["Model mmap","0.06–0.40 s from the baked cache, against 16–63 s if it downloaded"],["First POST /chat","23.9 s median — first request total 71.0 s median, 67.5–77.6 s"],["Warm turn","22.5 s median (22.5–23.9), about 89 % of it provider time"],["Sample size","n = 3, measured 2026-09-10 and 2026-09-11 without keep-alive; raw segments in docs/evidence/cold-start-probes.json"],["Mitigations","a /health preflight banner with an elapsed counter, and cold versus warm reported separately"]],c:["Live service"]};
+D["f6-cold"]={t:"Cold start",f:"trace",p:"Measured and published before it is mitigated. Every figure here is the no-ping behaviour; the ten-minute /health pinger added on 2026-09-11 keeps the instance warm and consumes about 744 of the 750 monthly hours, and disabling that workflow restores exactly these numbers.",
+ k:[["Spin-up to /health 200","44.8 s median (43.5–52.4) on the live free instance, each probe after 1,000 s idle"],["/health 200 to /ready 200","0.1 s median — 2.8 s on the readiness-fix build, 0.1 s on the final build"],["Model mmap","0.06–0.40 s from the baked cache, against 16–63 s if it downloaded"],["First POST /chat","23.9 s median — first request total 71.0 s median, 67.5–77.6 s"],["Warm turn","22.5 s median (22.5–23.9), about 89 % of it provider time"],["Sample size","n = 3, measured 2026-09-10 and 2026-09-11 without keep-alive; raw segments in docs/evidence/cold-start-probes.json"],["Mitigations",".github/workflows/keepalive.yml every ten minutes, a /health preflight banner with an elapsed counter, and cold versus warm reported separately"]],c:["Live service"]};
 D["f6-ghsec"]={t:"GitHub repository secrets",f:"data",p:"Three, and none of them is an LLM key — which is why the deploy path is fast, offline and free of rate-limit failures.",
  k:[["DEPLOY_URL","used by wait_for_deploy.py and smoke_deployed.py"],["RENDER_API_KEY","used by the deploy trigger and by check_render_hours.py, which warns and never fails"],["RENDER_SERVICE_ID","the service the deploy job POSTs to"],["RENDER_DEPLOY_HOOK_URL","optional — no REST endpoint publishes it, so the job POSTs /v1/services/{id}/deploys instead and uses the hook only if the secret exists"],["Set by","scripts/provision_render.py and provision_turso.py via gh secret set"],["Repo","public, which removes the private-repo Actions minute cap"]],c:["deploy job"]};
 D["f6-renv"]={t:"Render environment",f:"data",p:"Every variable appears in .env.example with a default, a REQUIRED or OPTIONAL marker and a signup URL — and that parity is itself a test in both directions.",
@@ -1829,8 +1829,8 @@ D["f6-e-t2"]={t:"on: pull_request",f:"edge",p:"The same jobs, minus the deploy �
 D["f6-e-t3"]={t:"workflow_dispatch",f:"edge",p:"Reaches the deploy job only after the suite it still depends on.",k:[["Input","deploy_only: true"],["Use","carrying a committed eval results set into the live image, verified by /health.trace_store.eval_runs_imported"]],c:["workflow_dispatch","lint, test and docker — deploy is reached only through needs"]};
 D["f6-e-need1"]={t:"needs: test",f:"edge",p:"The literal mechanism behind the deployment gate. A failed dependency means the job never runs.",k:[["Shown as","skipped with reason “dependent job failed”"]],c:["test job","deploy job"]};
 D["f6-e-need2"]={t:"needs: docker",f:"edge",p:"The image must build and answer /health before anything is deployed from it.",k:[["Checked","mcp.connected, tool_count == 9, index.loaded, doc_count == 14"]],c:["docker job","deploy job"]};
-D["f6-e-hook"]={t:"POST the deploy hook",f:"edge",p:"One curl, then wait, then smoke-test the live URL.",k:[["Timeout","900 s on wait_for_deploy.py"],["Smoke","smoke_deployed.py asserts the live GIT_SHA is a real commit, not \"dev\""]],c:["deploy job","Render deploy hook"]};
-D["f6-e-build"]={t:"Build the image",f:"edge",p:"Requirements are pinned exactly and installed from committed manifests; no curl-pipe-shell anywhere in the Dockerfile.",k:[["Copied in","src, mcp, corpus, mock_data, evaluation, the stub scripts and the committed chunk manifest"],["Not copied","requirements-dev.txt"]],c:["Render deploy hook","Render build"]};
+D["f6-e-hook"]={t:"POST the deploy",f:"edge",p:"One curl, then wait, then smoke-test the live URL.",k:[["Timeout","900 s on wait_for_deploy.py"],["Smoke","smoke_deployed.py asserts the live GIT_SHA is a real commit, not \"dev\""]],c:["deploy job","Render deploy (API)"]};
+D["f6-e-build"]={t:"Build the image",f:"edge",p:"Requirements are pinned exactly and installed from committed manifests; no curl-pipe-shell anywhere in the Dockerfile.",k:[["Copied in","src, mcp, corpus, mock_data, evaluation, the stub scripts and the committed chunk manifest"],["Not copied","requirements-dev.txt"]],c:["Render deploy (API)","Render build"]};
 D["f6-e-boot"]={t:"Boot — no indexing at start-up",f:"edge",p:"Indexing ~280 chunks took 15.8 s in the probe, which would dominate a free-tier cold start. Boot only opens the file and mmaps the model.",k:[["Boot cost","0.06–0.40 s for the model, plus opening a SQLite file"]],c:["Render build","Live service"]};
 D["f6-e-idle"]={t:"15 minutes idle → spin-down",f:"edge",p:"The free tier sleeps, and the next request pays for it. The project measures that rather than hiding it behind a cron.",k:[["Measured by","scripts/measure_cold_start.py, idle ≥ 16 min then curl /health and /chat"],["Published in","deployed.md under ## Cold start"]],c:["Live service","Cold start"]};
 D["f6-e-sec"]={t:"Secrets into CI",f:"edge",p:"Set once at provisioning time by script, never pasted into a workflow file.",k:[["Command","gh secret set, driven by scripts/provision_render.py"],["Scanned","gitleaks runs over the full history on every lint job"]],c:["GitHub repository secrets","deploy job"]};

@@ -47,7 +47,7 @@ def test_one_instance_running_for_three_hours_is_three_instance_hours():
 
 
 def test_the_idle_hours_of_a_spun_down_instance_cost_nothing():
-    """The whole free-tier argument of §14.4: no keep-alive cron, so idle time is free.
+    """The free-tier arithmetic of §14.4: a spun-down instance is not counted, so idle time is free.
 
     Awake for the first hour, spun down for the next two, awake again at the last sample — which
     is the *left* endpoint of an interval that has not closed yet, so it contributes nothing to a

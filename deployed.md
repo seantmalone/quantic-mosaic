@@ -120,9 +120,12 @@ past Render's 15-minute spin-down) and then times four segments in order: `GET /
 polled to 200, the first `POST /chat`, and a second warm `POST /chat`. The published number is
 distinct from §13.5's cold-*turn* p50, which is an eval metric over a warm instance.
 
+### Measured without keep-alive
+
 **On the live free instance — n=3, measured 2026-09-10 and 2026-09-11 without keep-alive.** The
-service carries no keep-alive pinger, so this is the behaviour a grader who leaves the tab idle for
-15 minutes will actually see. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
+service carried no keep-alive pinger when these ran, so this is the behaviour of the instance with
+nothing touching it — and the behaviour a visitor sees again the moment the keep-alive below is
+disabled. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
 ran on `da0dca2`, the build that served the published evaluation run, at 02:19Z and 02:37Z:
 
 | Segment | Probe 1 | Probe 2 | Probe 3 | Median |
@@ -141,14 +144,6 @@ figure is quoted with its `n` everywhere it appears. The 2.8 s to `/ready` on pr
 row that moved materially: the final build answers `/ready` in 0.1 s once the instance is up, which
 is what baking the model into the image buys.
 
-**On the keep-alive.** There is none today, and the table above is the documented no-ping
-behaviour. Sean's ruling of 2026-09-10 20:40Z is to keep publishing it and then add a GitHub
-Actions keep-alive that pings `/health` every ten minutes; that workflow is queued as its own step
-and `.github/workflows/` still holds only `ci.yml`. An always-on free instance consumes about 744
-of the 750 free instance-hours a month, and exhausting them suspends the service until the month
-resets rather than billing anything — which is why the measurement is published first and the
-pinger is a separate, reversible decision rather than a way to make the number disappear.
-
 Two things the first probe settled beyond the numbers. The spin-down is real and observable in Render's
 own logs — its last health-check line at 17:20:59Z, ~15 minutes after the last inbound request,
 then silence until `Started server process` at 17:29:05Z. And the first attempt at this measurement
@@ -165,8 +160,41 @@ account, the three probes side by side and the keep-alive ruling are in
 timestamp and sha, are in
 [`docs/evidence/cold-start-probes.json`](docs/evidence/cold-start-probes.json).
 
-**The part the image controls**, measured locally on 2026-09-10 — the floor the live figures above
-sit on, and the reason the gap between them is Render's, not the image's. Both rows
+### Keep-alive
+
+`.github/workflows/keepalive.yml` pings `GET $DEPLOY_URL/health` every ten minutes on a GitHub
+Actions schedule, so the instance never reaches Render's 15-minute idle timer and a visitor gets the
+warm turn instead of the 71.0 s above. It landed on 2026-09-11, **after** the table: Sean's ruling of
+2026-09-10 20:40Z was to publish the measurement first and mitigate it second, so every figure above
+is still the honest no-ping behaviour and nothing was re-measured to look better.
+
+The job is one `curl` on `ubuntu-latest`: no checkout, no secret, and `permissions: {}`, because
+`/health` is an open route. It reads the URL from the repository **variable** `DEPLOY_URL` and falls
+back to the committed live origin, prints `status`, `app.cold_start` and `app.uptime_ms`, and
+**never fails the repository's status** — a spun-down, deploying or suspended instance produces a
+`::warning::`, an exit 0 and one line in the run's job summary, so the Actions tab shows the outage
+without painting `main` red. `tests/contract/test_keepalive_workflow.py` pins all of that.
+
+**What it costs — the 750-hour arithmetic.** The workspace gets 750 free instance-hours per calendar
+month and an instance is counted only while it is awake, which is exactly what pinging round the
+clock makes it: 24 × 31 = **744 hours** in a 31-day month, 24 × 30 = 720 in a 30-day one, against a
+750-hour budget. The keep-alive therefore spends nearly the whole allowance, and the ~6 hours of
+slack in a 31-day month is all that is left for anything else free in the workspace. Nothing is ever
+billed for it: exhausting the 750 hours **suspends** every free service until the month resets, and
+a suspended service answers nothing — which is what the warning line exists to make visible.
+`scripts/check_render_hours.py` reports the month to date and warns above 600 of 750 (and above 400
+of 500 build minutes) without ever failing a build, so the consumption is legible before it runs out.
+
+**How to turn it off.** GitHub → **Actions** → *keepalive* → ⋯ → **Disable workflow**. The schedule
+stops at once, no commit is needed, and the service goes back to the spin-down behaviour the table
+above measures; the same menu re-enables it. Deleting the file or dropping its `schedule:` trigger
+works too, but disabling is the reversible one, and that is the whole point — the measurement is
+published, the mitigation is a switch.
+
+### The part the image controls
+
+Measured locally on 2026-09-10 — the floor the live figures above sit on, and the reason the gap
+between them is Render's, not the image's. Both rows
 are read off the **same** `make docker-run-512` run whose output is pasted verbatim under *Memory*
 below — the first segment is that run's `is up after`, the second is the gap to its `/ready is green
 after` — so the published figures and the evidence for them cannot drift apart:
@@ -293,6 +321,12 @@ the index build — so this is the budget being spent deliberately, once per dep
 750 instance-hours and 400 of 500 build minutes and **never fails**; it derives both from the
 metrics and deploys endpoints, because Render publishes no usage endpoint, and it says so on every
 line it prints.
+
+**The instance-hour arithmetic, after the keep-alive.** `.github/workflows/keepalive.yml` (§*Cold
+start* → *Keep-alive*) keeps the instance awake round the clock from 2026-09-11, so the month's
+consumption now trends to ~744 of the 750 free hours **by design** rather than to the handful of
+hours an idle demo would use. Exhausting the 750 suspends the free service until the month resets
+and bills nothing; disabling that workflow is the lever, and it costs one Actions menu.
 
 ### Memory — the 512 MB gate, measured 2026-09-10
 

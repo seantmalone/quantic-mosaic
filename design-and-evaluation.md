@@ -701,11 +701,11 @@ running: three probes, 2026-09-10 and 2026-09-11, median **71.0 s** cold to firs
 s) against **22.5 s** warm, with the per-probe table in `deployed.md` §*Cold start* and the raw
 segments in `docs/evidence/cold-start-probes.json`. The design decision is the ordering, not a
 refusal: publish the number the rubric asks us to explain, then add a GitHub Actions keep-alive
-pinging `/health` every ten minutes (Sean's ruling of 2026-09-10; queued as its own step,
-`.github/workflows/` holds only `ci.yml` today). That pinger costs about 744 of the 750 free
+pinging `/health` every ten minutes (Sean's ruling of 2026-09-10; `.github/workflows/keepalive.yml`
+landed 2026-09-11, after the three probes). That pinger costs about 744 of the 750 free
 instance-hours a month and exhausting them suspends the service until the month resets rather than
 billing anything, which is why it is a reversible last step rather than the first thing built — and
-why, if it ever lands, the measured table stays exactly as published. Independently of it: `/ready`
+why, now that it has landed, the measured table stays exactly as published. Independently of it: `/ready`
 turns green only when the model and index are resident, the UI shows a cold-start banner with an
 elapsed counter, the README tells a grader to open `/health` first and wait for a 200, and cold and
 warm latencies are reported separately with their `n`. The image-controlled segments are measured —

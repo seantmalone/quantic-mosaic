@@ -12,8 +12,13 @@ that do exist, and the derivation is stated rather than hidden:
 
 * **instance-hours** — `GET /v1/resources/metrics/instance-count` sampled hourly over the month to
   date, integrated as `Σ value_i × (t_{i+1} − t_i)`. On the free tier the count is 1 while the
-  service is awake and 0 for the 15-minute-idle spin-downs, which is precisely why §14.4 refuses a
-  keep-alive cron: pinging round the clock would consume ~744 of the 750 hours.
+  service is awake and 0 for the 15-minute-idle spin-downs, which is precisely why §14.4 weighed a
+  keep-alive so carefully: pinging round the clock consumes ~744 of the 750 hours.
+  **`.github/workflows/keepalive.yml` landed on 2026-09-11, so ~744 is now the expected shape of a
+  full month** — the 600-hour warning below will fire around the 25th of a 31-day month, and when it
+  does it means the budget is being spent as designed, not that something is leaking. The lever, if
+  the headroom ever matters more than a warm instance, is to disable that workflow (one Actions
+  menu, no commit); the thresholds here do not move, because 750 is still the wall.
 * **build-minutes** — the wall-clock of every deploy created this month, from
   `GET /v1/services/{id}/deploys`. It is an upper bound on pipeline minutes (a deploy's clock
   includes the post-build rollout), which is the right direction for a budget warning to err in.
