@@ -211,10 +211,15 @@ def request_is_https(request: Request) -> bool:
     """Whether the *browser* reached this app over https — not whether ASGI did (§14.1).
 
     Render terminates TLS at its edge and forwards plain http into the container, and uvicorn's
-    `ProxyHeadersMiddleware` rewrites the scheme only for a trusted peer (`127.0.0.1` by default),
-    which the edge is not. So `request.url.scheme` is `http` on the deployed service and every
-    cookie below would ship without `Secure` — contradicting constraint 9 and the published claim
-    in `deployed.md`. Reading the header is safe here in a way it would not be for an authorisation
+    `ProxyHeadersMiddleware` rewrites the scheme only for a peer the process was told to trust. The
+    deployed image now tells it to (`--proxy-headers --forwarded-allow-ips='*'` in the Dockerfile
+    CMD, P20), but every other way this app runs does not — `make run`, `make demo1`, the test
+    servers, a bare `uvicorn` — so the header is read here rather than left to the middleware. The
+    two agree: with the middleware on, `request.url.scheme` is already `https` **and**
+    `X-Forwarded-Proto` is still on the request, because the middleware rewrites the scope and
+    strips nothing. Without this, `request.url.scheme` was `http` on the deployed service and every
+    cookie below shipped without `Secure` — contradicting constraint 9 and the published claim in
+    `deployed.md`. Reading the header is safe here in a way it would not be for an authorisation
     decision: forging `X-Forwarded-Proto: https` only makes the forger's own cookie `Secure`.
     """
     forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()

@@ -74,6 +74,21 @@ def test_the_command_expands_port_through_a_shell_and_runs_one_worker():
     assert "--host 0.0.0.0" in command
 
 
+def test_the_command_trusts_the_edge_s_forwarded_headers():
+    """Behind Render's TLS-terminating edge, uvicorn must be told to read `X-Forwarded-*` (P20).
+
+    Without `--proxy-headers` the scheme uvicorn reports is `http` for every request and
+    `request.client.host` is the **edge's** address, so §17's per-IP limiter keys every visitor in
+    the world onto one shared bucket. `--forwarded-allow-ips='*'` is what makes the edge a trusted
+    peer: the container port is reachable through the edge and nowhere else, and the Dockerfile says
+    so beside the CMD.
+    """
+    command = next(line for line in DOCKERFILE.splitlines() if line.startswith("CMD "))
+    assert "--proxy-headers" in command
+    assert "--forwarded-allow-ips='*'" in command
+    assert "X-Forwarded-For" in DOCKERFILE and "X-Forwarded-Proto" in DOCKERFILE
+
+
 def test_the_model_is_baked_and_the_cache_path_is_the_container_one():
     """`/app/models` is not writable on macOS or a GH runner, so it must not be the default (§12.3)."""
     assert "FASTEMBED_CACHE_PATH=/app/models" in DOCKERFILE

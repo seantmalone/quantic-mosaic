@@ -54,4 +54,21 @@ RUN python -m hrmosaic.rag.ingest --verify-manifest && python -m hrmosaic.rag.in
 
 EXPOSE 8000
 # sh -c so ${PORT} is expanded by the shell at run time — Render injects it.
-CMD ["sh", "-c", "uvicorn hrmosaic.web.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+#
+# `--proxy-headers --forwarded-allow-ips='*'` because this port is reachable only through Render's
+# TLS-terminating edge, which sets `X-Forwarded-For` and `X-Forwarded-Proto` on every request.
+# Without them uvicorn reports `request.url.scheme == "http"` for every request and
+# `request.client.host` as the **edge's** address, so §17's per-IP limiter
+# (`ACCESS_RATE_LIMIT_PER_MIN`) keys every visitor in the world onto one shared bucket. `'*'` is the
+# only value that can name a peer whose address Render does not publish and which changes without
+# notice; it is safe here because nothing but the edge can route to this port.
+#
+# What it buys, stated precisely: with `'*'` uvicorn's `ProxyHeadersMiddleware` takes the **first**
+# entry of `X-Forwarded-For`, so ordinary traffic — a browser that sends no such header — keys on
+# the visitor's own address, which is the fix. A caller that deliberately forges the header can
+# still rotate buckets; that is a milder failure than one bucket for everybody, it is a drive-by
+# speed bump over entirely synthetic data either way, and nothing authorises on it — the access
+# gate is `secrets.compare_digest` and the write path is the confirmation gate. `web/api.py`'s
+# `request_is_https()` reads `X-Forwarded-Proto` itself rather than relying on this flag, because
+# every other way this app runs (`make run`, the test servers) passes no proxy flags at all.
+CMD ["sh", "-c", "uvicorn hrmosaic.web.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --proxy-headers --forwarded-allow-ips='*'"]
