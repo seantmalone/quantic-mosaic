@@ -22,10 +22,7 @@ pytestmark = pytest.mark.anyio
 
 HTMX = {"HX-Request": "true"}
 TOOL_USING_QUESTION = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
-PTO_QUESTION = (
-    "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
-    "— and can you open the request for me?"
-)
+SENSITIVE_QUESTION = "A colleague has been harassing me in meetings and I want to raise it formally."
 RECOMMENDATION_BADGE = "Recommendation — not company policy"
 
 
@@ -173,32 +170,21 @@ async def test_a_rendered_turn_shows_typed_blocks_badges_and_citation_chips(web)
 
 
 async def test_an_escalation_block_renders_its_own_badge(web):
-    """The third badge, on the turn that actually produces one.
+    """The third badge, on the turn that actually produces one: G5's sensitive escalation (§7.4).
 
     Demo task 1's committed recording — a real exchange, not a hand-written fixture — states the
     director approval and the Tax & Legal review as cited `policy_fact`s rather than labelling them
-    an escalation, so the `escalation` badge has to be asserted where the model does emit one:
-    demo task 2, after the human confirms, where the answer hands the reader off to their manager.
+    an escalation. Demo task 2's recording *did* emit one, and that is exactly the block P22's
+    outcome-consistency step now replaces: it denied a ticket the same turn had already created.
+    So the badge is asserted where an escalation is the right answer and always will be — a
+    harassment report, which G5 escalates deterministically without calling a tool.
     """
-    async with web("demo_task_2.json") as client:
-        proposal = await client.post("/chat", json={"message": PTO_QUESTION, "client_label": "web"})
-        assert proposal.status_code == 200, proposal.text
-        pending = proposal.json()
-        assert pending["outcome"] == "awaiting_confirmation"
+    async with web("sensitive.json") as client:
+        response = await client.post("/chat", json={"message": SENSITIVE_QUESTION}, headers=HTMX)
 
-        confirmed = await client.post(
-            "/chat/confirm",
-            json={
-                "session_id": pending["session_id"],
-                "turn_id": pending["turn_id"],
-                "decision": "confirmed",
-            },
-            headers=HTMX,
-        )
-
-    assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.headers["content-type"].startswith("text/html")
-    assert 'class="badge badge-escalation"' in confirmed.text
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'class="badge badge-escalation"' in response.text
 
 
 async def test_a_rendered_turn_carries_the_snapshot_note_when_a_tool_result_has_an_as_of(web):

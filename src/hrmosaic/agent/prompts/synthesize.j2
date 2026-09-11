@@ -50,6 +50,9 @@ RULES
    reader is subject to.
 9. A statement supported by more than one document cites one chunk_id from EACH supporting
    document. Citations are per supporting document, not one per statement.
+10. A <tool_result> from a write tool with a success status is an action the user confirmed and
+   that has been performed. State it first, with its id, as a recommendation block. Never write
+   that you cannot perform, or did not perform, an action such a result shows was performed.
 
 Respond with JSON matching the AnswerSchema.
 {%- endblock -%}

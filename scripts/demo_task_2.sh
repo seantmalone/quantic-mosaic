@@ -95,13 +95,34 @@ curl -sS -o "$WORK/turn.json" -w '' \
 echo
 
 "$PYTHON" - "$WORK/turn.json" <<'PY'
-import json, sys
+import json, re, sys
 
 turn = json.load(open(sys.argv[1]))
+answer = turn.get("answer") or turn.get("final_answer") or ""
 print("-- outcome:", turn.get("outcome"))
 print()
 print("-- answer")
-print(turn.get("answer") or turn.get("final_answer") or "")
+print(answer)
+print()
+
+# P22: a confirmed write is reported as done. The id comes from THIS response — the confirmed
+# `create_mock_hr_ticket` span's own result — and the answer has to name it. The live failure this
+# assertion pins: the ticket was created, the result reached the synthesis prompt verbatim, and
+# the answer still ended "I cannot open PTO requests on your behalf" without naming it.
+created = [
+    match
+    for entry in (turn.get("trace") or turn.get("spans") or [])
+    if entry.get("kind") == "tool_call" and entry.get("name") == "create_mock_hr_ticket"
+    for match in re.findall(r"MOCK-HR-[0-9]+", entry.get("result_preview") or "")
+]
+if not created:
+    print("the confirmed turn carries no created ticket id", file=sys.stderr)
+    raise SystemExit(1)
+ticket_id = created[-1]
+if ticket_id not in answer:
+    print(f"the answer never names {ticket_id}, the ticket this turn created", file=sys.stderr)
+    raise SystemExit(1)
+print(f"-- the confirmed write is reported as done: {ticket_id} is named in the answer")
 print()
 
 citations = turn.get("citations") or []

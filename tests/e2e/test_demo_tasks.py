@@ -41,6 +41,10 @@ class DemoExpectation:
     requires_write: bool
     requires_confirmation: bool
     min_distinct_docs_cited: int
+    #: A write the user confirmed is reported **as done, with its id**, in the answer text (P22).
+    #: The measured failure it pins: the ticket was created, the result reached the synthesis
+    #: prompt verbatim, and the answer said "I cannot open PTO requests on your behalf".
+    answer_states_the_write_id: bool = False
     forbidden_tools: list[str] = field(default_factory=list)
     required_tools: list[str] = field(default_factory=list)
     precedence_edges: list[tuple[str, str]] = field(default_factory=list)
@@ -81,6 +85,7 @@ DEMO_EXPECTATIONS = [
         requires_write=True,
         requires_confirmation=True,
         min_distinct_docs_cited=2,
+        answer_states_the_write_id=True,
         forbidden_tools=[],
         # `lookup_employee_profile` is **optional** here for the same reason (P10 fix round,
         # §18.2): the persona already carries the employee id, `check_pto_balance` answers the
@@ -167,6 +172,10 @@ def check(expectation: DemoExpectation, response: dict, spans: list[dict], store
     if expectation.requires_write:
         assert len(writes) == 1, f"{expectation.id}: expected exactly one mock write"
         assert writes[0]["confirmation_token"], "a mock write cannot exist without a confirmation"
+        if expectation.answer_states_the_write_id:
+            assert writes[0]["id"] in response["answer"], (
+                f"{expectation.id}: the answer never names {writes[0]['id']}, the write it performed"
+            )
     else:
         assert writes == [], f"{expectation.id}: this task performs no write"
 
@@ -249,10 +258,14 @@ async def test_demo_task_2_pto_request_through_confirm_to_write(web, store):
     assert body["turn_id"] == proposal["turn_id"], "the same turn, reopened"
     check(expectation, body, _spans(store, body["turn_id"]), store)
 
-    # The `escalation` block demo 1 does not label: the synthesis that follows the confirmed write
-    # hands MosaicOne back to the human ("I cannot open PTO requests … on your behalf"). It exists
-    # only on the reopened turn's answer, not on the gated proposal, so it is asserted here.
-    assert "escalation" in {block["type"] for block in body["answer_blocks"]}
+    # Outcome consistency (P22). The recorded synthesis for this turn ends with an `escalation`
+    # block — "I cannot open PTO requests in MosaicOne on your behalf" — written while the ticket
+    # it denies was already in `mock_writes`. The deterministic step states the outcome first and
+    # replaces that denial with a line pointing at the ticket, so neither survives into the answer.
+    blocks = body["answer_blocks"]
+    assert blocks[0]["type"] == "recommendation" and blocks[0]["text"].startswith("Done: HR ticket ")
+    assert "escalation" not in {block["type"] for block in blocks}
+    assert "cannot open PTO requests" not in body["answer"]
 
     write = store.execute("SELECT id, kind, employee_id, payload_json FROM mock_writes").dicts()[0]
     assert write["id"].startswith("MOCK-HR-")

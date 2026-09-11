@@ -50,6 +50,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from hrmosaic.agent import outcome as outcome_consistency
 from hrmosaic.agent import prompts
 from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
@@ -704,8 +705,16 @@ class Orchestrator:
             return self._refuse(turn, "every cited chunk failed to resolve", cold_start=cold_start)
         relabelled = g3.check(repaired.blocks, turn=turn.buffer)
 
+        # -- 5b. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
+        # A write the user confirmed and the server performed is reported from the tool result,
+        # not from model output: the outcome goes first with its id, and an escalation denying
+        # the very action the result shows was performed is replaced by a pointer to it. The
+        # measured failure was a `created` ticket answered with "I cannot open PTO requests on
+        # your behalf" (§7.4's outcome-consistency paragraph).
+        consistent = outcome_consistency.apply(relabelled.blocks, turn.envelopes)
+
         answer = AnswerSchema(
-            blocks=[AnswerBlock.model_validate(block) for block in relabelled.blocks],
+            blocks=[AnswerBlock.model_validate(block) for block in consistent.blocks],
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )

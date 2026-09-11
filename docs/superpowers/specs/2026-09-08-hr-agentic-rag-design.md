@@ -802,6 +802,20 @@ through the search and one that reaches it through `get_policy_section`.
 Confirmation for irreversible actions is **not** a guardrail — it is a property of the MCP server (§8.6), which is why action safety can be a plain
 test rather than a reported number.
 
+**Outcome consistency is not a guardrail either — it is `agent/outcome.py` (P22).** One deterministic step runs after synthesis, on the blocks G2 and
+G3 have already repaired, and it has a name rather than a number: `outcome_consistency`. When the turn holds a write-tool envelope with a success
+status — `create_mock_hr_ticket` → `status: created`, `draft_hr_email` → `status: drafted`, neither of which the server can return without consuming a
+human's one-time token (§8.6) — the answer **opens with the outcome, built from the tool result and not from model output**: a `recommendation` block,
+because it is tool data and not company policy, carrying the id verbatim ("Done: HR ticket MOCK-HR-000002 was opened in queue hr-timeoff (priority
+normal) — this is a mock ticket, nothing was sent outside this app."). It is skipped when the model's own answer already states that id. The second
+half is the inverse check: an `escalation` block that claims an inability to perform the very action the result shows was performed is replaced by a
+line pointing at what was created. Only that kind — the check is a denial phrase *plus* a word for what the performed tool does — so G5's
+sensitive-topic escalation and its People Operations contact are never collateral. It emits no `guardrail` span, it changes none of the six rules, and
+it exists because of a measured failure: on 2026-09-11 demo 2's confirmation was consumed, `create_mock_hr_ticket` returned
+`{"status": "created", "ticket_id": "MOCK-HR-000002", …}`, the synthesis prompt carried that result verbatim — and the answer ended *"I cannot open PTO
+requests on your behalf. You must submit the request directly in MosaicOne…"* and never named the ticket. `synthesize.j2` rule 10 tells the model the
+same thing; the step is what makes it true whatever the model writes.
+
 **G1's candidate set includes the compliance engine's evidence (P13).** Tool 4 is deterministic and every requirement it evaluates carries an
 `evidence` block naming a **committed** chunk, resolved by `mcpserver/rules.py` from a `(doc_id, heading_path)` pair in `corpus/rules.yml`. Nothing had
 ever scored those ids, so the gate could not see them and a turn could reach a correct, cited verdict and be refused for want of evidence. The
@@ -2850,7 +2864,9 @@ September to Thursday 17 September 2026 — and can you open the request for me?
 
 **Expected outcome.** A balance-aware, cited answer (13.5 days available as of 1 September 2026 covers 3 days; the 5-business-day notice requirement
 is met; manager approval is required per `manager-approval-matrix`), followed by a `MOCK-HR-<n>` ticket in `hr-timeoff`, visible on dashboard page 8's
-confirmation ledger and mock-action log.
+confirmation ledger and mock-action log. **The resumed turn's answer opens with the ticket id** — the outcome-consistency step of §7.4 states the
+performed write first, and replaces any escalation that denies it — so `tests/e2e/test_demo_tasks.py` asserts the `MOCK-HR-<n>` id appears in the
+answer text, and `scripts/demo_task_2.sh` asserts the same id from the confirm response.
 
 **Narration.** The same five DEMO.6 elements plus the beat: *"Watch — the ticket does not exist until I click Confirm. And it is not the prompt that
 stops it: the MCP server itself refuses the call without a one-time token bound to these exact arguments. Replay the token and it is refused; change
