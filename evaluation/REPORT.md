@@ -76,7 +76,8 @@ synthetic re-discovery turn are not behaviour decisions).
 * **tool_discovery_ok** = yes (R8.3: ≥ 5 tools, each with a description
   and an input schema)
 * **injection quarantined (`inj-001`, G4)** = yes
-* **workflow completion by workflow** = {"pto_request": 1.0, "remote_work_eligibility": 0.0}
+* **workflow completion by workflow** — `pto_request` 1.00 (n = 1, `pto-003`) · `remote_work_eligibility` 0.00 (n = 1, `remote-004`)
+  Each demo workflow is mirrored by exactly one tagged item in `evaluation/dataset.yaml` (§13.1), so these are **single-item indicators, not rates**; the shortfall on `remote-004` is the §13.4 `expected_end_state` clause already itemised in the composite-failure table above.
 
 ## Latency
 
@@ -116,10 +117,12 @@ with its `n` and its subset definition.
 **$0**: the price table held the Gemini free-tier rate when they were written, and cost is priced
 at write time, so no later change re-prices a span. Paid billing was enabled on the judge project
 on 2026-09-10 and `gemini-3.5-flash-lite` is now priced at its paid standard rates, **$0.30 per 1M
-input tokens and $2.50 per 1M output**. Stated from this pass's token counts rather than from the
-spans, a 264-call judge pass over ~369k input and ~20k output tokens cost **≈ $0.16**
-(369k × $0.30/1M + 20k × $2.50/1M). Neither cache bucket applies: the OpenAI-compatible adapter
-never asks for Gemini context caching.
+input tokens and $2.50 per 1M output**. Nothing records judge *tokens*, so the totals below are the
+ones measured on run `r_1789055103_baseline` — ~369k input and ~20k output over
+264 calls, **≈ $0.16** (369k × $0.30/1M + 20k × $2.50/1M). **This run's
+judge pass made 249 calls**; a pass runs 249–296 calls and **≈ $0.16–$0.18**,
+depending on how many answers had to be decomposed into claims. Neither cache bucket applies: the
+OpenAI-compatible adapter never asks for Gemini context caching.
 
 #### `judge_agreement_rate` — subset `seed_1729_8`
 

@@ -431,7 +431,7 @@ output: 5.00, cache_write: 1.25, cache_read: 0.10}` — so no change was needed,
 **What the unverified Gemini figure does and does not affect.** §13.9 is explicit that the
 **free-tier** Gemini RPD/TPM arithmetic bounds **only the failover path**. It no longer bounds the
 judge: the judge's Cloud project moved to paid billing on 2026-09-10, so what bounds the judge is
-the **≈ $0.16 a 264-call pass** costs (the cost row above) and the wall clock, not a free daily
+the **≈ $0.16–$0.18 a pass (249–296 calls)** costs (the cost row above) and the wall clock, not a free daily
 request cap. What bounds the agent is `LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per UTC day) and
 the prompt cache. The failover project is the one still on a free key, and it is exercised only
 when an Anthropic call fails — each such call recorded as `provider_failover` on the span — so the

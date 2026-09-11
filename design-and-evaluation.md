@@ -474,7 +474,7 @@ the abstraction claim is real rather than asserted:
 | Role | Provider / model | Adapter |
 |---|---|---|
 | **Agent** — route, act, synthesize, repair | Anthropic **`claude-haiku-4-5`** | `AnthropicAdapter` (native SDK, sync client behind `asyncio.to_thread`, `max_retries=0`, `timeout=25`) |
-| **Judge** | Google **`gemini-3.5-flash-lite`**, its own key on its own Cloud project — on paid billing since 2026-09-10, $0.30 / $2.50 per MTok in / out, ≈ $0.16 per 264-call judge pass | `OpenAICompatAdapter` |
+| **Judge** | Google **`gemini-3.5-flash-lite`**, its own key on its own Cloud project — on paid billing since 2026-09-10, $0.30 / $2.50 per MTok in / out, ≈ $0.16–$0.18 a judge pass (249–296 calls) | `OpenAICompatAdapter` |
 | **Agent failover** on repeated 429 / 5xx / timeout | Google `gemini-3.5-flash-lite`, a *second* Cloud project | `OpenAICompatAdapter` |
 | **CI and tests** | scripted `StubAdapter`, zero secrets | — |
 

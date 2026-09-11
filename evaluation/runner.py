@@ -1150,17 +1150,30 @@ above is what tells you how many turns were pushed back into the loop at all."""
 #: billing was enabled on it on 2026-09-10 and the table now carries the paid standard rates. Cost
 #: is priced at **write** time in `core/llm/base.py`, so every judge span recorded before that
 #: change keeps its $0 and `est_cost_usd` under-reports the judged half of any earlier run. The
-#: figure below is therefore stated from the pass's own token counts rather than read back off a
-#: span, and it is deliberately arithmetic a reader can redo.
-JUDGE_COST_NOTE = """\
+#: figure below is therefore derived from a **measured** pass's token counts rather than read back
+#: off a span, and it is deliberately arithmetic a reader can redo. The measured pass is named by
+#: run id: nothing records judge *tokens* — `judges.py` tracks only `.calls`, the run JSON has no
+#: token fields and `traces.sqlite` has no judge spans — so the totals cannot be attributed to the
+#: run being reported without saying where they came from. Only the call count is this run's, and
+#: it is interpolated rather than carried over, which is how this paragraph came to claim a
+#: **264**-call pass in a report whose own header said 249.
+JUDGE_COST_MEASURED_RUN = "r_1789055103_baseline"
+JUDGE_COST_MEASURED_CALLS = 264
+
+
+def judge_cost_note(run: RunFile) -> str:
+    """The cost paragraph, with **this** run's judge-call count instead of an inherited literal."""
+    return f"""\
 **What the judge pass cost.** Judge spans recorded before 2026-09-10 carry `cost_usd_estimate` =
 **$0**: the price table held the Gemini free-tier rate when they were written, and cost is priced
 at write time, so no later change re-prices a span. Paid billing was enabled on the judge project
 on 2026-09-10 and `gemini-3.5-flash-lite` is now priced at its paid standard rates, **$0.30 per 1M
-input tokens and $2.50 per 1M output**. Stated from this pass's token counts rather than from the
-spans, a 264-call judge pass over ~369k input and ~20k output tokens cost **≈ $0.16**
-(369k × $0.30/1M + 20k × $2.50/1M). Neither cache bucket applies: the OpenAI-compatible adapter
-never asks for Gemini context caching."""
+input tokens and $2.50 per 1M output**. Nothing records judge *tokens*, so the totals below are the
+ones measured on run `{JUDGE_COST_MEASURED_RUN}` — ~369k input and ~20k output over
+{JUDGE_COST_MEASURED_CALLS} calls, **≈ $0.16** (369k × $0.30/1M + 20k × $2.50/1M). **This run's
+judge pass made {run.judge_calls} calls**; a pass runs 249–296 calls and **≈ $0.16–$0.18**,
+depending on how many answers had to be decomposed into claims. Neither cache bucket applies: the
+OpenAI-compatible adapter never asks for Gemini context caching."""
 
 
 def fmt(value: Any, digits: int = 3) -> str:
@@ -1481,6 +1494,54 @@ def _item_table(run: RunFile) -> str:
     return "\n".join(lines)
 
 
+def _workflow_completion_line(run: RunFile) -> str:
+    """`workflow completion by workflow`, with the `n` and the items behind each figure.
+
+    Every other judged row in this report carries its own `n`; this one used to be a bare
+    `json.dumps` of the dict, so `{"remote_work_eligibility": 0.0}` read as a workflow that never
+    completes rather than as the one §13.4 end-state clause it actually is. The ids and the counts
+    are recomputed here from the dataset's own `workflow:` tags against the run's scored items, so
+    the line stays correct — and stops calling them single-item indicators — if more items are ever
+    tagged.
+    """
+    completion = run.metrics.workflow_completion_by_workflow
+    if not completion:
+        return "* **workflow completion by workflow** — no scored item in this run carries a `workflow:` tag"
+
+    scored = {entry.item_id for entry in run.items if entry.run_phase == "scored"}
+    contributors: dict[str, list[str]] = {}
+    for item in load_dataset().items:
+        if item.workflow and item.id in scored:
+            contributors.setdefault(item.workflow, []).append(item.id)
+
+    cells = []
+    for workflow, value in completion.items():
+        ids = contributors.get(workflow, [])
+        named = ", ".join(f"`{item_id}`" for item_id in ids)
+        cells.append(f"`{workflow}` {value:.2f}" + (f" (n = {len(ids)}, {named})" if ids else ""))
+    line = "* **workflow completion by workflow** — " + " · ".join(cells)
+
+    if contributors and all(len(ids) == 1 for ids in contributors.values()):
+        short = [
+            item_id
+            for workflow, value in completion.items()
+            if value < 1.0
+            for item_id in contributors.get(workflow, [])
+        ]
+        line += (
+            "\n  Each demo workflow is mirrored by exactly one tagged item in `evaluation/dataset.yaml` "
+            "(§13.1), so these are **single-item indicators, not rates**"
+        )
+        line += (
+            "; the shortfall on "
+            + ", ".join(f"`{item_id}`" for item_id in short)
+            + " is the §13.4 `expected_end_state` clause already itemised in the composite-failure table above."
+            if short
+            else "."
+        )
+    return line
+
+
 def _latency_block(run: RunFile) -> str:
     metrics = run.metrics
     caveat = (
@@ -1584,7 +1645,7 @@ synthetic re-discovery turn are not behaviour decisions).
 * **tool_discovery_ok** = {fmt(metrics.tool_discovery_ok)} (R8.3: ≥ 5 tools, each with a description
   and an input schema)
 * **injection quarantined (`inj-001`, G4)** = {fmt(metrics.injection_quarantined)}
-* **workflow completion by workflow** = {json.dumps(metrics.workflow_completion_by_workflow) or "{{}}"}
+{_workflow_completion_line(run)}
 
 ## Latency
 
@@ -1617,7 +1678,7 @@ anywhere in it. A disclosed-selection figure is evidence about the judge's harde
 a second blind opinion, and averaging the two would mean nothing.{subset_overlap} Both are below, each
 with its `n` and its subset definition.
 
-{JUDGE_COST_NOTE}
+{judge_cost_note(run)}
 
 {agreement_blocks}
 
