@@ -1,12 +1,21 @@
 name: keepalive
 
-# Keep the free Render instance awake (spec §14.4, `deployed.md` § *Cold start* → *Keep-alive*).
+# The SECOND layer of the keep-alive (spec §14.4, `deployed.md` § *Cold start* → *Keep-alive*).
 #
 # Render spins a free instance down after 15 idle minutes, and waking it costs a median 71.0 s to
-# the first answer (n=3, measured without this workflow and published in `deployed.md`). A ping
+# the first answer (n=3, measured without any keep-alive and published in `deployed.md`). A ping
 # every ten minutes keeps the container resident, so a grader who leaves the tab open gets the warm
 # ~22.5 s turn instead. The measurement is published first and mitigated second, deliberately: the
 # table in `deployed.md` stays exactly as measured, and this file is the reversible mitigation.
+#
+# **This schedule is not the primary mechanism, because it does not actually run.** GitHub's cron
+# is best-effort and de-prioritises low-traffic repositories: in the nine hours after this file was
+# pushed, the `*/10` schedule below ran **twice** — 09:48Z and 13:53Z on 2026-09-11, both green —
+# and the instance was found spun down at 14:25Z. The primary keep-alive is therefore in the app
+# itself (`web/main.py`'s `_keep_alive`, `KEEP_ALIVE_URL` / `KEEP_ALIVE_INTERVAL_S`): a background
+# task that GETs the service's own public `/health`, which is inbound traffic at Render's edge and
+# needs no scheduler at all. This workflow stays because the two layers cover each other's gap —
+# an in-process loop cannot run in an instance that is already asleep, and this job can wake one.
 #
 # **What it costs.** An always-on free instance consumes ~744 instance-hours in a 31-day month
 # (24 × 31) against the workspace's 750 free hours, so this workflow spends nearly the whole

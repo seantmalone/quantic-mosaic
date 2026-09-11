@@ -2000,6 +2000,8 @@ returns **HTTP 200** with `outcome: "configuration_required"` and a single escal
 | `EVAL_SMOKE_MAX_ITEMS` | – | `6` | Cap on a dashboard-launched eval |
 | `LLM_CACHE_TTL_S` | – | `0` (**off**) | TTL for the optional `llm_cache`. `0` disables caching entirely, which is the default and what every eval latency run uses |
 | `READY_WARMUP_TIMEOUT_S` | – | `30` | Budget for the startup warm-up that turns `/ready` green |
+| `KEEP_ALIVE_URL` | – | *(unset ⇒ no keep-alive task is started)* | The service's own **public** origin, which the lifespan's self keep-alive GETs at `/health` so Render's edge sees inbound traffic and never spins the instance down (§14.4) |
+| `KEEP_ALIVE_INTERVAL_S` | – | `600` | Seconds between those self-pings — inside Render's 15-minute idle timer, with headroom |
 
 There is deliberately **no `SEED` variable** (it is a module constant in `core/ids.py` consumed only by `evaluation/**`), no `NOW_OVERRIDE`, no
 `EVAL_FIXED_NOW` and no `OTEL_EXPORTER_OTLP_ENDPOINT`. Every field in the table is read by code that ships.
@@ -2506,11 +2508,18 @@ query embed is expected to cost ~100–300 ms of CPU and the KNN plus FTS5 a fur
 
 Mitigations, documented rather than hidden: the `/health` preflight banner with an elapsed counter; a README instruction to open `/health` first and
 wait for 200; lazy model load so `/ready` is what turns green; cold vs warm reported separately; the demo script narrates it. **A keep-alive, added
-after the measurement** (Sean's ruling of 2026-09-10 20:40Z, landed 2026-09-11): `.github/workflows/keepalive.yml` pings `/health` every ten minutes,
-so the instance normally stays warm. The ordering is the decision, not the pinger — the n=3 table in `deployed.md` is measured with nothing pinging and
-stays published exactly as measured — and the cost is stated rather than hidden: round-the-clock pinging consumes ~744 of the 750 monthly workspace
-instance-hours, and exhausting them suspends free services until the month resets rather than billing anything. Disabling the workflow (one menu, no
-commit) restores the measured behaviour.
+after the measurement** (Sean's ruling of 2026-09-10 20:40Z, landed 2026-09-11), in **two layers**. The primary one is **in the application**: a
+lifespan background task GETs `{KEEP_ALIVE_URL}/health` — the service's own *public* origin, because Render counts traffic at its edge — every
+`KEEP_ALIVE_INTERVAL_S` (default 600) with a 30 s timeout, logging at DEBUG, never raising, cancelled at shutdown, and never created at all when the
+variable is unset. The second is `.github/workflows/keepalive.yml`, kept rather than replaced. The order was settled by measurement: GitHub's
+`schedule:` is best-effort and de-prioritises low-traffic repositories, and in the nine hours after the workflow was pushed its `*/10` cron produced
+**two** runs (09:48Z and 13:53Z on 2026-09-11, both green) instead of ~54, with the instance found spun down at 14:25Z — so the cron cannot be the
+mechanism a grader's first click depends on, while it remains the only layer that can wake an instance the in-process loop is not running in. The
+ordering of measurement and mitigation is the decision, not the pinger — the n=3 table in `deployed.md` is measured with nothing pinging and stays
+published exactly as measured — and the cost is stated rather than hidden: round-the-clock pinging consumes ~744 of the 750 monthly workspace
+instance-hours (**unchanged** by the second pinger: an awake instance is counted once however many things ping it), and exhausting them suspends free
+services until the month resets rather than billing anything. Clearing `KEEP_ALIVE_URL` and disabling the workflow (one environment variable, one
+menu, no commit) restores the measured behaviour.
 
 ### 14.5 CI-gated deploy mechanism (R8.4)
 
@@ -2982,6 +2991,7 @@ Every open question is resolved here rather than deferred. Rows are stable and r
 | 46 | Agent model | **Anthropic `claude-haiku-4-5`, pinned** — `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-4-5` | Smart and snappy with strong tool use, strict schemas and prompt caching; the spend is bounded by `LLM_DAILY_CALL_CAP`, the token bucket and the cache to an expected total under $10 (§9.8). **Any other Anthropic model requires the user's explicit approval.** The free `openai_compat` Gemini path stays documented so a grader can run everything at zero cost |
 | 47 | Judge and failover models | **Google `gemini-3.5-flash-lite` for both**, each on its own Google AI Studio key from a different Cloud project | A different vendor and family from the agent, so judge independence holds by construction (§13.7) and the failover keeps a live demo alive, with no quota contention between them. Cheap rather than free since 2026-09-10: the judge project runs on paid billing at $0.30 / $2.50 per MTok, ≈ $0.16 per 264-call judge pass (§9.8) |
 | 48 | Guarding the paid model | **A daily call cap** (`LLM_DAILY_CALL_CAP`, default 1500 per UTC day, counted from `llm_call` spans) plus per-span `cost_usd_estimate` from `MODEL_PRICES` | A spend ceiling that is observable rather than trusted: `/health` reports `llm.agent.calls_today` / `llm.agent.daily_call_cap`, page 1 shows estimated spend today and over 7 days, and hitting the cap is a graceful HTTP 200 `outcome: "error"` turn — **not** a sixth `degradations[]` string |
+| 49 | Where the keep-alive lives | **In the application, with the GitHub Actions cron as a second layer** — a lifespan task pinging `{KEEP_ALIVE_URL}/health` every `KEEP_ALIVE_INTERVAL_S` (default 600), started only when the variable is set | Measured, not assumed: GitHub's `schedule:` is best-effort and ran the `*/10` keep-alive **twice in nine hours** on 2026-09-11, leaving the instance asleep at 14:25Z. An in-process loop needs no scheduler, runs whenever the instance is up — exactly when a ping is needed — and reaches Render's edge because the URL is the public one. The cron is kept because it is the only layer that can wake an instance that is already asleep, and it costs nothing extra: the 744-of-750-hour ceiling is a property of being awake, not of how many pingers there are (§14.4) |
 
 ## 22. What v2 removed from v1 and why
 

@@ -141,8 +141,8 @@ distinct from §13.5's cold-*turn* p50, which is an eval metric over a warm inst
 
 **On the live free instance — n=3, measured 2026-09-10 and 2026-09-11 without keep-alive.** The
 service carried no keep-alive pinger when these ran, so this is the behaviour of the instance with
-nothing touching it — and the behaviour a visitor sees again the moment the keep-alive below is
-disabled. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
+nothing touching it — and the behaviour a visitor sees again the moment **both** keep-alive layers
+below are turned off. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
 ran on `da0dca2`, the build that served the published evaluation run, at 02:19Z and 02:37Z:
 
 | Segment | Probe 1 | Probe 2 | Probe 3 | Median |
@@ -179,13 +179,33 @@ timestamp and sha, are in
 
 ### Keep-alive
 
-`.github/workflows/keepalive.yml` pings `GET $DEPLOY_URL/health` every ten minutes on a GitHub
-Actions schedule, so the instance never reaches Render's 15-minute idle timer and a visitor gets the
-warm turn instead of the 71.0 s above. It landed on 2026-09-11, **after** the table: Sean's ruling of
-2026-09-10 20:40Z was to publish the measurement first and mitigate it second, so every figure above
-is still the honest no-ping behaviour and nothing was re-measured to look better.
+Two layers, and the order matters. Both exist to keep the instance from reaching Render's
+15-minute idle timer, so a visitor gets the warm turn instead of the 71.0 s above. Both landed on
+2026-09-11, **after** the table: Sean's ruling of 2026-09-10 20:40Z was to publish the measurement
+first and mitigate it second, so every figure above is still the honest no-ping behaviour and
+nothing was re-measured to look better.
 
-The job is one `curl` on `ubuntu-latest`: no checkout, no secret, and `permissions: {}`, because
+**The primary layer is in the application.** `web/main.py` starts a background task in its lifespan
+that GETs `{KEEP_ALIVE_URL}/health` every `KEEP_ALIVE_INTERVAL_S` (default 600 s) with a 30 s
+timeout, logs the outcome at DEBUG, never raises and is cancelled at shutdown. The URL must be the
+service's **public** origin, not loopback: Render counts traffic at its edge, so the ping has to
+leave the container and come back to reset the idle timer. Unset `KEEP_ALIVE_URL` — the default,
+and the case on a laptop and in CI — and the task is never created.
+
+**Why the workflow below could not be the primary layer: it did not run.** GitHub's `schedule:` is
+best-effort and de-prioritises low-traffic repositories. In the nine hours after
+`.github/workflows/keepalive.yml` was pushed, its `*/10 * * * *` schedule produced **two** runs —
+09:48Z and 13:53Z on 2026-09-11, both green — instead of the ~54 it asks for, and the live instance
+was found spun down at 14:25Z. So the cron is kept as the **second** layer, where its one real
+advantage lives: an in-process loop cannot run inside an instance that is already asleep, and an
+external ping can wake one.
+
+**The arithmetic below is unchanged by the addition.** Both layers target the same state — an
+instance that is awake round the clock — so the ceiling is still 744 of 750 instance-hours in a
+31-day month, and pinging twice as often costs nothing extra because it is wakefulness, not
+requests, that is billed.
+
+The cron job is one `curl` on `ubuntu-latest`: no checkout, no secret, and `permissions: {}`, because
 `/health` is an open route. It reads the URL from the repository **variable** `DEPLOY_URL` and falls
 back to the committed live origin, prints `status`, `app.cold_start` and `app.uptime_ms`, and
 **never fails the repository's status** — a spun-down, deploying or suspended instance produces a
@@ -202,11 +222,13 @@ a suspended service answers nothing — which is what the warning line exists to
 `scripts/check_render_hours.py` reports the month to date and warns above 600 of 750 (and above 400
 of 500 build minutes) without ever failing a build, so the consumption is legible before it runs out.
 
-**How to turn it off.** GitHub → **Actions** → *keepalive* → ⋯ → **Disable workflow**. The schedule
-stops at once, no commit is needed, and the service goes back to the spin-down behaviour the table
-above measures; the same menu re-enables it. Deleting the file or dropping its `schedule:` trigger
-works too, but disabling is the reversible one, and that is the whole point — the measurement is
-published, the mitigation is a switch.
+**How to turn it off — both layers, and neither needs a commit.** Clear `KEEP_ALIVE_URL` in the
+Render dashboard (Environment → the variable → *Delete* → *Save, rebuild, and deploy*) and the
+in-process task is not created on the next boot; then GitHub → **Actions** → *keepalive* → ⋯ →
+**Disable workflow** stops the schedule. With both off the service goes back to the spin-down
+behaviour the table above measures, and the same two menus put it back. Deleting the workflow file
+or dropping its `schedule:` trigger works too, but disabling is the reversible one, and that is the
+whole point — the measurement is published, the mitigation is a switch.
 
 ### The part the image controls
 
@@ -251,6 +273,12 @@ same day. Every other variable runs at its coded default:
 | `LLM_RPM` / `LLM_BURST` | **`60` / `30`** (2026-09-10, single-key PUT on the live service) | operator, see below |
 | `PORT` | injected by Render | the platform |
 | `GIT_SHA` | resolved from `RENDER_GIT_COMMIT` | the platform + a `settings.py` validator |
+
+**`KEEP_ALIVE_URL` is the one variable that switches a behaviour on rather than tuning one.** The
+in-process keep-alive of § *Cold start* → *Keep-alive* is started only when it holds the service's
+own **public** origin; unset — the default, and the state on a laptop and in CI — no task is
+created and nothing is pinged. Setting it is a single-key PUT on the live service with no rebuild,
+exactly like the two limiter variables above, and `KEEP_ALIVE_INTERVAL_S` runs at its coded 600 s.
 
 **Why the service runs `LLM_RPM=60` / `LLM_BURST=30` while the code default stays 10.** The
 pre-optimization deployed sweep recorded a **3.9 s per turn mean** of token-bucket waiting inside
@@ -339,11 +367,13 @@ the index build — so this is the budget being spent deliberately, once per dep
 metrics and deploys endpoints, because Render publishes no usage endpoint, and it says so on every
 line it prints.
 
-**The instance-hour arithmetic, after the keep-alive.** `.github/workflows/keepalive.yml` (§*Cold
-start* → *Keep-alive*) keeps the instance awake round the clock from 2026-09-11, so the month's
+**The instance-hour arithmetic, after the keep-alive.** The keep-alive (§*Cold start* →
+*Keep-alive*) keeps the instance awake round the clock from 2026-09-11, so the month's
 consumption now trends to ~744 of the 750 free hours **by design** rather than to the handful of
-hours an idle demo would use. Exhausting the 750 suspends the free service until the month resets
-and bills nothing; disabling that workflow is the lever, and it costs one Actions menu.
+hours an idle demo would use. That figure is the ceiling for both layers together — an awake
+instance is counted once however many things ping it — and it did not move when the in-process
+self-ping joined the GitHub schedule. Exhausting the 750 suspends the free service until the month
+resets and bills nothing; the levers are one Render environment variable and one Actions menu.
 
 ### Memory — the 512 MB gate, measured 2026-09-10
 
