@@ -52,6 +52,13 @@ if [ "$STATUS" = "202" ]; then
     ATTEMPT=$((ATTEMPT + 1))
     sleep 1
   done
+  # Falling out of the loop is a turn that never closed. Without this the script carried on and
+  # exited 0 on a half-finished turn, which is worse than a red `make demo1`.
+  if ! "$PYTHON" -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("outcome") else 1)' \
+      "$WORK/gated.json"; then
+    echo "the turn never closed after ${ATTEMPT} polls of GET /api/traces/turns/${TURN_ID}" >&2
+    exit 1
+  fi
 elif [ "$STATUS" != "200" ]; then
   echo "POST /chat returned HTTP ${STATUS}" >&2
   cat "$WORK/gated.json" >&2

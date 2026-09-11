@@ -1,6 +1,6 @@
 """The only structural test file in the repository (spec §16.3).
 
-Five greps over `src/`, each protecting an invariant that a later phase could
+Six greps over `src/`, each protecting an invariant that a later phase could
 otherwise break silently:
 
 1. only `core/trace.py` writes to the trace tables;

@@ -12,6 +12,14 @@ on:
         description: 'Run the suite, then redeploy the dispatched ref'
         default: 'false'
 
+# Two pushes to `main` in quick succession otherwise run two `deploy` jobs that race each other
+# against Render, and the loser can be the newer commit. `cancel-in-progress: false` because a run
+# that has already reached `deploy` must be allowed to finish: cancelling mid-deploy would leave the
+# service on a half-known sha.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   lint:
     runs-on: ubuntu-latest

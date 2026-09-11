@@ -52,6 +52,13 @@ if [ "$STATUS" = "202" ]; then
     ATTEMPT=$((ATTEMPT + 1))
     sleep 1
   done
+  # Falling out of the loop is a turn that never closed. Without this the script carried on and
+  # exited 0 on a half-finished turn, which is worse than a red `make demo1`.
+  if ! "$PYTHON" -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("outcome") else 1)' \
+      "$WORK/turn.json"; then
+    echo "the turn never closed after ${ATTEMPT} polls of GET /api/traces/turns/${TURN_ID}" >&2
+    exit 1
+  fi
 elif [ "$STATUS" != "200" ]; then
   echo "POST /chat returned HTTP ${STATUS}" >&2
   cat "$WORK/turn.json" >&2
@@ -97,4 +104,20 @@ if usage:
         f"{usage.get('completion_tokens', 0)} tokens in {timings.get('total_ms', 0)} ms"
     )
 print("-- dashboard:", turn.get("dashboard_url"))
+
+# `make demo1` is a definition-of-done command, so it has to fail on a turn that did not work.
+# Without this the script exited 0 on an empty answer, zero citations or `outcome: null`.
+# Citations are asserted as non-empty rather than at the three distinct documents
+# `tests/e2e/test_demo_tasks.py` requires under the stub: this script is also run against the live
+# URL, where document breadth varies run to run (see `docs/demo-script.md`, task 1 element ④).
+problems = []
+if turn.get("outcome") != "answered":
+    problems.append(f"outcome is {turn.get('outcome')!r}, not 'answered'")
+if not answer.strip():
+    problems.append("the answer is empty")
+if not citations:
+    problems.append("the answer carries no citations")
+if problems:
+    print("demo task 1 did not complete: " + "; ".join(problems), file=sys.stderr)
+    raise SystemExit(1)
 PY

@@ -68,6 +68,23 @@ async def test_the_rail_narrates_each_step_and_the_answer_streams_under_it(web):
     assert "clearProvisional();" in html, "`turn_completed` is a hard replace, never a merge"
 
 
+async def test_the_provisional_render_mirrors_g3s_relabel_of_an_uncited_policy_fact(web):
+    """`#provisional-blocks` must never show an unverified claim as company policy (§11.3).
+
+    `renderBlock()` mirrored `render_answer()`'s two prefixes but not G3's relabel rule: a streamed
+    `policy_fact` with an empty `citations[]` is exactly what G3 turns into a `recommendation` in
+    the final answer, and what G2 drops when its citations do not resolve. `turn_completed` hard-
+    replaces the preview — but §11.3 records 2 of 17 answered turns being revised after the last
+    token, and for those seconds the claim was on screen wearing the wrong label. `StreamedBlock`
+    already carries `citations`, so the rule costs nothing on the wire.
+    """
+    async with web() as client:
+        html = (await client.get("/")).text
+
+    assert 'block.type === "policy_fact" && (block.citations || []).length === 0' in html
+    assert 'if (block.type === "recommendation" || uncitedFact)' in html
+
+
 async def test_the_page_resubscribes_for_the_resumed_half_of_a_gated_turn(web):
     """The confirm card's POST opens a stream of its own, on the SAME turn id (§10.3 step 4).
 

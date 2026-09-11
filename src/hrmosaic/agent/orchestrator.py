@@ -1148,6 +1148,7 @@ class Orchestrator:
         if result.tool_name == COMPLIANCE_TOOL:
             resolved = self._engine_evidence_rows(turn, result.body)
             if resolved:
+                # §4.2's `agent/** → rag/` exemption, as at `_engine_evidence` — see the note there.
                 from hrmosaic.rag.retrieve import score_chunk_ids
 
                 scores = await asyncio.to_thread(score_chunk_ids, list(resolved), query=turn.request.message)
@@ -1247,10 +1248,12 @@ class Orchestrator:
             return []
 
         if scores is None:
-            # The one place `agent/**` reaches into `hrmosaic.rag` (§4.2's docstring convention, and
-            # the same lazy-import shape `web/api.py` uses for `/health`'s index block). The
-            # alternative was a tenth MCP tool whose only caller is this line, and §13.4 would then
-            # have scored an extra `tools/call` on every compliance turn.
+            # One of the **three** places `agent/**` reaches into `hrmosaic.rag` — the others are
+            # `_absorb_async` and `_rehydrate_scores`, both of which score the same compliance
+            # evidence off the request path (§4.2's docstring convention, and the same lazy-import
+            # shape `web/api.py` uses for `/health`'s index block). The alternative was a tenth MCP
+            # tool whose only caller is this line, and §13.4 would then have scored an extra
+            # `tools/call` on every compliance turn.
             from hrmosaic.rag.retrieve import score_chunk_ids
 
             scores = score_chunk_ids(list(resolved), query=turn.request.message)
@@ -1615,6 +1618,7 @@ class Orchestrator:
             return None
         message = store.execute("SELECT user_message FROM turns WHERE id = ?", (turn_id,)).scalar()
 
+        # §4.2's `agent/** → rag/` exemption, as at `_engine_evidence` — see the note there.
         from hrmosaic.rag.retrieve import score_chunk_ids
 
         return await asyncio.to_thread(score_chunk_ids, ids, query=str(message or ""))

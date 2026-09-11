@@ -340,3 +340,63 @@ async def test_the_mcp_mount_is_refused_without_a_credential(web):
     assert anonymous.status_code == 401
     assert anonymous.json()["code"] == "ACCESS_REQUIRED"
     assert credentialed.status_code != 401
+
+
+# --------------------------------------------------------------------------------------
+# §17's denial-of-service row: the remaining unbounded inputs on the gated surface
+# --------------------------------------------------------------------------------------
+
+
+async def test_an_oversized_message_is_refused_before_it_is_embedded(web):
+    """`ChatBody.message` had `min_length=1` and no upper bound.
+
+    It is embedded on the request path (~0.6 s of CPU on the 0.1-vCPU instance), stored verbatim in
+    `turns.user_message` and sent to the paid model, while every other input on this path is
+    bounded — `options.k` at `le=10`, the 24/32/128 KB payload caps, the 6-step / 8-tool / 90 s
+    budgets, the 300-session retention.
+    """
+    from hrmosaic.web.api import MAX_MESSAGE_CHARS
+
+    async with web("rag_only.json") as client:
+        oversized = await client.post("/chat", json={"message": "a" * (MAX_MESSAGE_CHARS + 1)})
+        at_the_limit = await client.post("/chat", json={"message": "What is the weather in Berlin?"})
+
+    assert oversized.status_code == 422
+    assert oversized.json()["code"] == "INVALID_REQUEST"
+    assert at_the_limit.status_code == 200, "an ordinary question is untouched"
+
+
+async def test_the_stream_route_validates_its_turn_id(web):
+    """Each subscription holds a queue for up to `STREAM_MAX_S`, and `_rate_limited` exempts it."""
+    async with web() as client:
+        bad = await client.get("/chat/stream", params={"turn_id": "not-a-turn-id"})
+
+    assert bad.status_code == 422
+    assert bad.json() == {"code": "INVALID_ID", "field": "turn_id"}
+
+
+async def test_health_never_returns_a_backend_error_string_unredacted(web, store, monkeypatch):
+    """`/health` is the one open, unauthenticated route that returns back-end error text (§11.4).
+
+    `core/db.py` builds store errors as `turso request failed: {exc}` and
+    `turso responded {code}: {response.text[:200]}` — third-party text echoed verbatim to an
+    anonymous caller. Everything this project persists goes through `core/redact.py`; the three
+    `last_error` / `error` fields on this payload did not, and they are the only unauthenticated
+    surface that returns a back-end exception at all.
+    """
+    from hrmosaic.core.db import StoreError
+
+    leaked = "turso responded 401: {'authorization': 'Bearer sk-ant-probe-not-a-real-key'}"
+    async with web() as client:
+        monkeypatch.setattr(store, "execute", lambda *args, **kwargs: (_ for _ in ()).throw(StoreError(leaked)))
+        health = await client.get("/health")
+
+    assert health.status_code == 200, "constraint 11: /health is always 200"
+    payload = health.json()
+    assert payload["trace_store"]["reachable"] is False
+    assert "trace_store_unreachable" in payload["degradations"]
+
+    last_error = payload["trace_store"]["last_error"]
+    assert "sk-ant-probe-not-a-real-key" not in health.text
+    assert "sk-ant-probe-not-a-real-key" not in last_error
+    assert "turso responded 401" in last_error, "the operator still learns what failed"

@@ -158,8 +158,18 @@
 
     // The JS mirror of `orchestrator.render_answer()`. A recommendation carries its prefix, which
     // is why only COMPLETE blocks are ever streamed: a half-written one would read as policy.
+    //
+    // It mirrors G3's relabel rule too: a `policy_fact` with no citations is what G3 turns into a
+    // `recommendation` in the final answer (and what G2 drops when its citations do not resolve).
+    // `turn_completed` hard-replaces the preview a moment later, but §11.3 records 2 of 17 answered
+    // turns being revised after the last token — so without this an unverified claim reads as
+    // company policy for those seconds. `StreamedBlock` already carries `citations`, so the rule
+    // needs nothing new on the wire.
     function renderBlock(block) {
-      if (block.type === "recommendation") { return "Recommendation — not company policy: " + block.text; }
+      var uncitedFact = block.type === "policy_fact" && (block.citations || []).length === 0;
+      if (block.type === "recommendation" || uncitedFact) {
+        return "Recommendation — not company policy: " + block.text;
+      }
       if (block.type === "escalation") { return "Escalation: " + block.text; }
       return block.text;
     }

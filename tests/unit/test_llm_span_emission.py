@@ -328,9 +328,12 @@ def test_both_providers_down_is_still_one_span_flagged_as_a_failover(writer, sto
 # `invoke()` degrades in three steps, or a transport that ignores its own timeout, must still not
 # outlive the slot the agent loop allotted the call. These four assert the deadline itself.
 
-#: Small enough to keep the suite fast, and `_hangs` is always well clear of it.
+#: Small enough to keep the suite fast, and `_hangs` is always well clear of it. `HANG_S` is 2.0
+#: rather than 0.8 because the assertion around it is a real wall clock — `BUDGET_S <= elapsed <
+#: HANG_S` across a worker-thread join — and 550 ms of headroom is thin on a loaded CI runner. The
+#: bug it catches (a budget that is not enforced at all) still fails at any separation.
 BUDGET_S = 0.25
-HANG_S = 0.8
+HANG_S = 2.0
 
 
 def _hangs(seconds: float, response: tuple[int, dict]):

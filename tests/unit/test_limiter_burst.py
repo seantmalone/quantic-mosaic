@@ -48,7 +48,9 @@ def test_a_full_bucket_admits_a_whole_turn_with_no_delay():
     elapsed_ms = (time.monotonic() - started) * 1000
 
     assert waits == [0] * BURST
-    assert elapsed_ms < 50, f"six back-to-back calls slept {elapsed_ms:.1f} ms"
+    # 250 ms, not 50: this is a real wall clock on a shared CI runner, and the bug it exists to
+    # catch (a full bucket that sleeps anyway) costs whole seconds, not milliseconds.
+    assert elapsed_ms < 250, f"six back-to-back calls slept {elapsed_ms:.1f} ms"
 
 
 def test_the_calls_after_the_burst_pace():

@@ -166,6 +166,8 @@ class SpanBroker:
     # -- publication -------------------------------------------------------------------
     def publish_span(self, event: SpanEvent) -> None:
         """The **one** `core.trace` span listener (§11.3) — both phases of a span come through it."""
+        if not self._has_subscriber(event.turn_id):
+            return
         if event.phase == "started":
             self.publish(event.turn_id, "step_started", step_started_data(event))
             return
@@ -173,7 +175,23 @@ class SpanBroker:
 
     def publish_answer_delta(self, event: AnswerDeltaEvent) -> None:
         """The one `core.trace` delta listener: one complete answer block, provisionally (W2-E)."""
+        if not self._has_subscriber(event.turn_id):
+            return
         self.publish(event.turn_id, "answer_delta", answer_delta_data(event))
+
+    def _has_subscriber(self, turn_id: str) -> bool:
+        """Nobody is listening: do not build the frame at all.
+
+        `span_event_data` calls `narration.label_for`, which for `get_policy_section` issues a
+        `corpusread.get_document` query, plus `summarise_span` and two `preview_value` passes;
+        `publish` then does a `json.dumps` and a `call_soon_threadsafe` hop. Every eval item, every
+        `scripts/demo_task_*.sh` curl, every `make demo1`/`make demo2` and every keep-alive-woken
+        turn used to pay all of that per span with no browser attached, on a 0.1-vCPU instance.
+        This is a pure optimisation: a subscriber that arrives mid-turn already misses the earlier
+        spans and falls back to `trace[]`
+        (`test_a_late_subscriber_misses_the_earlier_spans_and_nothing_else`).
+        """
+        return not self._closed and self.subscriber_count(turn_id) > 0
 
     def publish(self, turn_id: str, event: str, data: dict[str, Any]) -> None:
         """Queue one frame for every subscriber of `turn_id`. Never blocks, never raises."""

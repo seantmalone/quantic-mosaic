@@ -74,10 +74,15 @@ def quarantine_tool_result(name: str, body: dict[str, Any]) -> dict[str, Any]:
     a quarantined passage may carry.
 
     This runs in `client.call_tool` on the way in, **before the `tool_call` span is written and long
-    before the result is appended to the conversation**, so neither the record nor the model ever
-    holds the text. The search tool takes the same decision server-side (W2-C's BLOCKING bullet, so
-    the text is never on the wire at all); this is the client's own shield, which holds against any
-    MCP server it is pointed at rather than trusting a server to police its own output.
+    before the result is appended to the conversation**, so neither the `tool_call` record nor the
+    **act conversation** ever holds the text. The synthesis prompt is the one place it is shown, and
+    it is shown once, inside §7.4's `<document trust="data" quarantined="true">` envelope under
+    system rule 4 — `_Turn.chunks()` deliberately returns quarantined chunks and `EvidenceChunk.text`
+    re-reads the stored chunk, because an answer written without seeing the passage cannot say what
+    the passage was. It stays **uncitable** either way: `_Turn.citable()` filters it out. The search
+    tool takes the same decision server-side (W2-C's BLOCKING bullet, so the text is never on the
+    wire at all); this is the client's own shield, which holds against any MCP server it is pointed
+    at rather than trusting a server to police its own output.
     """
     _walk(body, depth=0)
     return body

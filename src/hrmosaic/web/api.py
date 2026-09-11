@@ -63,6 +63,7 @@ from hrmosaic.core.db import Store, TursoHTTPStore, get_store, now_micros
 from hrmosaic.core.ids import new_session_id, new_turn_id, user_agent_hash
 from hrmosaic.core.llm import count_calls_today
 from hrmosaic.core.models import AnswerBlock, ConfirmationPayload, ErrorPayload
+from hrmosaic.core.redact import redact_text
 from hrmosaic.mcpserver import confirm as confirm_gate
 from hrmosaic.settings import Settings, secret_value
 from hrmosaic.web.sse import broker
@@ -86,6 +87,11 @@ COOKIE_MAX_AGE_S = 30 * 24 * 60 * 60
 #: `^E1[0-9]{3}$` or the literal `admin` (§11). Anything else resolves to the default persona.
 ACTOR_PATTERN = re.compile(r"^(?:E1[0-9]{3}|admin)$")
 DEFAULT_ACTOR = "E1042"
+
+#: §17's cap on `ChatBody.message`. Every other input on the `POST /chat` path is bounded —
+#: `options.k` at `le=10`, the 24/32/128 KB payload caps, the 6-step / 8-tool / 90 s budgets —
+#: and this one was not.
+MAX_MESSAGE_CHARS = 4000
 
 #: 32-hex, the shape `core/ids.py` mints (§11.1: "may be supplied as UUID4 hex").
 ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
@@ -408,7 +414,11 @@ class ChatBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    message: str = Field(min_length=1)
+    #: Bounded like every other input on this path (§17): the message is embedded on the request
+    #: path (~0.6 s of CPU on the 0.1-vCPU instance), stored verbatim in `turns.user_message`
+    #: and sent to the paid model, so an unbounded one is a denial-of-service lever. 4,000
+    #: characters is an order of magnitude above the longest dataset item and demo prompt.
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     session_id: str | None = None
     turn_id: str | None = None
     employee_id: str | None = None
@@ -976,7 +986,17 @@ def _record_decline(store: Store, buffer: trace_module.TurnBuffer, pending: dict
 
 @router.get("/chat/stream")
 async def chat_stream(turn_id: str) -> StreamingResponse:
-    """One SSE subscription per `turn_id`; subscribe **before** POSTing (§11.1, §11.3)."""
+    """One SSE subscription per `turn_id`; subscribe **before** POSTing (§11.1, §11.3).
+
+    The id is validated against the same `ID_PATTERN` `POST /chat` applies (§17). Each subscription
+    allocates a queue and a `_subscribers` entry that lives for up to `STREAM_MAX_S`, and
+    `_rate_limited` deliberately exempts this route — a limit here would throttle the rail rather
+    than the work behind it — so an unvalidated id let a gated-but-authenticated client hold an
+    unbounded number of 300-second subscriptions on arbitrary strings. It also makes a typo'd id a
+    named error instead of a stream that silently emits nothing but heartbeats.
+    """
+    if not ID_PATTERN.match(turn_id):
+        raise HTTPException(status_code=422, detail={"code": "INVALID_ID", "field": "turn_id"})
     return StreamingResponse(
         broker.stream(turn_id),
         media_type="text/event-stream",
@@ -1138,7 +1158,7 @@ async def _mcp_block(app: Any) -> dict[str, Any]:
             "tool_count": 0,
             "tool_names": [],
             "handshake_ms": None,
-            "last_error": str(exc),
+            "last_error": redact_text(str(exc)),
         }
     return {
         "connected": True,
@@ -1161,9 +1181,9 @@ def _index_block() -> dict[str, Any]:
         open_index().close()
         meta = corpusread.read_index_meta()
     except IndexModelMismatch as exc:
-        return {"loaded": False, "mismatch": True, "error": str(exc)}
+        return {"loaded": False, "mismatch": True, "error": redact_text(str(exc))}
     except Exception as exc:  # a missing or unreadable file: not loaded, not a mismatch
-        return {"loaded": False, "error": str(exc)}
+        return {"loaded": False, "error": redact_text(str(exc))}
     return {
         "loaded": True,
         "doc_count": meta.doc_count,
@@ -1184,7 +1204,7 @@ def _store_block(settings: Settings) -> tuple[dict[str, Any], Store | None]:
         runs = int(store.execute("SELECT COUNT(*) AS n FROM eval_runs").scalar() or 0)
     except Exception as exc:
         return (
-            {"backend": settings.persist_backend, "reachable": False, "last_error": str(exc)},
+            {"backend": settings.persist_backend, "reachable": False, "last_error": redact_text(str(exc))},
             None,
         )
     return (

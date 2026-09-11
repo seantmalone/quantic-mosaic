@@ -12,7 +12,9 @@ and `mcp/server_entrypoint.py --http` is deliberately publicly reachable (§15, 
 attach MCP Inspector — so "the wire" is not only the loopback hop to our own client. The decision
 therefore has to be taken in `mcpserver/tools/search_policy_documents.py`, which may import `core/`
 and may **not** import `hrmosaic.agent` (§4.2: `mcpserver/ → rag/ → core/`; measured, that import
-pulls 2,867 modules and ~1.0 s of `anthropic`/`openai`/`uvicorn` into the stdio server process).
+pulls ~2,800 modules and ~0.9 s of `anthropic`/`openai`/`uvicorn` into the stdio server process —
+`import hrmosaic.agent.guardrails.g4` = 2,823 modules / 0.85 s against
+`import hrmosaic.core.injection` = 12 / 0.003 s).
 
 The agent still runs its own scan on the way in (`g4.quarantine_tool_result`). That is not
 redundancy for its own sake: a client that trusts a server to police its own output has no shield at

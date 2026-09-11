@@ -471,14 +471,32 @@ def test_nudge_and_catalog_reopened_read_the_plan_span(remote_turn):
 
 
 def test_the_dataset_items_all_score_without_raising(remote_turn):
-    """A smoke pass over the whole set: no scorer may raise on any committed item shape."""
+    """A smoke pass over the whole set: no scorer may raise on any committed item shape.
+
+    The results are asserted rather than discarded — as written with every return value thrown
+    away, a regression that returned `None` or a NaN for every item passed this test.
+    """
     usage = det.tool_usage(remote_turn)
+    assert DATASET.items, "the committed dataset is not empty"
     for entry in DATASET.items:
-        det.tool_scores(entry, usage)
-        det.citation_resolvability(remote_turn.citations, expects_citations=entry.expects_citations)
-        det.document_recall(det.retrieved_doc_ids(remote_turn), entry.expected_docs)
-        det.workflow_completion(entry, remote_turn, usage)
-        det.exact_match(entry.gold_answer_short, remote_turn.final_answer)
+        tools = det.tool_scores(entry, usage)
+        assert tools is not None, f"{entry.id}: tool_scores returned nothing"
+        for value in (tools.recall, tools.precision, tools.selection):
+            assert value is None or 0.0 <= value <= 1.0, f"{entry.id}: tool score out of range"
+
+        for name, value in (
+            (
+                "cit_resolve",
+                det.citation_resolvability(remote_turn.citations, expects_citations=entry.expects_citations),
+            ),
+            ("doc_recall", det.document_recall(det.retrieved_doc_ids(remote_turn), entry.expected_docs)),
+            ("workflow", det.workflow_completion(entry, remote_turn, usage)),
+        ):
+            assert value is None or 0.0 <= value <= 1.0, f"{entry.id}: {name} = {value!r}"
+
+        # `None` where the gold does not reduce to a scalar (§13.3); 0.0/1.0 where it does.
+        exact = det.exact_match(entry.gold_answer_short, remote_turn.final_answer)
+        assert exact is None or exact in (0.0, 1.0), f"{entry.id}: exact_match = {exact!r}"
 
 
 # --------------------------------------------------------------------------------------------
