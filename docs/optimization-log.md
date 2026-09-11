@@ -341,6 +341,38 @@ keeps it that way.**
 
 ---
 
+## 2026-09-11 — What a real browser showed, and the last fixes
+
+A live session in Chrome through the grader link (after the final review's fixes were deployed):
+
+- **Worked as designed.** Cookie exchange from the tokenized link; a PTO question narrated on the rail
+  step by step in plain language; a cited answer with policy-fact and recommendation blocks; demo 2
+  reached the "Confirm before anything is written" card with the exact payload, and Confirm resumed
+  the turn with the rail still narrating. The store confirmed the mechanics: confirmation consumed,
+  ticket MOCK-HR-000002 written.
+- **Defect 1 — the keep-alive was not keeping anything alive.** GitHub's scheduler ran the `*/10`
+  workflow twice in nine hours (09:48Z and 13:53Z), so the instance was asleep when the page was
+  opened. Fix (P21): a self-ping inside the app every ten minutes through its own public hostname,
+  which runs exactly when the instance is up and needs no scheduler; the Actions workflow stays as a
+  second layer and the docs state the measured scheduler behaviour.
+- **Defect 2 — a confirmed write was denied by the answer.** The synthesis prompt carried the created
+  ticket verbatim, yet the model closed with an escalation saying it could not open PTO requests.
+  Fix (P22): a deterministic "outcome consistency" step builds the first answer block from the tool
+  result ("Done: HR ticket … was opened in queue …"), replaces an escalation that denies a performed
+  action, drops a next step that asks for the write again, and a prompt rule points the model the
+  same way; the stub demo and the live rehearsal script now assert the ticket id appears.
+- **Cosmetic.** An empty "Writing the answer…" preview and the "Waking the free instance…" banner were
+  visible at rest — a `[hidden]` attribute losing to `display: flex`, fixed with one CSS rule. The
+  gated write's rail line now reads "Needs your confirmation" in amber instead of "error" in red.
+- **CI.** The new coverage tracer halved the CI runner's speed and exposed a race in a health-check
+  test (the boot-time import of twelve evaluation runs was still running); the test now waits for the
+  import instead of racing it. Coverage gate: 90% enforced in CI; measured 95.5% lines / 87% branches
+  before the last two waves, 94% with the branch-weighted total afterwards.
+
+Final suite: 1,933 tests, pristine under `filterwarnings = error`.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
