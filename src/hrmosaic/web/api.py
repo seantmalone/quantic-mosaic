@@ -196,6 +196,25 @@ def _key_page(request: Request, *, status_code: int, message: str) -> Response:
     return JSONResponse({"code": "ACCESS_REQUIRED", "detail": message}, status_code=status_code)
 
 
+#: What a gated request is told when the gate is on and no token is configured (`APP_ENV=docker`
+#: with `APP_ACCESS_TOKEN` unset). It is a 403, not a 401: there is no key that would work.
+MISSING_TOKEN_MESSAGE = "APP_ACCESS_TOKEN is not set on this deployment."
+
+
+def request_is_https(request: Request) -> bool:
+    """Whether the *browser* reached this app over https — not whether ASGI did (§14.1).
+
+    Render terminates TLS at its edge and forwards plain http into the container, and uvicorn's
+    `ProxyHeadersMiddleware` rewrites the scheme only for a trusted peer (`127.0.0.1` by default),
+    which the edge is not. So `request.url.scheme` is `http` on the deployed service and every
+    cookie below would ship without `Secure` — contradicting constraint 9 and the published claim
+    in `deployed.md`. Reading the header is safe here in a way it would not be for an authorisation
+    decision: forging `X-Forwarded-Proto: https` only makes the forger's own cookie `Secure`.
+    """
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return forwarded == "https" if forwarded else request.url.scheme == "https"
+
+
 def is_loopback(host: str) -> bool:
     """`127.0.0.1`, `::1` and the rest of `127.0.0.0/8` — never a hostname, never a proxy header."""
     try:
@@ -326,6 +345,14 @@ class AccessGateMiddleware:
     def _authenticate(self, request: Request) -> Response | Literal["cookie", "bearer"]:
         """The three presentations of §11, in order, each `compare_digest`-compared."""
         token = secret_value(self.settings.app_access_token) or ""
+        if not token:
+            # The gate is on because `APP_ENV != "local"` (docker or render) but no token is
+            # configured. `compare_digest` against `""` succeeds for an empty credential, so
+            # `Authorization: Bearer`, `Cookie: mosaic_access=` and `?access=` would each open a
+            # gate that has just refused the anonymous request. `gate_misconfigured()` fails closed
+            # for `render` only, by design (§11.4 scopes the `access_token_missing` degradation to
+            # it), so the refusal belongs here: never compare against an empty secret.
+            return _key_page(request, status_code=403, message=MISSING_TOKEN_MESSAGE)
         supplied = request.query_params.get("access")
         if supplied is not None and request.method == "GET":
             if not hmac.compare_digest(supplied, token):
@@ -355,7 +382,7 @@ class AccessGateMiddleware:
             max_age=COOKIE_MAX_AGE_S,
             httponly=True,
             samesite="lax",
-            secure=request.url.scheme == "https",
+            secure=request_is_https(request),
             path="/",
         )
         return response
@@ -968,7 +995,7 @@ async def set_actor(request: Request) -> Response:
         max_age=COOKIE_MAX_AGE_S,
         httponly=False,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=request_is_https(request),
         path="/",
     )
     return response
@@ -990,6 +1017,15 @@ async def access_submit(request: Request) -> Response:
     token = secret_value(_settings(request).app_access_token) or ""
     if not gate_enabled(_settings(request)):
         return RedirectResponse("/", status_code=303)
+    if not token:
+        # The gate is on with no token configured: `compare_digest(supplied, "")` would mint the
+        # cookie for an empty form field. There is no key that works, so say so and set nothing.
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="access.html",
+            context={"message": MISSING_TOKEN_MESSAGE},
+            status_code=403,
+        )
     if not hmac.compare_digest(supplied, token):
         return TEMPLATES.TemplateResponse(
             request=request,
@@ -1004,7 +1040,7 @@ async def access_submit(request: Request) -> Response:
         max_age=COOKIE_MAX_AGE_S,
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=request_is_https(request),
         path="/",
     )
     return response

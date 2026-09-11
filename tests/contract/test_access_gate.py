@@ -25,6 +25,10 @@ def _gated(**overrides):
     return {"app_access_token": SecretStr(TOKEN), **overrides}
 
 
+def _bearer() -> dict[str, str]:
+    return {"Authorization": f"Bearer {TOKEN}"}
+
+
 async def test_the_gate_is_off_locally_when_no_token_is_set(web):
     """`APP_ENV=local` with no `APP_ACCESS_TOKEN`: the gate is off and `/` is open (§11)."""
     async with web() as client:
@@ -243,3 +247,96 @@ async def test_the_real_nonce_does_not_exempt_post_chat(web):
         second = await client.post("/chat", json=question, headers=headers)
 
     assert (first.status_code, second.status_code) == (200, 429)
+
+
+# --------------------------------------------------------------------------------------
+# The gate is on but no token is configured — and an empty credential is not a key
+# --------------------------------------------------------------------------------------
+
+
+async def test_the_gate_with_no_token_configured_refuses_every_empty_credential(web):
+    """`APP_ENV=docker` with `APP_ACCESS_TOKEN` unset: the gate is on and nothing opens it.
+
+    `gate_enabled()` is true for any `APP_ENV` that is not `local`, but `gate_misconfigured()`
+    fails closed for `render` **only** — §11.4 scopes the `access_token_missing` degradation to the
+    deployed environment. `docker` is a documented value (`.env.example`, `settings.py`), so the
+    gate could be on with the resolved token an empty string, and `compare_digest(x, "")` succeeds
+    for an empty `x`: a bare `Authorization: Bearer`, `Cookie: mosaic_access=` and `?access=` each
+    opened a gate that had just refused the anonymous request one line earlier.
+
+    httpx refuses to send `"Bearer "` with its trailing space (`LocalProtocolError: Illegal header
+    value`), so the bare scheme is used — `header.partition(" ")` reaches the same empty value.
+    """
+    async with web(app_env="docker", app_access_token=None) as client:
+        anonymous = await client.get("/")
+        bearer = await client.get("/", headers={"Authorization": "Bearer"})
+        client.cookies.set("mosaic_access", "")
+        cookie = await client.get("/")
+        client.cookies.clear()
+        parameter = await client.get("/", params={"access": ""})
+        form = await client.post("/access", data={"access": ""})
+
+    assert anonymous.status_code == 403
+    assert bearer.status_code == 403, "an empty bearer is not a credential"
+    assert cookie.status_code == 403, "an empty cookie is not a credential"
+    assert parameter.status_code == 403, "an empty `?access=` is not a credential"
+    assert form.status_code == 403, "the key form does not mint a cookie for an empty field"
+    for refused in (anonymous, bearer, cookie, parameter, form):
+        assert "set-cookie" not in refused.headers
+        assert "APP_ACCESS_TOKEN" in refused.text
+
+
+# --------------------------------------------------------------------------------------
+# `Secure` behind a TLS-terminating edge
+# --------------------------------------------------------------------------------------
+
+
+async def test_the_cookie_is_marked_secure_when_the_edge_terminated_tls(web):
+    """Constraint 9's *"Secure on https"* has to hold on Render, where ASGI only ever sees http.
+
+    Render terminates TLS at its edge and forwards plain http into the container; uvicorn's
+    `ProxyHeadersMiddleware` rewrites `scope["scheme"]` only for a trusted peer (`127.0.0.1` by
+    default), which the edge is not. `request.url.scheme` is therefore `http` on the deployed
+    service, and every cookie shipped without `Secure` — while `deployed.md` published the
+    opposite. `request_is_https()` reads `X-Forwarded-Proto` for this, and for nothing else:
+    forging the header only makes the forger's own cookie `Secure`.
+    """
+    https = {"X-Forwarded-Proto": "https"}
+    async with web(**_gated()) as client:
+        exchanged = await client.get("/", params={"access": TOKEN}, headers=https)
+        form = await client.post("/access", data={"access": TOKEN}, headers=https)
+        actor = await client.post("/session/actor", json={"actor": "admin"}, headers={**https, **_bearer()})
+
+    assert "Secure" in exchanged.headers["set-cookie"]
+    assert "Secure" in form.headers["set-cookie"]
+    assert "Secure" in actor.headers["set-cookie"], "the act-as cookie travels the same wire"
+    # And the loopback case is unchanged: a `Secure` cookie over plain http is simply dropped.
+    async with web(**_gated()) as client:
+        plain = await client.get("/", params={"access": TOKEN})
+    assert "Secure" not in plain.headers["set-cookie"]
+
+
+# --------------------------------------------------------------------------------------
+# The MCP mount is gated, and that is the protection `mcp/README.md` says it relies on
+# --------------------------------------------------------------------------------------
+
+
+async def test_the_mcp_mount_is_refused_without_a_credential(web):
+    """§17's *MCP endpoint exposure* row, and the reason no DNS-rebinding allowlist is configured.
+
+    `mcp/README.md` says in as many words that the SDK's own `allowed_hosts`/`allowed_origins`
+    guard is left unconfigured because *"the protection this project relies on is the gate"*. That
+    sentence is only true while the mount is actually behind the gate, and until now every test of
+    the mount ran with the gate off.
+    """
+    call = {
+        "json": {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        "headers": {"Accept": "application/json, text/event-stream"},
+    }
+    async with web(**_gated()) as client:
+        anonymous = await client.post("/mcp-server/mcp", **call)
+        credentialed = await client.post("/mcp-server/mcp", json=call["json"], headers={**call["headers"], **_bearer()})
+
+    assert anonymous.status_code == 401
+    assert anonymous.json()["code"] == "ACCESS_REQUIRED"
+    assert credentialed.status_code != 401
