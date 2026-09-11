@@ -261,6 +261,41 @@ and the before / after-P13 / final comparison.
 
 ---
 
+## 2026-09-11 — The final column: after Waves 1 and 2 (deployed, `r_1789086979_baseline`)
+
+One deploy carrying P14, P15 and P16; the same 26 items, judge and instance as the two earlier
+columns. 249 judge calls (≈ $0.15). Blind reference labels re-authored for these answers before the
+judge ran: agreement 1.00 on the seed subset (n=8).
+
+| Metric | Before | After P13 (quality) | Final (quality + performance) |
+|---|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.692 | 0.808 | **0.808** |
+| Groundedness | 0.979 | 1.000 | 0.982 |
+| Citation accuracy | 0.847 | 0.914 | 0.925 |
+| Partial match (gold facts) | 0.794 | 0.875 | 0.852 |
+| Doc recall | 0.855 | 0.974 | 0.974 |
+| Tool selection F1 | 0.926 | 0.987 | 0.992 |
+| Workflow completion | 0.769 | 0.846 | 0.846 |
+| Over-refusal / missed-refusal | 0.111 / 0.000 | 0 / 0 | 0 / 0 |
+| Latency p50 | 17.6 s | 22.6 s | **16.7 s** |
+| Latency p95 | 47.7 s | 39.2 s | **32.4 s** |
+| Ablation delta (tools removed) | −0.154 | −0.192 | −0.231 (bar 0.25) |
+
+**Reading it.** The performance waves gave back the five seconds the quality fixes had cost at the
+median and cut the tail by a third, with no quality metric moving more than noise (groundedness
+1.000 → 0.982 is one item; citation accuracy and tool selection improved). Five items still fail
+strict pass: two lose one answer block to the citation guardrail (a citation to an id that does not
+resolve), three miss the "three distinct documents" end state on multi-document questions.
+Those are the next targets if the 0.85 bar is to be cleared. The ablation gap widened again with
+the tighter workflow rule and now sits just under the pre-registered bar; it is reported as
+not supported, with the arm's changed meaning stated beside all three figures.
+
+**Interactive experience.** Streaming and the progress lines do not show in these numbers (the
+harness waits for the whole answer); the live check showed the first answer block arriving while
+later blocks were still being written, and each step announced as it began.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
