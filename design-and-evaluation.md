@@ -737,7 +737,7 @@ request, and on `workflow_dispatch`**:
 **The coverage gate is the same command locally and in CI.** `make coverage` and the `test` job
 both run `coverage run --branch --source=src/hrmosaic -m pytest -q`, write `coverage.xml` and then
 enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 87% of
-branches over 7,360 statements** on 2026-09-11 (94% combined, which is the number the gate reads),
+branches over 7,361 statements** on 2026-09-11 (94% combined, which is the number the gate reads),
 so the 90 floor is a regression guard rather than a target to grow into. No third-party coverage
 service and no badge token is involved — §15.2's claim that nothing CI holds is a credential stands
 unchanged.
