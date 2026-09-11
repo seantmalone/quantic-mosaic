@@ -10,7 +10,7 @@ GIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo dev)
 IMAGE ?= mosaic-hr
 BASE_URL ?= http://$(HOST):$(PORT)
 
-.PHONY: setup run run-stdio lint test ingest eval ablation demo1 demo2 docker docker-run-512
+.PHONY: setup run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512
 
 setup:
 	$(PYTHON) -m venv $(VENV)
@@ -30,6 +30,17 @@ lint:
 
 test:
 	$(BIN)/pytest -q
+
+# The coverage gate (P20). `--branch` because a project this full of guard clauses reports a
+# flattering line number without it, and `--source=src/hrmosaic` so the measurement is the shipped
+# package and not the tests that drive it. `coverage xml` runs BEFORE the gate so the report exists
+# as an artifact even on the run that fails it — which is the run whose numbers someone needs.
+# `--fail-under=90` is the gate itself; `coverage.xml` and `.coverage` are git-ignored.
+COVERAGE_MIN ?= 90
+coverage:
+	$(BIN)/coverage run --branch --source=src/hrmosaic -m pytest -q
+	$(BIN)/coverage xml
+	$(BIN)/coverage report --fail-under=$(COVERAGE_MIN)
 
 ingest:
 	$(BIN)/python -m hrmosaic.rag.ingest

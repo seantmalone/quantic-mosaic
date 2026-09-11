@@ -61,8 +61,21 @@ jobs:
       - run: python -m hrmosaic.rag.download_model   # a no-op on a cache hit
       - run: python scripts/check_facts.py           # corpus quotes verbatim, heading paths real (P2)
       - run: python -m hrmosaic.rag.ingest --verify-manifest   # R1.4, and it leaves a real index for the suite
-      - run: pytest -q                               # the WHOLE suite
+      # The WHOLE suite, under coverage (P20). The three lines below are `make coverage` verbatim,
+      # so the gate a developer runs locally is the gate CI enforces: `--branch` because a codebase
+      # this full of guard clauses reports a flattering line number without it, `--source=src/hrmosaic`
+      # so the measurement is the shipped package rather than the tests driving it, and `coverage xml`
+      # ahead of the gate so the artifact exists even on the run that fails it.
+      - run: coverage run --branch --source=src/hrmosaic -m pytest -q
+      - run: coverage xml
+      - name: The coverage table, then the gate    # `coverage report` prints the per-module table
+        run: coverage report --fail-under=90
       - run: python scripts/pii_check.py             # no SSN shapes / non-.example addresses / non-555 numbers
+      # No third-party coverage service and no badge token (§15.2: nothing CI holds is a credential):
+      # the XML is a build artifact anyone with the run can download.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: coverage-xml, path: coverage.xml }
 
   docker:
     runs-on: ubuntu-latest

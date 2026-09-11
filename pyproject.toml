@@ -43,6 +43,10 @@ dev = [
     "pytest==9.1.1",
     "ruff==0.16.6",
     "fpdf2==2.8.4",
+    # The coverage gate of `make coverage` and the CI `test` job. A test tool, so it is pinned
+    # here with the others and compiled into `requirements-dev.txt`; the Docker image installs
+    # `requirements.txt` alone and never sees it.
+    "coverage==7.10.7",
 ]
 
 # src layout: the importable packages live under `src/`, nothing at the repo root.
