@@ -109,7 +109,7 @@ selection uses the judge's own scores and is therefore **not blind** — the lab
 `selection_disclosed: true` — while the *labelling* is blind in the same way as the first: the same
 packet shape, the same four §13.3 evidence classes, and no score, verdict, rationale or report text
 anywhere in it. A disclosed-selection figure is evidence about the judge's hardest cases; it is not
-a second blind opinion, and averaging the two would mean nothing. They are also **not independent samples**: nothing keeps the random draw and the lowest-scoring eight apart, and on this run the two subsets share 4 of 8 items — `benefits-001`, `benefits-002`, `conduct-001`, `expenses-001` — so the two rates are not two independent draws and must not be read as one figure corroborating the other. Both are below, each
+a second blind opinion, and averaging the two would mean nothing. They are also **not independent samples**: nothing keeps the random draw and the lowest-scoring eight apart, and on this run the two subsets share 5 of 8 items — `benefits-001`, `benefits-002`, `conduct-001`, `expenses-001`, `remote-002` — so the two rates are not two independent draws and must not be read as one figure corroborating the other. Both are below, each
 with its `n` and its subset definition.
 
 **What the judge pass cost.** Judge spans recorded before 2026-09-10 carry `cost_usd_estimate` =
@@ -138,13 +138,18 @@ Of the 8 compared, **0** involved a `not_grounded` on either side: every cell bu
 
 #### `judge_agreement_rate_hard` — subset `judge_lowest_8`
 
-`judge_agreement_rate_hard` = **–** · `judge_agreement_n_hard` = **0** · subset `judge_lowest_8` · labels `evaluation/reference_labels_hard.yaml`.
+`judge_agreement_rate_hard` = **0.875** · `judge_agreement_n_hard` = **8** · subset `judge_lowest_8` · labels `evaluation/reference_labels_hard.yaml`.
 
 **Subset definition.** the 8 gold-`answer` items with the **lowest judge groundedness in this run**, ties broken by item id (`evaluation.schema.judge_lowest_subset()`). **Selection disclosed, labelling still blind**: the items were picked using the judge's scores, which the labeller never saw. The selection is disclosed and recorded as such in the labels file (`selection_disclosed: true`); the labelling is blind either way.
 
-Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-10. Authored in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet carried no judge output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection criterion or the ordering, so the labeller could not tell a low-scoring item from a high-scoring one. The session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's labels either.
+Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-11. Authored on 2026-09-11 for the final published run `r_1789086979_baseline` (deployed commit da0dca2) in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet carried no judge output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection criterion or the ordering, so the labeller could not tell a low-scoring item from a high-scoring one. The session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's labels either.
 
-_No item in this subset carries a judge groundedness score in this run, so the rate is `null` rather than a zero (§13.7)._
+| reference ↓ / judge → | grounded | not_grounded |
+|---|---|---|
+| grounded | benefits-001, benefits-002, conduct-001, equipment-001, expenses-001, remote-002, travel-001 | – |
+| not_grounded | pto-003 | – |
+
+Of the 8 compared, **1** involved a `not_grounded` on either side — the half of the decision that actually discriminates. The rest are unanimous `grounded`.
 
 ### What the tool metrics do and do not measure
 
@@ -219,3 +224,4 @@ All three runs share `target: deployed` and `dataset_sha: a501f288a6589730…`, 
 
 config.llm_rpm is this harness's rate, not the target's: the run was driven against a remote service whose own LLM_RPM/LLM_BURST are set in its environment (effective target rate: unknown; service env). The latency in this run was produced under the target's rate (§9.4). Judged in a second pass on 2026-09-11 (249 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven.
 judge_agreement_rate=1.0 over n=8 reference labels (subset seed_1729_8).
+judge_agreement_rate_hard=0.875 over n=8 reference labels (subset judge_lowest_8). disagreements: pto-003 (reference not_grounded, judge grounded)

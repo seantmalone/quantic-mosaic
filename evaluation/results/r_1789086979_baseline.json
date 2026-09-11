@@ -122,9 +122,9 @@
   "judge_agreement_rate": 1.0,
   "judge_agreement_n": 8,
   "judge_agreement_subset": "seed_1729_8",
-  "judge_agreement_rate_hard": null,
-  "judge_agreement_n_hard": 0,
-  "judge_agreement_subset_hard": null,
+  "judge_agreement_rate_hard": 0.875,
+  "judge_agreement_n_hard": 8,
+  "judge_agreement_subset_hard": "judge_lowest_8",
   "est_cost_usd": 0.625716,
   "doc_recall_mean": 0.9736842105263158,
   "workflow_completion": 0.8461538461538461,
@@ -151,7 +151,7 @@
  "duration_s": 480.1,
  "status": "complete",
  "judge_status": "judged",
- "notes": "config.llm_rpm is this harness's rate, not the target's: the run was driven against a remote service whose own LLM_RPM/LLM_BURST are set in its environment (effective target rate: unknown; service env). The latency in this run was produced under the target's rate (\u00a79.4). Judged in a second pass on 2026-09-11 (249 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven.\njudge_agreement_rate=1.0 over n=8 reference labels (subset seed_1729_8).",
+ "notes": "config.llm_rpm is this harness's rate, not the target's: the run was driven against a remote service whose own LLM_RPM/LLM_BURST are set in its environment (effective target rate: unknown; service env). The latency in this run was produced under the target's rate (\u00a79.4). Judged in a second pass on 2026-09-11 (249 judge calls, model gemini-3.5-flash-lite); the 26 answers are the drive pass's own and were not re-driven.\njudge_agreement_rate=1.0 over n=8 reference labels (subset seed_1729_8).\njudge_agreement_rate_hard=0.875 over n=8 reference labels (subset judge_lowest_8). disagreements: pto-003 (reference not_grounded, judge grounded)",
  "items": [
   {
    "id": "r_1789086979_baseline::pto-001",

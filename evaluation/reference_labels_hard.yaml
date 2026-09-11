@@ -28,7 +28,8 @@ protocol:
     gemini-3.5-flash-lite)
   labelled_on: "2026-09-11"
   blinding: >-
-    Authored in a fresh session that read only the labelling packet: for each item, the question,
+    Authored on 2026-09-11 for the final published run `r_1789086979_baseline` (deployed commit
+    da0dca2) in a fresh session that read only the labelling packet: for each item, the question,
     the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
     each labelled with its class. The packet carried no judge output of any kind — no verdict, no
     per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection
@@ -38,7 +39,9 @@ protocol:
   selection: >-
     `evaluation.schema.judge_lowest_subset()` — the 8 items whose gold behaviour is `answer` with
     the lowest judge groundedness in the judged baseline, ties broken by item id. Selected by judge
-    score, therefore NOT blind in selection; the labelling is blind.
+    score, therefore NOT blind in selection; the labelling is blind. Over the final run the
+    selection overlaps the seed subset on five of eight items because the judge scored 25 of 26
+    answered items 1.0.
   seed: null
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
@@ -50,10 +53,6 @@ protocol:
     supports it.
   subset: judge_lowest_8
   selection_disclosed: true
-  run_note: >-
-    Re-authored for the final published run `r_1789086979_baseline` (deployed commit da0dca2) on
-    2026-09-11 from a score-free packet; the judge_lowest selection over that run overlaps the seed
-    subset on five of eight items because the judge scored 25 of 26 answered items 1.0.
 
 labels:
   - item_id: benefits-001
