@@ -714,7 +714,7 @@ request, and on `workflow_dispatch`**:
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
 | `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (unit, contract, integration, architecture and e2e-with-stub; 1,815 tests as of 2026-09-11), then `scripts/pii_check.py` |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
-| `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; curls `RENDER_DEPLOY_HOOK_URL` |
+| `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
 The push path is **keyless and offline** after the model cache fill: the whole agent loop,
 guardrail stack, `/chat` contract and dashboard run against the scripted `StubAdapter`, which is
@@ -726,7 +726,8 @@ for 200 with `mcp.connected` and `index.loaded`) and
 
 **"Deployment must only occur if tests pass" is proved two independent ways.** In the repository,
 `deploy` declares `needs: [test, docker]`. On the platform, `render.yaml` sets `autoDeploy:
-false`, so the only path from a commit to the running service is the hook that job curls. There is
+false`, so the only path from a commit to the running service is the deploy that job triggers —
+`POST /v1/services/{id}/deploys` today, or the Deploy Hook if that optional secret is ever set. There is
 no branch protection — every phase pushes directly to `main`, so a rule exempting the owner would
 be decorative. The evidence is a **recorded red run**: a temporary branch carrying one
 deliberately failing test, dispatched with `deploy_only: true`, whose job graph shows `deploy`
