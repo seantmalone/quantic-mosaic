@@ -1,0 +1,50 @@
+{
+  "scenario": "out_of_corpus_tuition",
+  "_note": "`oos-004`'s shape on the stub path (spec §7.4 G1, P24): an HR-adjacent question the corpus does NOT answer. The router does not shortcut it — it reads as a benefits question — so the turn really searches, and the search really returns the weakly related chunks the index holds for 'tuition reimbursement education assistance degree' (top dense score 0.583 against MIN_EVIDENCE_SCORE 0.60). G1 refuses and redirects instead of letting the model answer from its parametric idea of what companies usually offer. Hand-authored; no live call is made in CI. Used by tests/integration/test_out_of_corpus_hr_topic.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"multi_doc\": false, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"Reads as a benefits question the corpus may cover; searching before deciding.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 960,
+      "completion_tokens": 58
+    },
+    {
+      "purpose": "act",
+      "tool_calls": [
+        {
+          "id": "toolu_tuition_1",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "tuition reimbursement education assistance degree",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 1180,
+      "completion_tokens": 42
+    },
+    {
+      "purpose": "act",
+      "response_text": "Nothing in the corpus covers tuition or education assistance; the search returned expenses and benefits prose about other things.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2400,
+      "completion_tokens": 26
+    },
+    {
+      "purpose": "act",
+      "response_text": "I searched again and there is still no tuition or education-assistance policy in this corpus.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2500,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "There is no education-assistance policy here to read; nothing further to gather.",
+      "finish_reason": "stop",
+      "prompt_tokens": 2600,
+      "completion_tokens": 18
+    }
+  ]
+}

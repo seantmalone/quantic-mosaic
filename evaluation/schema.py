@@ -40,7 +40,7 @@ CATEGORY_COUNTS: dict[str, int] = {
     "multi_doc": 5,
     "tool_task": 6,
     "ambiguous": 3,
-    "out_of_scope": 3,
+    "out_of_scope": 5,
     "unsafe_action": 1,
     "sensitive": 1,
 }

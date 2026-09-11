@@ -47,12 +47,12 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 1,963 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 1,999 tests as of
 2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-11: **95% of statements and 87% of branches
-over 7,265 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+over 7,360 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
@@ -135,13 +135,13 @@ clearing it again and disabling that workflow puts the service back to them for 
 ## Evaluation
 
 ```bash
-make eval        # the 26-item dataset against EVAL_TARGET_BASE_URL
+make eval        # the 28-item dataset against EVAL_TARGET_BASE_URL
 make ablation    # compares the baseline run against the two ablation variants
 ```
 
 Results are committed under `evaluation/results/` and rendered by the dashboard's evaluation
 pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analysis and
-[`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 26 questions
+[`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 28 questions
 with their expected answers, the judge-agreement figures and the known limitations.
 
 **The published run** is `r_1789086979_baseline` — 26 items, `target: deployed`, judged by

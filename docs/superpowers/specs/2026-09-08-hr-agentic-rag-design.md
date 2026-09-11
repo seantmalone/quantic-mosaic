@@ -26,14 +26,14 @@ subagents, requiring the human only for account creation, key pasting, the demo 
 
 | Rubric bullet | Target | Evidence |
 |---|---|---|
-| RUBRIC5.1 Cited, grounded responses | Groundedness ≥ 0.90 mean; citation resolvability ≥ 0.95; ≥ 0.85 strict pass on the 26-item set, from the run against the deployed instance | `evaluation/results/<run_id>.json` (committed) + dashboard eval pages + corpus-browser deep links |
+| RUBRIC5.1 Cited, grounded responses | Groundedness ≥ 0.90 mean; citation resolvability ≥ 0.95; ≥ 0.85 strict pass on the 28-item set, from the run against the deployed instance | `evaluation/results/<run_id>.json` (committed) + dashboard eval pages + corpus-browser deep links |
 | RUBRIC5.2 MCP fully functional | 9 tools discovered via a real `tools/list`; every turn's `tools/call` on the wire; graceful `isError` handling | `mcp_discovery` + `tool_call` spans; dashboard MCP page; 4 fault-injection tests |
 | RUBRIC5.3 Two end-to-end agentic tasks | Each ≥ 4 tool calls, ≥ 1 retrieval, ≥ 1 structured-data tool; task 2 additionally performs a mock write behind a confirmation gate | `tests/e2e/test_demo_tasks.py`, two UI buttons, two curl scripts |
 | RUBRIC5.4 Excellent RAG | Hybrid retrieval, heading-aware deterministic chunking, 6 guardrails, tuned `k` | `test_chunking_deterministic`, guardrail unit tests, the `dense_only_k2` ablation |
 | RUBRIC5.5 Excellent architecture | Six components in six packages, one conventions test | `tests/architecture/test_conventions.py` |
 | RUBRIC5.6 Free-tier deployment | Live URL, `/health` + `/ready`, every env var documented, measured cold/warm numbers | `deployed.md`, `scripts/measure_cold_start.py`, `render.yaml` |
 | RUBRIC5.7 CI/CD | Green on push **and** PR; build/start check + MCP discovery + MCP call test; deploy gated on tests | `.github/workflows/ci.yml` (`deploy` `needs: [test, docker]`); a recorded red run with deploy skipped |
-| RUBRIC5.8 Excellent evaluation | 26 items, all six metric families, 3-variant ablation, judge-agreement check | `evaluation/results/`, `design-and-evaluation.md`, dashboard eval pages |
+| RUBRIC5.8 Excellent evaluation | 28 items, all six metric families, 3-variant ablation, judge-agreement check | `evaluation/results/`, `design-and-evaluation.md`, dashboard eval pages |
 | RUBRIC5.9 Docs + demo | README, `design-and-evaluation.md`, `ai-tooling.md`, `deployed.md`, `evaluation/`, `mock_data/`, `mcp/`; mermaid diagram; 7–10 min video | `tests/contract/test_docs_completeness.py` (headings only), `docs/demo-script.md` |
 
 ### 1.3 The user's added requirement (USER.2 / USER.3 / USER.4)
@@ -232,7 +232,7 @@ quantic-mosaic/
 │   └── web/          main.py · api.py · dashboard.py · sse.py · templates/ ·
 │                     static/{app.css, vendor/{htmx,alpine,chart.js,LICENSES.md}}
 │
-├── evaluation/       dataset.yaml (26 items, fixed order — the file *is* the order) · schema.py ·
+├── evaluation/       dataset.yaml (28 items, fixed order — the file *is* the order) · schema.py ·
 │                     judges.py · deterministic.py · runner.py · ablation.py · REPORT.md ·
 │                     reference_labels.yaml · results/ ★ committed: <run_id>.json, latest.json,
 │                     comparison.json, chunk_size_comparison.json
@@ -674,7 +674,7 @@ constraint to the closing line: one sentence of at most 30 words naming what was
 documents, which values. 21 of 53 deployed act calls closed the loop with zero tool calls and a
 median 224 output tokens of prose that no answer path reads, 48 % of all act output tokens, at
 ~10.2 ms/token. The rule is deliberately *not* "a separate later step composes the answer" — that is
-false on the refuse / park / clarify paths, where 9 of 26 turns never synthesize — and deliberately
+false on the refuse / park / clarify paths, where 11 of 28 turns never synthesize — and deliberately
 not a blanket "do not restate policy": three in-conversation consumers read that text (a §9.1
 reminder's `continue`, the G1 recovery reopen, and `_rehydrate_messages` on resume), so the sentence
 must still name the ground already covered or a nudged step re-searches it.
@@ -2062,10 +2062,20 @@ There is deliberately **no `SEED` variable** (it is a module constant in `core/i
 
 ## 13. Evaluation design
 
-### 13.1 Dataset — 26 items (R9.1)
+### 13.1 Dataset — 28 items (R9.1)
 
-`evaluation/dataset.yaml`, in a fixed order — **the file's order is the run order**; there is no sort and no shuffle. Mix, summing to 26: **7**
-`simple_policy`, **5** `multi_doc`, **6** `tool_task`, **3** `ambiguous`, **3** `out_of_scope`, **1** `unsafe_action`, **1** `sensitive`.
+`evaluation/dataset.yaml`, in a fixed order — **the file's order is the run order**; there is no sort and no shuffle. Mix, summing to 28: **7**
+`simple_policy`, **5** `multi_doc`, **6** `tool_task`, **3** `ambiguous`, **5** `out_of_scope`, **1** `unsafe_action`, **1** `sensitive`.
+
+**Two of the five `out_of_scope` items are HR-adjacent (P24).** `oos-001`–`oos-003` are non-HR trivia — a capital city, a linked list, a weather
+forecast — and each is refused by the router before a chunk is read, which probes the easy half of the decision. `oos-004` (tuition reimbursement) and
+`oos-005` (the employee referral bonus) are the hard half: the *topic* is HR, an employee would plausibly ask either, and this corpus answers neither —
+it carries a USD 1,500 professional-development budget but nothing on degree tuition, and an annual bonus plan but no referral programme (both checked
+against `corpus/` and `corpus/facts.yml`; sabbatical leave, the other candidate, **is** in `leave-of-absence.md` and is therefore not one of them).
+That is where a model's parametric idea of "what companies usually offer" leaks, and the gold behaviour is the same as the other three: refuse or
+redirect with the People Operations contact, no policy claim, no citation, `expected_tools: []`. Both carry `expected_behavior: refuse`, so neither
+enters `reference_subset()` or `judge_lowest_subset()` — both draw from the gold-`answer` population, and the committed reference labels are unaffected
+by the dataset growing.
 
 Two labels exist for specific reasons. **`inj-001` is `simple_policy`, not `out_of_scope`:** the out-of-scope route ends at G1's refusal *before* the
 act loop and retrieves nothing, so an injection probe placed there could assert nothing. `inj-001` asks a genuine `security-acceptable-use` question
@@ -2078,7 +2088,7 @@ label, the escalation matrix ships with an empty `escalate` row, `MissedRefusalR
 answer depends on the day of the run — employee facts are as of the `2026-09-01` snapshot (§5.4), policy facts are timeless — which is what makes the
 dataset durable without a frozen clock (§22).
 
-`tests/unit/test_dataset.py` asserts: `n == 26` (band check `20 ≤ n ≤ 30`); all seven labels with the counts above; all five `expected_behavior`
+`tests/unit/test_dataset.py` asserts: `n == 28` (band check `20 ≤ n ≤ 30`); all seven labels with the counts above; all five `expected_behavior`
 classes (`answer`, `clarify`, `confirm`, `refuse`, `escalate`) carry ≥ 1 item; no `question` matches
 `/\b(next|last|this)\s+(week|month|monday|…|friday)\b|\btoday\b|\btomorrow\b/i`; `inj-001` exists as `simple_policy` with `security-acceptable-use` in
 `expected_docs`; every item has a non-empty gold; every `gold_facts` entry resolves to a key in `corpus/facts.yml`; every `tool_task` item's
@@ -2130,7 +2140,7 @@ variants, no `remove_tool` on the shared server. Each item therefore produces a 
 
 **Two passes, not one** (ratified 2026-09-10, P10 fix round). The harness separates *driving* the items from *judging* them:
 
-1. **Drive** — `make eval` / `python -m evaluation.runner --variant <v>` sends the 26 `POST /chat` calls, scores every deterministic metric, and writes
+1. **Drive** — `make eval` / `python -m evaluation.runner --variant <v>` sends the 28 `POST /chat` calls, scores every deterministic metric, and writes
    the run file with the judged metrics absent and `judge_status: "pending"` (an ablation arm is `"not_applicable"`: §13.9 judges `baseline` only).
    Everything judging needs is stored: each item's `turn_id` and served answer in the run file, the retrieval evidence and the whole span record in the
    trace store.
@@ -2140,7 +2150,7 @@ variants, no `remove_tool` on the shared server. Each item therefore produces a 
 
 The reason is a measured one: on 2026-09-10 `gemini-3.5-flash-lite` returned HTTP 500 `INTERNAL` on almost every call for over an hour, *intermittently*
 — roughly one request in three succeeded — and later 429 `RESOURCE_EXHAUSTED` against the free tier's 500-requests-per-model-per-day cap. A one-pass
-harness offers only bad choices at that moment: throw away 26 paid Haiku turns, or keep them and publish a composite that is **higher** than a judged
+harness offers only bad choices at that moment: throw away 28 paid Haiku turns, or keep them and publish a composite that is **higher** than a judged
 run's, because every clause of §13.8's `strict_pass` is vacuously true for an item that does not define one and an unjudged item defines no groundedness
 clause. Hence the hard rule: **`strict_pass_rate` is `null` on a `pending` run and `REPORT.md` renders "not computable — judge pending", never a
 number.** The same split is what lets P11 re-judge a deployed run the next day if the cap bites again, without re-driving it.
@@ -2295,15 +2305,15 @@ the ordinary suite — which is what gates the deploy. It is a **test that must 
 the deployed URL and RUBRIC5.1 for groundedness against the deployed instance; a figure gathered on a laptop would describe the laptop. `deployed.md`
 and page 11 both name the host each distribution came from.
 
-- `p50/p90/p95/p99` over `turns.duration_ms` via `statistics.quantiles(..., n=100)`, computed over **the 26 eval turns** (more than the required
+- `p50/p90/p95/p99` over `turns.duration_ms` via `statistics.quantiles(..., n=100)`, computed over **the 28 eval turns** (more than the required
   10–20). The two demo tasks are not dataset items and render as their own labelled two-row series.
 - **Cold** iff `process_uptime_ms < 60000`; warm otherwise.
 - **The runner warms the target before item 1** — a discarded `/health`, one throwaway `/chat`, then a poll of `/health` until `app.uptime_ms ≥ 60000`
-  — so all 26 scored turns are warm by construction. The warm-up turn is not written to `eval_results`.
+  — so all 28 scored turns are warm by construction. The warm-up turn is not written to `eval_results`.
 - **Cold samples (n ≥ 3) are re-runs of `pto-001`, `remote-001` and `benefits-001`**, stored with `run_phase = 'cold_probe'`. Before each, the runner
   idles `EVAL_COLD_IDLE_S` (default 1000 s) so Render spins the instance down, then issues the item first and **asserts `process_uptime_ms < 60000`
   before tagging `cold = 1`** — never by construction. Still warm? It retries once, then records `cold = 0`, notes the observed uptime in
-  `eval_runs.notes` and reports the honest `n_cold`. `dataset.yaml` still holds exactly 26 items.
+  `eval_runs.notes` and reports the honest `n_cold`. `dataset.yaml` still holds exactly 28 items.
 - **Latency decomposition** by span kind (`llm_ms`, `retrieval_ms`, `tool_ms`, `store_ms`), so the number is explainable — expect ≥ 90 % provider
   time, which is why the retrieval-k ablation shows no latency signal and the report says so up front.
 - **Platform cold start** — a different number from cold turn p50 — is measured by `scripts/measure_cold_start.py` (idle ≥ 16 min, then curl `/health`
@@ -2367,9 +2377,9 @@ item passes ⟺ Groundedness ≥ 0.85
 
 Each clause is vacuously true for an item that does not define it; "behaviour correct" means the §13.4 projection equals `expected_behavior` (items
 whose outcome maps to *excluded* do not pass). On a variant where groundedness is not judged (§13.9) the groundedness clause is likewise vacuously
-true, and the run's `judged: false` flag labels the figure. Target: `strict_pass_rate ≥ 0.85` on the 26-item set.
+true, and the run's `judged: false` flag labels the figure. Target: `strict_pass_rate ≥ 0.85` on the 28-item set.
 
-### 13.9 Ablation (R9.5) — three variants over the identical 26 items
+### 13.9 Ablation (R9.5) — three variants over the identical 28 items
 
 All three are configured **per request** via `options` on `POST /chat` against one running instance: no process restart between variants (impossible
 against a deployed instance) and no global `remove_tool` (process-wide, so it would break a concurrent grader session).
@@ -3017,7 +3027,7 @@ Every open question is resolved here rather than deferred. Rows are stable and r
 | 13 | Health semantics | **`/health` always 200 with a status string; `/ready` 503 until the model and index are resident** | Prevents Render restart-looping the instance during a provider hiccup or a slow model load |
 | 14 | Trace store default | **Turso, a required item**; `SqliteStore` is the coded fallback | "Full audit logs for every session" cannot hold for live sessions on an ephemeral disk, and Turso is free and card-free |
 | 15 | Dashboard | **11 pages, every page and `/api/*` read admin-only**; a bounded (≤ 6-item, admin-only) eval launch | Every surface USER.3 named, each specified as route · view-model · filters · charts; the grader browses freely by picking *HR admin* in the act-as selector, and the data is synthetic; a live eval demo without a full sweep on a 0.1-CPU box |
-| 16 | Eval size and mix | **26 items**: 7 simple_policy, 5 multi_doc, 6 tool_task, 3 ambiguous, 3 out_of_scope, 1 unsafe_action, 1 sensitive | Mid-range of the required 20–30 with every required category ≥ 1, plus the two categories G4 and G5 need |
+| 16 | Eval size and mix | **28 items**: 7 simple_policy, 5 multi_doc, 6 tool_task, 3 ambiguous, 5 out_of_scope (two HR-adjacent, P24), 1 unsafe_action, 1 sensitive | Mid-range of the required 20–30 with every required category ≥ 1, plus the two categories G4 and G5 need |
 | 17 | Citation metric | **One `cit_resolve_mean`, measured on the served answer, reported beside `blocks_dropped_by_g2`** | A pre/post pair with a 1.00 gate made G2 doing its job fail the build; two honest numbers say more and gate nothing |
 | 18 | Ablation variants | **baseline · dense_only_k2 · no_structured_tools**, plus a zero-LLM chunk-size comparison | The third is rhetorically decisive: it craters workflow completion while groundedness stays flat |
 | 19 | Guardrail count | **Six** — evidence gate, citation resolvability, fact-vs-recommendation, injection shield, sensitive escalation, redaction | Identity scoping was dropped: the data is synthetic and the rubric asks for no authorization model (§22) |

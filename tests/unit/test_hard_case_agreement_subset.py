@@ -502,3 +502,21 @@ def test_the_committed_blind_labels_still_declare_the_blind_subset():
     assert labels.protocol.subset == "seed_1729_8"
     assert labels.protocol.selection_disclosed is False
     assert labels.protocol.seed == 1729
+
+
+def test_the_hr_adjacent_out_of_scope_items_are_in_neither_subset():
+    """P24's `oos-004` / `oos-005` are refusals: there is no policy claim in them to label.
+
+    Both subsets draw from the gold-`answer` population, so adding two `refuse` items to
+    `dataset.yaml` must leave `reference_subset()`'s seed-1729 selection and the disclosed
+    hard-case selection untouched — which is what keeps the committed reference labels valid
+    across a dataset that grew.
+    """
+    dataset = load_dataset()
+    added = {"oos-004", "oos-005"}
+    assert added <= {item.id for item in dataset.items}, "the two HR-adjacent items are in the dataset"
+    assert all(item.expected_behavior == "refuse" for item in dataset.items if item.id in added)
+
+    rows = [_row(item.id, 0.1 if item.id in added else 0.9, category=item.category) for item in dataset.items]
+    assert not added & set(reference_subset(dataset))
+    assert not added & set(judge_lowest_subset(_run(rows), size=len(dataset.items), dataset=dataset))

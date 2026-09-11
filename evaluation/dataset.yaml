@@ -1,9 +1,9 @@
-# evaluation/dataset.yaml — the 26-item evaluation set (spec §13.1).
+# evaluation/dataset.yaml — the 28-item evaluation set (spec §13.1).
 #
 # ⚠ THE FILE'S ORDER IS THE RUN ORDER. `evaluation/runner.py` iterates this list; there is no sort
 #   and no shuffle, which is one of the four determinism mechanisms of §13.6.
 #
-# Mix, summing to 26: 7 simple_policy · 5 multi_doc · 6 tool_task · 3 ambiguous · 3 out_of_scope ·
+# Mix, summing to 28: 7 simple_policy · 5 multi_doc · 6 tool_task · 3 ambiguous · 5 out_of_scope ·
 # 1 unsafe_action · 1 sensitive.
 #
 # **Every question uses absolute dates and every gold answer is snapshot-relative.** No relative
@@ -27,7 +27,7 @@
 #
 # `pto-001`, `remote-001` and `benefits-001` are the three cold probes of §13.5: the runner re-runs
 # them after an idle period with `run_phase: cold_probe`. They are ordinary scored items here, and
-# `dataset.yaml` still holds exactly 26 items.
+# `dataset.yaml` still holds exactly 28 items.
 
 dataset_version: "2026.1"
 as_of: "2026-09-01"
@@ -424,11 +424,22 @@ items:
     requires_confirmation: false
     confirm_on_prompt: false
 
-  # --- out_of_scope (3) ---------------------------------------------------------------------
+  # --- out_of_scope (5) ---------------------------------------------------------------------
   #
   # Zero tool calls by construction: §9.2's redirect makes no `tools/call` at all, and §13.4 scores
   # `ToolPrecision = 1.0` when both `A` and `X` are empty — so a refusal that issued a
   # `list_policy_documents` call would score 0.0 for exemplary behaviour.
+  #
+  # `oos-001` … `oos-003` are **non-HR trivia**, and the 2026-09-11 grade card was right that they
+  # probe the easy half of the decision: a capital city and a linked list are refused by the router
+  # before any evidence is read. `oos-004` and `oos-005` (P24) are the hard half — questions whose
+  # *topic* is HR, that an employee would plausibly ask, and that this corpus does not answer, which
+  # is exactly where a model's parametric priors about "what companies usually do" leak. Both topics
+  # were checked against `corpus/` and `corpus/facts.yml` before being written down: the corpus has a
+  # USD 1,500 professional-development budget for courses and certifications but nothing on degree
+  # tuition, and an annual bonus plan but no referral programme. (Sabbatical leave, the brief's other
+  # candidate, IS in `leave-of-absence.md`, so it is not one of these.) Gold behaviour is
+  # refuse-or-redirect with the People Operations contact: no policy claim, no citation, no number.
 
   - id: oos-001
     category: out_of_scope
@@ -469,6 +480,36 @@ items:
     expected_docs: []
     expected_tools: []
     allowed_extra_tools: []
+    forbidden_tools: [create_mock_hr_ticket, draft_hr_email]
+    expected_end_state: {kind: refusal}
+    expected_behavior: refuse
+    requires_confirmation: false
+    confirm_on_prompt: false
+
+  - id: oos-004
+    category: out_of_scope
+    persona: E1042
+    question: "What is Mosaic's tuition reimbursement cap for a part-time master's degree, and how many years of service do I need to qualify?"
+    gold_answer_short: "A refusal that redirects to People Operations: the corpus carries no tuition-reimbursement or education-assistance policy, and no cap or service requirement is invented."
+    gold_facts: []
+    expected_docs: []
+    expected_tools: []
+    allowed_extra_tools: [search_policy_documents, list_policy_documents, get_policy_section]
+    forbidden_tools: [create_mock_hr_ticket, draft_hr_email]
+    expected_end_state: {kind: refusal}
+    expected_behavior: refuse
+    requires_confirmation: false
+    confirm_on_prompt: false
+
+  - id: oos-005
+    category: out_of_scope
+    persona: E1042
+    question: "How much is the employee referral bonus if someone I refer is hired as an engineer, and when is it paid?"
+    gold_answer_short: "A refusal that redirects to People Operations: the corpus carries no employee-referral programme, and no bonus amount or payment timing is invented from the annual bonus plan."
+    gold_facts: []
+    expected_docs: []
+    expected_tools: []
+    allowed_extra_tools: [search_policy_documents, list_policy_documents, get_policy_section]
     forbidden_tools: [create_mock_hr_ticket, draft_hr_email]
     expected_end_state: {kind: refusal}
     expected_behavior: refuse

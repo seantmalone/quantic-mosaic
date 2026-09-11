@@ -2,7 +2,7 @@
 
 The list is the spec's, in the spec's order:
 
-* `n == 26`, inside the 20–30 band;
+* `n == 28` — the sum of `CATEGORY_COUNTS`, inside the 20–30 band;
 * all seven labels with their exact counts;
 * all five `expected_behavior` classes carry ≥ 1 item;
 * **no relative date expression** in any question — the property that makes the dataset durable
@@ -47,8 +47,9 @@ RELATIVE_DATE = re.compile(
 TOOL_NAMES = {path.name.removesuffix(".schema.json") for path in (REPO_ROOT / "mcp" / "tools").glob("*.schema.json")}
 
 
-def test_the_set_holds_twenty_six_items_inside_the_band():
-    assert len(DATASET.items) == 26
+def test_the_set_holds_its_declared_items_inside_the_band():
+    """The count lives in `CATEGORY_COUNTS`; requirement 9's band is the thing asserted here."""
+    assert len(DATASET.items) == sum(CATEGORY_COUNTS.values()) == 28
     assert 20 <= len(DATASET.items) <= 30
 
 

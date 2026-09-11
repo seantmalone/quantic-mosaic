@@ -730,6 +730,41 @@ def _coverage_totals() -> dict[str, int] | None:
     }
 
 
+#: How each graded document writes the **dataset** size. Deliberately narrow: a figure describing a
+#: *run* ("the published run is `r_…` — 26 items", "three variants over the identical 26 items") is a
+#: fact about that run and must not move when the dataset grows, so none of these patterns can match
+#: one. The count itself is never hard-coded here — it is read from `evaluation/dataset.yaml`, which
+#: is what makes adding an item a one-file edit plus a green test rather than a scavenger hunt (P24).
+DATASET_COUNT_STATED = (
+    re.compile(r"\*\*(\d+) items\*\* in `evaluation/dataset\.yaml`"),
+    re.compile(r"the (\d+)-item dataset"),
+    re.compile(r"a (\d+)-item evaluation"),
+    re.compile(r"the (\d+) questions"),
+    re.compile(r"### The (\d+) questions"),
+    re.compile(r"drive all (\d+) items"),
+    re.compile(r"\(\*\*(\d+)\*\* items:"),
+    re.compile(r"`n == (\d+)`"),
+    re.compile(r"\((\d+) eval turns"),
+)
+
+
+def _dataset_item_count() -> int:
+    """What `evaluation/dataset.yaml` actually holds, parsed the way the harness parses it."""
+    from evaluation.schema import load_dataset
+
+    return len(load_dataset().items)
+
+
+def test_every_document_that_states_the_dataset_size_states_the_one_in_dataset_yaml():
+    expected = str(_dataset_item_count())
+    for name in NUMBER_DOCS:
+        text = _text(REPO_ROOT / name)
+        stated = [value for pattern in DATASET_COUNT_STATED for value in pattern.findall(text)]
+        assert stated, f"{name} no longer states the dataset size; drop it from NUMBER_DOCS or put it back"
+        wrong = [value for value in stated if value != expected]
+        assert not wrong, f"{name} says {wrong} dataset items; evaluation/dataset.yaml holds {expected}"
+
+
 def test_every_document_that_states_the_suite_size_states_the_collected_one():
     collected = _collected_test_count()
     expected = f"{collected:,}"

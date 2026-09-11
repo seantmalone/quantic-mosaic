@@ -1276,7 +1276,7 @@ def _strict_pass_note(run: RunFile) -> str:
         if not run.metrics.judged
         else ""
     )
-    return f"Strict pass rate {fmt(value)} {verdict} on the 26-item set.{unjudged}"
+    return f"Strict pass rate {fmt(value)} {verdict} on the {run.n_items}-item set.{unjudged}"
 
 
 def _score(scores: Mapping[str, Any], key: str, default: float) -> float:
@@ -1626,7 +1626,7 @@ def render_report(run: RunFile, *, ablation_section: str | None = None) -> str:
     if run.judge_status == "pending":
         judged_note += (
             "\n\n> ⚠ **This run has not been judged.** §13.2's harness is two-pass: the sweep drives the "
-            "26 items and stores what judging needs (each item's `turn_id` and served answer here, the "
+            f"{run.n_items} items and stores what judging needs (each item's `turn_id` and served answer here, the "
             "retrieval evidence in the trace store), and `python -m evaluation.runner --judge "
             f"{run.run_id}` computes the judged half afterwards without re-driving anything. Until it "
             "runs, `groundedness_mean`, `citation_accuracy_mean`, `partial_match_mean`, "
@@ -2107,7 +2107,7 @@ def _judge_pass_note(previous: str | None, judged: RunFile) -> str:
     stripped = re.sub(r"\s*Judged in a second pass.*?$", "", previous or "", flags=re.S).strip()
     note = (
         f"Judged in a second pass on {time.strftime('%Y-%m-%d', time.gmtime())} "
-        f"({judged.judge_calls} judge calls, model {judged.judge_model}); the 26 answers are the "
+        f"({judged.judge_calls} judge calls, model {judged.judge_model}); the {judged.n_items} answers are the "
         "drive pass's own and were not re-driven."
     )
     return f"{stripped} {note}".strip() if stripped else note
