@@ -17,7 +17,7 @@ included. Each row below names the command whose output it is; the full sequence
 | The live service `mosaic-hr-copilot` (`srv-dahcsj95efls73dibqeg`), its URL and the tokenized `?access=` link | `python scripts/provision_render.py` | 2026-09-10 |
 | Every `sync: false` env var on Render, and the `gh secret set` calls (`DEPLOY_URL`, `RENDER_API_KEY`, `RENDER_SERVICE_ID`) | `python scripts/provision_render.py` | 2026-09-10 |
 | The Turso database `mosaic-hr`, its token and the first live FK/parity answer | `python scripts/provision_turso.py` | 2026-09-10 |
-| Measured cold start and warm turn on the live instance | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` | 2026-09-10 (n=1) |
+| Measured cold start and warm turn on the live instance | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` | 2026-09-10 and 2026-09-11 (n=3) |
 | Free-tier hours and build minutes read from the account | `python scripts/check_render_hours.py` | 2026-09-11 |
 | The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the two variants and `make ablation` | 2026-09-11 |
 | `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11 |
@@ -120,23 +120,36 @@ past Render's 15-minute spin-down) and then times four segments in order: `GET /
 polled to 200, the first `POST /chat`, and a second warm `POST /chat`. The published number is
 distinct from §13.5's cold-*turn* p50, which is an eval metric over a warm instance.
 
-**On the live free instance — n=1, measured 2026-09-10 without keep-alive; two further probes
-queued.** The service carries no keep-alive pinger, so this is the behaviour a grader who leaves
-the tab idle for 15 minutes will actually see:
+**On the live free instance — n=3, measured 2026-09-10 and 2026-09-11 without keep-alive.** The
+service carries no keep-alive pinger, so this is the behaviour a grader who leaves the tab idle for
+15 minutes will actually see. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
+ran on `da0dca2`, the build that served the published evaluation run, at 02:19Z and 02:37Z:
 
-| Segment | Observed | How |
-|---|---|---|
-| Spin-up → `GET /health` 200 | **44.8 s** | `measure_cold_start.py`, after 1,000 s idle |
-| `/health` 200 → `/ready` 200 | **2.8 s** | same probe |
-| First `POST /chat` (cold turn) | **23.3 s** | same probe |
-| **First request, total** | **71.0 s** | same probe |
-| Warm `POST /chat` immediately after | **22.5 s** | same probe |
+| Segment | Probe 1 | Probe 2 | Probe 3 | Median |
+|---|---|---|---|---|
+| Spin-up → `GET /health` 200 | 44.8 s | 43.5 s | 52.4 s | **44.8 s** |
+| `/health` 200 → `/ready` 200 | 2.8 s | 0.1 s | 0.1 s | **0.1 s** |
+| First `POST /chat` (cold turn) | 23.3 s | 23.9 s | 25.2 s | **23.9 s** |
+| **First request, total** | 71.0 s | 67.5 s | 77.6 s | **71.0 s** |
+| Warm `POST /chat` immediately after | 22.5 s | 22.5 s | 23.9 s | **22.5 s** |
 
-One sample is one sample, and it is labelled as one: two further probes are queued and each costs
-~17 minutes of a deliberately idle instance, which is why they did not run beside the evaluation
-sweeps. The figure is quoted with its `n` everywhere it appears rather than rounded into a range.
+Every probe idled 1,000 s first, so three samples cost ~an hour of a deliberately idle instance —
+which is why they ran after the evaluation sweeps rather than beside them. Medians are taken per
+segment and each total is measured wall clock, so the segment medians do not add up to 71.0 s. The
+spread is the honest headline: **67.5–77.6 s** cold to first answer, **22.5–23.9 s** warm, and the
+figure is quoted with its `n` everywhere it appears. The 2.8 s to `/ready` on probe 1 is the only
+row that moved materially: the final build answers `/ready` in 0.1 s once the instance is up, which
+is what baking the model into the image buys.
 
-Two things this probe settled beyond the numbers. The spin-down is real and observable in Render's
+**On the keep-alive.** There is none today, and the table above is the documented no-ping
+behaviour. Sean's ruling of 2026-09-10 20:40Z is to keep publishing it and then add a GitHub
+Actions keep-alive that pings `/health` every ten minutes; that workflow is queued as its own step
+and `.github/workflows/` still holds only `ci.yml`. An always-on free instance consumes about 744
+of the 750 free instance-hours a month, and exhausting them suspends the service until the month
+resets rather than billing anything — which is why the measurement is published first and the
+pinger is a separate, reversible decision rather than a way to make the number disappear.
+
+Two things the first probe settled beyond the numbers. The spin-down is real and observable in Render's
 own logs — its last health-check line at 17:20:59Z, ~15 minutes after the last inbound request,
 then silence until `Started server process` at 17:29:05Z. And the first attempt at this measurement
 found a **defect**, not a platform limit: `/ready` had been permanently 503 on every deploy since
@@ -145,9 +158,12 @@ of the SDK's 30 s connect / 300 s read, so the first embed on a 0.1-CPU instance
 one-shot warm-up latched readiness false for the life of the process. Everything else — `/health`,
 `/chat`, the whole eval sweep — worked throughout, which is exactly why nothing had caught it. P11c
 (commit `395036d`) fixed the timeouts, gave the warm-up a bounded retry and made
-`scripts/smoke_deployed.py` fail a deploy whose `/ready` never greens; the table above is from the
-first probe after that shipped. The full account is in
-[`docs/optimization-log.md`](docs/optimization-log.md).
+`scripts/smoke_deployed.py` fail a deploy whose `/ready` never greens; probe 1 above is the first
+probe after that shipped, and probes 2 and 3 show the fix holding on the final build. The full
+account, the three probes side by side and the keep-alive ruling are in
+[`docs/optimization-log.md`](docs/optimization-log.md); the raw segments, with each probe's
+timestamp and sha, are in
+[`docs/evidence/cold-start-probes.json`](docs/evidence/cold-start-probes.json).
 
 **The part the image controls**, measured locally on 2026-09-10 — the floor the live figures above
 sit on, and the reason the gap between them is Render's, not the image's. Both rows
@@ -164,7 +180,8 @@ A second run on the same image read 2.1 s and the same 0.5 s.
 
 Those 0.5 s are what baking the model into the image buys: without it the same segment is a 16–63 s
 download from Hugging Face on 0.1 CPU, on every spin-up. Render's own spin-up is added on top, and
-that is the whole of the difference: 2.2 s on the laptop against **44.8 s** on the free instance.
+that is the whole of the difference: 2.2 s on the laptop against a median **44.8 s** (43.5–52.4 s
+over three probes) on the free instance.
 
 ## Environment variables
 
@@ -323,7 +340,7 @@ Every row of §3.1 that P11 owns, read live on the date shown. Nothing here is i
 | Render documented HTTP request timeout | **"Render web services allow HTTP responses to take up to 100 minutes."** `/docs/web-services` carries no timeout section; this is the figure Render publishes. | 2026-09-10 | https://render.com/docs/render-vs-vercel-comparison |
 | Turso free-tier limits | **100 databases · 5 GB storage · 500 M rows read/month · 10 M rows written/month** | 2026-09-10 | https://turso.tech/pricing |
 | Measured container RSS under `docker run -m 512m` | **294.9 MB** on this commit's image (293.0 MB on its second run; 290.4, 291.3, 292.1, 292.1, 292.2 and 292.9 MB on six earlier runs of the same gate that day; see the memory section above) | 2026-09-10 | `make docker-run-512` |
-| Measured cold start / warm turn on the live instance | **71.0 s** cold to first answer (44.8 s to `/health`, 2.8 s on to `/ready`, 23.3 s for the first `POST /chat`) and **22.5 s** warm — n=1, no keep-alive | 2026-09-10 | `scripts/measure_cold_start.py` |
+| Measured cold start / warm turn on the live instance | median **71.0 s** cold to first answer (range 67.5–77.6; segment medians 44.8 s to `/health`, 0.1 s on to `/ready`, 23.9 s for the first `POST /chat`) and median **22.5 s** warm (22.5–23.9) — n=3, no keep-alive | 2026-09-10, 2026-09-11 | `scripts/measure_cold_start.py`, `docs/evidence/cold-start-probes.json` |
 | Measured `rss_mb` on the live instance | **293.6 MB** at `/health`, `status: ok`, `degradations: []` | 2026-09-10 | `scripts/smoke_deployed.py` |
 | Render plan details read back from the API | **`plan: free`**, one instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"` | 2026-09-10 | `GET /v1/services/{id}` |
 | Render usage: instance hours | **UNAVAILABLE from the API** — `GET /v1/metrics/instance-count` answers 200 with no samples for a free instance type; the dashboard's usage page needs an authenticated session | 2026-09-11 | `scripts/check_render_hours.py` |

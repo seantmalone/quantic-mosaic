@@ -695,14 +695,22 @@ polls `/ready` so the ONNX session is resident, serves one turn through `POST /c
 container, a real Linux cgroup — against a design budget of 345 MB and 217 MB of headroom below
 the limit. Eight builds that day spread 290.4–294.9 MB.
 
-**Cold start is documented, not hidden.** The free instance spins down after 15 minutes idle. A
-keep-alive cron would consume ~744 of the 750 monthly workspace hours to disguise a number the
-rubric asks us to explain, so there is none. Instead: `/ready` turns green only when the model and
-index are resident, the UI shows a cold-start banner with an elapsed counter, the README tells a
-grader to open `/health` first and wait for a 200, and cold and warm latencies are reported
-separately with their `n`. The image-controlled segments are measured — container start →
-`/health` 200 in **2.2 s**, then `/health` → `/ready` in **0.5 s** — and Render's own ~30–60 s
-spin-up sits on top and is measured the moment the account exists.
+**Cold start is measured and published before it is mitigated.** The free instance spins down after
+15 minutes idle, and every cold-start figure in this repository was measured with no keep-alive
+running: three probes, 2026-09-10 and 2026-09-11, median **71.0 s** cold to first answer (67.5–77.6
+s) against **22.5 s** warm, with the per-probe table in `deployed.md` §*Cold start* and the raw
+segments in `docs/evidence/cold-start-probes.json`. The design decision is the ordering, not a
+refusal: publish the number the rubric asks us to explain, then add a GitHub Actions keep-alive
+pinging `/health` every ten minutes (Sean's ruling of 2026-09-10; queued as its own step,
+`.github/workflows/` holds only `ci.yml` today). That pinger costs about 744 of the 750 free
+instance-hours a month and exhausting them suspends the service until the month resets rather than
+billing anything, which is why it is a reversible last step rather than the first thing built — and
+why, if it ever lands, the measured table stays exactly as published. Independently of it: `/ready`
+turns green only when the model and index are resident, the UI shows a cold-start banner with an
+elapsed counter, the README tells a grader to open `/health` first and wait for a 200, and cold and
+warm latencies are reported separately with their `n`. The image-controlled segments are measured —
+container start → `/health` 200 in **2.2 s**, then `/health` → `/ready` in **0.5 s** — and Render's
+own ~30–60 s spin-up sits on top, which the three live probes confirm at 43.5–52.4 s.
 
 ### CI/CD
 
@@ -1156,9 +1164,11 @@ Stated plainly, because each one is a real gap:
    platform rather than in the suite.
 6. **Prompt caching is not active** — the measured cacheable prefix is 3,523 tokens against
    `claude-haiku-4-5`'s 4,096-token floor.
-7. **The cold-start figure is a single sample.** 71.0 s cold to first answer was measured once, on
-   2026-09-10, without a keep-alive; two further probes are queued. It is quoted with its `n`
-   everywhere it appears rather than smoothed into a range.
+7. **The cold-start figure rests on three samples.** 71.0 s cold to first answer is the median of
+   three probes (67.5, 71.0, 77.6 s) measured on 2026-09-10 and 2026-09-11 without a keep-alive,
+   one on the readiness-fix build and two on the final build. Three is enough to show the spread
+   and not enough to characterise a distribution, so the range is published beside the median and
+   the `n` travels with the number everywhere it appears.
 8. **The ablation hypothesis is not supported, and the arm changed meaning mid-project.** The
    design predicted a workflow-completion drop of more than 0.25 when the structured-data tools
    are removed; the observed deltas are −0.154, −0.192 and −0.231 across the three columns. The

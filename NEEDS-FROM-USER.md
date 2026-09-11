@@ -215,7 +215,7 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | `DEPLOY_URL` / `RENDER_API_KEY` / `RENDER_SERVICE_ID` repository secrets (`RENDER_DEPLOY_HOOK_URL` optional) | 2 + 4 | `scripts/provision_render.py` (`gh secret set`) | **done** 2026-09-10 |
 | The tokenized `README.md` `Deployed:` link | 2 + 4 | printed by `scripts/provision_render.py` | **done** 2026-09-10 |
 | The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` | **done** 2026-09-10 — FKs enforced |
-| Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 (n=1; two further probes queued) |
+| Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 and 2026-09-11 (n=3; median 71.0 s cold, 22.5 s warm) |
 | Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` | **done** 2026-09-11 — build minutes ~11.5 of 500; instance hours unavailable from the API |
 | The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** — `r_1789086979_baseline`, judged |
 | `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` | **done** 2026-09-11 |

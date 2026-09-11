@@ -231,6 +231,11 @@ realism; quality and grading risk); only levers both kept survive, at the review
 | 2 · zero cost, changes graded behaviour | act loop stops writing a throw-away 224-token answer (−1.5 s), synthesis output diet (−0.5 s), full chunk text on search hits so a fetch step disappears (−0.4 s), input diet (cost only), streaming the answer (first prose 3 s sooner at p50, 17 s at p95) | 11.4 s / 33.1 s | $0 | a new sweep + judge + labels; one spec non-goal reversed for streaming |
 | 3 · paid | Render Starter 0.5 CPU ≈ −0.45 s; keep-alive pinger | not credited | $7/month | owner approval; not recommended |
 
+Wave 3's "keep-alive pinger" is the *paid* version of the idea — it is priced there beside Render
+Starter and is still not recommended. The free GitHub Actions pinger decided on later that day (see
+*Cold start, measured three times*, below) costs nothing but free instance-hours and is a separate
+call.
+
 The largest single interactive win is in Wave 2: nearly half of all act-loop output tokens are a
 closing answer that nothing reads. Wave 1 is being implemented in the final fix wave (P14); Wave 2
 awaits Sean's decision because it re-drives the evaluation and re-labels.
@@ -299,8 +304,10 @@ later blocks were still being written, and each step announced as it began.
 ## 2026-09-11 — Cold start, measured three times without keep-alive
 
 Each probe left the instance untouched for 1,000 s so Render spun it down (its own health-check
-lines stop after 15 idle minutes), then timed the wake. Probe 1 ran on the readiness-fix build,
-probes 2 and 3 on the final build.
+lines stop after 15 idle minutes), then timed the wake with `scripts/measure_cold_start.py`. Probe 1
+ran on the readiness-fix build `bf85ffd` at 18:55Z on 2026-09-10; probes 2 and 3 ran on the final
+build `da0dca2` — the one that served the published evaluation run — at 02:19Z and 02:37Z on
+2026-09-11.
 
 | Segment | Probe 1 | Probe 2 | Probe 3 | Median |
 |---|---|---|---|---|
@@ -310,11 +317,28 @@ probes 2 and 3 on the final build.
 | First request, end to end | 71.0 s | 67.5 s | 77.6 s | 71.0 s |
 | Warm turn immediately after | 22.5 s | 22.5 s | 23.9 s | 22.5 s |
 
-**Decision (Sean, 2026-09-10).** Keep the measured table as the documented no-ping behaviour and add
-a GitHub Actions keep-alive that pings `/health` every ten minutes: one always-on free instance uses
-about 744 of the 750 free instance-hours a month, and running out suspends the service until the
-month resets rather than billing anything. The warm-turn row is the same turn the evaluation runs
-measure; the cold-start penalty is entirely the 45-second wake.
+Medians are per segment, so they do not add up to the total median, and each total is the measured
+wall clock rather than the sum of its rounded segments. Probe 1's 2.8 s to `/ready` is the
+readiness-fix build reloading a cold ONNX session; probes 2 and 3 answered `/ready` in 0.1 s, which
+is what the baked model cache buys once the instance is up. The script prints its table and writes
+no file, so the three probes are transcribed into
+[`docs/evidence/cold-start-probes.json`](evidence/cold-start-probes.json) with their timestamps,
+their shas and the ledger entry each came from.
+
+**Decision (Sean, 2026-09-10 20:40Z, taken before these probes ran).** Measure the cold start first,
+then remove it: keep the table above as the documented no-ping behaviour — it is the number the
+rubric asks us to explain — and add a GitHub Actions keep-alive that pings `/health` every ten
+minutes. One always-on free instance uses about 744 of the 750 free instance-hours a month, and
+running out suspends the service until the month resets rather than billing anything. The warm-turn
+row is the same turn the evaluation runs measure; the cold-start penalty is entirely the 45-second
+wake.
+
+**Status: the keep-alive workflow is not in the repository yet.** `.github/workflows/` holds
+`ci.yml` and nothing else; the pinger is queued as its own step after the publish wave, and every
+figure published anywhere in this repository — here, in `deployed.md`, `README.md`,
+`docs/architecture.html` and the traceability matrix — is the no-keep-alive behaviour measured
+above. When the workflow lands, this section and those documents gain a line saying so; they do not
+change the measured table.
 
 ---
 

@@ -76,12 +76,14 @@ HttpOnly cookie and stripped from the URL; API clients and MCP Inspector send
 observability dashboard. Full details, every environment variable and the measured numbers are in
 `deployed.md`.
 
-**Cold start.** The free instance spins down after 15 minutes idle. Measured on the live service —
-n=1, 2026-09-10, without a keep-alive, after 1,000 s of idle — waking it took **44.8 s** to the
-first `GET /health` 200, **2.8 s** more for `/ready`, and **23.3 s** for the first `POST /chat`:
-**71.0 s** from cold to first answer, against **22.5 s** for a warm turn. Open `/health` first and
-wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter while that
-happens. `deployed.md` carries the segment table and its provenance.
+**Cold start.** The free instance spins down after 15 minutes idle. Measured on the live service
+three times — n=3, 2026-09-10 and 2026-09-11, without a keep-alive, each probe after 1,000 s of
+idle — waking it took a median **44.8 s** to the first `GET /health` 200, **0.1 s** more for
+`/ready`, and **23.9 s** for the first `POST /chat`: a median **71.0 s** from cold to first answer
+(67.5–77.6 s across the three), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
+first and wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter
+while that happens. `deployed.md` carries the per-probe table and its provenance, and a keep-alive
+pinger is a queued decision rather than something already hiding these numbers.
 
 ## Evaluation
 

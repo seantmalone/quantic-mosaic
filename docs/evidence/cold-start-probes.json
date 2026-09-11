@@ -1,0 +1,62 @@
+{
+  "what": "The three live cold-start probes behind deployed.md's `## Cold start` table and docs/optimization-log.md's `2026-09-11 — Cold start, measured three times without keep-alive`.",
+  "produced_by": "scripts/measure_cold_start.py --url \"$DEPLOY_URL\" (EVAL_COLD_IDLE_S=1000, one probe per run; the script prints a markdown table and writes no file, so each run's printed segments were transcribed here from the session ledger entry written as it finished)",
+  "service": "mosaic-hr-copilot (srv-dahcsj95efls73dibqeg), Render plan free, region oregon, no keep-alive pinger on the service at the time of any probe",
+  "units": "seconds, as published (one decimal). `first_request_total_s` is the measured wall clock from the wake to the first answer, not the sum of the rounded segments — probe 3 sums to 77.7 and measured 77.6.",
+  "idle_s": 1000,
+  "probes": [
+    {
+      "probe": 1,
+      "measured_at": "2026-09-10T18:55Z",
+      "git_sha": "bf85ffd",
+      "build": "the P11c readiness fix, the first deploy whose /ready greened",
+      "spinup_to_health_s": 44.8,
+      "health_to_ready_s": 2.8,
+      "first_chat_s": 23.3,
+      "first_request_total_s": 71.0,
+      "warm_chat_s": 22.5,
+      "ledger": ".superpowers/sdd/2026-09-08-implementation-roadmap/progress.md — entry `2026-09-10 18:55Z`"
+    },
+    {
+      "probe": 2,
+      "measured_at": "2026-09-11T02:19Z",
+      "git_sha": "da0dca2",
+      "build": "the final build (Waves 1-2), the one that served the published evaluation run",
+      "spinup_to_health_s": 43.5,
+      "health_to_ready_s": 0.1,
+      "first_chat_s": 23.9,
+      "first_request_total_s": 67.5,
+      "warm_chat_s": 22.5,
+      "ledger": ".superpowers/sdd/2026-09-08-implementation-roadmap/progress.md — entry `Cold probe 2 (2026-09-11 02:19Z, on da0dca2)`"
+    },
+    {
+      "probe": 3,
+      "measured_at": "2026-09-11T02:37Z",
+      "git_sha": "da0dca2",
+      "build": "the final build (Waves 1-2), the one that served the published evaluation run",
+      "spinup_to_health_s": 52.4,
+      "health_to_ready_s": 0.1,
+      "first_chat_s": 25.2,
+      "first_request_total_s": 77.6,
+      "warm_chat_s": 23.9,
+      "ledger": ".superpowers/sdd/2026-09-08-implementation-roadmap/progress.md — entry `Cold probe 3 (02:37Z)`"
+    }
+  ],
+  "summary": {
+    "n": 3,
+    "note": "Medians are taken per segment, so they do not add up to the total median.",
+    "spinup_to_health_s": {"median": 44.8, "min": 43.5, "max": 52.4},
+    "health_to_ready_s": {"median": 0.1, "min": 0.1, "max": 2.8},
+    "first_chat_s": {"median": 23.9, "min": 23.3, "max": 25.2},
+    "first_request_total_s": {"median": 71.0, "min": 67.5, "max": 77.6},
+    "warm_chat_s": {"median": 22.5, "min": 22.5, "max": 23.9}
+  },
+  "published_in": [
+    "deployed.md `## Cold start`",
+    "README.md `**Cold start.**`",
+    "docs/optimization-log.md `2026-09-11 — Cold start, measured three times without keep-alive`",
+    "docs/requirements-traceability.md RUBRIC5.6",
+    "docs/architecture.html figure 6 (`f6-cold`)",
+    "docs/demo-script.md segment 6:15-7:00"
+  ]
+}
