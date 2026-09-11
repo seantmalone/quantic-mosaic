@@ -34,7 +34,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -138,9 +138,23 @@ WHERE ended_at IS NULL AND started_at < ?
 # --------------------------------------------------------------------------------------
 
 
+#: A span event's half of the turn: `started` the moment a step begins, `closed` the moment it
+#: ends. **One** listener seam still carries both (§11.3) — `web/sse.py` renders a `started` event
+#: as the `step_started` frame that narrates the step in plain language while it runs, and a
+#: `closed` one as today's `span` frame. A second publication path is what §11.3 forbids.
+SpanPhase = Literal["started", "closed"]
+
+
 @dataclass(frozen=True)
 class SpanEvent:
-    """A closed span, published the moment it closes — long before the end-of-turn flush."""
+    """One span event: opened, or closed and buffered.
+
+    A `closed` event is published the moment the span closes — long before the end-of-turn flush —
+    and carries everything the record does. A `started` event is published from `open_span()` when
+    the step begins: `span_id`, `kind` and `name` are final, `payload` carries whatever the caller
+    can say up front (an `llm_call`'s purpose, a `tool_call`'s arguments) and nothing is timed yet,
+    so `seq`, `ended_at` and `duration_ms` are zero. The pair is joined by `span_id`.
+    """
 
     session_id: str
     turn_id: str
@@ -155,16 +169,36 @@ class SpanEvent:
     duration_ms: int
     payload: dict[str, Any]
     error_message: str | None = None
+    phase: SpanPhase = "closed"
+
+
+@dataclass(frozen=True)
+class AnswerDeltaEvent:
+    """One **complete** answer block, the moment the synthesis call finished writing it (W2-E).
+
+    Deliberately not a token: `render_answer()` labels a recommendation, so a half-written block
+    cannot be shown without risking prose that reads as company policy until its prefix arrives.
+    Deliberately not the whole synthesis body either — `rationale_summary` is §9.7's hidden
+    reasoning and never leaves the process.
+    """
+
+    turn_id: str
+    index: int
+    type: str
+    text: str
+    citations: list[str]
 
 
 SpanListener = Callable[[SpanEvent], None]
+DeltaListener = Callable[[AnswerDeltaEvent], None]
 
 _listeners: list[SpanListener] = []
+_delta_listeners: list[DeltaListener] = []
 _listener_lock = threading.RLock()
 
 
 def register_span_listener(listener: SpanListener) -> Callable[[], None]:
-    """Register a listener for every closed span. Returns the callable that unregisters it."""
+    """Register a listener for every span event — opened and closed. Returns the unregisterer."""
     with _listener_lock:
         _listeners.append(listener)
 
@@ -182,6 +216,28 @@ def clear_span_listeners() -> None:
         _listeners.clear()
 
 
+def register_delta_listener(listener: DeltaListener) -> Callable[[], None]:
+    """Register a listener for streamed answer blocks. Returns the callable that unregisters it.
+
+    A **separate** registry from the span listeners rather than a second kind of `SpanEvent`: a
+    delta is not a span, is never persisted, and `publish_span` is typed on something that is.
+    """
+    with _listener_lock:
+        _delta_listeners.append(listener)
+
+    def unregister() -> None:
+        with _listener_lock:
+            if listener in _delta_listeners:
+                _delta_listeners.remove(listener)
+
+    return unregister
+
+
+def clear_delta_listeners() -> None:
+    with _listener_lock:
+        _delta_listeners.clear()
+
+
 def _publish(event: SpanEvent) -> None:
     with _listener_lock:
         listeners = list(_listeners)
@@ -190,6 +246,21 @@ def _publish(event: SpanEvent) -> None:
             listener(event)
         except Exception:  # a dead SSE client must not cost us the record
             logger.warning("span listener %r raised; the span is still persisted", listener, exc_info=True)
+
+
+def publish_answer_delta(event: AnswerDeltaEvent) -> None:
+    """Hand one complete answer block to the delta listeners. Never raises; nothing is persisted.
+
+    Called from the provider adapter's worker thread, so a listener must not block: `web/sse.py`
+    hands the frame to the serving loop with `call_soon_threadsafe` and returns.
+    """
+    with _listener_lock:
+        listeners = list(_delta_listeners)
+    for listener in listeners:
+        try:
+            listener(event)
+        except Exception:  # the answer is not at risk: the store never sees a delta
+            logger.warning("answer delta listener %r raised; the turn is unaffected", listener, exc_info=True)
 
 
 # --------------------------------------------------------------------------------------
@@ -432,8 +503,12 @@ class TurnBuffer:
         span_id: str | None = None,
         parent_span_id: str | None = None,
     ) -> Iterator[SpanContext]:
-        """Open a span; it closes — and publishes — when the block leaves, however it leaves."""
+        """Open a span; it closes — and publishes — when the block leaves, however it leaves.
+
+        The opening is published too (`open_span`), so a block that takes a while narrates itself.
+        """
         context = SpanContext(kind, name, span_id=span_id, parent_span_id=parent_span_id)
+        self.open_span(kind, name, span_id=context.id, parent_span_id=parent_span_id)
         try:
             yield context
         except Exception as exc:
@@ -465,6 +540,53 @@ class TurnBuffer:
             error_message=context.error_message,
             messages=context.messages,
         )
+
+    def open_span(
+        self,
+        kind: SpanKind,
+        name: str,
+        *,
+        span_id: str | None = None,
+        parent_span_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> str:
+        """Announce a step that is **starting**, and return the id its `add_span` must carry.
+
+        Nothing is buffered and nothing is written: this publishes a `started` `SpanEvent` through
+        the same listener seam a closed span uses, which is what lets `/chat/stream` narrate the
+        step in plain language while it runs and then replace that line with the closed span's own
+        (§11.3). `detail` is whatever the caller can say up front — an `llm_call`'s purpose, a
+        `tool_call`'s arguments — and it is **not** the span payload: it never reaches the store,
+        and `web/narration.py` is the only reader, which turns it into a label that carries no
+        argument value and no employee data. It is **redacted** all the same (§10.4), because what
+        a listener is handed is what a listener could publish, and `detail` is the one thing here
+        that comes straight off the wire.
+
+        The id is returned rather than minted twice, so the `started` and `closed` events of one
+        step are joined by `span_id`. A caller that does not pass it on leaves a line the rail
+        never replaces, which is why every call site here hands it straight to `add_span`.
+        """
+        span_id = span_id or new_span_id()
+        started_at = now_micros()
+        _publish(
+            SpanEvent(
+                session_id=self.session_id,
+                turn_id=self.turn_id,
+                span_id=span_id,
+                parent_span_id=parent_span_id,
+                # Not timed and not sequenced yet: `seq` is allocated when the span closes.
+                seq=0,
+                kind=kind,
+                name=name,
+                status="ok",
+                started_at=started_at,
+                ended_at=started_at,
+                duration_ms=0,
+                payload=redact(dict(detail or {})),
+                phase="started",
+            )
+        )
+        return span_id
 
     def add_span(
         self,

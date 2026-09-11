@@ -169,6 +169,25 @@ body {
 .span-confirmation { border-left-color: var(--warn); }
 .span-error, .span-item.span-error { border-left-color: var(--danger); color: var(--danger); }
 
+/* A step that is still running: the plain-language label, a spinner and a live elapsed counter.
+   The closed span replaces this whole line, label first, technical detail after it (§11.3). */
+.span-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; }
+.span-label { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 0.82rem; }
+.span-detail { flex-basis: 100%; color: var(--ink-soft); }
+.span-elapsed { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.span-running { border-left-color: var(--accent); }
+.span-spinner {
+  width: 0.6rem; height: 0.6rem; flex: none;
+  border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+  animation: span-spin 0.9s linear infinite;
+}
+@keyframes span-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .span-spinner { animation: none; } }
+
+/* The streamed answer, before the guardrails have had their say (W2-E). */
+.turn-provisional .message { border-style: dashed; background: var(--paper); }
+.provisional-note { margin: 0; font-size: 0.78rem; color: var(--ink-soft); }
+
 /* -- the key page ------------------------------------------------------------------ */
 .access-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; }
 .access-card {

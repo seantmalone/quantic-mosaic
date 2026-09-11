@@ -51,8 +51,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from hrmosaic.agent import prompts
+from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
 from hrmosaic.agent.guardrails import g1, g2, g3, g4, g5, g6
+from hrmosaic.agent.guardrails import span_name as guardrail_span_name
 from hrmosaic.agent.router import RouteDecision, allowed_tools, clamp_rationale, fallback_decision, normalise, offered
 from hrmosaic.agent.workflows import EVIDENCE_TOOLS, LoopState, WorkflowSpec
 from hrmosaic.agent.workflows import get as get_workflow
@@ -73,7 +75,7 @@ from hrmosaic.core.models import (
     TraceEntry,
     TurnOutcome,
 )
-from hrmosaic.core.trace import SessionSpec, TurnBuffer
+from hrmosaic.core.trace import AnswerDeltaEvent, SessionSpec, TurnBuffer
 from hrmosaic.settings import Settings
 from hrmosaic.settings import settings as default_settings
 
@@ -688,12 +690,15 @@ class Orchestrator:
             )
 
         # -- 5. G2 then G3, over raw blocks (§7.3's validator fires on an uncited fact) ---
+        # One narration step for the whole verification pass (§11.3), closed by G2 — its first
+        # span, and the one whose verdict decides whether the answer survives.
         blocks = list(raw.get("blocks") or [])
         repaired = g2.check(
             blocks,
             turn=turn.buffer,
             evidence=turn.evidence,
             quarantined=turn.quarantined,
+            span_id=turn.buffer.open_span("guardrail", guardrail_span_name("G2")),
         )
         if repaired.refused:
             return self._refuse(turn, "every cited chunk failed to resolve", cold_start=cold_start)
@@ -1067,12 +1072,36 @@ class Orchestrator:
             tool_results=turn.envelopes,
             question=req.message,
         )
+        # W2-E: the answer reaches the page while the model is still writing it. Only **complete**
+        # blocks travel — `render_answer()` labels a recommendation, so a half-written block could
+        # read as company policy until its prefix arrived — and only `text` / `citations` of each,
+        # never `rationale_summary` (§9.7's hidden reasoning) and never `next_steps`. The assembler
+        # coalesces the deltas so the bounded SSE queue can never silently drop a block.
+        assembler = AnswerAssembler()
+        turn_id = turn.buffer.turn_id
+
+        def publish(blocks: Sequence[StreamedBlock]) -> None:
+            for block in blocks:
+                trace.publish_answer_delta(
+                    AnswerDeltaEvent(
+                        turn_id=turn_id,
+                        index=block.index,
+                        type=block.type,
+                        text=block.text,
+                        citations=list(block.citations),
+                    )
+                )
+
         completion = await self.model().complete(
             [Message(role="system", content=system), Message(role="user", content=user)],
             response_schema=AnswerSchema,
             purpose="synthesize",
             turn=turn.buffer,
+            on_delta=lambda delta: publish(assembler.feed(delta)),
         )
+        # Whatever the last coalescing window left: a turn's final block is otherwise shown only
+        # when `turn_completed` replaces the provisional answer wholesale.
+        publish(assembler.flush())
         body = completion.parsed_json()
         if not isinstance(body, dict):
             raise ValueError("the synthesis call did not return a JSON object")
@@ -1318,7 +1347,8 @@ class Orchestrator:
         turn.buffer.add_span(
             "confirmation",
             card.action,
-            ConfirmationPayload(
+            span_id=turn.buffer.open_span("confirmation", card.action, parent_span_id=result.span_id),
+            payload=ConfirmationPayload(
                 action=card.action,
                 arguments_preview=card.arguments_preview,
                 human_summary=card.human_summary,

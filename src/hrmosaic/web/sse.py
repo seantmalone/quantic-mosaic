@@ -1,17 +1,24 @@
-"""`GET /chat/stream?turn_id=…` — the live **span** rail (spec §11.3).
+"""`GET /chat/stream?turn_id=…` — the live rail, and the answer as it is written (spec §11.3).
 
-Spans, not tokens. On 0.1 CPU token streaming buys cosmetics, while a span rail makes the agentic
-layer visible on camera, which is what DEMO.6 asks for.
+The rail is the point and always was: it makes the *agentic layer* visible on camera, which is what
+DEMO.6 asks for. W2-E added the other half — the answer arrives under it while the model is still
+writing, block by block — after the measured baseline showed a p50 turn taking 13.7 s and showing
+nothing at all until the end of it (§1.4's reversed non-goal).
 
-**Exactly one listener.** `web/main.py`'s lifespan registers `broker.publish_span` with
-`core.trace.register_span_listener()` once, and this module fans each closed span out to whichever
+**Exactly one span listener.** `web/main.py`'s lifespan registers `broker.publish_span` with
+`core.trace.register_span_listener()` once, and this module fans each event out to whichever
 subscribers asked for that `turn_id`. A raising subscriber affects neither persistence nor its
 peers: `core/trace.py` already swallows a listener exception, and the fan-out below never blocks —
 a subscriber whose queue is full loses the event rather than stalling the turn that produced it.
+Streamed answer blocks come through a **second registry** (`register_delta_listener`) because a
+delta is not a span and is never persisted; it is still one listener per event family.
 
-**Three event types**, as §11.3 specifies: `turn_started` and `turn_completed` are published by the
-`POST /chat` and `POST /chat/confirm` handlers, which are the only code that knows a turn is about
-to begin or has just ended; `span` events come from the trace listener.
+**Five event types.** `turn_started` and `turn_completed` are published by the `POST /chat` and
+`POST /chat/confirm` handlers, which are the only code that knows a turn is about to begin or has
+just ended. `step_started` and `span` are the two phases of one span event — the first narrates a
+step in plain language while it runs (`web/narration.py`), the second replaces that line with the
+record's own once it closes, and the pair is joined by `span_id`. `answer_delta` carries one
+**complete** answer block, provisionally: the finished answer hard-replaces whatever was shown.
 
 **The rail is an enhancement, never a dependency.** A browser that subscribes late, or whose
 connection drops, renders `trace[]` from the POST response instead — every event published here is
@@ -34,7 +41,8 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from hrmosaic.agent.orchestrator import preview_value, summarise_span
-from hrmosaic.core.trace import SpanEvent
+from hrmosaic.core.trace import AnswerDeltaEvent, SpanEvent
+from hrmosaic.web import narration
 
 logger = logging.getLogger(__name__)
 
@@ -59,24 +67,55 @@ def format_event(event: str, data: dict[str, Any]) -> str:
 
 
 def span_event_data(event: SpanEvent) -> dict[str, Any]:
-    """The `span` frame of §11.3 — the same one-line summary `trace[]` carries.
+    """The `span` frame of §11.3 — the same one-line summary `trace[]` carries, plus its label.
 
     `summarise_span` and `preview_value` are the projection's own helpers rather than a second
     implementation: the live rail and the concise trace describe a span identically, or the panel
     the rail collapses into would disagree with itself halfway through a demo.
+
+    `span_id` and `label` are what let the closed line **replace** the in-progress one instead of
+    appearing under it: the same friendly sentence leads, and today's technical detail follows it.
     """
     frame: dict[str, Any] = {
         "seq": event.seq,
+        "span_id": event.span_id,
         "kind": event.kind,
         "name": event.name,
         "status": event.status,
         "duration_ms": event.duration_ms,
+        "label": narration.label_for(event.kind, event.name, event.payload),
         "summary": summarise_span(event.kind, event.name, event.payload),
     }
     if event.kind == "tool_call":
         frame["args_preview"] = preview_value(event.payload.get("arguments") or {})
         frame["result_preview"] = preview_value(event.payload.get("result_json") or "")
     return frame
+
+
+def step_started_data(event: SpanEvent) -> dict[str, Any]:
+    """The `step_started` frame — what the assistant is about to do, in a sentence.
+
+    Deliberately thin. The event's `payload` is the caller's `detail` (a purpose, a tool's
+    arguments) and stays server-side: only the label `web/narration.py` derives from it goes on the
+    wire, and a label carries no argument value and no employee data.
+    """
+    return {
+        "span_id": event.span_id,
+        "kind": event.kind,
+        "name": event.name,
+        "label": narration.label_for(event.kind, event.name, event.payload),
+        "started_at": event.started_at,
+    }
+
+
+def answer_delta_data(event: AnswerDeltaEvent) -> dict[str, Any]:
+    """One complete answer block. `type` is what the page's mirror of `render_answer()` reads."""
+    return {
+        "index": event.index,
+        "type": event.type,
+        "text": event.text,
+        "citations": list(event.citations),
+    }
 
 
 class SpanBroker:
@@ -126,8 +165,15 @@ class SpanBroker:
 
     # -- publication -------------------------------------------------------------------
     def publish_span(self, event: SpanEvent) -> None:
-        """The **one** `core.trace` span listener (§11.3)."""
+        """The **one** `core.trace` span listener (§11.3) — both phases of a span come through it."""
+        if event.phase == "started":
+            self.publish(event.turn_id, "step_started", step_started_data(event))
+            return
         self.publish(event.turn_id, "span", span_event_data(event))
+
+    def publish_answer_delta(self, event: AnswerDeltaEvent) -> None:
+        """The one `core.trace` delta listener: one complete answer block, provisionally (W2-E)."""
+        self.publish(event.turn_id, "answer_delta", answer_delta_data(event))
 
     def publish(self, turn_id: str, event: str, data: dict[str, Any]) -> None:
         """Queue one frame for every subscriber of `turn_id`. Never blocks, never raises."""
@@ -184,4 +230,13 @@ class SpanBroker:
 broker = SpanBroker()
 
 
-__all__ = ["HEARTBEAT_S", "STREAM_MAX_S", "SpanBroker", "broker", "format_event", "span_event_data"]
+__all__ = [
+    "HEARTBEAT_S",
+    "STREAM_MAX_S",
+    "SpanBroker",
+    "answer_delta_data",
+    "broker",
+    "format_event",
+    "span_event_data",
+    "step_started_data",
+]

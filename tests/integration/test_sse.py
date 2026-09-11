@@ -1,14 +1,18 @@
-"""`GET /chat/stream?turn_id=…` — the live span rail, and its fallback (spec §11.3).
+"""`GET /chat/stream?turn_id=…` — the live rail, the streamed answer, and the fallback (§11.3).
 
-Two paths, and §11.3 asks for both:
+Three paths, and §11.3 asks for all of them:
 
-* **live** — the browser subscribes **before** the POST, and every closed span arrives as its own
-  `span` frame between `turn_started` and `turn_completed`;
+* **live** — the browser subscribes **before** the POST, every step announces itself as a
+  `step_started` frame and settles into its own `span` frame, between `turn_started` and
+  `turn_completed`;
+* **the answer as it is written** — `answer_delta` carries one **complete** block at a time,
+  provisionally, and `turn_completed` hard-replaces whatever was shown (W2-E);
 * **fallback** — the browser subscribed late or the connection dropped, and the UI renders
   `trace[]` from the POST response instead. The rail is an enhancement, never a dependency.
 
-Spans rather than tokens: on 0.1 CPU token streaming buys cosmetics, while a span rail makes the
-agentic layer visible on camera, which is what DEMO.6 asks for.
+The rail is still the point of the page: it makes the *agentic layer* visible on camera, which is
+what DEMO.6 asks for. The answer stream is what §1.4's reversed non-goal bought — a p50 turn takes
+13.7 s and used to show nothing at all until the end of it.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import pytest
 
 from hrmosaic.core.trace import SpanEvent
 from hrmosaic.web import sse
+from tests.conftest import LLM_SCRIPTS
 
 pytestmark = pytest.mark.anyio
 
@@ -68,6 +73,7 @@ async def test_the_live_path_delivers_turn_started_every_span_and_turn_completed
     assert events[0] == "turn_started"
     assert events[-1] == "turn_completed"
     assert events.count("span") >= 1
+    assert events.count("step_started") >= 1
 
     started = frames[0][1]
     assert started["turn_id"] == TURN_ID and started["seq"] == 1
@@ -169,3 +175,144 @@ async def test_a_raising_subscriber_affects_neither_persistence_nor_its_peers(st
 
     assert queue.qsize() == 1, "the peer still got its frame"
     assert store.execute("SELECT COUNT(*) AS n FROM spans WHERE turn_id = 't-1'").scalar() == 1
+
+
+# --------------------------------------------------------------------------------------
+# `step_started` — the plain-language narration of §11.3
+# --------------------------------------------------------------------------------------
+
+
+async def _drive(client, script_question: str, turn_id: str) -> list[tuple[str, dict]]:
+    """Subscribe, POST, and return the whole frame sequence the browser saw."""
+    collected: list[str] = []
+
+    async def subscribe() -> None:
+        async with client.stream("GET", "/chat/stream", params={"turn_id": turn_id}) as response:
+            async for chunk in response.aiter_text():
+                collected.append(chunk)
+                if "turn_completed" in chunk:
+                    break
+
+    listening = asyncio.create_task(subscribe())
+    while sse.broker.subscriber_count(turn_id) == 0:
+        await asyncio.sleep(0.01)
+    posted = await client.post("/chat", json={"message": script_question, "turn_id": turn_id})
+    assert posted.status_code == 200, posted.text
+    await asyncio.wait_for(listening, timeout=60)
+    return _frames("".join(collected))
+
+
+async def test_every_step_is_announced_before_its_span_closes(web):
+    """`turn_started`, `step_started` … `span` … `turn_completed`, paired by `span_id`."""
+    async with web("demo_task_1.json") as client:
+        frames = await _drive(client, BERLIN_QUESTION, TURN_ID)
+
+    events = [event for event, _ in frames]
+    assert events[0] == "turn_started" and events[-1] == "turn_completed"
+
+    order = {}
+    for position, (event, data) in enumerate(frames):
+        if event in {"step_started", "span"} and "span_id" in data:
+            order.setdefault(data["span_id"], {})[event] = position
+    announced = {span_id: positions for span_id, positions in order.items() if "step_started" in positions}
+    assert announced, "at least the router, the tool calls and the synthesis announce themselves"
+    for span_id, positions in announced.items():
+        assert "span" in positions, f"{span_id} was announced and never closed"
+        assert positions["step_started"] < positions["span"], "the narration comes first, or it is not narration"
+
+    # Every announced step is one of the five §11.3 names, and each carries a sentence.
+    kinds = {data["kind"] for event, data in frames if event == "step_started"}
+    assert kinds <= {"llm_call", "tool_call", "guardrail", "confirmation"}
+    assert {"llm_call", "tool_call"} <= kinds
+    labels = [data["label"] for event, data in frames if event == "step_started"]
+    assert all(label.endswith("…") for label in labels)
+    assert "Understanding your question…" in labels and "Writing the answer…" in labels
+
+
+async def test_no_step_started_label_carries_an_argument_from_the_script(web):
+    """A rail line is prose for a person; it never repeats what the model asked a tool for."""
+    async with web("demo_task_1.json") as client:
+        frames = await _drive(client, BERLIN_QUESTION, TURN_ID)
+
+    script = json.loads((LLM_SCRIPTS / "demo_task_1.json").read_text(encoding="utf-8"))
+    values = {
+        str(value)
+        for entry in script["completions"]
+        for call in entry.get("tool_calls") or []
+        for value in (call.get("args") or {}).values()
+        if isinstance(value, str | int | float) and len(str(value)) > 2
+    }
+    assert values, "the recording has to actually pass arguments, or this asserts nothing"
+
+    labels = [data["label"] for event, data in frames if event == "step_started"]
+    for label in labels:
+        for value in values:
+            assert value not in label, f"{label!r} leaked {value!r}"
+
+
+async def test_a_closed_span_frame_carries_the_label_that_replaces_its_own_line(web):
+    """The rail replaces the in-progress line rather than adding under it, so both carry the label."""
+    async with web("rag_only.json") as client:
+        frames = await _drive(client, QUESTION, TURN_ID)
+
+    spans = [data for event, data in frames if event == "span"]
+    assert spans and all(data["label"] and data["span_id"] for data in spans)
+    synthesis = [data for data in spans if data["kind"] == "llm_call" and "purpose=synthesize" in data["summary"]]
+    assert synthesis and synthesis[0]["label"] == "Writing the answer…"
+
+
+# --------------------------------------------------------------------------------------
+# `answer_delta` — the answer while it is being written (W2-E)
+# --------------------------------------------------------------------------------------
+
+
+async def test_the_answer_arrives_as_complete_blocks_before_the_turn_ends(web):
+    async with web("rag_only.json") as client:
+        frames = await _drive(client, QUESTION, TURN_ID)
+
+    events = [event for event, _ in frames]
+    deltas = [data for event, data in frames if event == "answer_delta"]
+    assert deltas, "the stub streams its recorded synthesis"
+    assert events.index("answer_delta") < events.index("turn_completed")
+    assert [data["index"] for data in deltas] == list(range(len(deltas)))
+    for data in deltas:
+        assert set(data) == {"index", "type", "text", "citations"}
+        assert data["type"] in {"policy_fact", "recommendation", "escalation"}
+        assert data["text"], "a block is delivered whole or not at all"
+
+    script = json.loads((LLM_SCRIPTS / "rag_only.json").read_text(encoding="utf-8"))
+    synthesis = json.loads(next(e["response_text"] for e in script["completions"] if e["purpose"] == "synthesize"))
+    assert [data["text"] for data in deltas] == [block["text"] for block in synthesis["blocks"]]
+    # §9.7: the model's own reasoning is not something the page ever sees.
+    assert all(synthesis["rationale_summary"] not in json.dumps(data) for data in deltas)
+
+
+async def test_a_block_g2_strips_is_streamed_and_then_replaced_by_the_final_answer(web):
+    """The provisional render is a preview, and `turn_completed` is the hard replace."""
+    async with web("g2_strips_a_block.json") as client:
+        collected: list[str] = []
+
+        async def subscribe() -> None:
+            async with client.stream("GET", "/chat/stream", params={"turn_id": TURN_ID}) as response:
+                async for chunk in response.aiter_text():
+                    collected.append(chunk)
+                    if "turn_completed" in chunk:
+                        break
+
+        listening = asyncio.create_task(subscribe())
+        while sse.broker.subscriber_count(TURN_ID) == 0:
+            await asyncio.sleep(0.01)
+        body = (await client.post("/chat", json={"message": QUESTION, "turn_id": TURN_ID})).json()
+        await asyncio.wait_for(listening, timeout=60)
+
+    frames = _frames("".join(collected))
+    deltas = [data for event, data in frames if event == "answer_delta"]
+    dropped = "Unused PTO rolls over without limit under section 9 of the policy."
+
+    assert len(deltas) == 2, "the raw synthesis had two blocks and both were streamed"
+    assert dropped in [data["text"] for data in deltas], "the provisional answer showed the block"
+
+    # G2 could not resolve its only citation, and §7.3 drops an uncited `policy_fact`.
+    assert [block["text"] for block in body["answer_blocks"]] == [deltas[0]["text"]]
+    assert dropped not in body["answer"], "the finished answer is the one the guardrails passed"
+    assert [event for event, _ in frames][-1] == "turn_completed", "and it is what replaces the preview"

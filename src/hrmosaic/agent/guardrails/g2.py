@@ -174,8 +174,13 @@ def check(
     evidence: Mapping[str, Displayed] | None = None,
     quarantined: Sequence[str] = (),
     evidence_span_ids: Sequence[str] = (),
+    span_id: str | None = None,
 ) -> Outcome:
-    """Run the cascade and emit the one `guardrail` span."""
+    """Run the cascade and emit the one `guardrail` span.
+
+    `span_id` closes the narration step the caller opened for the whole verification pass: G2 is
+    its first span, and the rail line it replaces is the one that said the answer was being checked.
+    """
     outcome = apply(blocks, evidence=evidence, quarantined=quarantined)
     total = sum(len(block.get("citations") or []) for block in blocks)
     resolved = sum(len(block["citations"]) for block in outcome.blocks)
@@ -192,6 +197,7 @@ def check(
             "blocks_dropped": outcome.dropped_blocks,
             "refused": outcome.refused,
         },
+        span_id=span_id,
     )
     return outcome
 

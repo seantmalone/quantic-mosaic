@@ -578,6 +578,9 @@ class LlmRow(_View):
     completion_tokens: int
     duration_ms: int | None
     ttfb_ms: int | None
+    #: What `ttfb_ms` on this row means: the first token on a streamed call, the whole round trip
+    #: on one that did not stream (W2-E). Without it the column mixes two definitions.
+    streamed: bool
     finish_reason: str | None
     retry_count: int
     cache_hit: bool
@@ -1301,6 +1304,7 @@ def build_llm(request: Request, filters: Filters) -> LlmView:
                 completion_tokens=int(row["payload"].get("completion_tokens") or 0),
                 duration_ms=row["duration_ms"],
                 ttfb_ms=row["payload"].get("ttfb_ms"),
+                streamed=bool(row["payload"].get("streamed")),
                 finish_reason=row["payload"].get("finish_reason"),
                 retry_count=int(row["payload"].get("retry_count") or 0),
                 cache_hit=bool(row["payload"].get("cache_hit")),

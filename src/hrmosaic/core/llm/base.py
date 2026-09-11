@@ -350,16 +350,20 @@ def record_llm_call(
     started_at: int,
     status: str = "ok",
     error_message: str | None = None,
+    span_id: str | None = None,
 ) -> str | None:
     """Write the one `llm_call` span and its `llm_messages` rows. Returns the span id.
 
     Called from inside the adapter — including on the cache-hit and total-failure paths — so
     "exactly one span per logical call" holds however the call ended. With no turn (the live
     probe, a bare unit test) nothing is written and the completion is returned as it is.
+
+    `span_id` is the id `open_span()` already announced this step under, so the rail replaces the
+    in-progress line rather than adding a second one; minted here when the caller announced nothing.
     """
     if turn is None:
         return None
-    span_id = new_span_id()
+    span_id = span_id or new_span_id()
     rows = message_rows(request.messages)
     payload = LlmCallPayload(
         provider=completion.provider,
@@ -479,6 +483,14 @@ class RecordingAdapter:
         self._check_daily_cap(turn)
         limiter_wait_ms = await self._limiter.acquire() if self._limiter is not None else 0
 
+        # §11.3's narration: announce the step before the round trip, under the id the span will
+        # carry. The `purpose` is the detail `web/narration.py` keys on — the span's own name is
+        # `provider:model`, which cannot tell the router from the synthesis call.
+        span_id = (
+            None
+            if turn is None
+            else turn.open_span("llm_call", f"{self.provider}:{self.model}", detail={"purpose": request.purpose})
+        )
         started_at = now_micros()
         result = _Attempts()
         try:
@@ -522,6 +534,7 @@ class RecordingAdapter:
             started_at=started_at,
             status="error" if result.failure is not None else "ok",
             error_message=str(result.failure) if result.failure is not None else None,
+            span_id=span_id,
         )
         if result.failure is not None:
             raise result.failure

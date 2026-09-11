@@ -1,0 +1,57 @@
+{
+ "scenario": "g2_strips_a_block",
+ "_note": "rag_only's exchange with one extra synthesis block: a `policy_fact` whose only citation is a chunk id the index does not hold. G2 strips the citation, and §7.3's rule that a policy_fact must be cited drops the whole block — so the streamed provisional answer carries two blocks and the finished answer carries one. Used by tests/integration/test_sse.py to prove the provisional render is hard-replaced rather than merged.",
+ "completions": [
+  {
+   "purpose": "route",
+   "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 960,
+   "completion_tokens": 62
+  },
+  {
+   "purpose": "act",
+   "tool_calls": [
+    {
+     "id": "toolu_rag_1",
+     "name": "lookup_employee_profile",
+     "args": {
+      "employee_id": "E1042"
+     }
+    },
+    {
+     "id": "toolu_rag_2",
+     "name": "search_policy_documents",
+     "args": {
+      "query": "PTO accrual rate for full-time employees per month",
+      "k": 5
+     }
+    }
+   ],
+   "finish_reason": "tool_use",
+   "prompt_tokens": 1180,
+   "completion_tokens": 88
+  },
+  {
+   "purpose": "act",
+   "response_text": "The accrual table answers this without any employee record.",
+   "finish_reason": "stop",
+   "prompt_tokens": 2480,
+   "completion_tokens": 20
+  },
+  {
+   "purpose": "act",
+   "response_text": "There is nothing further to look up: the accrual table is the whole answer.",
+   "finish_reason": "stop",
+   "prompt_tokens": 2530,
+   "completion_tokens": 18
+  },
+  {
+   "purpose": "synthesize",
+   "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}, {\"type\": \"policy_fact\", \"text\": \"Unused PTO rolls over without limit under section 9 of the policy.\", \"citations\": [\"c_0000000000000000\"]}], \"next_steps\": [\"Check your own balance with the HR copilot if you want the number for your record.\"], \"rationale_summary\": \"Answered from the PTO accrual table; the rollover claim cites a section I could not open.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 2610,
+   "completion_tokens": 128
+  }
+ ]
+}

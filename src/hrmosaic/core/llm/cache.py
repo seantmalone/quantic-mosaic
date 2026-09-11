@@ -104,6 +104,8 @@ class CachedAdapter:
                     "ttfb_ms": 0,
                 }
             )
+            # No `step_started` on this branch: a hit makes no round trip, so there is no step in
+            # flight to narrate, and the wrapped adapter — which announces its own — is not called.
             span_id = record_llm_call(turn, request=request, completion=hit, started_at=started_at)
             return hit.model_copy(update={"span_id": span_id})
 

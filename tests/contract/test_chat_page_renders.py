@@ -44,6 +44,30 @@ async def test_the_chat_page_carries_the_selector_the_demo_buttons_and_the_rail(
     assert 'value="E1042" selected' in html, "the default persona is pre-selected"
 
 
+async def test_the_rail_narrates_each_step_and_the_answer_streams_under_it(web):
+    """§11.3's two additions, asserted on the markup and the script a grader actually loads."""
+    async with web() as client:
+        html = (await client.get("/")).text
+        css = (await client.get("/static/app.css")).text
+
+    # The rail is `aria-live="polite"` — unchanged — and its in-progress line carries a spinner and
+    # a live elapsed counter that the closed span then replaces, matched on `span_id`.
+    assert '<ol id="span-rail" class="span-rail" aria-live="polite">' in html
+    assert 'stream.addEventListener("step_started"' in html
+    assert "item.dataset.spanId = step.span_id" in html
+    assert "span-spinner" in html and "span-elapsed" in html
+    assert "rail.querySelector('[data-span-id=\"' + span.span_id + '\"]')" in html
+    assert "@keyframes span-spin" in css
+
+    # The provisional answer, and the JS mirror of `render_answer()` that keeps a recommendation
+    # labelled even before the turn is over (§7.3).
+    assert 'id="provisional-answer"' in html
+    assert 'stream.addEventListener("answer_delta"' in html
+    assert RECOMMENDATION_BADGE + ": " in html, "the JS mirror carries render_answer's own prefix"
+    assert '"Escalation: "' in html
+    assert "clearProvisional();" in html, "`turn_completed` is a hard replace, never a merge"
+
+
 async def test_the_dashboard_link_is_rendered_only_in_the_admin_persona(web):
     async with web() as client:
         employee = await client.get("/")

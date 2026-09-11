@@ -15,7 +15,8 @@ of §2.1: one cold start, one memory budget, one trace store.
    from a **stable absolute path** (`import_state.path` is stored as given, so a relative path
    would re-import under a different working directory). All three repeat every six hours.
 4. `web/sse.py`'s broker: bound to the serving loop and registered as the **one**
-   `core.trace.register_span_listener()` listener (§11.3).
+   `core.trace.register_span_listener()` listener — and, for the streamed answer, the one
+   `register_delta_listener()` listener (§11.3).
 5. the `Orchestrator`, built here rather than per request so the MCP handshake is cached for the
    life of the process (§9.1). With the gate on, its client carries `Authorization: Bearer` on
    every loopback `tools/list` and `tools/call` (§11, §16.4).
@@ -241,9 +242,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # 3. boot repair and boot import, repeating every six hours.
         maintenance = asyncio.create_task(_maintenance(resolved))
 
-        # 4. the one span listener (§11.3).
+        # 4. the one span listener, and the one answer-delta listener (§11.3).
         broker.bind(asyncio.get_running_loop())
         unregister = trace_module.register_span_listener(broker.publish_span)
+        unregister_deltas = trace_module.register_delta_listener(broker.publish_answer_delta)
 
         # 5. the orchestrator, so the MCP handshake outlives a request (§9.1).
         orchestrator = Orchestrator(client=_build_client(resolved), settings=resolved)
@@ -259,6 +261,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             finally:
                 broker.close()
                 unregister()
+                unregister_deltas()
                 for task in (warmup, maintenance):
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError, Exception):

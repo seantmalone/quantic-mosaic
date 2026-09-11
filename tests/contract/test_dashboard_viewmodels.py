@@ -338,6 +338,13 @@ async def test_the_llm_retrieval_and_tool_pages_project_the_spans_of_the_turn(se
 
     assert len(llm["rows"]) == len([row for row in recorded if row[0] == "llm_call"])
     assert {row["model"] for row in llm["by_model"]} == {row["model"] for row in llm["rows"]}
+    # §11.6 page 5 reads `ttfb_ms` and `streamed` together: on a streamed call TTFB is the first
+    # token, on one that did not stream it is the whole round trip (W2-E).
+    assert all(row["ttfb_ms"] is not None for row in llm["rows"])
+    # Only the synthesis call is given a delta sink — it is the only one whose output is prose a
+    # person reads — so it is the only stubbed row that says it streamed.
+    streamed = {row["purpose"] for row in llm["rows"] if row["streamed"]}
+    assert streamed == {"synthesize"}
     assert len(retrieval["rows"]) == len([row for row in recorded if row[0] == "retrieval"])
     assert retrieval["top_documents"], "the demo-1 turn retrieves from at least one document"
     called = {row[2]["tool_name"] for row in recorded if row[0] == "tool_call"}

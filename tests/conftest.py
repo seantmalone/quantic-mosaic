@@ -38,6 +38,7 @@ def writer(store):
     yield writer
     trace_module.set_writer(None)
     trace_module.clear_span_listeners()
+    trace_module.clear_delta_listeners()
 
 
 @pytest.fixture(autouse=True)
@@ -180,6 +181,7 @@ async def web_server(settings) -> AsyncIterator[str]:
         await serving
         AppStatus.should_exit = False
         trace_module.clear_span_listeners()
+        trace_module.clear_delta_listeners()
         trace_module.set_writer(None)
         # The lifespan installs the SIGTERM/atexit handlers, and `_handlers_installed` is a module
         # global: leaving it set would silently turn a later test's own `install_shutdown_handlers()`

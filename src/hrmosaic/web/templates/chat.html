@@ -47,6 +47,14 @@
   <section class="conversation">
     <div id="messages" class="messages"></div>
 
+    <!-- The answer as the model writes it: complete blocks only, replaced wholesale by the
+         finished turn on `turn_completed` (§11.3, W2-E). -->
+    <article id="provisional-answer" class="turn turn-provisional" aria-live="polite" hidden>
+      <p class="provisional-note">Writing the answer… this preview is replaced by the checked
+        answer when the turn finishes.</p>
+      <div id="provisional-blocks" class="message"></div>
+    </article>
+
     <form id="chat-form" class="composer" hx-post="/chat" hx-target="#messages" hx-swap="beforeend"
           hx-disabled-elt="#send-button">
       <label class="visually-hidden" for="message">Your question</label>
@@ -69,8 +77,8 @@
 
   <aside class="rail">
     <h2>Live agent activity</h2>
-    <p class="rail-note">Spans arrive as they close. If the stream drops, the finished answer still
-      carries the same trace.</p>
+    <p class="rail-note">Each step announces itself as it starts, then settles into the span it
+      recorded. If the stream drops, the finished answer still carries the same trace.</p>
     <ol id="span-rail" class="span-rail" aria-live="polite"></ol>
     <p class="rail-footer">Employee data snapshot: {{ data_as_of }}</p>
   </aside>
@@ -84,7 +92,10 @@
     var messageBox = document.getElementById("message");
     var turnField = document.getElementById("turn-id");
     var sessionField = document.getElementById("session-id");
+    var provisional = document.getElementById("provisional-answer");
+    var provisionalBlocks = document.getElementById("provisional-blocks");
     var stream = null;
+    var ticker = null;
 
     function newId() {
       return (crypto.randomUUID ? crypto.randomUUID() : "").replace(/-/g, "");
@@ -98,22 +109,108 @@
       rail.scrollTop = rail.scrollHeight;
     }
 
+    // -- the in-progress line: the plain-language label, a spinner and a live elapsed counter ----
+    function stepStarted(step) {
+      var item = document.createElement("li");
+      item.className = "span-item span-" + step.kind + " span-running";
+      item.dataset.spanId = step.span_id;
+      item.dataset.began = String(Date.now());
+      var spinner = document.createElement("span");
+      spinner.className = "span-spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      var label = document.createElement("span");
+      label.className = "span-label";
+      label.textContent = step.label;
+      var elapsed = document.createElement("span");
+      elapsed.className = "span-elapsed";
+      elapsed.textContent = "0.0 s";
+      item.append(spinner, label, elapsed);
+      rail.appendChild(item);
+      rail.scrollTop = rail.scrollHeight;
+    }
+
+    function tick() {
+      var now = Date.now();
+      rail.querySelectorAll(".span-running").forEach(function (item) {
+        var counter = item.querySelector(".span-elapsed");
+        if (counter) { counter.textContent = ((now - Number(item.dataset.began)) / 1000).toFixed(1) + " s"; }
+      });
+    }
+
+    // The closed span REPLACES its own in-progress line: the friendly label leads, and the
+    // technical detail the rail has always shown follows it.
+    function spanClosed(span) {
+      var running = rail.querySelector('[data-span-id="' + span.span_id + '"]');
+      var item = running || document.createElement("li");
+      item.className = "span-item span-" + span.kind + (span.status === "error" ? " span-error" : "");
+      item.dataset.spanId = span.span_id;
+      item.replaceChildren();
+      var label = document.createElement("span");
+      label.className = "span-label";
+      label.textContent = span.label;
+      var detail = document.createElement("span");
+      detail.className = "span-detail";
+      detail.textContent = span.kind + " · " + span.name + " — " + span.summary;
+      item.append(label, detail);
+      if (!running) { rail.appendChild(item); }
+      rail.scrollTop = rail.scrollHeight;
+    }
+
+    // The JS mirror of `orchestrator.render_answer()`. A recommendation carries its prefix, which
+    // is why only COMPLETE blocks are ever streamed: a half-written one would read as policy.
+    function renderBlock(block) {
+      if (block.type === "recommendation") { return "Recommendation — not company policy: " + block.text; }
+      if (block.type === "escalation") { return "Escalation: " + block.text; }
+      return block.text;
+    }
+
+    // Blocks arrive complete and in order, so each one is appended rather than the preview being
+    // re-rendered: an `aria-live` region that rewrites itself would re-announce the whole answer
+    // on every frame.
+    function answerDelta(block) {
+      provisional.hidden = false;
+      var paragraph = document.createElement("p");
+      paragraph.className = "answer-text";
+      paragraph.textContent = renderBlock(block);
+      provisionalBlocks.appendChild(paragraph);
+    }
+
+    function clearProvisional() {
+      provisional.hidden = true;
+      provisionalBlocks.replaceChildren();
+    }
+
+    function stopStream() {
+      if (stream) { stream.close(); stream = null; }
+      if (ticker) { clearInterval(ticker); ticker = null; }
+    }
+
     function openStream(turnId) {
-      if (stream) { stream.close(); }
+      stopStream();
       rail.replaceChildren();
+      clearProvisional();
+      ticker = setInterval(tick, 100);
       stream = new EventSource("/chat/stream?turn_id=" + encodeURIComponent(turnId));
       stream.addEventListener("turn_started", function () { railEntry("turn started", "meta", "ok"); });
-      stream.addEventListener("span", function (event) {
-        var span = JSON.parse(event.data);
-        railEntry(span.kind + " · " + span.name + " — " + span.summary, span.kind, span.status);
-      });
+      stream.addEventListener("step_started", function (event) { stepStarted(JSON.parse(event.data)); });
+      stream.addEventListener("span", function (event) { spanClosed(JSON.parse(event.data)); });
+      stream.addEventListener("answer_delta", function (event) { answerDelta(JSON.parse(event.data)); });
       stream.addEventListener("turn_completed", function (event) {
         var done = JSON.parse(event.data);
+        // A step whose span never closed (the transport failed under it) would otherwise spin
+        // forever; the turn is over, so nothing on the rail is still running.
+        rail.querySelectorAll(".span-running").forEach(function (item) {
+          item.classList.remove("span-running");
+          var counter = item.querySelector(".span-elapsed");
+          if (counter) { counter.remove(); }
+        });
         railEntry("turn completed · " + done.outcome, "meta", "ok");
-        stream.close();
-        stream = null;
+        // The hard replace: the finished answer is the one the guardrails passed, and it is what
+        // htmx swaps into `#messages` a moment later.
+        clearProvisional();
+        stopStream();
       });
-      stream.onerror = function () { if (stream) { stream.close(); stream = null; } };
+      stream.onerror = function () { stopStream(); };
     }
 
     // The UI generates `turn_id` and subscribes FIRST, then fires the POST — the POST does not
@@ -130,6 +227,9 @@
       var turns = document.querySelectorAll("#messages .turn");
       if (turns.length) { sessionField.value = turns[turns.length - 1].dataset.sessionId || ""; }
       messageBox.value = "";
+      // The other half of the hard replace: the finished turn is on the page, so the preview goes
+      // even if the stream dropped before `turn_completed` could clear it.
+      clearProvisional();
     });
 
     document.querySelectorAll(".demo-button").forEach(function (button) {

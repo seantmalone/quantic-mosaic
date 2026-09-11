@@ -523,6 +523,10 @@ class McpClient:
             k_override=k_override,
         )
 
+        # §11.3's narration, before the wire: the rail says what this tool is for while it runs,
+        # under the id the `tool_call` span will carry, and `web/narration.py` is the only reader of
+        # the arguments handed to it.
+        step_span_id = turn.open_span("tool_call", name, parent_span_id=parent_span_id, detail={"arguments": sent})
         started_at = now_micros()
         try:
             result = await session.call_tool(name, sent, meta=meta)
@@ -546,7 +550,8 @@ class McpClient:
         span_id = turn.add_span(
             "tool_call",
             name,
-            ToolCallPayload(
+            span_id=step_span_id,
+            payload=ToolCallPayload(
                 server=envelope.get("server") or catalog.server,
                 transport=envelope.get("transport") or catalog.transport,
                 tool_name=name,

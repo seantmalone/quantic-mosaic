@@ -1738,22 +1738,47 @@ looks up the turn's pending `confirmation` span, checks its `expires_at`, and mi
 `seq` — and performs the second flush. On `"declined"` it emits that span with `declined` and closes the turn without reopening; a re-ask starts a
 fresh proposal in a new turn.
 
-### 11.3 `GET /chat/stream?turn_id=…` — SSE **span** events (not tokens)
+### 11.3 `GET /chat/stream?turn_id=…` — SSE **span** events, and the answer as it is written
 
 ```
 event: turn_started  data: {"turn_id":"…","seq":1,"started_at":…}
-event: span          data: {"seq":3,"kind":"tool_call","name":"check_pto_balance","status":"ok",
-                            "duration_ms":4,"summary":"13.5 days remaining (as of 2026-09-01)",
+event: step_started  data: {"span_id":"…","kind":"tool_call","name":"check_pto_balance",
+                            "label":"Checking your PTO balance…","started_at":…}
+event: span          data: {"seq":3,"span_id":"…","kind":"tool_call","name":"check_pto_balance","status":"ok",
+                            "duration_ms":4,"label":"Checking your PTO balance…",
+                            "summary":"13.5 days remaining (as of 2026-09-01)",
                             "args_preview":"{\"employee_id\":\"E1042\"}"}
+event: answer_delta  data: {"index":0,"type":"policy_fact","text":"Full-time PTO accrues monthly…",
+                            "citations":["c_e178629918c7cd96"]}
 event: turn_completed data: {"outcome":"answered","duration_ms":4820,
                              "dashboard_url":"/dashboard/sessions/9f2c…#turn-1"}
 ```
 
-`web/sse.py` registers exactly **one** listener with `core.trace.register_span_listener()` during the lifespan, fanning each closed span out to the
+`web/sse.py` registers exactly **one** listener with `core.trace.register_span_listener()` during the lifespan, fanning each span event out to the
 subscribers of that `turn_id`; a raising subscriber affects neither persistence nor its peers, and a 15-second heartbeat keeps proxies from closing
 the connection. If the browser subscribes late or the connection drops, the UI renders `trace[]` from the POST response instead — the rail is an
-enhancement, never a dependency. `tests/integration/test_sse.py` covers both paths. Spans rather than tokens because on 0.1 CPU token streaming buys
-cosmetics, while a span rail makes the *agentic layer* visible on camera, which is what DEMO.6 asks for.
+enhancement, never a dependency. `tests/integration/test_sse.py` covers every path. The span rail is what makes the *agentic layer* visible on camera,
+which is what DEMO.6 asks for.
+
+**Live progress narration.** A span event has two phases on the **same** listener seam — a second publication path is what this section forbids.
+`TurnBuffer.open_span()` publishes a `started` event the moment a step begins (the router, each tool call, the guardrail pass, the synthesis call and
+the confirmation wait) and returns the `span_id` the eventual `add_span` carries, so the closed `span` frame **replaces** the in-progress line rather
+than appearing under it. `web/narration.py` is the one mapping from a span to its sentence, keyed on kind plus what identifies the step within that
+kind — the tool's name for a `tool_call`, the call's `purpose` for an `llm_call`, whose span name is `provider:model` and so cannot tell the router
+from the synthesis. Every tool of §8.4's catalog has a label (`test_narration.py` fails when one does not) and anything unmapped is a neutral
+"Working…". **A label never carries an argument value or a word of employee data**: the single exception is a document *title*, read from the index by
+`doc_id` rather than echoed from the call, so it can only ever name a document the corpus holds. The rail renders the in-progress line with a subtle
+spinner and a live elapsed counter, keeps the technical detail on the closed line behind the friendly label, and stays `aria-live="polite"`.
+
+**Streaming the answer (W2-E; reverses §1.4's first non-goal).** `answer_delta` carries one **complete** answer block at a time — never a token, and
+never `rationale_summary` (§9.7's hidden reasoning) or `next_steps`. Complete blocks because `render_answer()` labels a recommendation, and a block
+rendered as it is typed would read as company policy until its prefix arrived; the page mirrors `render_answer()` in JavaScript so the prefix is there
+from the first frame. `agent/answer_stream.py` scans the synthesis call's partial JSON for closed objects of its `blocks` array and coalesces the
+deltas (~40 characters or ~100 ms), which is what keeps the frame count far under `QUEUE_MAX = 512` — `_offer` drops a frame *silently* when a
+subscriber's queue is full, and an uncoalesced token stream was measured at 2,000 offered / 512 delivered. The streamed answer is explicitly
+**provisional** and is **hard-replaced** on `turn_completed`: 2 of 17 answered turns are revised after the last token (a G2 strip, a G3 relabel) and
+G2 retains a total-refusal branch, so a merge would leave a stripped claim on the page. Deltas travel through their own `register_delta_listener()`
+registry rather than a second kind of span event, because a delta is not a span and is never persisted.
 
 ### 11.4 `GET /health` (R6.4) and `GET /ready`
 
@@ -1829,13 +1854,17 @@ Each page is specified as **route · API · view-model · filters · charts** an
 | **2** | `/dashboard/sessions` · `/api/traces/sessions` | `rows[{session_id, started_at, employee_id, auth_mode, actor_role, client_label, n_turns, outcomes[], total_ms, tokens, has_error}]`, `page`, `total` | date range · `client_label` · persona · `auth_mode` · `actor_role` · outcome · has-error · min duration · free text over user messages | — |
 | **3** | `/dashboard/sessions/{id}` · `/api/traces/sessions/{id}` | `session{…}`, `turns[{turn_id, seq, user_message, final_answer, citations[], outcome, stop_reason, duration_ms, rollups{}, resumed_count, spans[{seq, kind, name, status, duration_ms, offset_ms, payload}]}]` | span-kind toggle | proportional CSS duration bars |
 | **4** | `/dashboard/turns` · `/api/traces/turns` | `rows[{turn_id, session_id, seq, started_at, user_message, outcome, intent, workflow, duration_ms, llm_calls, tool_calls, retrievals, guardrail_hits}]` | page 2's filter bar plus intent and workflow | — |
-| **5** | `/dashboard/llm` · `/api/traces/llm` | `rows[{span_id, turn_id, provider, model, purpose, prompt_tokens, completion_tokens, duration_ms, ttfb_ms, finish_reason, retry_count, cache_hit, limiter_wait_ms, provider_failover}]`, `by_model[{model, calls, tokens_in, tokens_out, est_cost_usd}]` | model · purpose · failover · date range | — |
+| **5** | `/dashboard/llm` · `/api/traces/llm` | `rows[{span_id, turn_id, provider, model, purpose, prompt_tokens, completion_tokens, duration_ms, ttfb_ms, streamed, finish_reason, retry_count, cache_hit, limiter_wait_ms, provider_failover}]`, `by_model[{model, calls, tokens_in, tokens_out, est_cost_usd}]` | model · purpose · failover · date range | — |
 | **6** | `/dashboard/retrieval` · `/api/traces/retrieval` | `rows[{span_id, turn_id, query, strategy, k, k_source, max_dense_score, n_hits, docs[], embed_ms, search_ms}]`, `top_documents[]`, `zero_evidence_queries[]` | strategy · doc_id · date range · zero-evidence only | — |
 | **7** | `/dashboard/tools` · `/api/traces/tools` | `by_tool[{tool_name, calls, error_rate, p50_ms, p95_ms, last_called_at}]`, `recent[{span_id, turn_id, tool_name, arguments, result_preview, is_error, error_code, duration_ms, actor_employee_id}]` | tool · errors only · date range | — |
 | **8** | `/dashboard/safety` · `/api/traces/safety` | `by_rule[{rule_id, rule_name, verdict, count}]`, `injection_hits[{span_id, chunk_id, doc_id, matched_pattern}]`, `confirmations[{turn_id, action, human_summary, user_response, created_at, used_at}]`, `mock_writes[{id, kind, employee_id, created_at, turn_id, payload}]` | rule · verdict · user_response · date range | verdict counts by rule (bar) |
 | **9** | `/dashboard/mcp` · `/api/mcp/discovery` | `server{name, version}`, `transport`, `url`, `protocol_version`, `handshake_ms`, `discovered_at`, `tools[{name, description, input_schema, output_schema, annotations}]`, `handshake_history[]` | — | — |
 | **10** | `/dashboard/corpus`, `/dashboard/corpus/{doc_id}` · `/api/corpus/*` | `documents[{doc_id, doc_title, source_format, topics, section_count, chunk_count, estimated_pages}]`; detail: `document{…, full_text}`, `chunks[{chunk_id, heading_path, char_start, char_end, n_chars, text}]` | topic · format · free text | — |
 | **11** | `/dashboard/evals`, `/dashboard/evals/{run_id}` · `/api/eval/{runs,runs/{id},compare}` | list: `runs[{run_id, label, variant, target, git_sha, created_at, n_items, headline{}, judge_model, duration_s, est_cost_usd}]`; detail: `metrics{…}` (below) and `items[{item_id, category, question, gold, answer, scores{}, verdicts{}, latency_ms, cold, passed, turn_id}]`; compare tab: `variants[{variant, metrics{}}]`, `flips[{item_id, baseline_passed, variant_passed}]`, `chunk_size[{chunk_chars, doc_recall_mean}]`; metrics tab: `latency{p50, p90, p95, p99, n_warm, n_cold, cold_p50, cold_p95, by_kind{}}`, `rss_series[]` | run · variant · category · failures-first · cold only | grouped ablation bars · latency histogram · cold-vs-warm bars · RSS line |
+
+**Page 5's `Streamed` column** sits beside `TTFB` because the two are read together: on a streamed call `ttfb_ms` is the time to the first token, on
+one that did not stream — `OpenAICompatAdapter`, the judge and the failover path — it is the whole round trip (§9.8, W2-E). Without the flag the column
+would silently mix the two definitions.
 
 **Page 11's metric block** (USER.3 asks that escalation and safety metrics be *browsable*, not just computed) renders the headline strip
 (`groundedness_mean`, `citation_accuracy_mean`, `cit_resolve_mean`, `blocks_dropped_by_g2`, `tool_selection_accuracy`, `arg_correctness_rate`,
@@ -2907,7 +2936,7 @@ Every open question is resolved here rather than deferred. Rows are stable and r
 | 9 | Corpus authoring | **Authored directly and committed; `facts.yml` indexes ~40 facts with verbatim quotes** | One quote-in-document test gives gold-vs-corpus consistency without a generator, a ledger or a numeric-extraction gate |
 | 10 | Mock data shape | **6 committed JSON files, immutable, each carrying an `as_of` snapshot**; writes go to `mock_writes` in the durable store | Diffable and grader-legible; the snapshot is what makes dates stable without freezing the clock |
 | 11 | Dates and the clock | **Real wall clock everywhere; employee data carries `as_of: 2026-09-01`; eval questions and demo prompts use absolute dates** | A frozen clock entangles latency measurement, mock-data arithmetic and gold answers, and was the single largest source of contradictions in v1 (§22) |
-| 12 | Streaming | **SSE span events, no token streaming** | Makes the agentic layer visible on camera using records already written; token streaming buys cosmetics on 0.1 CPU |
+| 12 | Streaming | **SSE span events with live narration, plus the answer streamed a complete block at a time** (W2-E, 2026-09-10) | The span rail makes the agentic layer visible on camera using records already written. The answer stream was a non-goal until the baseline measured a 13.7 s p50 turn that showed nothing until the end of it: streaming moves time to first visible answer text by −3.0 s p50 / −17.2 s p95 for ~21 ms of client CPU, and it is the only change that makes `ttfb_ms` a real TTFB (§1.4, §11.3) |
 | 13 | Health semantics | **`/health` always 200 with a status string; `/ready` 503 until the model and index are resident** | Prevents Render restart-looping the instance during a provider hiccup or a slow model load |
 | 14 | Trace store default | **Turso, a required item**; `SqliteStore` is the coded fallback | "Full audit logs for every session" cannot hold for live sessions on an ephemeral disk, and Turso is free and card-free |
 | 15 | Dashboard | **11 pages, every page and `/api/*` read admin-only**; a bounded (≤ 6-item, admin-only) eval launch | Every surface USER.3 named, each specified as route · view-model · filters · charts; the grader browses freely by picking *HR admin* in the act-as selector, and the data is synthetic; a live eval demo without a full sweep on a 0.1-CPU box |

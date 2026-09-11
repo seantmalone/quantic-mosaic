@@ -52,11 +52,16 @@ def emit(
     matched_pattern: str | None = None,
     details: dict | None = None,
     parent_span_id: str | None = None,
+    span_id: str | None = None,
 ) -> str | None:
     """Write the one `guardrail` span for a rule. Returns its id, or `None` with no turn.
 
     With no turn — a unit test asserting the rule itself — nothing is written and the decision
     function's return value is the whole answer.
+
+    `span_id` is the id the caller already announced the step under with `open_span()`, so the
+    rail's "Verifying every claim against the policy text…" line is *replaced* by this span's own
+    rather than joined by it (§11.3).
     """
     if turn is None:
         return None
@@ -69,7 +74,7 @@ def emit(
         matched_pattern=matched_pattern,
         details=dict(details or {}),
     )
-    return turn.add_span("guardrail", span_name(rule_id), payload, parent_span_id=parent_span_id)
+    return turn.add_span("guardrail", span_name(rule_id), payload, span_id=span_id, parent_span_id=parent_span_id)
 
 
 __all__ = ["RULE_NAMES", "emit", "span_name"]
