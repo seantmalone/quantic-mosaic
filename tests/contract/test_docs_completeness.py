@@ -48,6 +48,18 @@ NEEDS = REPO_ROOT / "NEEDS-FROM-USER.md"
 DEMO_SCRIPT = REPO_ROOT / "docs" / "demo-script.md"
 CHECKLIST = REPO_ROOT / "docs" / "pre-submission-checklist.md"
 EVIDENCE = REPO_ROOT / "docs" / "evidence"
+EVAL_REPORT = REPO_ROOT / "evaluation" / "REPORT.md"
+
+#: Every document a grader reads that describes the blind labeller (see `THIRD_FAMILY_CLAIM`).
+LABELLER_CLAIM_DOCUMENTS = [
+    README,
+    DESIGN,
+    AI_TOOLING,
+    DEPLOYED,
+    EVAL_REPORT,
+    REPO_ROOT / "evaluation" / "reference_labels.yaml",
+    REPO_ROOT / "evaluation" / "reference_labels_hard.yaml",
+]
 
 PLACEHOLDER = "TBD-before-submission"
 PENDING = re.compile(r"^pending: gate \d(?: \+ \d| ?/ ?\d)*\b")
@@ -112,8 +124,24 @@ AI_TOOLING_SECTIONS = [
 AI_TOOLING_WORKFLOW_FACTS = {
     "the design workflow — probes, proposals, a judge panel": ["probe", "proposal", "judge"],
     "the per-phase loop — implementer, reviewer, fix rounds": ["implementer", "reviewer", "fix round"],
-    "blind labelling by separate sessions": ["blind", "labelling", "session"],
+    "blind labelling by separate sessions": [
+        "blind",
+        "labelling",
+        "session",
+        # Grade-card item 6: the labeller's independence is of the *session*, not of the vendor.
+        "same vendor as the agent",
+        "different model",
+    ],
 }
+
+#: Grade-card item 6 (2026-09-11). The blind labeller is a Claude Opus 5 session — the agent's own
+#: vendor — so no graded document may sell it as a third model family. The phrase is legitimate in
+#: exactly one place: the sentence in `design-and-evaluation.md` (mirrored in `ai-tooling.md`) that
+#: names it as the old, wrong wording. The rule is therefore "every occurrence sits beside its own
+#: correction", not "the phrase never appears" — a document may not quietly drop the correction and
+#: keep the claim.
+THIRD_FAMILY_CLAIM = "third model family"
+THIRD_FAMILY_CORRECTION = "was wrong"
 
 #: DOCS.4 — `## What did not work` must name concrete, dated failures, not a genre. At least three
 #: of these must appear; the document currently carries every one.
@@ -194,6 +222,16 @@ def _section(path: Path, heading: str) -> str:
             stop = index
             break
     return "\n".join(lines[start:stop])
+
+
+def _flatten(text: str) -> str:
+    """Lower-cased, whitespace-collapsed, emphasis-stripped prose.
+
+    Markdown wraps at 100 columns and marks phrases up with `*`/`**`, so a literal phrase
+    assertion against the raw text is really an assertion about where the line broke. Flattening
+    first means a re-wrap or an added bold cannot fail a test about what the document *says*.
+    """
+    return re.sub(r"[*_`]", "", re.sub(r"\s+", " ", text.lower()))
 
 
 def _link_value(label: str) -> str:
@@ -370,7 +408,31 @@ def test_judge_methodology_names_the_labeller_and_the_blinding():
     assert "gemini-3.5-flash-lite" in body and "claude-haiku-4-5" in body
     assert "Opus" in body, "the labeller must be named, not implied"
     assert "blind" in body.lower(), "the blinding must be stated"
+    flat = _flatten(body)
+    # Grade-card item 6: independence of the session, never of the vendor.
+    assert "same vendor as the agent" in flat and "different model" in flat, (
+        "the labeller's relationship to the agent must be stated: same vendor, different model"
+    )
     assert "judge_agreement_rate" in body
+
+
+def test_no_graded_document_sells_the_labeller_as_a_third_model_family():
+    """Grade-card item 6 — an Opus session is Anthropic, the agent's own vendor, so the labeller is
+    not a third model family and not vendor-independent of the agent. Every mention of the old
+    claim must sit beside the sentence that retracts it."""
+    offenders = []
+    for path in LABELLER_CLAIM_DOCUMENTS:
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(re.escape(THIRD_FAMILY_CLAIM), text):
+            window = text[max(0, match.start() - 240) : match.end() + 240].lower()
+            if THIRD_FAMILY_CORRECTION not in window:
+                line = text.count("\n", 0, match.start()) + 1
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{line}")
+    assert offenders == [], (
+        f"{THIRD_FAMILY_CLAIM!r} is asserted, not retracted, at: {offenders}. The labeller is a "
+        "Claude Opus 5 session: the same vendor as the agent, a different model, in an independent "
+        "session that read only the packet."
+    )
 
 
 def test_design_document_references_all_three_evidence_screenshots():
@@ -542,7 +604,7 @@ def test_ai_tooling_describes_the_per_phase_implementer_reviewer_loop():
 
 def test_ai_tooling_describes_the_blind_labelling_by_separate_sessions():
     """RUBRIC5.8's honesty clause: the agreement labels came from a blind, separate session."""
-    body = _text(AI_TOOLING).lower()
+    body = _flatten(_text(AI_TOOLING))
     missing = [word for word in AI_TOOLING_WORKFLOW_FACTS["blind labelling by separate sessions"] if word not in body]
     assert missing == [], f"ai-tooling.md does not describe the blind labelling round — missing {missing}"
 

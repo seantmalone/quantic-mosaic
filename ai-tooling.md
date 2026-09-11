@@ -50,10 +50,14 @@ Phases P2 ∥ P3 ∥ P6 ran in **parallel git worktrees** on separate branches a
 coordinating session.
 
 **4 — Blind labelling by separate sessions (2026-09-10).** The judge-agreement figures in
-`design-and-evaluation.md` come from a fresh Opus session — a third model family, independent of
-both the Anthropic agent and the Gemini judge — that read *only* a labelling packet containing the
-question, the served answer and the verbatim evidence, with no judge output anywhere upstream of
-it. It read no run file, no report, no changelog.
+`design-and-evaluation.md` come from a fresh **Claude Opus 5** session: the **same vendor as the
+agent** (Anthropic), a *different model*, in an **independent session that read only the packet** —
+and a different vendor and family from the Gemini judge (Google). Its independence is of the
+*session*, not of the vendor; calling it a third model family, as this document did before
+2026-09-11, was wrong, and a shared vendor is a shared training lineage. The packet carried the
+question, the served answer and the verbatim evidence and nothing else, with no judge output
+anywhere upstream of it: no run file, no report, no changelog. `design-and-evaluation.md`'s
+*Judge methodology* section states the same thing at length.
 
 **5 — CI on every phase.** Every phase ended with a pushed commit and a watched GitHub Actions
 run. The suite grew from 72 tests at P1 to **1,590** at P11, and the whole suite runs on the push
@@ -171,7 +175,7 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 1,962 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
+committed suite — 1,963 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 26-item evaluation whose real
 numbers, including the ones below target, are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
@@ -193,3 +197,12 @@ and the independent grade card — and the design history is in `docs/superpower
 history carries one commit per phase with the requirement ids it satisfies in the trailer.
 (They are produced in `.superpowers/`, which is git-ignored; `docs/process/sdd/README.md` says what
 was copied, what was not, and how it was scanned for secrets first.)
+
+**One detail a reader of `git log` will notice.** Two `Co-Authored-By` trailers run through the
+history, and the split is not random: of 146 commits, **113 carry `Claude Opus 5 (1M context)`** —
+every phase commit from `P0`'s `ad593a3` onward, because an implementer or reviewer subagent wrote
+them — **30 carry `Claude Fable 5.1`**, the coordinating session's own commits (the spec, the
+roadmap, the optimization log, the merges of adjudicated rulings), and three are branch merges with
+no trailer at all. The rule is the same in all three cases: **the trailer names the model that
+actually wrote the commit.** `docs/process/sdd/constraints.md` line 14 said it as a fixed string
+until 2026-09-11 and now says it as that rule, which is what the history has done since P0.

@@ -454,3 +454,27 @@ Spec: docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md (authoritative)
   fix wave P23 (brief written; process trail to be committed under docs/process/sdd/); model-behaviour items
   (multi-doc citation breadth, an HR-adjacent out-of-scope dataset item) are reported to Sean as an optional
   further wave because they re-drive the published evaluation. Keep-alive verified: uptime 60.5 min at 18:37Z.
+- 2026-09-11 18:50Z: Sean: "Fix the model behavior items as well." P24 brief written (A citation breadth with a
+  bounded repair call; B two HR-adjacent out-of-scope dataset items → 28 items; C the two G2 block drops
+  diagnosed and fixed at the root). Sequence: P23 → P24 → push → deploy → three-arm sweep → judge → blind
+  labels (seed + judge-lowest, re-authored) → agreement → report → publish numbers → push → re-grade RB1.
+- 2026-09-11 20:05Z: P23 fix round 1 (review findings). (a) `ai-tooling.md`'s AI-use disclosure still called the
+  blind labeller "a third model family, independent of both the Anthropic agent and the Gemini judge" — the exact
+  claim grade-card item 6 removed from the YAMLs, `evaluation/REPORT.md` and `design-and-evaluation.md`. Reworded
+  to match the design document (same vendor as the agent, a different model, an independent session that read only
+  the packet; a different vendor and family from the Gemini judge), and a docs-completeness contract test now
+  forbids the phrase in every graded document except the one sentence in `design-and-evaluation.md` that names it
+  as the old, wrong wording. (b) **Attribution ruling.** `constraints.md` line 14 named a literal
+  `Co-Authored-By: Claude Fable 5.1`; the P23 commits carry `Claude Opus 5 (1M context)`, the model that wrote
+  them, under a harness instruction that names that trailer and states it replaces earlier guidance. **The review
+  finding's premise — a "138-commit convention" the P23 commits broke — does not survive a count:**
+  `git log --format='%(trailers:key=Co-Authored-By,valueonly)'` gives **113 commits on
+  `Claude Opus 5 (1M context)`** (every phase commit from P0's `ad593a3` onward, all written by implementer or
+  reviewer subagents), **30 on `Claude Fable 5.1`** (the coordinating session's own commits) and 3 branch merges
+  with no trailer. So line 14 has been honoured in spirit and contradicted in letter since P0, and the P23
+  commits follow the repository's *majority* convention rather than breaking it. Ruled: the trailer names **the
+  model that actually wrote the commit** — never a fixed string, and never a model that did not write it. Line 14
+  amended to that rule with the real counts (working copy and the committed `docs/process/sdd/` trail), and
+  `ai-tooling.md`'s audit-trail section now explains the split to a reader of `git log`. The alternative —
+  amending the P23 commits to `Claude Fable 5.1` — was rejected as a false co-author line, and would have made
+  four commits inconsistent with the 113 that already name their own author.

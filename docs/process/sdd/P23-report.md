@@ -492,3 +492,258 @@ turns, ≈ $0.03. `.env` was never read, printed or committed; the access token 
 7. **Item 4's traceability row is marked done from a `gh api` read taken today.** If the grader's
    access is ever revoked the row goes stale with nothing to catch it — no test can assert a GitHub
    permission offline.
+
+---
+
+# P23 fix round 1 — review findings (2026-09-11)
+
+**Base:** `76dece1` on `main` · **Commit:** see §F.5 · **Nothing pushed. `.env` never read. No
+subagents dispatched.** Two findings, both Important, both closed.
+
+## F.1 — `ai-tooling.md:52-54` still sold the labeller as a third model family
+
+**The finding was right, and it was the worst-placed instance of the defect.** Item 6 of the grade
+card corrected `evaluation/reference_labels.yaml`, `reference_labels_hard.yaml`,
+`evaluation/REPORT.md` and `design-and-evaluation.md` — but `ai-tooling.md`, *the AI-use disclosure
+a grader reads for exactly this kind of honesty*, kept the sentence the item existed to delete:
+
+```
+$ git show 76dece1:ai-tooling.md | sed -n '52,56p'
+**4 — Blind labelling by separate sessions (2026-09-10).** The judge-agreement figures in
+`design-and-evaluation.md` come from a fresh Opus session — a third model family, independent of
+both the Anthropic agent and the Gemini judge — that read *only* a labelling packet containing the
+question, the served answer and the verbatim evidence, with no judge output anywhere upstream of
+it. It read no run file, no report, no changelog.
+```
+
+So the disclosure document contradicted the design document it points at, and the design document
+(`design-and-evaluation.md:975-980`) explicitly calls that wording wrong. A grader reading both in
+order would have caught the project claiming vendor independence it does not have.
+
+**What it says now** — the same three facts the design document's *Judge methodology* paragraph
+carries, in the same order:
+
+```
+$ sed -n '52,60p' ai-tooling.md
+**4 — Blind labelling by separate sessions (2026-09-10).** The judge-agreement figures in
+`design-and-evaluation.md` come from a fresh **Claude Opus 5** session: the **same vendor as the
+agent** (Anthropic), a *different model*, in an **independent session that read only the packet** —
+and a different vendor and family from the Gemini judge (Google). Its independence is of the
+*session*, not of the vendor; calling it a third model family, as this document did before
+2026-09-11, was wrong, and a shared vendor is a shared training lineage. The packet carried the
+question, the served answer and the verbatim evidence and nothing else, with no judge output
+anywhere upstream of it: no run file, no report, no changelog. `design-and-evaluation.md`'s
+*Judge methodology* section states the same thing at length.
+```
+
+**The wording cannot come back** (the finding's "consider"; I did it). `tests/contract/test_docs_completeness.py`
+gains one forbidden-phrase assertion and two positive ones:
+
+* `test_no_graded_document_sells_the_labeller_as_a_third_model_family` — scans `README.md`,
+  `design-and-evaluation.md`, `ai-tooling.md`, `deployed.md`, `evaluation/REPORT.md` and the two
+  `reference_labels*.yaml` files for `"third model family"`, and **fails unless every occurrence
+  sits within 240 characters of `"was wrong"`**. The rule is *"every mention sits beside its own
+  retraction"*, not *"the phrase never appears"*, because the correct paragraphs in
+  `design-and-evaluation.md` and `ai-tooling.md` legitimately quote the old claim in order to
+  retract it — a plain ban would have forced those two documents to drop the retraction, which is
+  the opposite of the fix. Deleting the retraction and keeping the claim now fails the suite.
+* `test_judge_methodology_names_the_labeller_and_the_blinding` now also requires
+  `"same vendor as the agent"` and `"different model"` in the design document's section.
+* `AI_TOOLING_WORKFLOW_FACTS["blind labelling by separate sessions"]` gains the same two phrases, so
+  `ai-tooling.md` must state the vendor relationship, not merely avoid the wrong word.
+
+A new `_flatten()` helper (lower-case, collapse whitespace, strip `*`/`_`/`` ` ``) backs both
+positive assertions. Without it the assertion is really about *where the line broke*: both documents
+wrap at 100 columns and both happened to wrap mid-phrase (`the *same\nvendor as the agent*`), so the
+first draft of the test failed against text that says exactly the right thing. Verified by failing
+first — the test was written before the `ai-tooling.md` edit and failed on it.
+
+**Verification that the phrase is gone from every asserted document:**
+
+```
+$ grep -rn "third model family" --include="*.md" --include="*.yaml" . | grep -v "docs/process\|.superpowers"
+ai-tooling.md:56:*session*, not of the vendor; calling it a third model family, as this document did before
+design-and-evaluation.md:978:it is a different vendor and family from the judge (Google). Calling it a third model family, as
+docs/evidence/grade-card-2026-09-11.md:66:| … describes the labeller as "a third model family independent of both the agent" …
+```
+
+Three hits, all correct: two retractions and the independent grade card's own verbatim finding
+(`docs/evidence/` is the graded copy of the card, which must not be edited). The
+`docs/process/sdd/` copies of the brief and the card are the historical trail and are likewise
+untouched.
+
+## F.2 — two `Co-Authored-By` conventions in one `git log`
+
+**The finding is right that the deviation was unresolved. Its premise is wrong, and the count is
+the thing that settles the ruling.** The finding describes "the repository's 138-commit convention"
+broken "visibly in git log" by four P23 commits. That is not what is in the history:
+
+```
+$ git log --format='%H%x09%(trailers:key=Co-Authored-By,valueonly,separator=%x2C)' \
+    | awk -F'\t' '{print $2}' | sort | uniq -c | sort -rn
+ 113 Claude Opus 5 (1M context) <noreply@anthropic.com>
+  30 Claude Fable 5.1 <noreply@anthropic.com>
+   3                                     ← the three branch merges (p2, p3, p6)
+$ git rev-list --count HEAD
+146
+$ git log --reverse --format='%h %(trailers:key=Co-Authored-By,valueonly)%x09%s' | grep -n 'Opus 5' | head -1
+10:ad593a3 Claude Opus 5 (1M context) …  P0(skeleton): repository that lints, tests and runs CI green from commit one
+```
+
+**`Claude Opus 5 (1M context)` is the repository's majority convention and has been since P0**, the
+tenth commit. The split is not drift: every *phase* commit was written by an implementer or reviewer
+subagent and names that subagent's model; the 30 `Claude Fable 5.1` commits are the coordinating
+session's own (the spec, the roadmap, the optimization log, adjudicated rulings). So the four P23
+commits follow the same rule the other 109 phase commits follow, and `constraints.md` line 14 has
+been honoured in spirit and contradicted in letter for 137 commits — not four.
+
+That makes the choice between the finding's two branches one-sided rather than a judgement call, so
+I took the **second** (amend line 14, note it in the ledger). Amending the four commits was still
+*possible* — they are unpushed (`git status -sb` → `## main...origin/main [ahead 4]`), no force-push
+involved — but it would have put `Co-Authored-By: Claude Fable 5.1` on four commits a
+`Claude Opus 5 (1M context)` session wrote, making them **inconsistent with the 113 that already
+name their own author** while adding a false authorship record to a repository whose whole AI-use
+disclosure turns on stating honestly which model did what. The session harness instruction naming
+the Opus trailer also states in terms that it replaces earlier attribution guidance.
+
+**I could not do what the fix literally asks.** "Get a one-line ruling from Sean" is not available
+to this session: I am a fix-round subagent with no channel to the user, and the phase cannot sit
+open waiting for one. The ruling below is mine, it is recorded as mine, and it is reversible
+(§F.6 concern 1).
+
+**What changed.** `constraints.md` line 14 no longer names a literal string; it names the *rule*
+that 143 of the 146 commits already satisfy (the other three are merges):
+
+```
+$ git diff --stat docs/process/sdd/constraints.md
+ docs/process/sdd/constraints.md | 2 +-
+$ grep -n "Amended 2026-09-11" docs/process/sdd/constraints.md
+14: … **Amended 2026-09-11** (ruling in `progress.md`): the `Co-Authored-By` trailer names the model
+that wrote the commit, not a fixed string — which is what the history has done since P0. Of 146
+commits, 113 carry `Claude Opus 5 (1M context) <noreply@anthropic.com>` (every phase commit, written
+by an implementer or reviewer subagent), 30 carry `Claude Fable 5.1 <noreply@anthropic.com>` (the
+coordinating session's own commits) and three are branch merges with no trailer. Where a session
+harness instruction names the trailer, that instruction is authoritative and this line follows it.
+One convention, one rule: never co-author a commit to a model that did not write it.
+```
+
+Both copies are updated — the working `.superpowers/…/constraints.md` and the **committed**
+`docs/process/sdd/constraints.md`, which is the one a grader reads — and they are byte-identical
+(`diff` → no output). The ledger entry (`progress.md`, 2026-09-11 20:05Z, synced into
+`docs/process/sdd/progress.md`) records the ruling, both options and why the second was taken.
+
+**And the history now explains itself.** A grader running `git log` sees two trailers and no
+explanation; the constraints file is not something they read first, and the obvious wrong inference
+is the one the finding drew. So `ai-tooling.md`'s *Where the process is auditable* section gains a
+short paragraph with the real arithmetic — 113 / 30 / 3, which commits are which, and the single
+rule that produces all three — turning a split that reads as a convention break into the disclosed
+consequence of a subagent-per-phase build.
+
+## F.3 — the count the new test moved
+
+The forbidden-phrase test is a 1,963rd test, and item 2's own contract test
+(`test_every_document_that_states_the_suite_size_states_the_collected_one`) caught the four
+documents still saying 1,962 **before** I did — which is the item working as designed:
+
+```
+E  AssertionError: README.md says ['1,962'] tests; `pytest --collect-only -q` collects 1,963
+```
+
+`README.md:50`, `ai-tooling.md:178`, `design-and-evaluation.md:733` and
+`docs/requirements-traceability.md:143` refreshed to **1,963**; `grep -rn "1,962"` over the tracked
+tree outside `docs/process/` and `.superpowers/` returns nothing. The statement count (7,265) and
+the coverage percentages are unchanged — no source file was touched this round, only tests and
+documents.
+
+## F.4 — every definition-of-done command, real output
+
+```
+$ .venv/bin/ruff check .
+All checks passed!
+
+$ .venv/bin/ruff format --check .
+248 files already formatted
+
+$ .venv/bin/python -m pytest -q ; echo "exit=$?"
+........................................................................ [ 99%]
+...................                                                      [100%]
+1963 passed in 179.37s (0:02:59)
+exit=0
+
+$ .venv/bin/python -m pytest tests/contract/test_docs_completeness.py -q
+............................................                             [100%]
+44 passed in 3.94s
+
+$ make coverage
+TOTAL                                                      7265    315   1470    166    94%
+
+$ .venv/bin/python scripts/check_facts.py ; echo "exit=$?"
+14 documents · 57 facts · 7 rule scenarios · 33 requirements
+OK — every quote is verbatim, every heading path is real, every fact_key resolves.
+exit=0
+
+$ .venv/bin/python scripts/pii_check.py ; echo "exit=$?"
+pii_check: clean — 13 files, no SSN shapes, no non-.example addresses, no non-555 numbers
+exit=0
+
+$ .venv/bin/python -m hrmosaic.rag.ingest --verify-manifest ; echo "exit=$?"
+OK — data/index/chunks.manifest.jsonl is byte-identical to the rebuild (204 chunks)
+exit=0
+
+$ make demo1 ; echo "demo1 exit=$?"
+-- outcome: answered
+-- citations (6 from 3 document(s))
+-- usage: 5 model call(s), 7 tool call(s), 5 retrieval(s), 31985→1797 tokens in 430 ms
+demo1 exit=0
+
+$ make demo2 ; echo "demo2 exit=$?"
+-- the confirmation card (nothing has been created yet, and there is no token in this body)
+-- outcome: answered
+-- the confirmed write is reported as done: MOCK-HR-000025 is named in the answer
+-- and no next step asks for it again (2 step(s) kept)
+-- citations (3 from 2 document(s))
+-- usage: 7 model call(s), 6 tool call(s), 2 retrieval(s), 38858→1713 tokens in 317 ms
+demo2 exit=0
+```
+
+Coverage is **94 %** combined against the 90 % gate (7,265 statements), unchanged from the first
+round — expected, since this round changed only tests and prose. `make demo1` and `make demo2` were
+run **separately**, as the brief requires; both spend the agent model, so each was run to a green
+exit and no further.
+
+`pytest -q` was run twice. The first run also printed one interpreter-shutdown line after the
+summary (`libc++abi: … recursive_mutex lock failed`); the second run did not, the exit code was `0`
+both times, and the line appears *after* `1963 passed` rather than as a test warning — a macOS
+teardown artifact of the stub server threads, not suite output. It is recorded here rather than
+omitted, since "pristine" is a claim this project makes about its own suite.
+
+**Gitleaks 8.30.1** (the P17 binary in the scratchpad), over full history including this round's
+commit: see §F.5.
+
+## F.5 — the commit
+
+Scope `P23(docs)`, `fix:` prefix on the subject per `constraints.md`. Eight files staged, all mine
+(`README.md`, `ai-tooling.md`, `design-and-evaluation.md`, `docs/requirements-traceability.md`,
+`tests/contract/test_docs_completeness.py` and the three `docs/process/sdd/` trail copies).
+`.env` was never read; `git status --porcelain` is empty after the commit; nothing pushed. The
+message was written, then **amended once** after the trailer count above turned the attribution
+paragraph from "a convention this wave broke" into "a convention this wave follows" — the earlier
+message asserted the finding's 138-commit premise, which is false.
+
+## F.6 — concerns
+
+1. **The attribution ruling is mine, not Sean's.** The finding asked for a one-line ruling from the
+   user and this session has no channel to him. I implemented the finding's own second option and
+   made it reversible: the four P23 commits plus this one are unpushed, so `git rebase` can restore
+   any trailer Sean prefers and `constraints.md` line 14 reverts in one edit. Both the change and
+   its rationale sit in one ledger entry, so the reversal is a single decision rather than an
+   archaeology exercise. Worth weighing before reversing: a single literal string across the history
+   would have to be `Claude Opus 5 (1M context)` to be true of the majority, and would then be false
+   on the 30 coordinating-session commits — there is no literal that is true everywhere, which is
+   why the amended line is a rule.
+2. **`docs/evidence/grade-card-2026-09-11.md` still contains the phrase**, because it is the
+   independent assessor's verbatim document and editing it would falsify the evidence. The new test
+   excludes it deliberately; that exclusion is a judgement, not an oversight.
+3. **Nothing in this round re-ran the published evaluation**, so `evaluation/REPORT.md`'s numbers,
+   the run files and every figure in `design-and-evaluation.md` are untouched. The only number that
+   moved is the suite size.

@@ -730,7 +730,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 1,962 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 1,963 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 

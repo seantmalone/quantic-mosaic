@@ -47,7 +47,7 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 1,962 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 1,963 tests as of
 2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
