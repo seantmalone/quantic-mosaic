@@ -333,12 +333,8 @@ running out suspends the service until the month resets rather than billing anyt
 row is the same turn the evaluation runs measure; the cold-start penalty is entirely the 45-second
 wake.
 
-**Status: the keep-alive workflow is not in the repository yet.** `.github/workflows/` holds
-`ci.yml` and nothing else; the pinger is queued as its own step after the publish wave, and every
-figure published anywhere in this repository — here, in `deployed.md`, `README.md`,
-`docs/architecture.html` and the traceability matrix — is the no-keep-alive behaviour measured
-above. When the workflow lands, this section and those documents gain a line saying so; they do not
-change the measured table.
+**Status: `.github/workflows/keepalive.yml` landed 2026-09-11, after these probes; every figure
+above is still the no-keep-alive behaviour and disabling the workflow restores it.**
 
 ---
 
