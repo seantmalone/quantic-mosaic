@@ -296,6 +296,28 @@ later blocks were still being written, and each step announced as it began.
 
 ---
 
+## 2026-09-11 — Cold start, measured three times without keep-alive
+
+Each probe left the instance untouched for 1,000 s so Render spun it down (its own health-check
+lines stop after 15 idle minutes), then timed the wake. Probe 1 ran on the readiness-fix build,
+probes 2 and 3 on the final build.
+
+| Segment | Probe 1 | Probe 2 | Probe 3 | Median |
+|---|---|---|---|---|
+| Spin-up and container start until `/health` answers | 44.8 s | 43.5 s | 52.4 s | 44.8 s |
+| `/health` to `/ready` | 2.8 s | 0.1 s | 0.1 s | 0.1 s |
+| First `POST /chat` | 23.3 s | 23.9 s | 25.2 s | 23.9 s |
+| First request, end to end | 71.0 s | 67.5 s | 77.6 s | 71.0 s |
+| Warm turn immediately after | 22.5 s | 22.5 s | 23.9 s | 22.5 s |
+
+**Decision (Sean, 2026-09-10).** Keep the measured table as the documented no-ping behaviour and add
+a GitHub Actions keep-alive that pings `/health` every ten minutes: one always-on free instance uses
+about 744 of the 750 free instance-hours a month, and running out suspends the service until the
+month resets rather than billing anything. The warm-turn row is the same turn the evaluation runs
+measure; the cold-start penalty is entirely the 45-second wake.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
