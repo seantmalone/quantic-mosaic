@@ -185,9 +185,12 @@
       if (ticker) { clearInterval(ticker); ticker = null; }
     }
 
-    function openStream(turnId) {
+    // `reset` is false only on the resumed half of a confirmation-gated turn (§10.3 step 4): the
+    // rail keeps the lines it drew before the gate and the resumed spans append under them, so the
+    // waterfall reads as one turn rather than restarting at the mock write.
+    function openStream(turnId, reset) {
       stopStream();
-      rail.replaceChildren();
+      if (reset !== false) { rail.replaceChildren(); }
       clearProvisional();
       ticker = setInterval(tick, 100);
       stream = new EventSource("/chat/stream?turn_id=" + encodeURIComponent(turnId));
@@ -215,12 +218,27 @@
 
     // The UI generates `turn_id` and subscribes FIRST, then fires the POST — the POST does not
     // return until the turn is over, so its body can never carry the id the rail needs (§11.1).
+    //
+    // `/chat/confirm` needs the same subscribe-then-POST, and it is the half that performs the
+    // mock write: `POST /chat` publishes `turn_completed` even when the outcome is
+    // `awaiting_confirmation`, which ends the stream on both sides, so without a second
+    // subscription every resumed span and every `answer_delta` of the resumed turn would be
+    // published into a broker with no subscribers. The id is the one already in the confirm card —
+    // it is the SAME turn — so nothing is minted and `turn_id` is not overwritten. A Cancel
+    // republishes `turn_started`, its own `confirmation` span and a second `turn_completed`
+    // (§11.2), so the same branch covers it.
     document.body.addEventListener("htmx:configRequest", function (event) {
-      if (event.detail.path !== "/chat") { return; }
-      var turnId = newId();
-      event.detail.parameters.turn_id = turnId;
-      turnField.value = turnId;
-      openStream(turnId);
+      if (event.detail.path === "/chat") {
+        var turnId = newId();
+        event.detail.parameters.turn_id = turnId;
+        turnField.value = turnId;
+        openStream(turnId, true);
+        return;
+      }
+      if (event.detail.path === "/chat/confirm") {
+        var resumed = event.detail.parameters.turn_id;
+        if (resumed) { openStream(resumed, false); }
+      }
     });
 
     document.body.addEventListener("htmx:afterSwap", function () {

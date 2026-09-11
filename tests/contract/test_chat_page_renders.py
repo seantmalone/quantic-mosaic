@@ -68,6 +68,26 @@ async def test_the_rail_narrates_each_step_and_the_answer_streams_under_it(web):
     assert "clearProvisional();" in html, "`turn_completed` is a hard replace, never a merge"
 
 
+async def test_the_page_resubscribes_for_the_resumed_half_of_a_gated_turn(web):
+    """The confirm card's POST opens a stream of its own, on the SAME turn id (§10.3 step 4).
+
+    `POST /chat` publishes `turn_completed` even when the outcome is `awaiting_confirmation`, so the
+    page's `EventSource` is closed by the time the confirm card is on screen. Without a second
+    subscription the resumed half — the one that performs the mock write and writes the answer —
+    would publish every span and every `answer_delta` into a broker with no subscribers, and the
+    rail would sit on its pre-gate lines until the htmx swap.
+    """
+    async with web() as client:
+        html = (await client.get("/")).text
+
+    assert 'event.detail.path === "/chat/confirm"' in html
+    assert "openStream(resumed, false)" in html, "the rail keeps its pre-gate lines"
+    assert "openStream(turnId, true)" in html, "a new turn still starts from an empty rail"
+    # The id is the card's own hidden field: minting a second one would subscribe to a turn that
+    # never publishes, and overwriting `turnField` would misroute the NEXT message.
+    assert "var resumed = event.detail.parameters.turn_id;" in html
+
+
 async def test_the_dashboard_link_is_rendered_only_in_the_admin_persona(web):
     async with web() as client:
         employee = await client.get("/")

@@ -316,3 +316,91 @@ async def test_a_block_g2_strips_is_streamed_and_then_replaced_by_the_final_answ
     assert [block["text"] for block in body["answer_blocks"]] == [deltas[0]["text"]]
     assert dropped not in body["answer"], "the finished answer is the one the guardrails passed"
     assert [event for event, _ in frames][-1] == "turn_completed", "and it is what replaces the preview"
+
+
+PTO_QUESTION = (
+    "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
+    "— and can you open the request for me?"
+)
+
+
+async def _collect(client, turn_id: str) -> tuple[asyncio.Task, list[str]]:
+    """Subscribe to `turn_id` and read until `turn_completed`, as the page's EventSource does."""
+    collected: list[str] = []
+
+    async def subscribe() -> None:
+        async with client.stream("GET", "/chat/stream", params={"turn_id": turn_id}) as response:
+            assert response.status_code == 200
+            async for chunk in response.aiter_text():
+                collected.append(chunk)
+                if "turn_completed" in chunk:
+                    break
+
+    listening = asyncio.create_task(subscribe())
+    while sse.broker.subscriber_count(turn_id) == 0:
+        await asyncio.sleep(0.01)
+    return listening, collected
+
+
+async def test_a_confirmation_gated_turn_streams_its_resumed_half_to_a_second_subscriber(web, store):
+    """§10.3 step 4 — the half that performs the mock write has a rail of its own.
+
+    `POST /chat` publishes `turn_completed` even when the outcome is `awaiting_confirmation`, which
+    ends the generator server-side and closes the `EventSource` on the page. So the resumed turn is
+    only visible if the client subscribes a **second** time, with the id already in the confirm
+    card, before it posts `/chat/confirm` — which is what `chat.html`'s `htmx:configRequest`
+    handler now does. This pins the frames that second subscription exists to receive: the same
+    turn, its mock write, and the answer written after the human clicked.
+    """
+    async with web("demo_task_2.json") as client:
+        listening, gated_chunks = await _collect(client, TURN_ID)
+        proposal = await client.post("/chat", json={"message": PTO_QUESTION, "turn_id": TURN_ID})
+        assert proposal.status_code == 200, proposal.text
+        await asyncio.wait_for(listening, timeout=60)
+
+        gated = _frames("".join(gated_chunks))
+        assert gated[-1][0] == "turn_completed"
+        assert gated[-1][1]["outcome"] == "awaiting_confirmation"
+        assert sse.broker.subscriber_count(TURN_ID) == 0, "the first stream is over before the click"
+
+        resumed_listening, resumed_chunks = await _collect(client, TURN_ID)
+        confirmed = await client.post(
+            "/chat/confirm",
+            json={"session_id": proposal.json()["session_id"], "turn_id": TURN_ID, "decision": "confirmed"},
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        await asyncio.wait_for(resumed_listening, timeout=60)
+
+    frames = _frames("".join(resumed_chunks))
+    events = [event for event, _ in frames]
+
+    assert events[0] == "turn_started"
+    assert frames[0][1]["turn_id"] == TURN_ID
+    assert frames[0][1]["seq"] == gated[0][1]["seq"], "the same turn, not a new one"
+    assert "create_mock_hr_ticket" in {data.get("name") for _, data in frames if _ == "span"}
+    assert events.count("answer_delta") >= 1, "the answer written after the click streams too"
+    assert events[-1] == "turn_completed"
+    assert frames[-1][1]["outcome"] == "answered"
+
+
+async def test_a_declined_confirmation_also_streams_a_second_turn_started_and_completed(web, store):
+    """Cancel republishes `turn_started`, its own `confirmation` span and `turn_completed` (§11.2)."""
+    async with web("demo_task_2.json") as client:
+        listening, _gated = await _collect(client, TURN_ID)
+        proposal = await client.post("/chat", json={"message": PTO_QUESTION, "turn_id": TURN_ID})
+        await asyncio.wait_for(listening, timeout=60)
+
+        resumed_listening, resumed_chunks = await _collect(client, TURN_ID)
+        declined = await client.post(
+            "/chat/confirm",
+            json={"session_id": proposal.json()["session_id"], "turn_id": TURN_ID, "decision": "declined"},
+        )
+        assert declined.status_code == 200, declined.text
+        await asyncio.wait_for(resumed_listening, timeout=60)
+
+    frames = _frames("".join(resumed_chunks))
+    events = [event for event, _ in frames]
+
+    assert events[0] == "turn_started" and events[-1] == "turn_completed"
+    assert frames[-1][1]["outcome"] == "refused"
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
