@@ -4,7 +4,7 @@
  "completions": [
   {
    "purpose": "route",
-   "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": true, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"No dates were given, so the request cannot be checked against the notice rule.\"}",
+   "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"No dates were given, so the request cannot be checked against the notice rule.\"}",
    "finish_reason": "stop",
    "prompt_tokens": 1080,
    "completion_tokens": 92

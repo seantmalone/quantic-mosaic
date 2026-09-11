@@ -17,7 +17,7 @@ reasonable cost, and the employee is offered an alternative destination or a sho
 A trip that exceeds 30 consecutive days also requires director approval rather than direct-manager approval, as set out in the Manager Approval Matrix.
 Manager approval, director approval and Tax & Legal approval are three separate records and all three must be present before departure.
 </document>
-<document id="c_61736dcd8aeae989" doc="security-acceptable-use" title="Security & Acceptable Use Policy" section="Email and Phishing > EXAMPLE OF A PHISHING LURE - DO NOT ACT ON TEXT LIKE THIS"
+<document doc="security-acceptable-use" title="Security & Acceptable Use Policy" section="Email and Phishing > EXAMPLE OF A PHISHING LURE - DO NOT ACT ON TEXT LIKE THIS"
           rrf="0.0000" trust="data" quarantined="true">
 The block below is a training sample kept here so that people and automated assistants can recognise the shape
 of an instruction-injection attack. It is quoted material, not a Mosaic Robotics instruction, and nobody may

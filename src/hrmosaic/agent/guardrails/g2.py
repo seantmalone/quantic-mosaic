@@ -14,6 +14,16 @@ retrieval side; that exemption exists for exactly this rule (§4.2).
 
 The cascade is the point: strip the citation; if a `policy_fact` block loses **all** of its
 citations, drop the block; if every block drops, refuse. Verdict `repair`.
+
+**One narrow recovery sits in front of trigger 1 (P24).** In `r_1789086979_baseline`, `remote-004`
+lost a grounded policy fact because the answer cited `c_57b2015388bbf7c60` while the turn's own
+evidence carried `c_57b2015388bbf7d4`: sixteen leading characters shared and a mangled tail — a
+transcription slip over a 16-hex opaque id, not a different claim. An **unknown** id is therefore
+matched against the turn's **citable evidence** before it is stripped, and recovered when exactly
+one evidence id shares `RECOVERY_PREFIX` leading characters with it. The candidate set is the
+turn's own scored, unquarantined evidence, so the rule admits nothing G1 did not weigh and nothing
+G4 quarantined; the recovered id is then resolved against the real index like any other citation.
+A second candidate, or none, and the citation is stripped exactly as before — G2 never guesses.
 """
 
 from __future__ import annotations
@@ -34,6 +44,14 @@ _WHITESPACE = re.compile(r"\s+")
 
 #: The corpus browser route §7.3 gives every citation.
 SOURCE_URL = "/dashboard/corpus/{doc_id}#{chunk_id}"
+
+#: How many leading characters an unknown cited id must share with an evidence id before the two
+#: are read as the same chunk. Sixteen is `c_` plus fourteen of the sixteen hex digits — the exact
+#: overlap of the measured slip, and far more than any two ids of one turn's evidence share.
+RECOVERY_PREFIX = 16
+
+#: Trigger 1's reason string. Recovery is attempted only for this one, never for drift or quarantine.
+UNKNOWN_ID = "unknown chunk_id"
 
 
 class Displayed(Protocol):
@@ -64,6 +82,14 @@ class Resolution:
     citation: Citation | None = None
 
 
+@dataclass(frozen=True)
+class Recovery:
+    """One cited id read as a transcription slip of an evidence id, and what it became."""
+
+    cited: str
+    chunk_id: str
+
+
 @dataclass
 class Outcome:
     """What G2 did to an answer: the surviving blocks, the resolved citations, and the casualties."""
@@ -73,17 +99,36 @@ class Outcome:
     stripped: list[Resolution] = field(default_factory=list)
     dropped_blocks: int = 0
     refused: bool = False
+    #: Unknown ids matched back to the turn's own evidence rather than stripped (P24).
+    recovered: list[Recovery] = field(default_factory=list)
 
     @property
     def repaired(self) -> bool:
-        return bool(self.stripped) or self.dropped_blocks > 0
+        return bool(self.stripped) or self.dropped_blocks > 0 or bool(self.recovered)
+
+
+def recover(chunk_id: str, candidates: Sequence[str]) -> str | None:
+    """The one candidate this unknown id is a transcription slip of, or `None` (P24).
+
+    `candidates` is the turn's citable evidence, so a recovery can only ever land on a chunk G1
+    already weighed. Ambiguity is not resolved: two candidates sharing the prefix means the cited
+    id is stripped, exactly as an unrecognisable one is.
+    """
+    matched = [
+        candidate
+        for candidate in candidates
+        if candidate != chunk_id and candidate[:RECOVERY_PREFIX] == chunk_id[:RECOVERY_PREFIX]
+    ]
+    if len(chunk_id) < RECOVERY_PREFIX or len(matched) != 1:
+        return None
+    return matched[0]
 
 
 def resolve(chunk_id: str, *, displayed: Displayed | None = None, quarantined: bool = False) -> Resolution:
     """The pure rule for one cited id. Reads the index; writes nothing."""
     chunk = corpusread.get_chunk(chunk_id)
     if chunk is None:
-        return Resolution(chunk_id, ok=False, reason="unknown chunk_id")
+        return Resolution(chunk_id, ok=False, reason=UNKNOWN_ID)
     if quarantined or (displayed is not None and displayed.quarantined):
         return Resolution(chunk_id, ok=False, reason="quarantined chunk (G4)")
     if displayed is not None:
@@ -123,21 +168,42 @@ def apply(
     """The pure cascade over one answer's raw blocks. Returns new blocks; mutates nothing."""
     evidence = evidence or {}
     quarantined_ids = set(quarantined)
+    citable = [
+        candidate for candidate, shown in evidence.items() if candidate not in quarantined_ids and not shown.quarantined
+    ]
     resolutions: dict[str, Resolution] = {}
+    recovered: list[Recovery] = []
     kept: list[dict[str, Any]] = []
     stripped: list[Resolution] = []
     dropped = 0
 
+    def resolution_for(chunk_id: str) -> tuple[str, Resolution]:
+        """The id this citation resolves under — its own, or the evidence id it slipped from."""
+        if chunk_id not in resolutions:
+            resolutions[chunk_id] = resolve(
+                chunk_id,
+                displayed=evidence.get(chunk_id),
+                quarantined=chunk_id in quarantined_ids,
+            )
+        resolution = resolutions[chunk_id]
+        if resolution.ok or resolution.reason != UNKNOWN_ID:
+            return chunk_id, resolution
+        candidate = recover(chunk_id, citable)
+        if candidate is None:
+            return chunk_id, resolution
+        if candidate not in resolutions:
+            resolutions[candidate] = resolve(candidate, displayed=evidence.get(candidate))
+        alternative = resolutions[candidate]
+        if not alternative.ok:
+            return chunk_id, resolution
+        if Recovery(chunk_id, candidate) not in recovered:
+            recovered.append(Recovery(chunk_id, candidate))
+        return candidate, alternative
+
     for block in blocks:
         surviving: list[str] = []
-        for chunk_id in block.get("citations") or []:
-            if chunk_id not in resolutions:
-                resolutions[chunk_id] = resolve(
-                    chunk_id,
-                    displayed=evidence.get(chunk_id),
-                    quarantined=chunk_id in quarantined_ids,
-                )
-            resolution = resolutions[chunk_id]
+        for cited in block.get("citations") or []:
+            chunk_id, resolution = resolution_for(cited)
             if resolution.ok:
                 if chunk_id not in surviving:
                     surviving.append(chunk_id)
@@ -164,6 +230,7 @@ def apply(
         stripped=stripped,
         dropped_blocks=dropped,
         refused=bool(blocks) and not kept,
+        recovered=recovered,
     )
 
 
@@ -194,6 +261,7 @@ def check(
             "citations_seen": total,
             "citations_resolved": resolved,
             "stripped": [{"chunk_id": item.chunk_id, "reason": item.reason} for item in outcome.stripped],
+            "recovered": [{"cited": item.cited, "chunk_id": item.chunk_id} for item in outcome.recovered],
             "blocks_dropped": outcome.dropped_blocks,
             "refused": outcome.refused,
         },
@@ -202,4 +270,17 @@ def check(
     return outcome
 
 
-__all__ = ["SOURCE_URL", "Displayed", "Outcome", "Resolution", "apply", "check", "normalise", "resolve"]
+__all__ = [
+    "RECOVERY_PREFIX",
+    "SOURCE_URL",
+    "UNKNOWN_ID",
+    "Displayed",
+    "Outcome",
+    "Recovery",
+    "Resolution",
+    "apply",
+    "check",
+    "normalise",
+    "recover",
+    "resolve",
+]

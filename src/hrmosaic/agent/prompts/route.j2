@@ -20,6 +20,7 @@ Reply with JSON matching the RouteDecision schema.
 FIELDS
 - intent — `policy_qa` when the policy corpus alone can answer; `employee_data` when one employee's own record, balance or benefit is needed; `workflow` when the turn is a multi-step eligibility or request flow; `action` when the user asks for something to be created or sent.
 - workflow — `remote_work_eligibility`, `pto_request`, or null.
+- multi_doc — true when a complete answer needs rules from MORE THAN ONE of the documents listed under CORPUS: a question with several parts, or one whose answer depends on both a policy and the approval authority for it. false for a question one document answers.
 - needs_employee_data — true when an employee record, balance or benefit election is needed.
 - needs_clarification — true only when a required detail is missing and cannot be inferred. Name EVERY missing detail in rationale_summary, not only the first — the question the user is shown is built from that line.
 - out_of_scope — true when the turn is not about Mosaic Robotics HR policy or the employee's own HR data.

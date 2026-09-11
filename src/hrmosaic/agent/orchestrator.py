@@ -48,10 +48,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from hrmosaic.agent import breadth, prompts
 from hrmosaic.agent import outcome as outcome_consistency
-from hrmosaic.agent import prompts
 from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
 from hrmosaic.agent.guardrails import g1, g2, g3, g4, g5, g6
@@ -705,7 +705,19 @@ class Orchestrator:
             return self._refuse(turn, "every cited chunk failed to resolve", cold_start=cold_start)
         relabelled = g3.check(repaired.blocks, turn=turn.buffer)
 
-        # -- 5b. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
+        # -- 5b. citation breadth (P24) — NOT a guardrail either, and no G-number -----------
+        # `expenses-002` cited two of the five documents its own evidence spanned and lost the
+        # approval rule the question asked for; `onboarding-001` cited two of four. On a
+        # multi-document turn — the router's `multi_doc`, or a workflow — an answer narrower than
+        # its citable evidence buys ONE more synthesis call that names the uncited documents, and
+        # the second answer replaces the first only if it is strictly broader and G2/G3 cost it
+        # nothing (§7.4's citation-breadth paragraph).
+        if breadth.applies(decision):
+            broadened = await self._broaden(turn, raw, relabelled.blocks)
+            if broadened is not None:
+                raw, repaired, relabelled = broadened
+
+        # -- 5c. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
         # A write the user confirmed and the server performed is reported from the tool result,
         # not from model output: the outcome goes first with its id, an escalation denying the
         # very action the result shows was performed is replaced by a pointer to it, and a next
@@ -1079,7 +1091,62 @@ class Orchestrator:
                 return list(message.tool_calls)
         return []
 
-    async def _synthesize(self, turn: _Turn) -> dict[str, Any]:
+    async def _broaden(
+        self, turn: _Turn, raw: Mapping[str, Any], blocks: Sequence[Mapping[str, Any]]
+    ) -> tuple[dict[str, Any], g2.Outcome, g3.Outcome] | None:
+        """The one breadth repair of §7.4 (P24), or `None` to keep the answer already written.
+
+        It continues the synthesis conversation — the same rendered prompt, the model's own answer,
+        and one message naming the citable documents that answer does not cite — and is recorded as
+        a `repair` call, the same purpose the act loop's one tool-call repair uses, so the
+        dashboard's `llm_call` drill-down shows the extra round trip without a new vocabulary.
+
+        Every failure here keeps the first answer: a turn must never lose a written answer to the
+        step that was only trying to widen it.
+        """
+        missing = breadth.uncited_documents(blocks, turn.citable())
+        if not missing:
+            return None
+        messages = [
+            *self._synthesis_messages(turn),
+            Message(role="assistant", content=json.dumps(raw)),
+            Message(role="user", content=breadth.instruction(missing, turn.citable())),
+        ]
+        try:
+            completion = await self.model().complete(
+                messages, response_schema=AnswerSchema, purpose="repair", turn=turn.buffer
+            )
+            body = completion.parsed_json()
+            if not isinstance(body, dict):
+                return None
+            second = g2.check(
+                list(body.get("blocks") or []),
+                turn=turn.buffer,
+                evidence=turn.evidence,
+                quarantined=turn.quarantined,
+            )
+            relabelled = g3.check(second.blocks, turn=turn.buffer)
+            for block in relabelled.blocks:
+                AnswerBlock.model_validate(block)
+        except (ProviderError, DailyCapExceeded, ValidationError, ValueError, json.JSONDecodeError):
+            return None
+        if not breadth.accepted(
+            blocks,
+            relabelled.blocks,
+            turn.citable(),
+            dropped_blocks=second.dropped_blocks,
+            refused=second.refused,
+        ):
+            return None
+        return body, second, relabelled
+
+    def _synthesis_messages(self, turn: _Turn) -> list[Message]:
+        """§7.2's two halves, rendered from the turn's accumulated evidence.
+
+        One renderer for the two callers that need the exact same bytes: the synthesis call, and
+        the breadth repair of §7.4 (P24), which continues that conversation rather than opening a
+        second one — re-rendering is what keeps the two prompts identical up to the repair message.
+        """
         req = turn.request
         system, user = prompts.render(
             "synthesize.j2",
@@ -1088,6 +1155,9 @@ class Orchestrator:
             tool_results=turn.envelopes,
             question=req.message,
         )
+        return [Message(role="system", content=system), Message(role="user", content=user)]
+
+    async def _synthesize(self, turn: _Turn) -> dict[str, Any]:
         # W2-E: the answer reaches the page while the model is still writing it. Only **complete**
         # blocks travel — `render_answer()` labels a recommendation, so a half-written block could
         # read as company policy until its prefix arrived — and only `text` / `citations` of each,
@@ -1109,7 +1179,7 @@ class Orchestrator:
                 )
 
         completion = await self.model().complete(
-            [Message(role="system", content=system), Message(role="user", content=user)],
+            self._synthesis_messages(turn),
             response_schema=AnswerSchema,
             purpose="synthesize",
             turn=turn.buffer,

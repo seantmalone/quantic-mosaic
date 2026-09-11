@@ -4,7 +4,7 @@
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"remote_work_eligibility\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"employee_data_reader\", \"policy_qa\"], \"rationale_summary\": \"Remote work eligibility check for E1042 from Berlin, 3 Nov–14 Dec 2026. Requires employee record and policy rules.\"}",
+      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"remote_work_eligibility\", \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"employee_data_reader\", \"policy_qa\"], \"rationale_summary\": \"Remote work eligibility check for E1042 from Berlin, 3 Nov–14 Dec 2026. Requires employee record and policy rules.\"}",
       "finish_reason": "end_turn",
       "prompt_tokens": 1176,
       "completion_tokens": 121
@@ -105,6 +105,14 @@
       "finish_reason": "end_turn",
       "prompt_tokens": 13512,
       "completion_tokens": 648
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"You have completed 45 months of continuous service as of 2026-09-01, exceeding the 12-month minimum required to work outside your home country.\", \"citations\": [\"c_6577bf6f392890bf\"]}, {\"type\": \"policy_fact\", \"text\": \"Germany is an approved destination for temporary work abroad.\", \"citations\": [\"c_b189d36f26fb7c60\"]}, {\"type\": \"policy_fact\", \"text\": \"Your proposed stay from 3 November to 14 December is 42 consecutive calendar days. Stays exceeding 30 consecutive days require director approval and a Tax & Legal review before travel begins, filed at least 21 calendar days before departure.\", \"citations\": [\"c_c502ccd2ba5028f5\", \"c_0d2c84e4df38b6a0\"]}, {\"type\": \"policy_fact\", \"text\": \"The 42-day stay falls within the rolling 90-day annual limit for work outside your home country.\", \"citations\": [\"c_864fb910f46475a7\"]}, {\"type\": \"policy_fact\", \"text\": \"Work performed outside your home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. You must notify IT Security of the destination country at least 5 business days before departure.\", \"citations\": [\"c_57b2015388bbf7d4\"]}, {\"type\": \"recommendation\", \"text\": \"Raise your request in MosaicOne under 'Work from another country' with exact dates (3 November – 14 December 2026) and your workspace address in Berlin at least 21 calendar days before departure to allow time for director and Tax & Legal approvals.\", \"citations\": [\"c_c502ccd2ba5028f5\"]}, {\"type\": \"recommendation\", \"text\": \"Confirm with IT Security that your travel laptop meets the encryption and VPN requirements, and notify them of your Berlin destination at least 5 business days before 3 November.\", \"citations\": [\"c_57b2015388bbf7d4\"]}], \"next_steps\": [\"File the work-from-another-country request in MosaicOne by 13 September 2026 (21 days before 3 November)\", \"Obtain written approval from your director (Dana, E1007)\", \"Submit Tax & Legal review request with destination, exact dates, workspace address, and description of work to be performed\", \"Confirm device and VPN setup with IT Security by 27 October 2026 (5 business days before departure)\", \"Monitor Tax & Legal review outcome: approved, approved with conditions (e.g., no customer-facing activity), or not approved\"], \"rationale_summary\": \"Tenure, destination, duration and approvals are cited; not used: leave-of-absence, travel-policy.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 13512,
+      "completion_tokens": 648
     }
-  ]
+  ],
+  "_p24_note": "The final `repair` entry is the P24 citation-breadth check (spec §7.4) and is the one hand-authored completion in this file: the recording predates the step. It declines the ask — the uncited documents genuinely say nothing about this question — by naming them in `rationale_summary` as rule 8 requires, so the answer the reader gets is the recorded one, unchanged, and the extra round trip is visible in the trace."
 }

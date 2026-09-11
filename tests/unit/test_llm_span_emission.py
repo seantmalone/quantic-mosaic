@@ -292,8 +292,17 @@ def test_the_committed_demo_script_loads():
     path = Path("tests/fixtures/llm_scripts/demo_task_1.json")
     adapter = StubAdapter(script_path=path)
 
-    assert adapter.remaining == 5
-    assert [entry["purpose"] for entry in load_script(path)] == ["route", "act", "act", "act", "synthesize"]
+    assert adapter.remaining == 6
+    # The trailing `repair` is P24's citation-breadth check (§7.4): demo 1 is a workflow turn, so
+    # the step runs, and the recording carries the completion it asks for.
+    assert [entry["purpose"] for entry in load_script(path)] == [
+        "route",
+        "act",
+        "act",
+        "act",
+        "synthesize",
+        "repair",
+    ]
 
 
 def test_both_providers_down_is_still_one_span_flagged_as_a_failover(writer, store, wire):

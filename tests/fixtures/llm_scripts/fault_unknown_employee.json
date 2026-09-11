@@ -4,7 +4,7 @@
  "completions": [
   {
    "purpose": "route",
-   "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1999\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\"], \"rationale_summary\": \"A PTO balance question about a named employee id.\"}",
+   "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1999\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\"], \"rationale_summary\": \"A PTO balance question about a named employee id.\"}",
    "finish_reason": "stop",
    "prompt_tokens": 1105,
    "completion_tokens": 94

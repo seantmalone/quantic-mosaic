@@ -161,9 +161,26 @@ def test_the_user_half_carries_the_frozen_ordering(template):
 def test_the_evidence_envelopes_label_trust_and_the_quarantine():
     _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
     assert user.count('trust="data"') == 2 + len(TOOL_RESULTS), "two documents and every tool result"
-    lure = chunks()[1]
-    assert f'id="{lure.chunk_id}"' in user and 'quarantined="true"' in user
     assert user.count('quarantined="true"') == 1
+
+
+def test_a_quarantined_envelope_carries_no_citable_id():
+    """P24: `inj-001` cited the canary and G2 destroyed the grounded block it was the only support of.
+
+    In `r_1789086979_baseline` the answer cited `c_61736dcd8aeae989` — the quarantined phishing lure
+    — because the envelope handed it a chunk id that looked exactly like every citable one, while
+    CITATION COVERAGE (correctly) never listed it. G2 stripped the citation under trigger 4 and the
+    `policy_fact` it was the only support of was dropped. The quarantined envelope is still shown,
+    banner and all, and now carries **no** id at all: the model cannot cite what it was never given.
+    """
+    _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
+    (lure,) = [chunk for chunk in chunks() if chunk.quarantined]
+    citable = [chunk for chunk in chunks() if not chunk.quarantined]
+
+    assert lure.chunk_id not in user, "a quarantined chunk id is not shown anywhere in the prompt"
+    assert '<document doc="security-acceptable-use"' in user, "the evidence itself is still rendered"
+    for chunk in citable:
+        assert f'id="{chunk.chunk_id}"' in user
 
 
 def test_the_document_envelope_carries_the_whole_chunk_not_the_snippet():

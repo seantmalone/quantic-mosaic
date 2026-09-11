@@ -4,7 +4,7 @@
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\":\"action\",\"workflow\":\"pto_request\",\"needs_employee_data\":true,\"needs_clarification\":false,\"out_of_scope\":false,\"sensitive\":false,\"target_employee_id\":\"E1042\",\"selected_tools\":[\"employee_data\",\"pto_request_write\"],\"rationale_summary\":\"PTO request for E1042 Sep 15–17, 2026 (3 days). Needs balance check and write gate for filing.\"}",
+      "response_text": "{\"intent\":\"action\",\"workflow\":\"pto_request\",\"needs_employee_data\":true,\"needs_clarification\":false,\"multi_doc\": false, \"out_of_scope\":false,\"sensitive\":false,\"target_employee_id\":\"E1042\",\"selected_tools\":[\"employee_data\",\"pto_request_write\"],\"rationale_summary\":\"PTO request for E1042 Sep 15–17, 2026 (3 days). Needs balance check and write gate for filing.\"}",
       "finish_reason": "end_turn",
       "prompt_tokens": 1186,
       "completion_tokens": 108
@@ -103,6 +103,14 @@
       "finish_reason": "end_turn",
       "prompt_tokens": 6255,
       "completion_tokens": 415
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"Every PTO request requires written approval from the employee's direct manager in MosaicOne. Verbal agreement, a message in chat and an email thread are all insufficient on their own.\", \"citations\": [\"c_d57a7964d974ba44\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"You have 13.5 PTO days remaining as of 2026-09-01, so a 3-day request is covered by your balance. Your request for 15–17 September meets the 5-business-day notice requirement (8 business days from submission on 2026-09-10).\", \"citations\": []}, {\"type\": \"escalation\", \"text\": \"I cannot open PTO requests in MosaicOne on your behalf. You must submit the request yourself in MosaicOne so your manager can record written approval. Contact People Operations (people-ops@mosaicrobotics.example) if you need assistance with the system.\", \"citations\": []}], \"next_steps\": [\"Log into MosaicOne and submit your PTO request for 15–17 September 2026.\", \"Your manager will receive the request and must approve it in writing within MosaicOne.\", \"Once approved, the three days will be deducted from your PTO balance.\"], \"rationale_summary\": \"Notice, balance and the ticket are cited from the PTO policy; not used: remote-and-hybrid-work.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 6255,
+      "completion_tokens": 415
     }
-  ]
+  ],
+  "_p24_note": "The final `repair` entry is the P24 citation-breadth check (spec §7.4) and is the one hand-authored completion in this file: the recording predates the step. It declines the ask — the uncited documents genuinely say nothing about this question — by naming them in `rationale_summary` as rule 8 requires, so the answer the reader gets is the recorded one, unchanged, and the extra round trip is visible in the trace."
 }

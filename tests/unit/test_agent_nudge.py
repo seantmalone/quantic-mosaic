@@ -102,6 +102,7 @@ def decision(intent: str, workflow: str | None) -> RouteDecision:
     return RouteDecision(
         intent=intent,
         workflow=workflow,
+        multi_doc=False,
         needs_employee_data=True,
         needs_clarification=False,
         out_of_scope=False,

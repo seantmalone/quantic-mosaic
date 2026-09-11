@@ -139,3 +139,90 @@ def test_the_span_names_every_stripped_citation(writer, spans):
     assert payload["reason"] == "1/2 citations resolved"
     assert payload["details"]["stripped"] == [{"chunk_id": UNKNOWN, "reason": "unknown chunk_id"}]
     assert outcome.citations[0].score == 0.71, "the displayed dense score rides on the citation (§7.3)"
+
+
+# --------------------------------------------------------------------------------------
+# P24 — the two grounded blocks G2 destroyed in `r_1789086979_baseline`
+# --------------------------------------------------------------------------------------
+#
+# `remote-004` lost the encrypted-device/VPN requirement to a **transcription slip**: the answer
+# cited `c_57b2015388bbf7c60` while the turn's own evidence carried `c_57b2015388bbf7d4` — sixteen
+# leading characters shared, a mangled tail, and a `policy_fact` whose only citation was that id.
+# The id resolved to nothing, the citation was stripped and the whole grounded block was dropped.
+#
+# Recovery is deliberately narrow: the candidate must come from **this turn's citable evidence**
+# (so nothing unscored is ever admitted — §7.4's G1 rule stands), it must be the **only** candidate
+# sharing `RECOVERY_PREFIX` characters with the cited id, and the recovered id is then resolved
+# against the real index like any other citation.
+
+
+def near_miss(chunk_id: str) -> str:
+    """A cited id that shares `RECOVERY_PREFIX` characters with `chunk_id` and then diverges."""
+    head = chunk_id[: g2.RECOVERY_PREFIX]
+    return head + "".join("0" if character != "0" else "1" for character in chunk_id[g2.RECOVERY_PREFIX :]) + "0"
+
+
+def test_a_transcription_slip_is_recovered_to_the_evidence_chunk_it_prefixes():
+    chunk = a_chunk()
+    cited = near_miss(chunk.chunk_id)
+    assert corpusread.get_chunk(cited) is None, "the mangled id must be unknown to the index"
+
+    outcome = g2.apply([fact(cited)], evidence={chunk.chunk_id: displayed(chunk)})
+
+    assert outcome.dropped_blocks == 0, "the grounded block survives"
+    assert outcome.blocks[0]["citations"] == [chunk.chunk_id]
+    assert [(item.cited, item.chunk_id) for item in outcome.recovered] == [(cited, chunk.chunk_id)]
+    assert outcome.repaired, "a recovered citation is still a repair"
+
+
+def test_a_near_miss_to_a_chunk_outside_the_turns_evidence_is_stripped():
+    """Recovery reads the turn's citable evidence, never the index: nothing unscored is admitted."""
+    chunk = a_chunk()
+    cited = near_miss(chunk.chunk_id)
+
+    outcome = g2.apply([fact(cited)], evidence={})
+
+    assert outcome.recovered == []
+    assert outcome.dropped_blocks == 1
+    assert [item.reason for item in outcome.stripped] == ["unknown chunk_id"]
+
+
+def test_an_ambiguous_near_miss_is_stripped_rather_than_guessed():
+    chunk = a_chunk()
+    twin = displayed(chunk, chunk_id=near_miss(chunk.chunk_id)[:-1] + "1")
+    outcome = g2.apply(
+        [fact(near_miss(chunk.chunk_id))],
+        evidence={chunk.chunk_id: displayed(chunk), twin.chunk_id: twin},
+    )
+
+    assert outcome.recovered == []
+    assert outcome.dropped_blocks == 1
+
+
+def test_a_near_miss_to_a_quarantined_chunk_is_never_recovered():
+    """`inj-001`'s casualty class: a quarantined chunk is not a citation target (§7.4 trigger 4)."""
+    chunk = a_chunk()
+    outcome = g2.apply(
+        [fact(near_miss(chunk.chunk_id))],
+        evidence={chunk.chunk_id: displayed(chunk, quarantined=True)},
+        quarantined=[chunk.chunk_id],
+    )
+
+    assert outcome.recovered == []
+    assert outcome.dropped_blocks == 1
+
+
+def test_the_span_names_every_recovered_citation(writer, spans):
+    from hrmosaic.core.trace import SessionSpec
+
+    chunk = a_chunk()
+    cited = near_miss(chunk.chunk_id)
+    turn = writer.start_turn(SessionSpec(client_label="api"), user_message="remote work abroad")
+    outcome = g2.check([fact(cited)], turn=turn, evidence={chunk.chunk_id: displayed(chunk)})
+    turn.close(outcome="answered", stop_reason="answered")
+
+    payload = next(payload for kind, _, payload in spans(turn.turn_id) if kind == "guardrail")
+    assert (payload["rule_id"], payload["verdict"]) == ("G2", "repair")
+    assert payload["reason"] == "1/1 citations resolved"
+    assert payload["details"]["recovered"] == [{"cited": cited, "chunk_id": chunk.chunk_id}]
+    assert outcome.citations[0].chunk_id == chunk.chunk_id

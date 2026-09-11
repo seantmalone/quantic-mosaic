@@ -58,6 +58,11 @@ class RouteDecision(BaseModel):
 
     intent: Intent
     workflow: WorkflowName | None
+    #: Whether answering this turn needs rules from more than one policy document (P24). It is the
+    #: only item-independent signal for the `min_distinct_docs` end state §13.1 writes down per
+    #: item: the serving path never reads the dataset, so the turn has to say so itself. Nothing
+    #: routes on it — it gates one thing, `agent/breadth.py`'s post-synthesis coverage check.
+    multi_doc: bool
     needs_employee_data: bool
     needs_clarification: bool
     out_of_scope: bool
@@ -134,6 +139,9 @@ def fallback_decision(message: str, *, reason: str, out_of_scope: bool = False) 
     return RouteDecision(
         intent="policy_qa" if out_of_scope else "workflow",
         workflow=None,
+        # A router that could not answer has claimed nothing about the question's shape either:
+        # the breadth check (P24) costs a second synthesis call and is not spent on a guess.
+        multi_doc=False,
         needs_employee_data=False,
         needs_clarification=False,
         out_of_scope=out_of_scope,

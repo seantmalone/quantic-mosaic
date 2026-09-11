@@ -4,7 +4,7 @@
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"create_mock_hr_ticket\"], \"rationale_summary\": \"The user asked for a PTO request to be opened.\"}",
+      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"create_mock_hr_ticket\"], \"rationale_summary\": \"The user asked for a PTO request to be opened.\"}",
       "finish_reason": "stop",
       "prompt_tokens": 1010,
       "completion_tokens": 70

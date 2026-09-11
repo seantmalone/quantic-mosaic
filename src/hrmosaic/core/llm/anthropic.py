@@ -73,7 +73,13 @@ ANTHROPIC_SIGNUP_URL = "https://console.anthropic.com/settings/keys"
 
 #: Spec §9.8. Anything unnamed there (`act`, and the judge purposes if ever pointed here) takes the
 #: route budget: a tool-use turn emits a handful of small `tool_use` blocks, not prose.
-MAX_TOKENS: dict[str, int] = {"route": 1024, "synthesize": 2048, "repair": 512}
+#:
+#: `repair` carries **two** callers since P24 and takes the larger of their budgets: the act loop's
+#: tool-call repair answers with a `ToolCallRepair` of a few dozen tokens, while the citation-breadth
+#: step (§7.4) re-emits a whole `AnswerSchema` — at 512 that answer would be cut off mid-JSON and the
+#: step would silently never broaden anything. A ceiling costs nothing unspent: output is billed as
+#: produced, and the small repair still emits a small reply.
+MAX_TOKENS: dict[str, int] = {"route": 1024, "synthesize": 2048, "repair": 2048}
 DEFAULT_MAX_TOKENS = 1024
 
 #: Haiku 4.5's minimum cacheable prefix — the highest of any current model. Below it a request

@@ -4,7 +4,7 @@
  "completions": [
   {
    "purpose": "route",
-   "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
+   "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
    "finish_reason": "stop",
    "prompt_tokens": 1120,
    "completion_tokens": 96
@@ -81,7 +81,7 @@
   },
   {
    "purpose": "route",
-   "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
+   "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
    "finish_reason": "stop",
    "prompt_tokens": 1120,
    "completion_tokens": 96
@@ -162,6 +162,14 @@
    "finish_reason": "stop",
    "prompt_tokens": 4210,
    "completion_tokens": 108
+  },
+  {
+   "purpose": "repair",
+   "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO is requested in MosaicOne and the standard notice is five business days ahead of the first day off, so a request made now for 15 September 2026 meets it.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"Time off is approved by your direct manager under the approval matrix, so this request goes to Dana Whitfield (E1007).\", \"citations\": [\"c_9948839107acfaaf\", \"c_d57a7964d974ba44\"]}, {\"type\": \"recommendation\", \"text\": \"Your balance is 13.5 days as of the 1 September 2026 snapshot, which covers the three days from 15 to 17 September 2026.\", \"citations\": []}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\", \"The mock ticket is visible on the dashboard's mock-action log.\"], \"rationale_summary\": \"Cited the PTO notice and balance rules; not used: manager-approval-matrix.\"}",
+   "finish_reason": "stop",
+   "prompt_tokens": 4210,
+   "completion_tokens": 108
   }
- ]
+ ],
+ "_p24_note": "The final `repair` entry is the P24 citation-breadth check (spec §7.4) and is hand-authored: the recording predates the step. It declines the ask — the uncited document says nothing about this request — by naming it in `rationale_summary` as rule 8 requires, so the answer the reader gets is the recorded one, unchanged, and the extra round trip is visible in the trace."
 }

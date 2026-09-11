@@ -4,7 +4,7 @@
  "completions": [
   {
    "purpose": "route",
-   "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
+   "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A policy question the corpus alone can answer.\"}",
    "finish_reason": "stop",
    "prompt_tokens": 960,
    "completion_tokens": 62

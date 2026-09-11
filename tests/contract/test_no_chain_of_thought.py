@@ -99,6 +99,7 @@ def test_a_chatty_router_is_clamped_before_it_reaches_a_span():
     decision = RouteDecision(
         intent="policy_qa",
         workflow=None,
+        multi_doc=False,
         needs_employee_data=False,
         needs_clarification=False,
         out_of_scope=False,

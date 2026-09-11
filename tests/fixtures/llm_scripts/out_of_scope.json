@@ -4,7 +4,7 @@
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": true, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [], \"rationale_summary\": \"Not a Mosaic Robotics HR question.\"}",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": true, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [], \"rationale_summary\": \"Not a Mosaic Robotics HR question.\"}",
       "finish_reason": "stop",
       "prompt_tokens": 940,
       "completion_tokens": 58

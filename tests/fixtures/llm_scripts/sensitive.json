@@ -4,7 +4,7 @@
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": true, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"A harassment report: never answered directly.\"}",
+      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": true, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"A harassment report: never answered directly.\"}",
       "finish_reason": "stop",
       "prompt_tokens": 960,
       "completion_tokens": 60

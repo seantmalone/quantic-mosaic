@@ -4,7 +4,7 @@
   "completions": [
     {
       "purpose": "route",
-      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
+      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"lookup_employee_profile\", \"check_pto_balance\", \"search_policy_documents\", \"check_policy_compliance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"A PTO request the user asked to have opened.\"}",
       "finish_reason": "stop",
       "prompt_tokens": 1120,
       "completion_tokens": 96
@@ -12,8 +12,21 @@
     {
       "purpose": "act",
       "tool_calls": [
-        {"id": "toolu_cr_1", "name": "lookup_employee_profile", "args": {"employee_id": "E1042"}},
-        {"id": "toolu_cr_2", "name": "check_pto_balance", "args": {"employee_id": "E1042", "as_of": "2026-09-15"}}
+        {
+          "id": "toolu_cr_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_cr_2",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042",
+            "as_of": "2026-09-15"
+          }
+        }
       ],
       "finish_reason": "tool_use",
       "prompt_tokens": 1380,
@@ -25,7 +38,10 @@
         {
           "id": "toolu_cr_3",
           "name": "search_policy_documents",
-          "args": {"query": "PTO request advance notice manager approval blackout", "k": 5}
+          "args": {
+            "query": "PTO request advance notice manager approval blackout",
+            "k": 5
+          }
         },
         {
           "id": "toolu_cr_4",
@@ -33,7 +49,10 @@
           "args": {
             "scenario": "pto_request",
             "employee_id": "E1042",
-            "parameters": {"days": 3, "start_date": "2026-09-15"}
+            "parameters": {
+              "days": 3,
+              "start_date": "2026-09-15"
+            }
           }
         }
       ],
@@ -66,6 +85,14 @@
       "finish_reason": "stop",
       "prompt_tokens": 4210,
       "completion_tokens": 108
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO is requested in MosaicOne and needs your manager's approval; the standard notice is five business days ahead of the first day off.\", \"citations\": [\"c_16186f87d12c1302\", \"c_d57a7964d974ba44\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Cited the PTO notice and balance rules; not used: manager-approval-matrix.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 4210,
+      "completion_tokens": 108
     }
-  ]
+  ],
+  "_p24_note": "The final `repair` entry is the P24 citation-breadth check (spec §7.4) and is hand-authored: the recording predates the step. It declines the ask — the uncited document says nothing about this request — by naming it in `rationale_summary` as rule 8 requires, so the answer the reader gets is the recorded one, unchanged, and the extra round trip is visible in the trace."
 }
