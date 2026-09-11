@@ -107,11 +107,11 @@ ADMIN_PREFIXES = ("/dashboard", "/api")
 #: `/chat/stream` would throttle the rail rather than the work behind it.
 MCP_MOUNT_PREFIX = "/mcp-server"
 
-#: **The app's own loopback client is exempt from the mount's limit.** The limit is keyed on
-#: `request.client.host`, and the agent reaches its own MCP mount over loopback — so every
-#: `initialize`, `tools/list` and `tools/call` the app makes on its own behalf, plus the
-#: `client.discover()` behind each `GET /health`, lands in the same `127.0.0.1` bucket as the
-#: grader's browser. One tool-using turn is ~10 requests, so past three turns a minute the app
+#: **The app's own loopback client is exempt from the mount's limit.** The limit is keyed on the
+#: client address (`rate_limit_key()` below), and the agent reaches its own MCP mount over
+#: loopback — so every `initialize`, `tools/list` and `tools/call` the app makes on its own behalf,
+#: plus the `client.discover()` behind each `GET /health`, lands in the same `127.0.0.1` bucket as
+#: the grader's browser. One tool-using turn is ~10 requests, so past three turns a minute the app
 #: starts 429-ing its own `tools/call` and the turn silently degrades to `partial`.
 #:
 #: The exemption is a private header whose value is a **per-process nonce**, minted here at import
@@ -238,6 +238,36 @@ def is_own_loopback_client(request: Request, host: str) -> bool:
     """This process's own in-process MCP client: the nonce, on loopback (see `LOOPBACK_NONCE`)."""
     supplied = request.headers.get(LOOPBACK_HEADER)
     return bool(supplied) and is_loopback(host) and hmac.compare_digest(supplied, LOOPBACK_NONCE)
+
+
+def rate_limit_key(request: Request) -> str:
+    """The bucket §17's `ACCESS_RATE_LIMIT_PER_MIN` counts against — the **last** forwarded hop.
+
+    Every `X-Forwarded-For` entry is a claim, and only the last one was made by a peer this process
+    has any reason to believe. Each proxy *appends* the address it received the request from, so
+    behind Render's edge the chain reads `<whatever the caller sent>, <the address the edge saw>`:
+    the prefix is attacker-controlled and the final entry is the edge's own observation.
+
+    That distinction is why this function exists rather than `request.client.host`. The image's CMD
+    carries `--proxy-headers --forwarded-allow-ips='*'` (P20), and `'*'` sets uvicorn's
+    `always_trust`, under which `_TrustedHosts.get_trusted_client_address` returns the **first**
+    entry of the chain (uvicorn 0.52.4). `request.client.host` inside the container is therefore
+    client-settable. For the scheme rewrite the flag exists for that is harmless; for a
+    denial-of-service bucket it is a regression on the single shared bucket P20 set out to fix — a
+    caller who rotates the header mints an unlimited supply of fresh 30-per-minute budgets, where
+    before the fix they were capped at 30 along with everyone else. Keying on the last entry keeps
+    what the flag bought (a real per-visitor bucket) without handing out the bucket selector.
+
+    Where no proxy header arrives at all — `make run`, `make demo1`, every test server, a bare
+    `uvicorn` — this is exactly `request.client.host`, so the local behaviour is unchanged. uvicorn
+    rewrites the ASGI scope and strips no header, so the full chain is still readable here.
+    """
+    hops = [
+        hop.strip() for value in request.headers.getlist("x-forwarded-for") for hop in value.split(",") if hop.strip()
+    ]
+    if hops:
+        return hops[-1]
+    return request.client.host if request.client else "unknown"
 
 
 #: The sliding window §17's `ACCESS_RATE_LIMIT_PER_MIN` is measured over.
@@ -403,7 +433,7 @@ class AccessGateMiddleware:
         mcp = path == MCP_MOUNT_PREFIX or path.startswith(MCP_MOUNT_PREFIX + "/")
         if not (chat_post or mcp):
             return False
-        client = request.client.host if request.client else "unknown"
+        client = rate_limit_key(request)
         if mcp and is_own_loopback_client(request, client):
             return False  # the app talking to itself never spends a visitor's budget
         return not self.limiter.allow(client)

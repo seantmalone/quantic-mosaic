@@ -196,11 +196,61 @@ async def test_the_per_ip_rate_limit_covers_post_chat(web):
 # --------------------------------------------------------------------------------------
 
 
+#: `FORWARDED_ALLOW_IPS` is what `uvicorn.Config` reads when no `forwarded_allow_ips=` is passed
+#: (`config.py:356`), so setting it to `*` gives the test server exactly the trust configuration the
+#: image's `--forwarded-allow-ips='*'` gives the deployed one. That matters: under a *concrete*
+#: trust list uvicorn scans the chain in reverse and lands on the last untrusted hop by itself, so
+#: a test on the default configuration would pass whatever the limiter keyed on. `'*'` sets
+#: `always_trust`, and only then does `request.client.host` become the caller-supplied first entry.
+EDGE_TRUST = ("FORWARDED_ALLOW_IPS", "*")
+
+
+async def test_a_forged_forwarded_for_prefix_cannot_rotate_the_rate_limit_bucket(web, monkeypatch):
+    """§14's denial-of-service row: the limit must not hand the caller its own bucket selector.
+
+    The deployed image runs uvicorn with `--forwarded-allow-ips='*'` so the scheme is right behind
+    Render's edge. `'*'` sets uvicorn's `always_trust`, under which
+    `_TrustedHosts.get_trusted_client_address` returns the **first** `X-Forwarded-For` entry — and
+    since each proxy *appends*, the first entry is whatever the caller sent. Keying on
+    `request.client.host` would therefore let a hostile caller rotate the header for an unlimited
+    supply of fresh 30-per-minute budgets: strictly worse than the single shared bucket the flags
+    were added to remove. `rate_limit_key()` keys on the last hop instead.
+
+    Two requests, different forged prefixes, same final hop — the second must be refused.
+    """
+    monkeypatch.setenv(*EDGE_TRUST)
+    async with web("rag_only.json", access_rate_limit_per_min=1) as client:
+        question = {"message": "What is the weather in Berlin?"}
+        first = await client.post("/chat", json=question, headers={"X-Forwarded-For": "1.1.1.1, 198.51.100.4"})
+        second = await client.post("/chat", json=question, headers={"X-Forwarded-For": "2.2.2.2, 198.51.100.4"})
+
+    assert first.status_code == 200
+    assert second.status_code == 429, "a rotated prefix is not a new client"
+
+
+async def test_two_visitors_behind_the_edge_still_get_their_own_budgets(web, monkeypatch):
+    """And the fix P20 set out to make still holds: the bucket is per visitor, not one for all.
+
+    This is the other half of the pair above — pinning only that forged prefixes collapse together
+    would also pass if the limiter had quietly gone back to one shared bucket behind the edge.
+    """
+    monkeypatch.setenv(*EDGE_TRUST)
+    async with web("rag_only.json", access_rate_limit_per_min=1) as client:
+        question = {"message": "What is the weather in Berlin?"}
+        one = await client.post("/chat", json=question, headers={"X-Forwarded-For": "198.51.100.4"})
+        two = await client.post("/chat", json=question, headers={"X-Forwarded-For": "198.51.100.5"})
+        again = await client.post("/chat", json=question, headers={"X-Forwarded-For": "198.51.100.4"})
+
+    assert (one.status_code, two.status_code) == (200, 200), "two addresses, two budgets"
+    assert again.status_code == 429, "and each budget is still spent by its own client"
+
+
 async def test_four_turns_in_a_row_all_answer_because_the_apps_own_loopback_client_is_exempt(web):
     """The app must never 429 itself (§17).
 
-    The limit is keyed on `request.client.host`, and the agent reaches its own MCP mount over
-    loopback: `initialize`, `tools/list`, the long-lived `GET`, every `tools/call`, and the
+    The limit is keyed on the client address (`rate_limit_key()`, which is `request.client.host`
+    whenever no forwarded header arrives — every run mode but the image), and the agent reaches its
+    own MCP mount over loopback: `initialize`, `tools/list`, the long-lived `GET`, every `tools/call`, and the
     `client.discover()` behind each `GET /health` all arrive from `127.0.0.1`. Sharing one bucket
     with the visitor means a single tool-using turn spends ~10 of the budget, so a grader who asks
     a few questions in a minute silently gets `partial` answers with the tools refused underneath.

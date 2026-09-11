@@ -63,12 +63,16 @@ EXPOSE 8000
 # only value that can name a peer whose address Render does not publish and which changes without
 # notice; it is safe here because nothing but the edge can route to this port.
 #
-# What it buys, stated precisely: with `'*'` uvicorn's `ProxyHeadersMiddleware` takes the **first**
-# entry of `X-Forwarded-For`, so ordinary traffic — a browser that sends no such header — keys on
-# the visitor's own address, which is the fix. A caller that deliberately forges the header can
-# still rotate buckets; that is a milder failure than one bucket for everybody, it is a drive-by
-# speed bump over entirely synthetic data either way, and nothing authorises on it — the access
-# gate is `secrets.compare_digest` and the write path is the confirmation gate. `web/api.py`'s
-# `request_is_https()` reads `X-Forwarded-Proto` itself rather than relying on this flag, because
-# every other way this app runs (`make run`, the test servers) passes no proxy flags at all.
+# What `'*'` does NOT do, and why the limiter does not rely on it: `'*'` sets uvicorn's
+# `always_trust`, under which `_TrustedHosts.get_trusted_client_address` returns the **first** entry
+# of `X-Forwarded-For` (uvicorn 0.52.4), so `request.client.host` in the container is whatever the
+# caller put in front of the chain. Harmless for the scheme rewrite; unusable as a denial-of-service
+# bucket, since rotating the header would mint unlimited fresh §17 budgets — worse than the single
+# shared bucket these flags were added to fix. So `web/api.py`'s `rate_limit_key()` keys the limiter
+# on the **last** entry instead: each proxy appends the address it received the request from, so the
+# final entry is the edge's own observation of the caller and no forged prefix can displace it. The
+# flags stay for the scheme; the bucket selector is never taken from attacker-controlled input.
+# `request_is_https()` likewise reads `X-Forwarded-Proto` itself rather than relying on this flag,
+# because every other way this app runs (`make run`, the test servers) passes no proxy flags at all
+# — and forging that header only costs the forger their own cookie's `Secure`.
 CMD ["sh", "-c", "uvicorn hrmosaic.web.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --proxy-headers --forwarded-allow-ips='*'"]

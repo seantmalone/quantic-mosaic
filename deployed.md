@@ -112,18 +112,19 @@ headers, and the endpoint stays deliberately reachable for exactly that.
   TLS at its edge and forwards plain http into the container, so uvicorn has to be told to read the
   forwarded headers: the image's CMD carries `--proxy-headers --forwarded-allow-ips='*'`, which is
   safe precisely because the container port is reachable through that edge and through nothing
-  else. With it, `request.client.host` is the **visitor's** address, so `ACCESS_RATE_LIMIT_PER_MIN`
-  (30) is one bucket per client on Render, as it already was locally and under Docker; before P20
-  it behaved as one shared 30/min bucket across every visitor, because the address uvicorn saw was
-  the edge's. Stated precisely, because `'*'` is a broad grant: with it uvicorn takes the **first**
-  entry of `X-Forwarded-For`, so a browser that sends no such header keys on its own address, while
-  a caller that deliberately forges one can still rotate buckets. That is a milder failure than a
-  single bucket for everybody, and nothing authorises on the value — the gate is
+  else. With it the scheme is `https` again, so the `mosaic_access` cookie ships `Secure` as
+  constraint 9 requires, and `ACCESS_RATE_LIMIT_PER_MIN` (30) is one bucket per client on Render as
+  it already was locally and under Docker; before P20 it behaved as one shared 30/min bucket across
+  every visitor, because the address uvicorn saw was the edge's. The limit does **not** rely on the
+  flag to decide whose bucket it is: `'*'` is a broad grant, and under it uvicorn reports the
+  **first** `X-Forwarded-For` entry as the client — which is whatever the caller sent, since each
+  proxy appends. So `web/api.py`'s `rate_limit_key()` keys on the **last** entry, the one the edge
+  itself appended, and no forged prefix can move a caller to a fresh budget. `request_is_https()`
+  likewise reads `X-Forwarded-Proto` itself for the cookie flag, and for nothing else — every other
+  way this app runs (`make run`, the test servers) passes no proxy flags, and forging that header
+  only makes the forger's own cookie `Secure`. Nothing authorises on either value: the gate is
   `secrets.compare_digest` against `APP_ACCESS_TOKEN`, the write path is the confirmation gate, and
-  every record behind both is synthetic. `web/api.py`'s `request_is_https()` still reads
-  `X-Forwarded-Proto` itself for the cookie flag, and for nothing else — every other way this app
-  runs (`make run`, the test servers) passes no proxy flags, and forging that header only makes the
-  forger's own cookie `Secure`.
+  every record behind both is synthetic.
 - **Post-grading rotation:** `gh secret set` is not involved — the token is a Render env var. Rotate
   it with `RENDER_API_KEY=… python scripts/provision_render.py` after deleting `APP_ACCESS_TOKEN`
   from the service (the script generates a new one only when the service carries none, precisely so

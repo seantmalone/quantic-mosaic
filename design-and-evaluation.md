@@ -721,14 +721,14 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 1,901 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 1,911 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
 **The coverage gate is the same command locally and in CI.** `make coverage` and the `test` job
 both run `coverage run --branch --source=src/hrmosaic -m pytest -q`, write `coverage.xml` and then
 enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 87% of
-branches over 7,110 statements** on 2026-09-11 (94% combined, which is the number the gate reads),
+branches over 7,115 statements** on 2026-09-11 (94% combined, which is the number the gate reads),
 so the 90 floor is a regression guard rather than a target to grow into. No third-party coverage
 service and no badge token is involved — §15.2's claim that nothing CI holds is a credential stands
 unchanged.

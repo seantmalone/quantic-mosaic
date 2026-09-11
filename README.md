@@ -45,12 +45,12 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 1,901 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 1,911 tests as of
 2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-11: **95% of statements and 87% of branches
-over 7,110 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+over 7,115 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
