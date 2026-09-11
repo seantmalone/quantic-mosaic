@@ -1,19 +1,19 @@
 {
- "generated_at": 1789074910731546,
+ "generated_at": 1789089843199013,
  "target": "deployed",
  "dataset_sha": "a501f288a6589730bc570507bbce06080876fa192a31d2ef821b1bc74d776758",
  "variants": [
   {
    "variant": "baseline",
-   "run_id": "r_1789069158_baseline",
+   "run_id": "r_1789086979_baseline",
    "judged": true,
    "judge_status": "judged",
    "metrics": {
-    "groundedness_mean": 1.0,
-    "citation_accuracy_mean": 0.9138764414248521,
+    "groundedness_mean": 0.9821428571428571,
+    "citation_accuracy_mean": 0.9248861733728562,
     "cit_resolve_mean": 1.0,
     "doc_recall_mean": 0.9736842105263158,
-    "tool_selection_accuracy": 0.9868131868131869,
+    "tool_selection_accuracy": 0.9923076923076923,
     "arg_correctness_rate": 1.0,
     "workflow_completion": 0.8461538461538461,
     "over_refusal_rate": 0.0,
@@ -23,58 +23,58 @@
   },
   {
    "variant": "dense_only_k2",
-   "run_id": "r_1789069770_dense_only_k2",
+   "run_id": "r_1789087461_dense_only_k2",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 1.0,
-    "doc_recall_mean": 0.9342105263157895,
-    "tool_selection_accuracy": 0.9868131868131869,
+    "doc_recall_mean": 0.9605263157894737,
+    "tool_selection_accuracy": 0.9923076923076923,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.8076923076923077,
+    "workflow_completion": 0.8461538461538461,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.7692307692307693
+    "strict_pass_rate": 0.8461538461538461
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.0,
-    "doc_recall_mean": -0.0395,
+    "doc_recall_mean": -0.0132,
     "tool_selection_accuracy": 0.0,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": -0.0385,
+    "workflow_completion": 0.0,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": -0.0385
+    "strict_pass_rate": 0.0385
    }
   },
   {
    "variant": "no_structured_tools",
-   "run_id": "r_1789070405_no_structured_tools",
+   "run_id": "r_1789087895_no_structured_tools",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.9615384615384616,
-    "doc_recall_mean": 0.9736842105263158,
+    "doc_recall_mean": 0.9868421052631579,
     "tool_selection_accuracy": 0.9153846153846155,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.6538461538461539,
+    "workflow_completion": 0.6153846153846154,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.6538461538461539
+    "strict_pass_rate": 0.5769230769230769
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": -0.0385,
-    "doc_recall_mean": 0.0,
-    "tool_selection_accuracy": -0.0714,
+    "doc_recall_mean": 0.0132,
+    "tool_selection_accuracy": -0.0769,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": -0.1923,
+    "workflow_completion": -0.2308,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": -0.1538
+    "strict_pass_rate": -0.2308
    }
   }
  ],
@@ -82,19 +82,43 @@
   "supported": false,
   "reason": null,
   "baseline": 0.8462,
-  "no_structured_tools": 0.6538,
-  "delta": -0.1923,
+  "no_structured_tools": 0.6154,
+  "delta": -0.2308,
   "threshold": 0.25
  },
  "flips": [
   {
-   "item_id": "onboarding-001",
+   "item_id": "inj-001",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
+   "item_id": "remote-002",
    "variant": "dense_only_k2",
    "baseline_passed": true,
    "variant_passed": false
   },
   {
+   "item_id": "expenses-002",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
+   "item_id": "onboarding-001",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
    "item_id": "equipment-001",
+   "variant": "dense_only_k2",
+   "baseline_passed": true,
+   "variant_passed": false
+  },
+  {
+   "item_id": "remote-004",
    "variant": "dense_only_k2",
    "baseline_passed": false,
    "variant_passed": true
@@ -106,10 +130,10 @@
    "variant_passed": false
   },
   {
-   "item_id": "equipment-001",
+   "item_id": "remote-002",
    "variant": "no_structured_tools",
-   "baseline_passed": false,
-   "variant_passed": true
+   "baseline_passed": true,
+   "variant_passed": false
   },
   {
    "item_id": "profile-001",
