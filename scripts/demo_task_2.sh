@@ -123,6 +123,26 @@ if ticket_id not in answer:
     print(f"the answer never names {ticket_id}, the ticket this turn created", file=sys.stderr)
     raise SystemExit(1)
 print(f"-- the confirmed write is reported as done: {ticket_id} is named in the answer")
+
+# ...and nothing under "Next steps:" sends the reader off to file the request that now exists.
+# The same live answer that denied the ticket also ended "Log into MosaicOne and submit your PTO
+# request for 15-17 September 2026", one line under the block stating the ticket.
+paragraph = next((part for part in answer.split("\n\n") if part.startswith("Next steps:")), "")
+steps = [line[2:] for line in paragraph.splitlines() if line.startswith("- ")]
+# Mirrors `agent/outcome.py`'s check without importing it: an imperative verb at the head of a
+# clause plus the ticket it made in the same clause. "Your manager will open the request" is a
+# statement about someone else and is left alone, exactly as the step leaves it alone.
+directive = re.compile(
+    r"(?:^|[,;:.]\s*|\b(?:and|then|or)\s+)"
+    r"(?:please\s+|make sure to\s+|be sure to\s+|you (?:must|should|need to|have to|can)\s+)?"
+    r"(?:submit|file|open|raise|create)\b[^.,;:]*\b(?:request|ticket|case)\b",
+    re.I,
+)
+directives = [step for step in steps if directive.search(step)]
+if directives:
+    print(f"a next step still tells the user to file the request: {directives}", file=sys.stderr)
+    raise SystemExit(1)
+print(f"-- and no next step asks for it again ({len(steps)} step(s) kept)")
 print()
 
 citations = turn.get("citations") or []

@@ -816,6 +816,13 @@ it exists because of a measured failure: on 2026-09-11 demo 2's confirmation was
 requests on your behalf. You must submit the request directly in MosaicOne…"* and never named the ticket. `synthesize.j2` rule 10 tells the model the
 same thing; the step is what makes it true whatever the model writes.
 
+The step covers **`next_steps` as well as the blocks**, because `render_answer` puts both in front of the same reader: the same demo-2 answer that
+denied the ticket also closed with *"Log into MosaicOne and submit your PTO request for 15–17 September 2026"*, one line under the block naming it. A
+next step that tells the reader to go and perform the action the result shows was performed is **dropped**, on the imperative twin of the escalation
+check and just as narrow — an imperative verb for the performed tool at the head of a clause, *plus* one of that tool's own objects (`ticket`,
+`request`, `case`) in the same clause. "Watch for your manager's approval in MosaicOne" and "Your manager will receive the request" are not directives
+at the reader and survive; so does any step naming the id, which is talking about the thing that exists. The rest of the model's advice is untouched.
+
 **G1's candidate set includes the compliance engine's evidence (P13).** Tool 4 is deterministic and every requirement it evaluates carries an
 `evidence` block naming a **committed** chunk, resolved by `mcpserver/rules.py` from a `(doc_id, heading_path)` pair in `corpus/rules.yml`. Nothing had
 ever scored those ids, so the gate could not see them and a turn could reach a correct, cited verdict and be refused for want of evidence. The
@@ -2865,8 +2872,9 @@ September to Thursday 17 September 2026 — and can you open the request for me?
 **Expected outcome.** A balance-aware, cited answer (13.5 days available as of 1 September 2026 covers 3 days; the 5-business-day notice requirement
 is met; manager approval is required per `manager-approval-matrix`), followed by a `MOCK-HR-<n>` ticket in `hr-timeoff`, visible on dashboard page 8's
 confirmation ledger and mock-action log. **The resumed turn's answer opens with the ticket id** — the outcome-consistency step of §7.4 states the
-performed write first, and replaces any escalation that denies it — so `tests/e2e/test_demo_tasks.py` asserts the `MOCK-HR-<n>` id appears in the
-answer text, and `scripts/demo_task_2.sh` asserts the same id from the confirm response.
+performed write first, replaces any escalation that denies it, and drops any next step telling the reader to go and file the request — so
+`tests/e2e/test_demo_tasks.py` asserts the `MOCK-HR-<n>` id appears in the answer text and that nothing under "Next steps:" asks for the request
+again, and `scripts/demo_task_2.sh` asserts both against the confirm response.
 
 **Narration.** The same five DEMO.6 elements plus the beat: *"Watch — the ticket does not exist until I click Confirm. And it is not the prompt that
 stops it: the MCP server itself refuses the call without a one-time token bound to these exact arguments. Replay the token and it is refused; change

@@ -21,6 +21,15 @@ Two moves, both read from the tool result rather than from model output:
    created. Only that kind of escalation: G5's sensitive-topic block names a People Operations
    contact and would be collateral damage, so the check is denial *plus* a word for the action the
    performed tool performs, and nothing else is touched.
+3. **A next step that sends the reader off to do it themselves is dropped.** `next_steps` is
+   rendered into the same answer as the blocks, so the same contradiction reads the same way: the
+   demo-2 answer stated the ticket and then closed with *"Log into MosaicOne and submit your PTO
+   request for 15-17 September 2026."* The check is the imperative twin of the escalation one and
+   just as narrow — an imperative verb for the performed tool at the head of a clause, *plus* one
+   of that tool's own objects in the same clause. "Watch for your manager's approval in MosaicOne"
+   and "Dana Whitfield approves request MOCK-HR-000123" are not directives at the reader and
+   survive, and so does any step naming the id, which is talking about the thing that exists
+   rather than asking for another one.
 
 **A success status is proof of a confirmation.** `mcpserver/confirm.py` mints a token only inside
 `POST /chat/confirm`, after a human clicks Confirm, and `mock_writes.confirmation_token` is `NOT
@@ -32,6 +41,7 @@ confirmation", asked where the answer is written down.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -66,6 +76,35 @@ ACTION_WORDS: dict[str, tuple[str, ...]] = {
     "create_mock_hr_ticket": ("ticket", "request", "open", "file", "submit", "raise", "create"),
     "draft_hr_email": ("email", "draft", "message", "write", "send", "compose"),
 }
+
+#: A next step is a directive when a clause *opens* with one of these verbs — the imperative mood,
+#: which is the whole difference between "Submit your PTO request in MosaicOne" (an instruction to
+#: the reader) and "Your manager will receive the request" (a statement about someone else).
+IMPERATIVES: dict[str, tuple[str, ...]] = {
+    "create_mock_hr_ticket": ("submit", "file", "open", "raise", "create", "log"),
+    "draft_hr_email": ("send", "write", "compose", "draft", "email"),
+}
+
+#: ...and the object of that verb, in the same clause, has to be the thing the tool made. Without
+#: it, "Open the policy and read section 4" would be read as an instruction to file a request.
+#: The subject of the request — "PTO" — is deliberately **not** an object: "Open the PTO &
+#: Holidays Policy" names the topic, not the ticket, and dropping that step would lose the reader
+#: a real instruction to keep a wording the model is free to vary.
+ACTION_OBJECTS: dict[str, tuple[str, ...]] = {
+    "create_mock_hr_ticket": ("ticket", "request", "case"),
+    "draft_hr_email": ("email", "draft", "message", "note"),
+}
+
+#: Clause boundaries. "Log into MosaicOne and submit your PTO request" is two clauses, and only
+#: the second one is the directive that contradicts a ticket that already exists.
+_CLAUSE = re.compile(r"[,;:.!?]|\band\b|\bthen\b|\bor\b|\bbut\b|\bso\b")
+
+#: Politeness and modality in front of the verb, stripped one layer at a time so that
+#: "Please make sure to submit ..." reaches "submit" the way a bare imperative does.
+_LEAD_IN = re.compile(
+    r"^(?:please|also|first|next|finally|be sure to|make sure to|remember to|go and|go to|"
+    r"you must|you should|you need to|you will need to|you have to|you can)\s+"
+)
 
 
 @dataclass(frozen=True)
@@ -113,17 +152,21 @@ class PerformedWrite:
 
 @dataclass
 class Outcome:
-    """The blocks after the step, and what it did to them."""
+    """The blocks and next steps after the step, and what it did to them."""
 
     blocks: list[dict[str, Any]]
+    #: The next steps that survived, in order. The same list when nothing contradicted the write.
+    next_steps: list[str] = field(default_factory=list)
     #: Whether the outcome block was inserted. False when the model already stated the id.
     stated: bool = False
     #: Indexes **into the model's own block list**, before the outcome block is inserted.
     replaced: list[int] = field(default_factory=list)
+    #: Indexes into the model's own `next_steps` of the directives that were dropped.
+    dropped: list[int] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
-        return self.stated or bool(self.replaced)
+        return self.stated or bool(self.replaced) or bool(self.dropped)
 
 
 def performed_write(envelopes: Iterable[Any]) -> PerformedWrite | None:
@@ -159,12 +202,40 @@ def denies(text: str, tool_name: str) -> bool:
     return any(word in lowered for word in ACTION_WORDS.get(tool_name, ()))
 
 
-def apply(blocks: Sequence[Mapping[str, Any]], envelopes: Iterable[Any]) -> Outcome:
-    """The pure rule: state the write first, and replace an escalation that denies it. Mutates nothing."""
+def directs(text: str, tool_name: str) -> bool:
+    """Does this next step tell the reader to go and do what `tool_name` has already done?
+
+    The imperative twin of `denies`: an imperative verb for the tool at the head of a clause, and
+    one of that tool's own objects in the same clause. Both halves are needed — "Your manager will
+    receive the request" has the object and no imperative, "Open the policy" has the imperative and
+    no object, and neither contradicts a ticket that exists.
+    """
+    verbs = IMPERATIVES.get(tool_name, ())
+    objects = ACTION_OBJECTS.get(tool_name, ())
+    if not verbs or not objects:
+        return False
+    for clause in _CLAUSE.split(text.lower()):
+        head = clause.strip()
+        while match := _LEAD_IN.match(head):
+            head = head[match.end() :]
+        words = head.split()
+        if words and words[0].strip("\"'()“”‘’") in verbs and any(word in head for word in objects):
+            return True
+    return False
+
+
+def apply(
+    blocks: Sequence[Mapping[str, Any]],
+    envelopes: Iterable[Any],
+    *,
+    next_steps: Sequence[str] = (),
+) -> Outcome:
+    """The pure rule: state the write first, and drop what contradicts it. Mutates nothing."""
     write = performed_write(envelopes)
     body = [dict(block) for block in blocks]
+    steps = [str(step) for step in next_steps]
     if write is None:
-        return Outcome(blocks=body)
+        return Outcome(blocks=body, next_steps=steps)
 
     replaced: list[int] = []
     for index, block in enumerate(body):
@@ -174,20 +245,32 @@ def apply(blocks: Sequence[Mapping[str, Any]], envelopes: Iterable[Any]) -> Outc
             block["citations"] = []
             replaced.append(index)
 
+    kept: list[str] = []
+    dropped: list[int] = []
+    for index, step in enumerate(steps):
+        # A step naming the id is talking about the ticket that exists, not asking for another.
+        if write.write_id in step or not directs(step, write.tool_name):
+            kept.append(step)
+        else:
+            dropped.append(index)
+
     if any(write.write_id in str(block.get("text") or "") for block in blocks):
-        return Outcome(blocks=body, replaced=replaced)
+        return Outcome(blocks=body, next_steps=kept, replaced=replaced, dropped=dropped)
     statement = {"type": "recommendation", "text": write.statement, "citations": []}
-    return Outcome(blocks=[statement, *body], stated=True, replaced=replaced)
+    return Outcome(blocks=[statement, *body], next_steps=kept, stated=True, replaced=replaced, dropped=dropped)
 
 
 __all__ = [
+    "ACTION_OBJECTS",
     "ACTION_WORDS",
     "DENIALS",
+    "IMPERATIVES",
     "STEP_NAME",
     "WRITE_SUCCESS",
     "Outcome",
     "PerformedWrite",
     "apply",
     "denies",
+    "directs",
     "performed_write",
 ]

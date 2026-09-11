@@ -707,15 +707,22 @@ class Orchestrator:
 
         # -- 5b. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
         # A write the user confirmed and the server performed is reported from the tool result,
-        # not from model output: the outcome goes first with its id, and an escalation denying
-        # the very action the result shows was performed is replaced by a pointer to it. The
-        # measured failure was a `created` ticket answered with "I cannot open PTO requests on
-        # your behalf" (§7.4's outcome-consistency paragraph).
-        consistent = outcome_consistency.apply(relabelled.blocks, turn.envelopes)
+        # not from model output: the outcome goes first with its id, an escalation denying the
+        # very action the result shows was performed is replaced by a pointer to it, and a next
+        # step telling the reader to go and perform it themselves is dropped. The measured
+        # failure was a `created` ticket answered with "I cannot open PTO requests on your
+        # behalf" and "Log into MosaicOne and submit your PTO request" in the same answer
+        # (§7.4's outcome-consistency paragraph). `next_steps` goes through the step for the
+        # same reason the blocks do: `render_answer` puts both in front of the same reader.
+        consistent = outcome_consistency.apply(
+            relabelled.blocks,
+            turn.envelopes,
+            next_steps=[str(step) for step in (raw.get("next_steps") or [])],
+        )
 
         answer = AnswerSchema(
             blocks=[AnswerBlock.model_validate(block) for block in consistent.blocks],
-            next_steps=[str(step) for step in (raw.get("next_steps") or [])],
+            next_steps=consistent.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
         if turn.write_failed:

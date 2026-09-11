@@ -201,3 +201,112 @@ def test_a_success_status_with_no_id_is_not_a_write_to_report():
     idless = _ToolEnvelope(name="create_mock_hr_ticket", result_json='{"status": "created"}')
 
     assert outcome.performed_write([idless]) is None
+
+
+# --------------------------------------------------------------------------------------
+# `next_steps` — the same contradiction, one line further down the same answer
+# --------------------------------------------------------------------------------------
+
+#: Exactly what the recorded demo-2 synthesis emits (`tests/fixtures/llm_scripts/demo_task_2.json`).
+DEMO_2_STEPS = [
+    "Log into MosaicOne and submit your PTO request for 15–17 September 2026.",
+    "Your manager will receive the request and must approve it in writing within MosaicOne.",
+    "Once approved, the three days will be deducted from your PTO balance.",
+]
+
+
+def test_a_next_step_telling_the_reader_to_file_the_request_is_dropped():
+    """The twin of the escalation case: `render_answer` puts next steps in the same answer."""
+    result = outcome.apply([POLICY_BLOCK], envelopes(TICKET), next_steps=DEMO_2_STEPS)
+
+    assert result.next_steps == DEMO_2_STEPS[1:], "only the directive to go and file it goes"
+    assert result.dropped == [0], "the model's own next_steps index"
+    assert result.changed
+
+
+def test_a_next_step_that_is_not_aimed_at_the_reader_survives():
+    """A statement about someone else carries the object and no imperative at the reader."""
+    steps = [
+        "Watch for your manager's approval in MosaicOne.",
+        "Dana Whitfield approves request MOCK-HR-000123 in hr-timeoff.",
+        "Your manager will receive the request and must approve it in writing.",
+    ]
+
+    result = outcome.apply([POLICY_BLOCK], envelopes(TICKET), next_steps=steps)
+
+    assert result.next_steps == steps
+    assert result.dropped == []
+
+
+def test_a_next_step_that_names_the_ticket_survives_even_in_the_imperative():
+    """It is talking about the ticket that exists, not asking for a second one."""
+    steps = ["Open MOCK-HR-000002 in the mock-action log if you want to see the request."]
+
+    result = outcome.apply([POLICY_BLOCK], envelopes(TICKET), next_steps=steps)
+
+    assert result.next_steps == steps
+    assert result.dropped == []
+
+
+def test_an_imperative_about_something_else_survives_the_write():
+    """An imperative verb is not enough: the object has to be the thing the tool made."""
+    steps = [
+        "Open the PTO & Holidays Policy and read section 4 before your manager replies.",
+        "Please submit your expense report separately in the finance portal.",
+    ]
+
+    result = outcome.apply([POLICY_BLOCK], envelopes(TICKET), next_steps=steps)
+
+    assert result.next_steps == steps
+    assert result.dropped == []
+
+
+def test_politeness_in_front_of_the_verb_does_not_hide_the_directive():
+    steps = [
+        "Please submit the PTO request in MosaicOne yourself.",
+        "You need to file a ticket for the three days.",
+        "Make sure to open a request with HR.",
+    ]
+
+    result = outcome.apply([POLICY_BLOCK], envelopes(TICKET), next_steps=steps)
+
+    assert result.next_steps == []
+    assert result.dropped == [0, 1, 2]
+
+
+def test_a_next_step_telling_the_reader_to_write_the_email_is_dropped():
+    steps = [
+        "Send the email to your manager yourself once you have checked the dates.",
+        "Your manager usually replies within two business days.",
+    ]
+
+    result = outcome.apply([POLICY_BLOCK], envelopes(DRAFT), next_steps=steps)
+
+    assert result.next_steps == steps[1:]
+    assert result.dropped == [0]
+
+
+def test_next_steps_are_untouched_when_nothing_was_performed():
+    """No write, no contradiction: the gated attempt leaves the model's advice alone."""
+    for turn_envelopes in (envelopes(REJECTED), [_ToolEnvelope(name="check_pto_balance", result_json="{}")]):
+        result = outcome.apply([POLICY_BLOCK], turn_envelopes, next_steps=DEMO_2_STEPS)
+
+        assert result.next_steps == DEMO_2_STEPS
+        assert result.dropped == []
+        assert not result.changed
+
+
+def test_next_steps_default_to_nothing_when_the_caller_passes_none():
+    """`apply` is called for the blocks alone in the unit tests above; that stays legal."""
+    assert outcome.apply([POLICY_BLOCK], envelopes(TICKET)).next_steps == []
+
+
+def test_directs_needs_both_halves_for_the_tool_that_performed_the_write():
+    """The matrix the two word lists encode, stated once."""
+    assert outcome.directs("Submit your PTO request in MosaicOne.", "create_mock_hr_ticket")
+    assert not outcome.directs("Submit your PTO request in MosaicOne.", "draft_hr_email")
+    assert not outcome.directs("The request was submitted for you.", "create_mock_hr_ticket")
+    assert not outcome.directs("Open the policy document.", "create_mock_hr_ticket")
+    assert not outcome.directs("Submit your PTO request.", "check_pto_balance"), (
+        "a read-only tool performs nothing, so no advice can contradict it"
+    )

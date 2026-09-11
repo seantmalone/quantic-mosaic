@@ -43,7 +43,8 @@ class DemoExpectation:
     min_distinct_docs_cited: int
     #: A write the user confirmed is reported **as done, with its id**, in the answer text (P22).
     #: The measured failure it pins: the ticket was created, the result reached the synthesis
-    #: prompt verbatim, and the answer said "I cannot open PTO requests on your behalf".
+    #: prompt verbatim, and the answer said "I cannot open PTO requests on your behalf" — and,
+    #: under `next_steps`, "Log into MosaicOne and submit your PTO request".
     answer_states_the_write_id: bool = False
     forbidden_tools: list[str] = field(default_factory=list)
     required_tools: list[str] = field(default_factory=list)
@@ -127,6 +128,12 @@ def _spans(store, turn_id: str) -> list[dict]:
     for row in rows:
         row["payload"] = json.loads(row.pop("payload_json"))
     return rows
+
+
+def _rendered_next_steps(answer: str) -> list[str]:
+    """The `- ` lines of `render_answer`'s "Next steps:" paragraph, as the reader sees them."""
+    paragraph = next((part for part in answer.split("\n\n") if part.startswith("Next steps:")), "")
+    return [line[2:] for line in paragraph.splitlines() if line.startswith("- ")]
 
 
 def check(expectation: DemoExpectation, response: dict, spans: list[dict], store) -> None:
@@ -266,6 +273,18 @@ async def test_demo_task_2_pto_request_through_confirm_to_write(web, store):
     assert blocks[0]["type"] == "recommendation" and blocks[0]["text"].startswith("Done: HR ticket ")
     assert "escalation" not in {block["type"] for block in blocks}
     assert "cannot open PTO requests" not in body["answer"]
+
+    # The same contradiction one line further down the same answer: the recorded synthesis also
+    # ends `next_steps` with "Log into MosaicOne and submit your PTO request for 15–17 September
+    # 2026", which `render_answer` prints under the blocks. A reader told the ticket exists must
+    # not then be told to go and file it, so the directive is dropped and the rest is kept.
+    steps = _rendered_next_steps(body["answer"])
+    assert steps, "the answer still ends with the advice that does not contradict the ticket"
+    assert not any("submit your PTO request" in step for step in steps), (
+        f"a next step still tells the user to file the request that exists: {steps}"
+    )
+    assert "Log into MosaicOne" not in body["answer"]
+    assert any("manager" in step for step in steps), "what happens next to the ticket is still said"
 
     write = store.execute("SELECT id, kind, employee_id, payload_json FROM mock_writes").dicts()[0]
     assert write["id"].startswith("MOCK-HR-")

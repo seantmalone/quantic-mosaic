@@ -167,6 +167,8 @@ Tick all five on camera:
       ticket in the `hr-timeoff` queue and the new row on the dashboard's mock-action log. Say why
       that first line is deterministic — it is built from the tool result, not from what the model
       wrote, so a confirmed write can never be reported as something the assistant declined to do.
+      The same step also clears the **next steps** of anything that sends the viewer off to file
+      the request themselves, so nothing under "Next steps:" contradicts the ticket on screen.
 
 ### The safety beat (do not rush this — it is the best 40 seconds in the demo)
 
