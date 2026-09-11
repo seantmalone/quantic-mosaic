@@ -721,7 +721,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (unit, contract, integration, architecture and e2e-with-stub; 1,815 tests as of 2026-09-11), then `scripts/pii_check.py` |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **`pytest -q` over the whole suite** (unit, contract, integration, architecture and e2e-with-stub; 1,844 tests as of 2026-09-11), then `scripts/pii_check.py` |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
