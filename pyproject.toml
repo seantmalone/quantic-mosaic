@@ -81,3 +81,11 @@ known-third-party = ["mcp", "mcp_types"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+# Constraint 12 asks for "output pristine (no warnings)" — enforced here rather than merely
+# asserted in a report. The list form leaves room for a targeted
+# `"ignore:<message>:DeprecationWarning:<module>"` entry if a pinned dependency ever needs one;
+# every pin is exact, so nothing can start warning without a deliberate commit that says so.
+filterwarnings = ["error"]
+# `--strict-markers`: a typo'd mark (`@pytest.mark.anyoi`) is an error, not a silently inert test.
+# `--strict-config`: an unknown key in this very table is an error too — the same class of typo.
+addopts = "--strict-markers --strict-config"
