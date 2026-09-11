@@ -237,6 +237,30 @@ awaits Sean's decision because it re-drives the evaluation and re-labels.
 
 ---
 
+## 2026-09-10 — Wave 1 and Wave 2 implemented; streaming verified live
+
+- **Wave 1 (P14, 1,745 tests):** query-embedding memo (the same question was embedded twice on most
+  turns), trace-store reads off the request path, the limiter documented with the measured account
+  limits, a contamination gate that refuses to publish a run with any failover or retry, and the
+  Gemini price table corrected for the paid tier.
+- **Wave 2 A–D (P15, 1,767 tests), one commit each:** the act loop's closing step is one sentence
+  instead of a discarded 224-token answer; synthesis output trimmed on the two de-risked clauses;
+  search hits carry the whole passage (with the quarantine shield: a poisoned chunk's text never
+  reaches the model); the model-facing tool envelopes drop telemetry keys, with one shared
+  definition of which envelopes count as evidence.
+- **Wave 2 E (P16, 1,814 tests):** the answer streams to the browser block by block and is replaced
+  by the final version when the guardrails finish; the chat page narrates each step as it starts
+  ("Searching the policy library…", "Checking your PTO balance…", "Writing the answer…"); the
+  per-string span cap raised to 24 KB so a search result is stored whole.
+- **Live verification** of the streaming path against the real Anthropic API on a local server: the
+  first answer block arrived while later blocks were still being written, eleven progress lines, a
+  fully cited answer, no errors. Reviewers had flagged this as the one thing tests could not prove.
+
+Next: one deploy carrying all three phases, the final three-arm sweep with the judge, blind labels,
+and the before / after-P13 / final comparison.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
