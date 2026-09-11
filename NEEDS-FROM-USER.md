@@ -7,8 +7,10 @@ Render account, the GitHub App, a payment method, the Turso token and the Render
 2026-09-10, and enabled paid billing on the judge Cloud project the same day; the service is live
 at `https://mosaic-hr-copilot.onrender.com`, the published evaluation sweep ran against it, and the
 cold start was measured on it. **Two gates are left, both irreducibly human:** recording the demo
-video (**gate 6**) and submitting (**gate 7**), plus one confirmation at submission time that the
-`quantic-grader` invitation shows as sent or accepted.
+video (**gate 6**) and submitting (**gate 7**). The `quantic-grader` invitation is **accepted** —
+re-verified 2026-09-11, `permission: read` with no pending invitation — and one optional
+three-minute item (**2b**) would make the deployed MCP endpoint externally attachable and remove the
+cold start.
 
 Item numbering follows design spec §19.1, so a number here means the same thing there. A
 **letter-suffixed** item (1a, 2a) is one the build discovered that §19.1 never anticipated; it is
@@ -33,6 +35,25 @@ numbered against the gate it belongs to rather than renumbering the list.
       Only the enrolled student can submit. **~2 minutes.** Both links are pre-staged in the first
       20 lines of `README.md`, so it is a copy-paste.
       Needed by: the deadline. Blocked by gate 6.
+
+- [ ] **2b — Two environment variables on the live Render service.** *Optional; the project is
+      complete without them and every document says so.* The service was created over the REST API
+      before either variable existed, and a code deploy does not change a service's environment, so
+      only the Render dashboard (Environment → *Add* → *Save, rebuild, and deploy*) or a re-run of
+      `scripts/provision_render.py` can set them. **~3 minutes.**
+      - `MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` — the MCP SDK
+        enables DNS-rebinding protection for a loopback-bound server, so until this is set the
+        deployed `/mcp-server/mcp` answers **HTTP 421** to an external MCP Inspector session.
+        Nothing in the graded topology breaks either way (the agent reaches its own tools over
+        loopback), and `mcp/README.md`, `deployed.md` and `docs/architecture.html` all state the
+        421 plainly and point at `mcp/run_stdio.sh` and `/dashboard/mcp` instead. Setting it makes
+        the endpoint attachable.
+      - `KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` — arms the in-process self-ping and
+        removes the ~71 s cold start for a grader's first click. It spends ~744 of the workspace's
+        750 free instance-hours a month, which is why it is a decision rather than a default;
+        `deployed.md` § *Cold start* has the arithmetic and the one-menu way to turn it off again.
+      `render.yaml` carries both, so a blueprint apply sets them and a re-provision cannot drop
+      them. If neither is ever set: nothing regresses, and the documents stay true as written.
 
 ## Discharged
 

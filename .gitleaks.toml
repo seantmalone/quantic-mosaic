@@ -58,9 +58,16 @@ regexes = [
 # scan reads **history**: commit `16edf18` still carries both lines and no later commit can change
 # what an earlier one contains.
 #
+# `docs/process/sdd/` joins them for the same reason at one remove (P23). That directory is the
+# committed process trail — the phase briefs and reports, reproduced verbatim so the AI-use
+# disclosure can be audited — and `P11-report.md` pastes the CI docker job's own gate log, including
+# the three `-H "Authorization: Bearer ci-access-token"` curl lines above. The token is the same
+# throwaway literal, quoted inside a transcript of a container that was destroyed in 2026-09; the
+# alternative was to edit the trail, which would defeat the point of committing it.
+#
 # `condition = "AND"` binds all three criteria at once — the finding must come from
-# `curl-auth-header`, **and** from one of these two files, **and** carry one of these three line
-# shapes. Any other rule, any other file, or any other token behind `Bearer` in these same two files
+# `curl-auth-header`, **and** from one of these paths, **and** carry one of these three line
+# shapes. Any other rule, any other file, or any other token behind `Bearer` in these same files
 # is still reported. Nothing here touches `src/`, `scripts/`, `mcp/` or `.env*`.
 [[allowlists]]
 description = "curl-auth-header: the Makefile / CI docker-job throwaway container tokens, and `Bearer $VAR` placeholders"
@@ -69,6 +76,7 @@ condition = "AND"
 paths = [
   '''^Makefile$''',
   '''^\.github/workflows/ci\.yml$''',
+  '''^docs/process/sdd/''',
 ]
 regexTarget = "line"
 regexes = [

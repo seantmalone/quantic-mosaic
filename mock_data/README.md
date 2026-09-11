@@ -73,6 +73,10 @@ That split is what makes the project durable:
 
 ## The files
 
+The company the corpus describes has **420 people**; these datasets hold **24 employee records** —
+a slice of it, enough to answer every demo and evaluation question about a named person without
+generating four hundred rows nobody reads.
+
 | File | Records | What it holds |
 |---|---|---|
 | `employees.json` | 24 | Identity, role, office, arrangement, manager, tenure at the snapshot |

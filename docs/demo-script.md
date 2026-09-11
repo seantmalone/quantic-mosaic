@@ -51,7 +51,7 @@ of task 1.
 
 | Time | Segment | What is on screen | What to say |
 |---|---|---|---|
-| **0:00–0:45** | Intro, on camera, full frame | You, then the browser address bar showing the deployed URL | Your name; **hold the government ID still for ≥ 3 s at ~0:15**; one line on the project — *"an agentic HR assistant for a fictional 120-person robotics company: policy RAG over 14 documents, nine MCP tools, and a full audit trail of every step."* Then shrink the webcam to the persistent overlay and **leave it there** |
+| **0:00–0:45** | Intro, on camera, full frame | You, then the browser address bar showing the deployed URL | Your name; **hold the government ID still for ≥ 3 s at ~0:15**; one line on the project — *"an agentic HR assistant for a fictional 420-person robotics company: policy RAG over 14 documents, nine MCP tools, and a full audit trail of every step."* Then shrink the webcam to the persistent overlay and **leave it there** |
 | **0:45–1:30** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Name the seven components as you point at them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. Make the one point that matters: *"the MCP server is mounted inside the app that consumes it, and the client speaks real JSON-RPC over a real loopback socket — these are not function calls dressed up as tools."* Mention the single trace model: one writer, five readers |
 | **1:30–3:30** | **Task 1 live** — international remote-work eligibility | The chat UI, then the span rail, then the corpus browser | Click the **Demo 1** button. Narrate the five DEMO.6 elements from the live span rail as they appear (sub-checklist below). Finish by clicking a citation chip through to the highlighted 30-day sentence in the corpus browser |
 | **3:30–5:30** | **Task 2 live** — PTO request through the confirmation gate | The chat UI, the Confirm card, then dashboard page 8 (**admin profile**) | Click **Demo 2**. Narrate the five elements again, then land the safety beat (below). **Cancel once** to show `declined` recorded, re-ask, then confirm, and watch the new row appear in the mock-action log. Beat ⑦ of the optimization story goes here, while the answer is streaming in and the rail is narrating each step as it starts |
@@ -160,8 +160,13 @@ Tick all five on camera:
       snapshot line out loud — *"the mock data carries an explicit `as_of` snapshot; there is no
       frozen clock anywhere in this system."* Then the compliance verdict: notice requirement met
       with 8 business days against a 5-day rule.
-- [ ] **④ Retrieved citations** — at least two distinct documents (`pto-and-holidays`,
-      `manager-approval-matrix`). Click through to the notice-requirement sentence.
+- [ ] **④ Retrieved citations** — **read the chips that are actually on screen.** Breadth here is
+      not deterministic: the live run captured in
+      [`docs/evidence/demo-task-2-live-2026-09-11.txt`](evidence/demo-task-2-live-2026-09-11.txt)
+      cited four chunks across **two** documents (`pto-and-holidays`, `manager-approval-matrix`),
+      while earlier live turns cited `pto-and-holidays` alone. Two documents is the design
+      expectation the executable record pins, not a promise about the turn on screen — so name what
+      is there and click one through to the notice-requirement sentence.
 - [ ] **⑤ Final answer and action** — the answer **opens with the ticket id**: *"Done: HR ticket
       `MOCK-HR-<n>` was opened in queue hr-timeoff…"*, then the balance-aware cited answer, the
       ticket in the `hr-timeoff` queue and the new row on the dashboard's mock-action log. Say why

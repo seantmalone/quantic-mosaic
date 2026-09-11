@@ -10,6 +10,14 @@ Tick each box only after the thing itself is done — not after it is planned.
 per id; it deliberately does **not** assert that a box is ticked, because a test that could tick
 its own box would prove nothing.
 
+**The independent assessment.** An independent, read-only grading pass against
+`docs/project-requirements.md` was run on 2026-09-11 and is committed verbatim as
+[`docs/evidence/grade-card-2026-09-11.md`](evidence/grade-card-2026-09-11.md). Its §4 is a
+checklist of what the recording has to show for the demo requirements to hold, and its §6 lists the
+things a grader is most likely to trip over. Read both before the take. The defects it found were
+fixed in the P23 commits; the two it names as outside the repository — the video link and the
+dashboard submission — are the `DEMO.1` and `SUB.1` boxes below.
+
 ---
 
 ## Before recording
@@ -52,11 +60,12 @@ its own box would prove nothing.
       20 lines of `README.md`, so this is a copy-paste.
 - [ ] **SUB.2** — the deployed application URL is in `README.md` (the `Deployed:` line), and the
       link opens the app for someone who is not signed in anywhere.
-- [ ] **SUB.3** — the repository is shared with the GitHub account **`quantic-grader`**. Claude
-      Code sends the invite at P12 with
-      `gh api -X PUT repos/seantmalone/quantic-mosaic/collaborators/quantic-grader` and reads back
-      `…/collaborators/quantic-grader/permission`; confirm here that the invitation is showing as
-      sent (or accepted) rather than assuming the API call was enough.
+- [x] **SUB.3** — the repository is shared with the GitHub account **`quantic-grader`**, and the
+      invitation has been **accepted**: `gh api
+      repos/seantmalone/quantic-mosaic/collaborators/quantic-grader/permission` returns
+      `{"permission":"read", …,"role_name":"read"}` and `gh api
+      repos/seantmalone/quantic-mosaic/invitations` returns `[]` — nothing still pending, which is
+      what distinguishes an accepted invite from a sent one. Re-verified 2026-09-11.
 
 ## After submitting
 

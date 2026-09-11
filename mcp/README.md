@@ -29,7 +29,7 @@ transport carried the call.
 
 | Mode | `MCP_TRANSPORT` | Where it is used | Endpoint |
 |---|---|---|---|
-| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`, also publicly reachable so a grader can attach MCP Inspector |
+| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; externally reachable only from a `Host` on `MCP_ALLOWED_HOSTS` — see *Native `Host` / `Origin` allowlist* below |
 | **stdio subprocess** | `stdio` | local dev, the demo video (a visibly separate OS process), the fast CI discovery test | `python mcp/server_entrypoint.py --stdio` |
 | **Remote Streamable HTTP** | `http` + `MCP_SERVER_URL` | R7.3 — the same client against an external endpoint; CI tests it against a second local uvicorn on another port | any external MCP endpoint |
 
@@ -195,20 +195,41 @@ any MCP code, because *a control claimed in a design doc but absent from the SDK
 `MCPServer.streamable_http_app(...)` and `run_streamable_http_async(...)` accept a
 `transport_security=` argument.
 
-Three caveats, all of which matter for how this project uses it:
+**Passing nothing is not "no allowlist".** This paragraph used to say it was, and that was wrong.
+`TransportSecurityMiddleware(None)` does construct
+`TransportSecuritySettings(enable_dns_rebinding_protection=False)` — but a mounted server never
+constructs the middleware itself. `streamable_http_app()` does, and it fills in a **loopback
+allowlist** first whenever its `host` argument is `127.0.0.1`, `localhost` or `::1`
+(`mcp/server/lowlevel/server.py:742-746`) — and `host` **defaults to `127.0.0.1`**. So
+`server.streamable_http_app()` with no arguments, mounted at `/mcp-server`, enables protection with
+`allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]`, and every request arriving with a
+public `Host` header gets `421 Invalid Host header`. That is what the deployed endpoint did until
+P23, and it is why an MCP Inspector session against
+`https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` failed with a bearer token that was
+perfectly valid.
 
-1. **It is off by default.** `TransportSecurityMiddleware(None)` constructs
-   `TransportSecuritySettings(enable_dns_rebinding_protection=False)` "for backwards compatibility".
-   Passing nothing gets you nothing.
-2. **`streamable_http_app()` auto-enables it only for a loopback `host` argument.** The SDK fills in
-   a default allowlist when `host` is one of `127.0.0.1`, `localhost`, `::1` — which is the *server's*
-   bind address, not the public hostname a Render deployment answers on.
-3. **The mount is behind the app's own gate anyway.** In the deployed topology the endpoint is
-   reached through the FastAPI access gate (`APP_ACCESS_TOKEN`, P8) and a per-IP rate limit, and the
-   only state-changing tools need a one-time token an external caller cannot obtain. So the
-   protection this project relies on is the gate, and the SDK's allowlist is documented here as
-   available rather than configured — a public MCP endpoint on a fixed hostname is a deliberate
-   choice (a grader must be able to attach MCP Inspector), not an oversight.
+**So the allowlist is configured, and protection stays on.** `mcpserver/asgi.py` builds a
+`TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=…,
+allowed_origins=…)` from the `MCP_ALLOWED_HOSTS` setting — default `127.0.0.1:*,localhost:*`, with
+`render.yaml` adding `mosaic-hr-copilot.onrender.com` for the deployment — and passes it to
+`streamable_http_app(transport_security=…)`. `allowed_origins` is derived from the same list as
+`http://<host>` and `https://<host>`. A `Host` outside the list still gets a 421: that is the
+control working, not a fault. `tests/contract/test_mcp_host_allowlist.py` drives real `initialize`
+requests through the mount and asserts all three cases — the public hostname accepted, an unlisted
+one refused, and loopback unchanged.
+
+**The allowlist is the second control, not the only one.** The mount is also behind the FastAPI
+access gate (`APP_ACCESS_TOKEN`, P8) and the per-IP rate limit, and the two state-changing tools
+need a one-time confirmation token an external caller cannot obtain.
+
+**Status on the live service, 2026-09-11.** The running instance was created over the REST API
+before `MCP_ALLOWED_HOSTS` existed, so it does not carry the variable yet and a `POST
+/mcp-server/mcp` with a valid bearer still answers `421 Invalid Host header` (re-checked 2026-09-11
+against `git_sha e13a772`). Arming it is one Environment entry of
+`MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` on the service (or one
+blueprint apply of the committed `render.yaml`), after which the endpoint answers Inspector.
+**Until then, demonstrate MCP over the stdio entrypoint (`mcp/run_stdio.sh`) or `/dashboard/mcp`**,
+both of which show the same nine tools from the same factory.
 
 ## The nine tools
 

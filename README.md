@@ -1,6 +1,6 @@
 # Mosaic HR Copilot
 
-An agentic HR assistant for a fictional 120-person company. It answers employee policy questions
+An agentic HR assistant for a fictional 420-person company. It answers employee policy questions
 from a hand-authored HR corpus using hybrid retrieval (sqlite-vec + FTS5, fused with Reciprocal
 Rank Fusion), reaches structured HR data through nine tools on its own **MCP server**, and shows
 every step it took — routing decision, retrieval, tool calls, guardrails — in a full audit trail.
@@ -13,12 +13,14 @@ Repo: https://github.com/seantmalone/quantic-mosaic
 
 Documentation: [`design-and-evaluation.md`](design-and-evaluation.md) (architecture, RAG and MCP
 design, evaluation results), [`deployed.md`](deployed.md) (the live deployment, access and cold
-start), [`ai-tooling.md`](ai-tooling.md) (AI-use disclosure),
+start), [`mcp/README.md`](mcp/README.md) (the MCP server: nine tools, three transports, the host
+allowlist and the SDK behaviour behind it), [`ai-tooling.md`](ai-tooling.md) (AI-use disclosure),
 [`docs/architecture.html`](docs/architecture.html) (an interactive walkthrough of the architecture),
 [`docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md`](docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md)
-(the full design spec), and
+(the full design spec),
 [`docs/requirements-traceability.md`](docs/requirements-traceability.md) (every rubric bullet mapped
-to the test, command or artifact that proves it).
+to the test, command or artifact that proves it), and
+[`docs/process/sdd/`](docs/process/sdd/) (the committed process trail: every phase brief and report).
 
 ## Setup
 
@@ -45,12 +47,12 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 1,917 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 1,962 tests as of
 2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-11: **95% of statements and 87% of branches
-over 7,135 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+over 7,265 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
@@ -73,6 +75,14 @@ BASE_URL=https://<app>.onrender.com APP_ACCESS_TOKEN=<key> sh scripts/demo_task_
 they need no key. The scripts are plain `curl`, parameterised by `BASE_URL`, and print the answer,
 the citations, the full span trace and the `dashboard_url` for the turn. Every call sends
 `Authorization: Bearer $APP_ACCESS_TOKEN`.
+
+**Pinned evidence — both tasks run live against the deployed service on 2026-09-11**, transcripts
+committed with the bearer token redacted and nothing else edited:
+[`docs/evidence/demo-task-1-live-2026-09-11.txt`](docs/evidence/demo-task-1-live-2026-09-11.txt)
+(8 citations across 3 documents, 30 spans, a `conditional` verdict) and
+[`docs/evidence/demo-task-2-live-2026-09-11.txt`](docs/evidence/demo-task-2-live-2026-09-11.txt)
+(the confirmation gate, then `MOCK-HR-000005`, 4 citations across 2 documents, 29 spans). The
+trace store rolls, so these are the record of what the deployed instance actually did.
 
 ## Deployment
 
@@ -98,7 +108,9 @@ section of [`design-and-evaluation.md`](design-and-evaluation.md).
 **Access.** The deployed instance carries one shared secret, `APP_ACCESS_TOKEN`. The link on the
 `Deployed:` line above already carries it as `?access=<token>`, which is exchanged once for an
 HttpOnly cookie and stripped from the URL; API clients and MCP Inspector send
-`Authorization: Bearer <token>` instead. Choose **HR admin** in the act-as selector to reach the
+`Authorization: Bearer <token>` instead. An external MCP client also needs its `Host` on
+`MCP_ALLOWED_HOSTS` — see [`mcp/README.md`](mcp/README.md), which documents the MCP server, its
+three transports and the host allowlist in full. Choose **HR admin** in the act-as selector to reach the
 observability dashboard. Full details, every environment variable and the measured numbers are in
 `deployed.md`.
 
@@ -113,11 +125,12 @@ while that happens. `deployed.md` carries the per-probe table and its provenance
 keep-alive (added 2026-09-11 *after* these figures were published) keeps the instance warm **once
 `KEEP_ALIVE_URL` is set on the service**: the app then pings its own public `/health` every ten
 minutes from inside the process, with `.github/workflows/keepalive.yml` behind it as a second layer
-because GitHub's cron skipped most of its scheduled runs. That variable is **unset by default and
-this repository does not set it** — neither `render.yaml` nor the `Dockerfile` carries a value — so
-until an operator sets it on the live service the in-process layer is not running and the numbers
-above are still exactly what a visitor gets; clearing it again and disabling that workflow puts the
-service back to them for good.
+because GitHub's cron skipped most of its scheduled runs. `render.yaml` now carries the value so a
+blueprint apply cannot undo it, and the `Dockerfile` deliberately does not; but the live service was
+created over the REST API and `autoDeploy: false` means no apply runs on its own, so
+**`KEEP_ALIVE_URL` is still not set on the live service** — the in-process layer is not running and
+the numbers above are exactly what a visitor gets. Setting it is one single-key PUT with no rebuild;
+clearing it again and disabling that workflow puts the service back to them for good.
 
 ## Evaluation
 

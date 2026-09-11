@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -591,7 +592,136 @@ def test_demo_script_carries_a_five_element_sub_checklist_per_task():
 
 
 def test_pre_submission_checklist_has_a_line_per_demo_and_sub_id():
+    """One box per id, ticked or not — a done item stays on the list, it does not leave it."""
     lines = _lines(CHECKLIST)
     for identifier in DEMO_IDS + SUB_IDS:
-        matches = [line for line in lines if line.startswith("- [ ] ") and identifier in line]
+        matches = [line for line in lines if line.startswith(("- [ ] ", "- [x] ")) and identifier in line]
         assert len(matches) == 1, f"docs/pre-submission-checklist.md needs exactly one `- [ ] {identifier}` line"
+
+
+# --- published numbers ----------------------------------------------------------------------
+#
+# R1.3: a number in a document must equal the thing it measures. These four are the ones a grader
+# can re-derive in one command — `pytest --collect-only -q` and `coverage report` — so a stale one
+# is the cheapest possible way to look careless. Every document that states either figure is listed
+# here, and the assertion is over **every** occurrence in it, not the first.
+
+#: Documents that publish the suite size or the coverage figures. Historical records are excluded
+#: on purpose: `CHANGELOG.md`, `docs/optimization-log.md` and `docs/process/sdd/**` say what was
+#: true on a date and must not be rewritten when the suite grows.
+NUMBER_DOCS = ("README.md", "ai-tooling.md", "design-and-evaluation.md", "docs/requirements-traceability.md")
+
+#: `1,958 tests` / `7,285 statements` — four digits or more, so `26 items` and `9 tools` are not
+#: candidates and a bare year cannot match either.
+TESTS_STATED = re.compile(r"([\d][\d,]{3,}) tests\b")
+STATEMENTS_STATED = re.compile(r"([\d][\d,]{3,}) statements\b")
+PERCENTS_STATED = re.compile(r"(\d+)% of statements and (\d+)% of branches")
+
+COVERAGE_XML = REPO_ROOT / "coverage.xml"
+
+
+def _collected_test_count() -> int:
+    """What `pytest --collect-only -q` reports, from a real collection in a child process.
+
+    A child process rather than an in-process count: this test has to know the size of the **whole**
+    suite, and the session it is running in may be one file. Collection only — nothing is executed,
+    and it costs about two seconds.
+    """
+    completed = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stdout[-2000:] + completed.stderr[-2000:]
+    match = re.search(r"^(\d+) tests? collected", completed.stdout, re.M)
+    assert match, f"could not read a collected count from:\n{completed.stdout[-2000:]}"
+    return int(match.group(1))
+
+
+def _coverage_totals() -> dict[str, int] | None:
+    """`lines-valid`, `branches-valid` and the two rates from `coverage.xml`, when one exists.
+
+    `coverage.xml` is git-ignored: `make coverage` writes it, CI uploads it as an artifact, and a
+    fresh checkout has none — including the checkout CI runs this very test in, because the report
+    is written *after* the suite. So `None` is a real answer, and the tests below fall back to
+    asserting that the documents at least agree with each other. `make coverage` is where the
+    figures are held to the measurement, and it is a definition-of-done command.
+
+    The percentages are **truncated**, not rounded, because that is what `coverage report` prints
+    and the documents quote its output: 6,950 of 7,265 statements is 95.66 %, and the table reads
+    `95%`.
+    """
+    if not COVERAGE_XML.exists():
+        return None
+    header = re.search(r"<coverage\b[^>]*>", COVERAGE_XML.read_text(encoding="utf-8"))
+    assert header, "coverage.xml has no <coverage> element"
+    fields = dict(re.findall(r'([\w-]+)="([^"]*)"', header.group(0)))
+    lines_valid, branches_valid = int(fields["lines-valid"]), int(fields["branches-valid"])
+    covered = int(fields["lines-covered"]) + int(fields["branches-covered"])
+    return {
+        "statements": lines_valid,
+        "branches": branches_valid,
+        "statement_pct": int(float(fields["line-rate"]) * 100),
+        "branch_pct": int(float(fields["branch-rate"]) * 100),
+        "combined_pct": int(covered / (lines_valid + branches_valid) * 100),
+    }
+
+
+def test_every_document_that_states_the_suite_size_states_the_collected_one():
+    collected = _collected_test_count()
+    expected = f"{collected:,}"
+    for name in NUMBER_DOCS:
+        stated = TESTS_STATED.findall(_text(REPO_ROOT / name))
+        assert stated, f"{name} no longer states the suite size; drop it from NUMBER_DOCS or put it back"
+        wrong = [value for value in stated if value != expected]
+        assert not wrong, f"{name} says {wrong} tests; `pytest --collect-only -q` collects {expected}"
+
+
+def test_every_document_that_states_the_statement_count_states_the_measured_one():
+    totals = _coverage_totals()
+    stated = {name: STATEMENTS_STATED.findall(_text(REPO_ROOT / name)) for name in NUMBER_DOCS}
+    assert any(stated.values()), "no document states the statement count any more"
+    if totals is None:
+        distinct = {value for values in stated.values() for value in values}
+        assert len(distinct) == 1, f"the documents disagree about the statement count: {sorted(distinct)}"
+        return
+    expected = f"{totals['statements']:,}"
+    for name, values in stated.items():
+        wrong = [value for value in values if value != expected]
+        assert not wrong, f"{name} says {wrong} statements; coverage.xml measures {expected}"
+
+
+def test_every_published_coverage_percentage_matches_coverage_xml():
+    totals = _coverage_totals()
+    stated = {name: PERCENTS_STATED.findall(_text(REPO_ROOT / name)) for name in NUMBER_DOCS}
+    assert any(stated.values()), "no document publishes the coverage percentages any more"
+    if totals is None:
+        distinct = {pair for pairs in stated.values() for pair in pairs}
+        assert len(distinct) == 1, f"the documents disagree about the coverage percentages: {sorted(distinct)}"
+        return
+    for name, pairs in stated.items():
+        for statements, branches in pairs:
+            assert int(statements) == totals["statement_pct"], f"{name}: statements % is stale"
+            assert int(branches) == totals["branch_pct"], f"{name}: branches % is stale"
+
+
+#: The company the corpus describes. The corpus is the policy truth — `corpus/README.md` and the
+#: design spec both say 420 — and the two most-read documents once opened on "120-person", which is
+#: the kind of contradiction a grader finds in the first sentence.
+HEADCOUNT = "420-person"
+HEADCOUNT_DOCS = (
+    "README.md",
+    "design-and-evaluation.md",
+    "corpus/README.md",
+    "mock_data/README.md",
+    "docs/demo-script.md",
+)
+WRONG_HEADCOUNTS = re.compile(r"\b(\d+)-person\b")
+
+
+def test_every_document_that_names_the_company_size_names_the_same_one():
+    for name in HEADCOUNT_DOCS:
+        stated = WRONG_HEADCOUNTS.findall(_text(REPO_ROOT / name))
+        assert stated, f"{name} no longer names the company size"
+        assert set(stated) == {HEADCOUNT.split("-")[0]}, f"{name} says {set(stated)}-person, not {HEADCOUNT}"

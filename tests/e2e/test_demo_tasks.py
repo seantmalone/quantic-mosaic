@@ -16,6 +16,13 @@ or let the write escape its confirmation, and this file fails.
 
 Both prompts use **explicit dates**. There is no frozen clock, so "next Tuesday" would resolve
 differently on every run and the documented arguments would rot within a week.
+
+**What these tests are evidence of.** They drive the *recorded* stub script, not the live model, so
+what they prove is that the shipped orchestration, gate and citation plumbing still produce the
+documented sequence from a real recorded exchange. Citation **breadth** on a live turn is not
+deterministic and these records do not claim it is: `min_distinct_docs_cited` is the design
+expectation the recording meets, and `docs/evidence/demo-task-*-live-2026-09-11.txt` carries what
+live runs against the deployed service actually cited.
 """
 
 from __future__ import annotations
@@ -85,6 +92,12 @@ DEMO_EXPECTATIONS = [
         min_structured_data_tools=1,
         requires_write=True,
         requires_confirmation=True,
+        # The **recorded script** is the design expectation, and it cites two documents
+        # (`pto-and-holidays` + `manager-approval-matrix`), so the bar stays at 2 and this test
+        # keeps proving the recording still spans both. A **live** turn is not deterministic about
+        # it: the run in `docs/evidence/demo-task-2-live-2026-09-11.txt` cited two, earlier live
+        # turns cited `pto-and-holidays` alone. Nothing here is weakened for that — the honest
+        # statement belongs in the documents a presenter reads, not in a lowered assertion.
         min_distinct_docs_cited=2,
         answer_states_the_write_id=True,
         forbidden_tools=[],

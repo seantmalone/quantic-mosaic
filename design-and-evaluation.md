@@ -5,7 +5,7 @@
 **Design source of truth:** [`docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md`](docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md)
 **Requirement-by-requirement traceability:** [`docs/requirements-traceability.md`](docs/requirements-traceability.md)
 
-Mosaic HR Copilot is an agentic HR assistant for *Mosaic Robotics, Inc.*, a fictional 120-person
+Mosaic HR Copilot is an agentic HR assistant for *Mosaic Robotics, Inc.*, a fictional 420-person
 robotics company. It answers employee policy questions from a hand-authored 14-document corpus
 using hybrid retrieval, reaches structured HR data through **nine tools on its own MCP server**,
 and records every step it took — routing decision, retrieval, tool call, guardrail, confirmation,
@@ -286,11 +286,18 @@ mcp.server.mcpserver import MCPServer`), three transports from it:
 
 | Mode | `MCP_TRANSPORT` | Where used | Endpoint |
 |---|---|---|---|
-| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`, also publicly reachable so a grader can attach MCP Inspector with the bearer header |
+| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; external clients also need a `Host` on `MCP_ALLOWED_HOSTS` (below) |
 | **stdio subprocess** | `stdio` | local dev, the demo video (a visibly separate OS process), the fast CI discovery test | `python mcp/server_entrypoint.py --stdio` |
 | **remote** | any | proves requirement 7's separate-service path without paying for it | whatever `MCP_SERVER_URL` names; the session records `mcp_transport_effective = "remote"` |
 
-`app.mount("/mcp-server", mcp.streamable_http_app())` with `lifespan=mcp.session_manager.run()`.
+The mount is given an explicit `TransportSecuritySettings`: the SDK auto-enables DNS-rebinding
+protection for a loopback-bound server, so the default allowlist is loopback-only and an external
+client is answered `421 Invalid Host header`. `MCP_ALLOWED_HOSTS` (default `127.0.0.1:*,localhost:*`)
+names the hostnames the endpoint accepts and `render.yaml` adds the deployment's own;
+[`mcp/README.md`](mcp/README.md) carries the SDK detail, the three transports and the live status.
+
+`app.mount("/mcp-server", mcp.streamable_http_app(transport_security=...))` with
+`lifespan=mcp.session_manager.run()`.
 The client speaks real JSON-RPC over real HTTP to `127.0.0.1`: one process, one ONNX model load,
 and `tools/call` traffic genuinely on the wire — so requirement 5's "hard-coded direct function
 calls are not sufficient" is satisfied **structurally**, and the conventions test proves
@@ -723,14 +730,14 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 1,917 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 1,962 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
 **The coverage gate is the same command locally and in CI.** `make coverage` and the `test` job
 both run `coverage run --branch --source=src/hrmosaic -m pytest -q`, write `coverage.xml` and then
 enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 87% of
-branches over 7,135 statements** on 2026-09-11 (94% combined, which is the number the gate reads),
+branches over 7,265 statements** on 2026-09-11 (94% combined, which is the number the gate reads),
 so the 90 floor is a regression guard rather than a target to grow into. No third-party coverage
 service and no badge token is involved — §15.2's claim that nothing CI holds is a credential stands
 unchanged.
@@ -966,8 +973,12 @@ honest. This is **never** "human versus judge": the labeller is a model, and how
 stated per subset.
 
 The labeller is `blind-opus-labeller` — a separate **Claude Opus 5** session dispatched by the
-controlling session, a **third model family**, independent of both the agent (Anthropic) and the
-judge (Google). It read only a labelling packet: for each item, the question, the answer the agent
+controlling session. Its independence is **of the session, not of the vendor**: it is the *same
+vendor as the agent* (Anthropic) and a *different model*, in a session that read only the packet;
+it is a different vendor and family from the judge (Google). Calling it a third model family, as
+this paragraph did before 2026-09-11, was wrong, and the distinction matters — a shared vendor is a
+shared training lineage, so the agreement figure is evidence that the judge is not inventing
+verdicts, not evidence of vendor-independent adjudication. It read only a labelling packet: for each item, the question, the answer the agent
 served, and — verbatim — every evidence envelope the synthesis prompt carried, each labelled with
 its class. The packet was built by `scripts/gen_label_packet.py` while the run was still
 `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
@@ -1141,6 +1152,15 @@ create_mock_hr_ticket` — the write comes last, after the balance is known and 
 deterministic verdict. `lookup_employee_profile` is optional here for the same kind of reason as
 above: the persona already carries the employee id and `check_pto_balance` answers the question
 asked.
+
+**What a live run actually cites.** `min_distinct_docs_cited = 2` is the **design expectation**, and
+the executable record enforces it against the committed recording. A live turn is not deterministic
+about it: the run captured in
+[`docs/evidence/demo-task-2-live-2026-09-11.txt`](docs/evidence/demo-task-2-live-2026-09-11.txt)
+cited four chunks across two documents (`pto-and-holidays`, `manager-approval-matrix`), and earlier
+live turns cited `pto-and-holidays` alone — the approval-matrix chunk is retrieved either way, but
+whether the synthesis cites it varies. The demo script therefore tells the presenter to read the
+chips on screen rather than narrate the number written here.
 
 Both stub scripts under `tests/fixtures/llm_scripts/` are **recordings of real exchanges** against
 `claude-haiku-4-5` on 2026-09-10 — the provider's own purposes, texts, tool arguments, finish

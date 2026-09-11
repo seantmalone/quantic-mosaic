@@ -42,10 +42,16 @@ by `python scripts/provision_render.py`, which reads that same file so the Bluep
 API-created service cannot drift. Read back from the live service on 2026-09-10: `plan: free`, one
 instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"`, `autoDeployTrigger: "off"`.
 
-**Which commit served which evaluation run.** A run file's `git_sha` is the **harness tree's** sha,
-and the harness runs on the development machine, so every deployed run records `dev` there. The sha
-that matters is the deploy that served it, and it comes from the deploy ledger rather than from the
-run file:
+**Which commit served which evaluation run.** A run file carries two shas: `git_sha` is the
+**harness tree's** `git rev-parse HEAD` — the code that scored the run — and `target_git_sha` is
+what the target's own `/health` reported under `app.git_sha`, the build that answered the 26
+questions. `evaluation/REPORT.md` prints both.
+
+**Runs recorded before 2026-09-11 carry neither.** Until P23 the harness took `git_sha` from
+`settings.git_sha`, which resolves `GIT_SHA` → `RENDER_GIT_COMMIT` → `"dev"`, and on the
+development machine that is `"dev"`; there was no `target_git_sha` at all. The committed run files
+are **not** rewritten — a result file is a record of what happened, not a document — so for those
+three runs the serving commit lives here, in prose, taken from the deploy ledger:
 
 | Run | Column | Deployed commit that served it |
 |---|---|---|
@@ -100,9 +106,17 @@ asserts both.
 
 The **observability dashboard is admin-only**, every page and every `/api/*` read, enforced
 server-side on top of the access gate. All of its data is synthetic, so a grader browses freely:
-follow the tokenized link, then choose **HR admin** in the act-as selector. An MCP Inspector
-session attaches to `/mcp-server/mcp` with the same bearer header — Inspector supports custom
-headers, and the endpoint stays deliberately reachable for exactly that.
+follow the tokenized link, then choose **HR admin** in the act-as selector.
+
+An MCP Inspector session attaches to `/mcp-server/mcp` with the same bearer header — Inspector
+supports custom headers — **and with the service's own hostname on `MCP_ALLOWED_HOSTS`**. The MCP
+SDK enables DNS-rebinding protection for a loopback-bound server, which the mounted topology is, so
+the endpoint answers `421 Invalid Host header` to any `Host` the allowlist does not name; the
+committed `render.yaml` carries
+`MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com`. **As of 2026-09-11 the
+live service does not carry the variable yet** — it predates it — so an external Inspector session
+against the deployed endpoint still gets 421, and MCP is demonstrated over the stdio entrypoint
+(`mcp/run_stdio.sh`) or `/dashboard/mcp` until one Environment entry arms it.
 
 - Tokenized link: `https://mosaic-hr-copilot.onrender.com/?access=<token>`, written out in full on
   `README.md`'s `Deployed:` line and **nowhere else in the repository**. It is the grader's entry
@@ -182,8 +196,8 @@ timestamp and sha, are in
 
 Two layers, and the order matters. Both exist to keep the instance from reaching Render's
 15-minute idle timer, so a visitor gets the warm turn instead of the 71.0 s above. The primary
-layer is **conditional on one environment variable that the repository does not set** — read the
-**Status** paragraph below before relying on it. Both landed on 2026-09-11, **after** the table:
+layer is **conditional on one environment variable that the live service does not carry** — read
+the **Status** paragraph below before relying on it. Both landed on 2026-09-11, **after** the table:
 Sean's ruling of 2026-09-10 20:40Z was to publish the measurement first and mitigate it second, so every figure above is still the honest no-ping behaviour and
 nothing was re-measured to look better.
 
@@ -209,12 +223,16 @@ instance that is awake round the clock — so the ceiling is still 744 of 750 in
 requests, that is billed. It is a ceiling for the enabled case; while `KEEP_ALIVE_URL` is unset only
 the cron's best-effort runs touch the service.
 
-**Status, 2026-09-11: the in-process layer is shipped but not switched on.** `KEEP_ALIVE_URL` is set
-nowhere in this repository — not in `render.yaml`, not in the `Dockerfile` — and it has not been set
-on the live service, so the code path above exists and is tested but no self-ping is running and a
-visitor still gets the measured cold start. Turning it on is one single-key PUT (or one dashboard
-Environment entry) of `KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com`, no rebuild; this line
-and the § *Environment variables* note below are what change when someone does.
+**Status, 2026-09-11: the in-process layer is shipped but not switched on.** `render.yaml` carries
+`KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` and `KEEP_ALIVE_INTERVAL_S=600`, so a
+blueprint apply arms the loop and cannot silently undo an operator's value; the `Dockerfile`
+deliberately carries neither, because a baked origin would start the loop in every container a
+developer runs. But the live service was created over the REST API rather than from the blueprint,
+and `autoDeploy: false` means no apply happens on its own, so **`KEEP_ALIVE_URL` has not been set on
+the live service**: the code path above exists and is tested, no self-ping is running, and a visitor
+still gets the measured cold start. Turning it on is one single-key PUT (or one dashboard
+Environment entry) of that same value, no rebuild; this line and the § *Environment variables* note
+below are what change when someone does.
 
 The cron job is one `curl` on `ubuntu-latest`: no checkout, no secret, and `permissions: {}`, because
 `/health` is an open route. It reads the URL from the repository **variable** `DEPLOY_URL` and falls
@@ -288,10 +306,11 @@ same day. Every other variable runs at its coded default:
 **`KEEP_ALIVE_URL` is the one variable that switches a behaviour on rather than tuning one.** The
 in-process keep-alive of § *Cold start* → *Keep-alive* is started only when it holds the service's
 own **public** origin; unset — the default, and the state on a laptop and in CI — no task is
-created and nothing is pinged. **It is not set on the live service as of 2026-09-11**, so it
-belongs in no row of the table above: the rows record values the service carries, and this one
-carries none. Setting it is a single-key PUT on the live service with no rebuild, exactly like the
-two limiter variables above, and `KEEP_ALIVE_INTERVAL_S` runs at its coded 600 s.
+created and nothing is pinged. `render.yaml` carries it for a blueprint apply, but **it is not set
+on the live service as of 2026-09-11**, so it belongs in no row of the table above: the rows record
+values the service carries, and this one carries none. Setting it is a single-key PUT on the live
+service with no rebuild, exactly like the two limiter variables above, and `KEEP_ALIVE_INTERVAL_S`
+runs at its coded 600 s there too.
 
 **Why the service runs `LLM_RPM=60` / `LLM_BURST=30` while the code default stays 10.** The
 pre-optimization deployed sweep recorded a **3.9 s per turn mean** of token-bucket waiting inside
