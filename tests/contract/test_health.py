@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from hrmosaic.web.api import DEGRADATIONS
+from tests.conftest import health_after_the_boot_import
 
 pytestmark = pytest.mark.anyio
 
@@ -24,7 +25,11 @@ TOP_LEVEL = {"status", "app", "mcp", "index", "data", "llm", "trace_store", "deg
 
 async def test_health_reports_every_block_of_the_payload(web):
     async with web() as client:
-        response = await client.get("/health")
+        # The boot import of `evaluation/results/*.json` runs in the lifespan's maintenance task,
+        # so `eval_runs_imported` climbs to its final value a moment after the server is up. CI
+        # read it mid-import on 753596e — `assert 1 == 12`, under the coverage tracer, on a run
+        # that passed locally — so the equality below waits for the import rather than racing it.
+        response = await health_after_the_boot_import(client, eval_runs=_committed_run_count())
 
     assert response.status_code == 200
     body = response.json()

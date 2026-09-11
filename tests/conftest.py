@@ -229,6 +229,36 @@ def web(store, monkeypatch):
     return start
 
 
+#: The bounded wait `health_after_the_boot_import` spends, and the step between polls.
+BOOT_IMPORT_TIMEOUT_S = 30.0
+BOOT_IMPORT_STEP_S = 0.2
+
+
+async def health_after_the_boot_import(client, *, eval_runs: int):
+    """`GET /health` once the boot import of `evaluation/results/*.json` has finished (§10.3).
+
+    **The race.** `web/main.py`'s lifespan starts `_maintenance()` as a background task, and its
+    first pass imports every committed `evaluation/results/r_*.json` into `eval_runs` — twelve
+    files, one transaction each, off the event loop in a thread. A test that reads `/health` the
+    instant the server is up can therefore see the count part way there: CI caught exactly that on
+    753596e with `assert 1 == 12`, on a runner made ~2x slower by the coverage tracer, while the
+    same assertion passed locally every time.
+
+    So the wait is here rather than the assertion being weakened: poll until the store reports the
+    number the caller expects, for at most `BOOT_IMPORT_TIMEOUT_S`, and hand back whatever the last
+    response was. An import that never finishes still fails the caller's own equality assertion,
+    with the real number in the message.
+    """
+    deadline = asyncio.get_running_loop().time() + BOOT_IMPORT_TIMEOUT_S
+    response = await client.get("/health")
+    while (response.json().get("trace_store") or {}).get("eval_runs_imported") != eval_runs:
+        if asyncio.get_running_loop().time() >= deadline:
+            break
+        await asyncio.sleep(BOOT_IMPORT_STEP_S)
+        response = await client.get("/health")
+    return response
+
+
 @pytest.fixture
 def spans(store):
     """Every span of a turn, in `seq` order, as `(kind, name, payload)` — what the gates assert on."""
