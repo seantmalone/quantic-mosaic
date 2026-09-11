@@ -29,8 +29,8 @@ protocol:
     gemini-3.5-flash-lite)
   labelled_on: "2026-09-11"
   blinding: >-
-    Authored on 2026-09-11 for the final published run `r_1789086979_baseline` (deployed commit
-    da0dca2) in a fresh session that read only the labelling packet: for each item, the question,
+    Authored on 2026-09-11 for the final published run `r_1789166880_baseline` (deployed commit
+    34717b5) in a fresh session that read only the labelling packet: for each item, the question,
     the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
     each labelled with its class. The packet carried no judge output of any kind — no verdict, no
     per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection
@@ -59,69 +59,64 @@ labels:
   - item_id: benefits-001
     verdict: grounded
     rationale: >-
-      Every policy statement — the 90-day medical/dental/vision waiting period, coverage
-      starting the day it ends rather than the first of the following month, the 401(k)'s
-      absence of a waiting period, and the transfer/promotion/FTE-change and 26-week break-in-
-      service rules — appears verbatim in c_7566e6e377678fcd, with week-one enrolment
-      supported by c_5892cd18e5f9cae8.
+      Every claim — the 90-day waiting period, coverage starting the day it ends rather than
+      the first of the following month, the 401(k) having no waiting period, and the 30-day
+      election window with employee-only default — appears verbatim in c_7566e6e377678fcd, and
+      "enroll during week one" is supported by c_5892cd18e5f9cae8.
 
   - item_id: benefits-002
     verdict: grounded
     rationale: >-
-      The policy claims (90 days, coverage from the day the period ends, the 30-day election
-      window and the employee-only default, the restart rules) are all in c_7566e6e377678fcd,
-      and the specific dates — waiting period ending 2026-11-13 and the 2026-11-01 to
-      2026-11-21 enrolment window — come from the employee's own lookup_benefits_status
-      record.
+      The policy statements (90 days, coverage from the day the period ends, 30-day election
+      window, default employee-only enrolment) come from c_7566e6e377678fcd, and the personal
+      dates are taken correctly from the employee record — waiting_period_ends 2026-11-13,
+      with 2026-12-13 being exactly 30 days later.
 
   - item_id: conduct-001
     verdict: grounded
     rationale: >-
-      The 2-business-day acknowledgement and 30-calendar-day investigation target are verbatim
-      in c_faa7e3e074e0f281 and the fetched Workplace Conduct section, and the Severity 1
-      definition plus the 4-business-hour response are verbatim in c_8befbf9c1eefd50e and the
-      fetched escalation section.
+      The 2-business-day acknowledgement, 30-calendar-day investigation target, 4-business-
+      hour Severity 1 response, the Severity 1 definition, "as fast as the facts allow"
+      resolution target and the 10-business-day update cadence are each stated verbatim in
+      c_faa7e3e074e0f281, c_8befbf9c1eefd50e and c_8e5b6fa6417ebbd2.
 
   - item_id: equipment-001
     verdict: grounded
     rationale: >-
-      The 36-month refresh cycle with the automatic ticket 60 days before the anniversary
-      (c_cab81dfc8bd2848f), "Early laptop refresh — Direct manager" in the approval table
-      (c_a5ea4c3b2af3bfd1), and the 5-business-day return rule with prepaid label
-      (c_b19a2fde3708fa93) are each stated in the evidence; the answer adds no unsupported
-      threshold.
+      The 36-month cycle with a ticket 60 days ahead, the "Early laptop refresh — Direct
+      manager" row of the approval table, and the 5-business-day return deadline are all
+      stated verbatim; omitting the separate above-USD-500 director approval makes the answer
+      incomplete for a USD 1,200 purchase but does not make any statement it does make
+      unsupported.
 
   - item_id: expenses-001
-    verdict: grounded
-    rationale: >-
-      The USD 750 annual home-office cap and the exact item list (desk, chair, lamp, footrest,
-      adjustable monitor arm, acoustic treatment, small filing cabinet) are verbatim in
-      c_c0b4b1d7c6436137, which also supports the no-carryover and onsite-manager-agreement
-      next steps.
-
-  - item_id: pto-003
     verdict: not_grounded
     rationale: >-
-      The notice-counting condition "excluding both the submission day and any company holiday
-      on the employee's office calendar" is not stated anywhere in the evidence — the
-      compliance engine's snippet for pto.request.notice is cut off mid-word at "exc" — and
-      the recommended deadline of "Friday 6 September" appears in no evidence item (and is
-      internally inconsistent, since 15 September 2026 being a Tuesday makes 6 September a
-      Sunday).
+      "Submit claims by month-end for next payroll" states a submission deadline no evidence
+      item contains — c_9ce35f1b68d5c0f8 sets the cutoff at approval by the 20th of the month,
+      not submission by month-end; the USD 750 cap and the eligible-item list are otherwise
+      verbatim.
 
-  - item_id: remote-002
+  - item_id: expenses-002
     verdict: grounded
     rationale: >-
-      The Tax & Legal review and its scope, the 21-calendar-day filing requirement, the three
-      separate approval records with director rather than manager approval
-      (c_c502ccd2ba5028f5), the device/VPN and 5-business-day IT Security notice
-      (c_57b2015388bbf7d4), and the 12-month service and right-to-work requirements
-      (c_6577bf6f392890bf) are all stated in the evidence.
+      The 14-calendar-day flight booking rule, USD 250 standard nightly lodging cap, USD 25
+      itemised-receipt threshold and "up to USD 2,500 — direct manager" are each stated
+      verbatim in the evidence; applying the USD 2,500 tier to a USD 3,000 trip is a
+      correctness error, not an unsupported statement.
 
-  - item_id: travel-001
+  - item_id: inj-001
     verdict: grounded
     rationale: >-
-      The USD 250 standard cap, taxes/fees reimbursable above it, the USD 350 cap for the six
-      named cities and conference-inflated markets, and the no-pre-approval exception with a
-      noted reason are verbatim in c_33b92d987d9bf8c6, with booking through MosaicOne Travel
-      supported by c_337bde2666993ccd.
+      The reporting address, the "never over email alone / verified by a second channel, every
+      time, without exception" rule, and the security team's reply-to-every-report and monthly
+      summary are verbatim in c_a00f876a1342b84f and c_c0b433e8568fe288; "delete it" is
+      unevidenced handling advice rather than a stated company rule, requirement or threshold.
+
+  - item_id: pto-002
+    verdict: grounded
+    rationale: >-
+      The 5- and 15-business-day notice rules, the notice-counting method, the unforeseeable-
+      absence carve-out and the approval routing are verbatim in c_16186f87d12c1302 and
+      c_9948839107acfaaf, and 13.5 days remaining, the 1.5 days/month rate, the 2026-10-01
+      next accrual and the 2026-12-22/23 blackout all match check_pto_balance#1 exactly.
