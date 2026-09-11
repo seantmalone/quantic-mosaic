@@ -140,6 +140,10 @@ class Settings(BaseSettings):
     llm_cache_ttl_s: int = Field(default=0, ge=0)
     ready_warmup_timeout_s: int = Field(default=30, ge=1)
 
+    # --- keep-alive ------------------------------------------------------------------------------
+    keep_alive_url: str | None = None
+    keep_alive_interval_s: int = Field(default=600, ge=1)
+
     _mcp_server_url_explicit: bool = PrivateAttr(default=False)
 
     @field_validator("git_sha", mode="before")

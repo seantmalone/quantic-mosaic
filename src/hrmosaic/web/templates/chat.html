@@ -268,16 +268,32 @@
     });
 
     // The cold-start banner: a `/health` preflight with an elapsed counter (§11.5).
+    //
+    // It describes exactly one state — a request that is actually waiting — and this page was
+    // itself served by the instance, so on a warm one the preflight answers in milliseconds and
+    // the banner is never shown at all. The reveal is therefore deferred by a grace period and
+    // cancelled the moment `/health` settles; only a genuinely slow preflight ever paints it, and
+    // then the counter runs from when the request was made, not from when the strip appeared.
     (function coldStartPreflight() {
+      var COLD_START_BANNER_DELAY_MS = 1200;
       var banner = document.getElementById("cold-start-banner");
       var elapsed = document.getElementById("cold-start-elapsed");
       var began = Date.now();
-      banner.hidden = false;
-      var ticker = setInterval(function () {
+      var ticker = null;
+      function show() {
         elapsed.textContent = Math.round((Date.now() - began) / 1000) + " s";
-      }, 1000);
+      }
+      var reveal = setTimeout(function () {
+        banner.hidden = false;
+        show();
+        ticker = setInterval(show, 1000);
+      }, COLD_START_BANNER_DELAY_MS);
       fetch("/health").then(function (response) { return response.json(); }).catch(function () { return null; })
-        .then(function () { clearInterval(ticker); banner.hidden = true; });
+        .then(function () {
+          clearTimeout(reveal);
+          if (ticker) { clearInterval(ticker); }
+          banner.hidden = true;
+        });
     })();
   })();
 </script>

@@ -24,6 +24,9 @@ of §2.1: one cold start, one memory budget, one trace store.
    readiness exercises the same wire the agent uses (§11.4). It runs as a background task because
    uvicorn does not accept connections until lifespan startup has returned — a loopback call made
    inside the lifespan would be refused by a socket that is not listening yet.
+7. the **self keep-alive** (§14.4), started only when `KEEP_ALIVE_URL` is set: a `GET` of the
+   service's own *public* `/health` every `KEEP_ALIVE_INTERVAL_S`, so Render's fifteen-minute idle
+   timer never fires.
 
 `/health` never depends on any of it: it answers 200 while the process is up, whatever failed.
 """
@@ -38,6 +41,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -74,6 +78,11 @@ WARMUP_POLL_S = 0.2
 #: the server, and on a 0.1-CPU instance an immediate second attempt would only pile another cold
 #: embed onto the CPU the first one is still using.
 WARMUP_RETRY_S = 1.0
+
+#: How long a self keep-alive ping may take before it is abandoned. A cold instance answers
+#: `/health` in ~45 s, but a ping that finds one cold has already lost the race it exists to win:
+#: 30 s bounds a ping made by an instance that is, by construction, already awake.
+KEEP_ALIVE_TIMEOUT_S = 30.0
 
 #: The one warm-up call. `search_policy_documents` is the only tool that touches both halves of
 #: what `/ready` promises: the ONNX model (the query embedding) and the index (the search).
@@ -139,6 +148,40 @@ def _maintenance_pass(settings: Settings) -> None:
         pruned.sessions_deleted,
         len(imported.imported),
     )
+
+
+async def _keep_alive(settings: Settings) -> None:
+    """`GET {KEEP_ALIVE_URL}/health` every `KEEP_ALIVE_INTERVAL_S`, from inside the process (§14.4).
+
+    **Why the app pings itself.** Render counts traffic at its *edge*, and a request to the
+    service's own public hostname is inbound traffic like any other: it leaves the container, is
+    routed by the edge and comes back, resetting the fifteen-minute idle timer exactly as a
+    visitor's request would. Which is why the URL must be the public one — a loopback call to
+    `127.0.0.1` never reaches the edge and would keep nothing awake.
+
+    **Why it is the primary mechanism, and the GitHub Actions schedule the second layer.**
+    `.github/workflows/keepalive.yml` asks for a ping every ten minutes, but GitHub's scheduler is
+    best-effort and de-prioritises low-traffic repositories: on 2026-09-11 it ran the `*/10`
+    schedule **twice in nine hours** (09:48Z and 13:53Z — both green), and the instance was found
+    spun down at 14:25Z. This loop depends on no scheduler at all, and it runs whenever the
+    instance is up, which is precisely when a ping is needed. The two layers cover each other's
+    gap: the cron can wake an instance this loop cannot run in.
+
+    It never raises — a missed ping costs only the cold start `deployed.md` publishes — and it
+    logs at DEBUG, because a line every ten minutes at INFO would bury the traffic it protects.
+    The wait comes first: the boot that started this task was itself inbound traffic.
+    """
+    assert settings.keep_alive_url is not None  # the caller starts the task only when it is set
+    url = f"{settings.keep_alive_url.rstrip('/')}/health"
+    async with httpx.AsyncClient(timeout=KEEP_ALIVE_TIMEOUT_S) as client:
+        while True:
+            await asyncio.sleep(settings.keep_alive_interval_s)
+            try:
+                response = await client.get(url)
+            except Exception as exc:  # a dropped ping is never worth a restart or a warning
+                logger.debug("keep-alive: GET %s failed: %s", url, exc)
+            else:
+                logger.debug("keep-alive: GET %s -> %s", url, response.status_code)
 
 
 async def _warm_up(app: FastAPI) -> None:
@@ -255,6 +298,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # 6. the `/ready` warm-up, after uvicorn starts accepting (§11.4).
         warmup = asyncio.create_task(_warm_up(app))
 
+        # 7. the self keep-alive (§14.4) — only when the public origin is configured.
+        keep_alive = asyncio.create_task(_keep_alive(resolved)) if resolved.keep_alive_url else None
+        app.state.keep_alive = keep_alive
+
         async with mcp_lifespan(server):
             try:
                 yield
@@ -262,7 +309,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 broker.close()
                 unregister()
                 unregister_deltas()
-                for task in (warmup, maintenance):
+                for task in (warmup, maintenance, keep_alive):
+                    if task is None:
+                        continue
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError, Exception):
                         await task
@@ -281,6 +330,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
     )
     app.state.settings = resolved
+    app.state.keep_alive = None
     app.state.employees = _employees()
     app.state.data_as_of = _data_as_of()
     app.state.served_a_turn = False
@@ -301,4 +351,4 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 app = create_app()
 
 
-__all__ = ["MAINTENANCE_INTERVAL_S", "app", "create_app"]
+__all__ = ["KEEP_ALIVE_TIMEOUT_S", "MAINTENANCE_INTERVAL_S", "app", "create_app"]

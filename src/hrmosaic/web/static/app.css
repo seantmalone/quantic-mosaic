@@ -18,6 +18,13 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` is the one visibility switch every page here uses, and it has to win. The user-agent
+   sheet's `[hidden] { display: none }` is beaten by ANY author `display:` declaration — `.banner`
+   and `.turn` each set one — which is how the cold-start banner and the empty answer preview came
+   to be painted at rest and to survive `element.hidden = true`. Declared once, up here, so a later
+   rule cannot quietly take the switch away again. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

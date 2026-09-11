@@ -44,6 +44,43 @@ async def test_the_chat_page_carries_the_selector_the_demo_buttons_and_the_rail(
     assert 'value="E1042" selected' in html, "the default persona is pre-selected"
 
 
+async def test_at_rest_the_page_carries_neither_a_banner_nor_an_empty_answer_preview(web):
+    """Page load, before any turn: the two transient areas are off screen, and stay off (§11.5).
+
+    Both were on screen at rest, and neither could be dismissed. `hidden` was on both elements from
+    the day they were written, but an author `display:` beats the user-agent sheet's
+    `[hidden] { display: none }` — and `.banner` and `.turn` each set one. So the
+    *"Waking the free instance…"* strip was painted on every load and survived `banner.hidden =
+    true` when `/health` answered, and the provisional-answer box was painted empty under its
+    *"Writing the answer…"* caption before a question had been asked. One `!important` declaration
+    gives the pages back their one visibility switch; these assertions are what keep it.
+    """
+    async with web() as client:
+        html = (await client.get("/")).text
+        css = (await client.get("/static/app.css")).text
+
+    assert '<div id="cold-start-banner" class="banner" hidden>' in html
+    assert '<article id="provisional-answer" class="turn turn-provisional" aria-live="polite" hidden>' in html
+    assert re.search(r"\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}", css), (
+        "`hidden` must beat every author `display:` rule, or neither area can be hidden at all"
+    )
+
+    # The preview is revealed by the first `answer_delta` frame and hidden again by the hard
+    # replace on `turn_completed` — never at load.
+    assert "provisional.hidden = false;" in html
+    assert "provisional.hidden = true;" in html
+
+    # The banner describes one state: a request that is actually waiting. The page itself was
+    # served by the instance, so the preflight answers in milliseconds on a warm one and the
+    # banner is never revealed at all.
+    preflight = html.split("function coldStartPreflight()")[1]
+    assert "COLD_START_BANNER_DELAY_MS" in preflight
+    assert preflight.count("banner.hidden = false") == 1
+    assert "setTimeout(" in preflight, "the reveal is deferred, so a warm load never flashes it"
+    assert "clearTimeout(reveal)" in preflight, "a preflight that answers first cancels the reveal"
+    assert "banner.hidden = true" in preflight, "and hides it if it was already on screen"
+
+
 async def test_the_rail_narrates_each_step_and_the_answer_streams_under_it(web):
     """§11.3's two additions, asserted on the markup and the script a grader actually loads."""
     async with web() as client:
