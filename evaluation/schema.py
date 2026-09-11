@@ -336,7 +336,11 @@ class RunFile(BaseModel):
 
     run_id: str
     created_at: int
+    #: `git rev-parse HEAD` of the harness tree — the code that scored this run (§13.2).
     git_sha: str
+    #: `app.git_sha` as the target's own `/health` reported it; `None` for a `local` target, and
+    #: absent from every run file written before 2026-09-11.
+    target_git_sha: str | None = None
     label: str
     variant: str
     target: Target

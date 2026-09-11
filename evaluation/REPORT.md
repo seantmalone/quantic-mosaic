@@ -16,7 +16,8 @@ comes from that one run; nothing here is hand-edited.
 | Limiter | LLM_RPM = 10 |
 | Estimated spend | $0.6257 |
 | Wall clock | 480.1 s |
-| git sha | `dev` |
+| Harness git sha | `dev` |
+| Target git sha | — (not recorded; `deployed.md` names the commit that served this run) |
 
 ## Headline metrics
 
@@ -130,7 +131,7 @@ OpenAI-compatible adapter never asks for Gemini context caching.
 
 **Subset definition.** 8 items sampled with `SEED = 1729` by `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer`. **Blind**: the sample was fixed before any judge verdict existed and the labeller saw no score. The selection is blind (`selection_disclosed: false`).
 
-Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-11. Authored in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet was built from run `r_1789086979_baseline` (the final published run, deployed commit da0dca2) at 00:44:36Z on 2026-09-11 while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no per-claim verdict, no rationale, no groundedness score. The session read no run file, no REPORT.md, no CHANGELOG and no phase report.
+Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller: the same vendor as the agent (Anthropic claude-haiku-4-5), a different model, in an independent session that read only the packet — and a different vendor and family from the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-11. Authored in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet was built from run `r_1789086979_baseline` (the final published run, deployed commit da0dca2) at 00:44:36Z on 2026-09-11 while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no per-claim verdict, no rationale, no groundedness score. The session read no run file, no REPORT.md, no CHANGELOG and no phase report.
 
 | reference ↓ / judge → | grounded | not_grounded |
 |---|---|---|
@@ -145,7 +146,7 @@ Of the 8 compared, **0** involved a `not_grounded` on either side: every cell bu
 
 **Subset definition.** the 8 gold-`answer` items with the **lowest judge groundedness in this run**, ties broken by item id (`evaluation.schema.judge_lowest_subset()`). **Selection disclosed, labelling still blind**: the items were picked using the judge's scores, which the labeller never saw. The selection is disclosed and recorded as such in the labels file (`selection_disclosed: true`); the labelling is blind either way.
 
-Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-11. Authored on 2026-09-11 for the final published run `r_1789086979_baseline` (deployed commit da0dca2) in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet carried no judge output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection criterion or the ordering, so the labeller could not tell a low-scoring item from a high-scoring one. The session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's labels either.
+Protocol: labeller `blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller: the same vendor as the agent (Anthropic claude-haiku-4-5), a different model, in an independent session that read only the packet — and a different vendor and family from the judge (Google gemini-3.5-flash-lite)`, labelled 2026-09-11. Authored on 2026-09-11 for the final published run `r_1789086979_baseline` (deployed commit da0dca2) in a fresh session that read only the labelling packet: for each item, the question, the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried, each labelled with its class. The packet carried no judge output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection criterion or the ordering, so the labeller could not tell a low-scoring item from a high-scoring one. The session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's labels either.
 
 | reference ↓ / judge → | grounded | not_grounded |
 |---|---|---|

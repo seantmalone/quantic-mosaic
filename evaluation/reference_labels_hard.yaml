@@ -23,8 +23,9 @@
 
 protocol:
   labeller: >-
-    blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third
-    model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google
+    blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller: the same
+    vendor as the agent (Anthropic claude-haiku-4-5), a different model, in an independent session
+    that read only the packet — and a different vendor and family from the judge (Google
     gemini-3.5-flash-lite)
   labelled_on: "2026-09-11"
   blinding: >-

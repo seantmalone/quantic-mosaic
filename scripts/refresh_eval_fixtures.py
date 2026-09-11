@@ -137,6 +137,7 @@ def build_fixture(variant: str, run_id: str, *, dataset: Dataset, results_dir: P
     # Provenance is the source run's, not this process's.
     run.created_at = source.created_at
     run.git_sha = source.git_sha
+    run.target_git_sha = source.target_git_sha
     run.label = f"P10 fixture — {variant}"
     run.dataset_sha = source.dataset_sha
     run.judge_model = source.judge_model
