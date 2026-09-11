@@ -22,12 +22,12 @@ protocol:
     blind-opus-labeller — a separate Claude Opus 5 session dispatched by the controller, a third
     model family independent of both the agent (Anthropic claude-haiku-4-5) and the judge (Google
     gemini-3.5-flash-lite)
-  labelled_on: "2026-09-10"
+  labelled_on: "2026-09-11"
   blinding: >-
     Authored in a fresh session that read only the labelling packet: for each item, the question,
     the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
-    each labelled with its class. The packet was built from the run while it was still
-    `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
+    each labelled with its class. The packet was built from run `r_1789086979_baseline` (the final published run, deployed
+    commit da0dca2) at 00:44:36Z on 2026-09-11 while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
     per-claim verdict, no rationale, no groundedness score. The session read no run file, no
     REPORT.md, no CHANGELOG and no phase report.
   selection: >-
@@ -52,59 +52,63 @@ labels:
   - item_id: benefits-001
     verdict: grounded
     rationale: >-
-      Every policy claim is verbatim in the evidence — the 90-day waiting period and its
-      coverage-start, transfer and 26-week break-in-service rules in c_7566e6e377678fcd, life/AD&D
-      cover beginning with the medical waiting period in c_88f9cf68022eeaea, and week-one enrolment
-      with the no-waiting-period 401(k) in c_5892cd18e5f9cae8.
+      Every policy claim — the 90-day medical/dental/vision waiting period with coverage
+      starting the day it ends, the 401(k) having no waiting period, and the non-restart on
+      transfer/promotion/PT-to-FT versus restart after a 26-week break — is stated verbatim in
+      c_7566e6e377678fcd, and the week-one enrolment step is supported by c_5892cd18e5f9cae8.
 
   - item_id: benefits-002
     verdict: grounded
     rationale: >-
-      The 90-day rule and the 30-day election window with its employee-only default come from
-      c_7566e6e377678fcd, and the specific date claim — waiting period ending 2026-11-13 as of
-      2026-09-01 — is exactly the employee's own record in lookup_benefits_status#1.
+      The policy statements (90-day period, coverage from the end date, 30-day election window
+      with employee-only default, non-restart rules) come from c_7566e6e377678fcd, and the
+      personalized facts — waiting period ending 2026-11-13 and the 2026-11-01 to 2026-11-21
+      open-enrollment window — match the structured_data record lookup_benefits_status#1
+      exactly.
 
   - item_id: conduct-001
     verdict: grounded
     rationale: >-
-      The three published timelines are each stated in the evidence: the 2-business-day
-      acknowledgement and 30-calendar-day investigation target in c_faa7e3e074e0f281, and the
-      Severity 1 definition with its 4-business-hour response in c_8befbf9c1eefd50e, with the "as
-      fast as the facts allow" Severity 1 resolution target in c_8e5b6fa6417ebbd2.
+      The 2-business-day acknowledgement and 30-calendar-day investigation target are verbatim
+      in c_faa7e3e074e0f281 / get_policy_section#1, and the Severity 1 definition plus the
+      4-business-hour response target are verbatim in c_8befbf9c1eefd50e /
+      get_policy_section#2.
 
   - item_id: expenses-001
     verdict: grounded
     rationale: >-
-      The USD 750 annual home-office cap and every rule attached to it — 1 January reset with no
-      carryover, hybrid/remote eligibility, the exclusion of laptops and monitors as company assets,
-      employee ownership and taxability, and the post-1-October new-hire double claim — are all in
-      c_c0b4b1d7c6436137.
+      The USD 750 per plan year home-office cap and the exact list of eligible items (desk,
+      chair, lamp, footrest, adjustable monitor arm, acoustic treatment, small filing cabinet)
+      are stated in c_c0b4b1d7c6436137, which also supports the onsite manager-approval
+      caveat; the answer does not confuse it with the separate USD 750 HSA contribution in
+      c_093305ba196720bd.
 
   - item_id: pto-001
     verdict: grounded
     rationale: >-
-      The single claim, that full-time employees with three or more years of service accrue 1.50
-      days of PTO per month, is stated word for word in c_e178629918c7cd96 and in the fetched
-      section get_policy_section#1.
+      Both figures — 1.50 days per month for three-or-more years of service and 18.0 days
+      across a full plan year — appear verbatim in c_e178629918c7cd96.
 
   - item_id: remote-001
     verdict: grounded
     rationale: >-
-      The claim that hybrid employees are on site at least 3 days a week with team-set days anchored
-      on Tuesday–Thursday is a verbatim restatement of c_cf43ea100f30ec65.
+      The three-days-on-site requirement, team-set anchor days (Tue/Wed/Thu), rolling four-
+      week average measurement in MosaicOne, and proportional reduction for holiday/PTO/travel
+      weeks are all stated in c_cf43ea100f30ec65.
 
   - item_id: remote-002
     verdict: grounded
     rationale: >-
-      The three-approval requirement (manager, director, Tax & Legal, all present before departure),
-      the 21-calendar-day filing deadline, the review's scope and its three outcomes all come from
-      c_c502ccd2ba5028f5, with the 12-month tenure, good-standing and role-ineligibility conditions
-      from c_6577bf6f392890bf and the right-to-work, device and rolling 90-day limit from
-      c_4142a3cd62ef49dd.
+      Each requirement is sourced: the Tax & Legal review and its three purposes, the
+      21-calendar-day filing and three separate approval records from c_c502ccd2ba5028f5; the
+      encrypted-laptop/VPN rule and 5-business-day IT Security notice from c_57b2015388bbf7d4;
+      and the 12-month tenure plus right-to-work condition from c_6577bf6f392890bf.
 
   - item_id: remote-003
     verdict: grounded
     rationale: >-
-      The answer declines to answer and states no company policy at all — it makes no claim about
-      the 30-day Tax & Legal threshold that check_policy_compliance#1 carries — so there is no
-      policy claim that could be unsupported.
+      The "30 days or fewer needs no Tax & Legal review" rule is from c_4142a3cd62ef49dd,
+      Ireland's approved status from c_b189d36f26fb7c60, and the 20-day count, 21-day manager
+      notice, 5-business-day IT Security notice and device requirement are all confirmed by
+      c_64fbd63786de81d4, c_57b2015388bbf7d4 and the compliance evidence
+      check_policy_compliance#1 (duration_days 20, destination IE).
