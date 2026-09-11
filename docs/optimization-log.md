@@ -333,8 +333,11 @@ running out suspends the service until the month resets rather than billing anyt
 row is the same turn the evaluation runs measure; the cold-start penalty is entirely the 45-second
 wake.
 
-**Status: `.github/workflows/keepalive.yml` landed 2026-09-11, after these probes; every figure
-above is still the no-keep-alive behaviour and disabling the workflow restores it.**
+**Status: `.github/workflows/keepalive.yml` landed 2026-09-11, after these probes, and an
+in-process self-ping joined it the same day as the primary layer — but that layer starts only when
+`KEEP_ALIVE_URL` is set on the service and it is **not set on the live service**, so every figure
+above is still the behaviour a visitor gets; disabling the workflow and leaving the variable clear
+keeps it that way.**
 
 ---
 

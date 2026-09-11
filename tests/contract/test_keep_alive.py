@@ -16,13 +16,23 @@ Four properties carry the argument, and each is asserted below:
   one (the boot that started it was itself inbound traffic), and a failed ping neither raises nor
   stops the loop — a missed ping costs only the cold start `deployed.md` publishes;
 * shutdown cancels it, like every other lifespan-owned task.
+
+A fifth property is about the **documents**, and it is here because it is a property of this
+feature and of nothing else: the loop only runs when an operator sets `KEEP_ALIVE_URL` on the
+service, and nothing in this repository sets it. So every graded document that publishes the
+keep-alive has to publish it in the conditional, and the day someone does set it — in
+`render.yaml`, in the `Dockerfile`, or on the live service — those documents have to be revisited.
+`test_the_published_keep_alive_claim_stays_conditional_while_nothing_sets_the_url` fails on both
+halves of that: an unconditional claim, or a repository that quietly starts setting the variable.
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from unittest import mock
 
 import httpx
@@ -37,6 +47,32 @@ from tests.conftest import free_port
 pytestmark = pytest.mark.anyio
 
 PUBLIC_ORIGIN = "https://mosaic-hr-copilot.onrender.com"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: The graded documents that publish the keep-alive to a reader.
+PUBLISHED_DOCS = (
+    "README.md",
+    "deployed.md",
+    "docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md",
+    "docs/architecture.html",
+)
+
+#: A claim that the instance *is* being kept warm, with no precondition attached.
+UNCONDITIONAL_CLAIM = re.compile(r"\b(now|already|does)\s+keeps?\s+the\s+instance\s+(warm|awake)\b", re.I)
+
+#: Any one of these, in a document, states the precondition the reader needs.
+CONDITIONAL_MARKERS = (
+    "once `KEEP_ALIVE_URL` is set",
+    "is set nowhere in this repository",
+    "is set in no file of this repository",
+    "not set on the live service",
+    "has not been set on the live service",
+    "not switched on",
+)
+
+#: Files that could set the variable for the deployed service without an operator lifting a finger.
+DEPLOY_FILES = ("render.yaml", "Dockerfile")
 
 
 def _settings(**overrides: object) -> Settings:
@@ -137,3 +173,37 @@ async def test_the_loop_pings_public_health_on_its_schedule_and_survives_a_failu
     assert waits == [600, 600, 600, 600], "it waits its interval before every ping"
     assert pings == [f"{PUBLIC_ORIGIN}/health"] * 3, "the public origin, one trailing slash or none"
     assert timeouts == [web_main.KEEP_ALIVE_TIMEOUT_S]
+
+
+def test_the_published_keep_alive_claim_stays_conditional_while_nothing_sets_the_url():
+    """The documents may promise a warm instance only where they name the switch that arms it.
+
+    P21 replaced one over-claim (the GitHub cron "now keeps the instance warm", which its own
+    finding disproved) and must not install another: the in-process loop is real, tested and
+    **off**, because `KEEP_ALIVE_URL` is unset by default and this repository sets it nowhere. A
+    grader reads `README.md` and gets the 71.0 s cold start `deployed.md` measures, so the claim
+    has to carry its precondition. Both halves are asserted — the repository's silence about the
+    variable, and each document's conditional — so that setting it in `render.yaml` tomorrow fails
+    here instead of quietly making three documents true by accident and one of them stale.
+    """
+    for name in DEPLOY_FILES:
+        body = (REPO_ROOT / name).read_text(encoding="utf-8")
+        assert "KEEP_ALIVE_URL" not in body, (
+            f"{name} now sets the keep-alive URL — the documents say the repository does not; "
+            "update them (and this test) in the same commit"
+        )
+
+    example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^KEEP_ALIVE_URL=\s*(#|$)", example, re.M), (
+        ".env.example must carry the key with no value: unset is the documented default"
+    )
+
+    for rel in PUBLISHED_DOCS:
+        prose = " ".join((REPO_ROOT / rel).read_text(encoding="utf-8").split())
+        assert not UNCONDITIONAL_CLAIM.search(prose), (
+            f"{rel} claims the instance is being kept warm; it is not, until an operator sets "
+            "KEEP_ALIVE_URL on the service"
+        )
+        assert any(marker in prose for marker in CONDITIONAL_MARKERS), (
+            f"{rel} publishes the keep-alive without naming the variable that arms it"
+        )

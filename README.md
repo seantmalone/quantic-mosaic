@@ -45,7 +45,7 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 1,916 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 1,917 tests as of
 2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
@@ -110,11 +110,14 @@ a median **71.0 s** from cold to first answer (67.5–77.6 s across the three; t
 taken per segment, so they do not sum to it), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
 first and wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter
 while that happens. `deployed.md` carries the per-probe table and its provenance, and a two-layer
-keep-alive (added 2026-09-11 *after* these figures were published) now keeps the instance warm: the
-app pings its own public `/health` every ten minutes from inside the process (`KEEP_ALIVE_URL`),
-with `.github/workflows/keepalive.yml` behind it as a second layer because GitHub's cron skipped
-most of its scheduled runs — clear that variable and disable that workflow and the table above is
-again exactly what a visitor sees.
+keep-alive (added 2026-09-11 *after* these figures were published) keeps the instance warm **once
+`KEEP_ALIVE_URL` is set on the service**: the app then pings its own public `/health` every ten
+minutes from inside the process, with `.github/workflows/keepalive.yml` behind it as a second layer
+because GitHub's cron skipped most of its scheduled runs. That variable is **unset by default and
+this repository does not set it** — neither `render.yaml` nor the `Dockerfile` carries a value — so
+until an operator sets it on the live service the in-process layer is not running and the numbers
+above are still exactly what a visitor gets; clearing it again and disabling that workflow puts the
+service back to them for good.
 
 ## Evaluation
 
