@@ -27,8 +27,8 @@ protocol:
   blinding: >-
     Authored in a fresh session that read only the labelling packet: for each item, the question,
     the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
-    each labelled with its class. The packet was built from run `r_1789086979_baseline` (the final published run, deployed
-    commit da0dca2) at 00:44:36Z on 2026-09-11 while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
+    each labelled with its class. The packet was built from run `r_1789166880_baseline` (the final published run, deployed
+    commit 34717b5) at 22:57:33Z on 2026-09-11 while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
     per-claim verdict, no rationale, no groundedness score. The session read no run file, no
     REPORT.md, no CHANGELOG and no phase report.
   selection: >-
@@ -53,63 +53,64 @@ labels:
   - item_id: benefits-001
     verdict: grounded
     rationale: >-
-      Every policy claim — the 90-day medical/dental/vision waiting period with coverage
-      starting the day it ends, the 401(k) having no waiting period, and the non-restart on
-      transfer/promotion/PT-to-FT versus restart after a 26-week break — is stated verbatim in
-      c_7566e6e377678fcd, and the week-one enrolment step is supported by c_5892cd18e5f9cae8.
+      Every claim — the 90-day medical/dental/vision waiting period, coverage starting the day
+      the period ends rather than the first of the following month, the no-waiting-period
+      401(k) from the first payroll run, and the 30-day election window with employee-only
+      standard-plan default — is stated verbatim in c_7566e6e377678fcd, and "enroll during
+      week one" is supported by c_5892cd18e5f9cae8.
 
   - item_id: benefits-002
     verdict: grounded
     rationale: >-
-      The policy statements (90-day period, coverage from the end date, 30-day election window
-      with employee-only default, non-restart rules) come from c_7566e6e377678fcd, and the
-      personalized facts — waiting period ending 2026-11-13 and the 2026-11-01 to 2026-11-21
-      open-enrollment window — match the structured_data record lookup_benefits_status#1
-      exactly.
+      The 90-day rule and the 30-day election window come from c_7566e6e377678fcd, and the
+      2026-11-13 end date (as of 2026-09-01) is the employee's own record in
+      lookup_benefits_status#1; the 2026-12-13 next step is exactly 30 days after that
+      record's date, and the benefits@ address appears in c_0df5d11cd585014f.
 
   - item_id: conduct-001
     verdict: grounded
     rationale: >-
-      The 2-business-day acknowledgement and 30-calendar-day investigation target are verbatim
-      in c_faa7e3e074e0f281 / get_policy_section#1, and the Severity 1 definition plus the
-      4-business-hour response target are verbatim in c_8befbf9c1eefd50e /
-      get_policy_section#2.
+      All three published timelines — 2 business days to acknowledge (c_faa7e3e074e0f281), 30
+      calendar days targeted for investigation (c_faa7e3e074e0f281), and a 4-business-hour
+      Severity 1 response with "as fast as the facts allow" resolution and 10-business-day
+      updates (c_8befbf9c1eefd50e, c_8e5b6fa6417ebbd2) — are stated in the evidence, as is the
+      Employee Relations routing (c_b1b9f056ae7f2f27).
 
   - item_id: expenses-001
-    verdict: grounded
+    verdict: not_grounded
     rationale: >-
-      The USD 750 per plan year home-office cap and the exact list of eligible items (desk,
-      chair, lamp, footrest, adjustable monitor arm, acoustic treatment, small filing cabinet)
-      are stated in c_c0b4b1d7c6436137, which also supports the onsite manager-approval
-      caveat; the answer does not confuse it with the separate USD 750 HSA contribution in
-      c_093305ba196720bd.
+      The USD 750 annual cap and the eligible-item list match c_c0b4b1d7c6436137, but the next
+      step "Submit claims by month-end for next payroll" asserts a month-end deadline that no
+      evidence item states; c_9ce35f1b68d5c0f8 sets the cutoff at approval by the 20th of the
+      month, with anything after that landing in the following month's payroll.
 
   - item_id: pto-001
     verdict: grounded
     rationale: >-
-      Both figures — 1.50 days per month for three-or-more years of service and 18.0 days
-      across a full plan year — appear verbatim in c_e178629918c7cd96.
+      Both figures — 1.50 days per month for three or more years of service and 18.0 days
+      across a full plan year — are stated verbatim in c_e178629918c7cd96.
 
   - item_id: remote-001
     verdict: grounded
     rationale: >-
-      The three-days-on-site requirement, team-set anchor days (Tue/Wed/Thu), rolling four-
-      week average measurement in MosaicOne, and proportional reduction for holiday/PTO/travel
-      weeks are all stated in c_cf43ea100f30ec65.
+      The at-least-3-onsite-days requirement, team-set days, and the
+      Tuesday/Wednesday/Thursday anchor are all stated verbatim in c_cf43ea100f30ec65.
 
   - item_id: remote-002
     verdict: grounded
     rationale: >-
-      Each requirement is sourced: the Tax & Legal review and its three purposes, the
-      21-calendar-day filing and three separate approval records from c_c502ccd2ba5028f5; the
-      encrypted-laptop/VPN rule and 5-business-day IT Security notice from c_57b2015388bbf7d4;
-      and the 12-month tenure plus right-to-work condition from c_6577bf6f392890bf.
+      The Tax & Legal review trigger, its three determinations, the 21-calendar-day filing
+      notice and required request contents, the three review outcomes, and the director-plus-
+      three-records approval rule all come from c_c502ccd2ba5028f5; the right-to-work/no-visa-
+      sponsorship claim is in c_6577bf6f392890bf and c_cceb27b487508cbd, and the encrypted-
+      laptop/VPN and 5-business-day IT Security notice from c_57b2015388bbf7d4 and
+      c_21fb57a686af7f30.
 
   - item_id: remote-003
     verdict: grounded
     rationale: >-
-      The "30 days or fewer needs no Tax & Legal review" rule is from c_4142a3cd62ef49dd,
-      Ireland's approved status from c_b189d36f26fb7c60, and the 20-day count, 21-day manager
-      notice, 5-business-day IT Security notice and device requirement are all confirmed by
-      c_64fbd63786de81d4, c_57b2015388bbf7d4 and the compliance evidence
-      check_policy_compliance#1 (duration_days 20, destination IE).
+      Ireland's approved status (c_b189d36f26fb7c60), the 30-day threshold and inclusive day
+      count giving 20 days (c_4142a3cd62ef49dd, corroborated by check_policy_compliance#1's
+      duration_days 20), the manager-only approver row (c_0d2c84e4df38b6a0), the 21-calendar-
+      day MosaicOne request contents (c_64fbd63786de81d4), and the device/IT-Security/90-day-
+      limit conditions are each supported.
