@@ -404,3 +404,160 @@ async def test_a_declined_confirmation_also_streams_a_second_turn_started_and_co
     assert events[0] == "turn_started" and events[-1] == "turn_completed"
     assert frames[-1][1]["outcome"] == "refused"
     assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
+
+
+# --------------------------------------------------------------------------------------
+# The broker's own promises: never block, never raise, always let go (§11.3)
+# --------------------------------------------------------------------------------------
+#
+# Everything above drives the rail through a real browser-shaped subscription, which is the path
+# that matters. The block below drives the three paths a healthy turn never takes — a browser that
+# stopped reading, an idle connection, and uvicorn's graceful shutdown — because each of them is a
+# promise this module makes to the *turn*: the turn must not stall, must not raise, and must not
+# hold the process open (P20).
+
+
+async def _read_stream(generator, limit: int) -> list[str]:
+    """Read a stream generator to completion, or to `limit` frames, whichever comes first."""
+    frames: list[str] = []
+    async for frame in generator:
+        frames.append(frame)
+        if len(frames) >= limit:
+            await generator.aclose()
+            break
+    return frames
+
+
+async def test_shutdown_releases_every_open_stream():
+    """The lifespan's `close()`: a long-lived SSE response must not hold graceful shutdown open."""
+    broker = sse.SpanBroker()
+    broker.bind(asyncio.get_running_loop())
+    stream = broker.stream("t-shutdown")
+    frames: list[str] = []
+
+    async def read() -> None:
+        async for frame in stream:
+            frames.append(frame)
+
+    reading = asyncio.create_task(read())
+    while broker.subscriber_count("t-shutdown") == 0:
+        await asyncio.sleep(0.01)
+    broker.close()
+
+    await asyncio.wait_for(reading, timeout=5)
+    assert frames == [": subscribed\n\n"], "the sentinel ended the generator without emitting a frame"
+    assert broker.subscriber_count("t-shutdown") == 0
+
+
+async def test_a_frame_published_after_shutdown_reaches_nobody():
+    broker = sse.SpanBroker()
+    broker.bind(asyncio.get_running_loop())
+    queue = broker.subscribe("t-closed")
+    broker.close()
+    while not queue.empty():  # drain the sentinel `close()` pushed
+        queue.get_nowait()
+
+    broker.publish("t-closed", "span", {"seq": 1})
+    await asyncio.sleep(0)
+    assert queue.empty()
+
+
+async def test_unsubscribing_from_a_turn_nobody_is_watching_is_a_no_op():
+    """A generator's `finally` runs after `close()` has already cleared the registry."""
+    broker = sse.SpanBroker()
+    queue: asyncio.Queue = asyncio.Queue()
+    broker.unsubscribe("t-absent", queue)  # must not raise
+    assert broker.subscriber_count("t-absent") == 0
+
+
+async def test_one_subscriber_leaving_does_not_end_its_peer_s_stream():
+    """Two browsers on one turn: the second tab closing must not unregister the first."""
+    broker = sse.SpanBroker()
+    broker.bind(asyncio.get_running_loop())
+    first = broker.subscribe("t-two")
+    second = broker.subscribe("t-two")
+
+    broker.unsubscribe("t-two", second)
+    assert broker.subscriber_count("t-two") == 1
+
+    broker.unsubscribe("t-two", second)  # already gone: still not an error
+    assert broker.subscriber_count("t-two") == 1
+
+    broker.publish("t-two", "span", {"seq": 1})
+    await asyncio.sleep(0)
+    assert first.qsize() == 1
+    broker.unsubscribe("t-two", first)
+    assert broker.subscriber_count("t-two") == 0
+
+
+async def test_a_frame_published_with_no_serving_loop_is_dropped_rather_than_raised():
+    """`publish_span` runs on a worker thread; a broker that was never bound must not take the turn down."""
+    unbound = sse.SpanBroker()
+    queue = unbound.subscribe("t-unbound")
+    unbound.publish("t-unbound", "span", {"seq": 1})
+    assert queue.empty()
+
+    spent = asyncio.new_event_loop()
+    spent.close()
+    bound_to_a_dead_loop = sse.SpanBroker()
+    bound_to_a_dead_loop.bind(spent)
+    bound_to_a_dead_loop.subscribe("t-dead")
+    bound_to_a_dead_loop.publish("t-dead", "span", {"seq": 1})  # must not raise
+
+
+async def test_a_loop_that_shuts_down_mid_publish_costs_the_frame_and_nothing_else():
+    """The race the `except RuntimeError` exists for: the loop dies between the check and the call.
+
+    It cannot be provoked with a real loop — `is_closed()` would already be true — so the stand-in
+    below is a loop that reports itself open and then raises exactly what `asyncio` raises.
+    """
+
+    class ClosingLoop:
+        def is_closed(self) -> bool:
+            return False
+
+        def call_soon_threadsafe(self, *args, **kwargs):
+            raise RuntimeError("Event loop is closed")
+
+    broker = sse.SpanBroker()
+    broker.bind(ClosingLoop())  # type: ignore[arg-type]
+    queue = broker.subscribe("t-racing")
+    broker.publish("t-racing", "span", {"seq": 1})  # must not raise
+    assert queue.empty()
+
+
+async def test_a_subscriber_that_stopped_reading_loses_frames_not_the_turn():
+    """A browser that stopped draining costs memory once (`QUEUE_MAX`) and never stalls the agent."""
+    broker = sse.SpanBroker()
+    broker.bind(asyncio.get_running_loop())
+    queue = broker.subscribe("t-full")
+    for seq in range(sse.QUEUE_MAX):
+        broker.publish("t-full", "span", {"seq": seq})
+    await asyncio.sleep(0)
+    assert queue.qsize() == sse.QUEUE_MAX
+
+    broker.publish("t-full", "span", {"seq": sse.QUEUE_MAX})  # must not raise, must not block
+    await asyncio.sleep(0)
+    assert queue.qsize() == sse.QUEUE_MAX
+
+
+async def test_an_idle_stream_sends_a_keep_alive_rather_than_letting_a_proxy_close_it(monkeypatch):
+    """§11.3's comment line every `HEARTBEAT_S`, shortened here so the test costs milliseconds."""
+    monkeypatch.setattr(sse, "HEARTBEAT_S", 0.02)
+    broker = sse.SpanBroker()
+    broker.bind(asyncio.get_running_loop())
+
+    frames = await asyncio.wait_for(_read_stream(broker.stream("t-idle"), limit=3), timeout=5)
+    assert frames == [": subscribed\n\n", ": keep-alive\n\n", ": keep-alive\n\n"]
+    assert broker.subscriber_count("t-idle") == 0, "the generator's finally still unsubscribed"
+
+
+async def test_a_stream_gives_up_at_its_deadline_rather_than_living_forever(monkeypatch):
+    """`STREAM_MAX_S` bounds a subscription whose turn never completes (P19's unbounded-id fix)."""
+    monkeypatch.setattr(sse, "STREAM_MAX_S", 0.0)
+    broker = sse.SpanBroker()
+    broker.bind(asyncio.get_running_loop())
+
+    frames = [frame async for frame in broker.stream("t-expired")]
+    assert frames == [": subscribed\n\n"]
+    assert broker.subscriber_count("t-expired") == 0

@@ -88,5 +88,5 @@ def main() -> None:
     print(json.dumps(snapshot(), indent=2))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - `python -m hrmosaic.core.procstat`, a one-shot reading
     main()

@@ -314,3 +314,207 @@ def test_a_manual_requirement_alone_keeps_a_scenario_off_insufficient_evidence()
 async def test_an_unknown_employee_is_a_successful_not_found():
     body = await compliance("pto_request", FIXTURES["pto_request"], employee_id="E1999")
     assert body["code"] == "EMPLOYEE_NOT_FOUND"
+
+
+# -- the closed vocabulary, at the edges -----------------------------------------------
+#
+# Everything above drives the seven shipped scenarios. The block below drives the engine's
+# *refusals* and its "not stated" paths, which `corpus/rules.yml` deliberately never exercises: the
+# committed rule set is well-formed, so the only way to assert that a malformed construct stops the
+# build — rather than degrading into a silently ignored rule, or worse a falsely `compliant`
+# verdict — is to hand the engine a one-requirement scenario of the test's own making (P20).
+
+#: A real `(doc_id, heading_path)` pair, so a synthesised requirement still resolves real evidence
+#: and these tests exercise the same `resolve_evidence` path the shipped rules take.
+ANCHOR = {"doc_id": "tax-and-location-addendum", "heading_path": "Approved Countries"}
+
+
+def one_requirement(check: object | None, **overrides) -> rules.RuleSet:
+    """A rule set carrying exactly one requirement — the isolating harness for the block below."""
+    requirement = {"id": "probe", "text": "A probe requirement.", "fact_key": "tax.approved_countries"}
+    requirement.update(ANCHOR)
+    if check is not None:
+        requirement["check"] = check
+    requirement.update(overrides)
+    return rules.RuleSet(
+        rules_version=RULE_SET.rules_version,
+        scenarios={
+            "probe_scenario": {
+                "requirements": [requirement],
+                "approvals_required": [],
+                "next_steps": [],
+                "escalate_to": "People Operations — probe@mosaicrobotics.example",
+            }
+        },
+        facts=RULE_SET.facts,
+    )
+
+
+def run_probe(rule_set: rules.RuleSet, parameters: dict | None = None, **overrides) -> dict:
+    arguments = {
+        "employee": {},
+        "balance": {},
+        "parameters": parameters or {},
+        "holidays": (),
+        "as_of": "2026-09-01",
+        "rule_set": rule_set,
+    }
+    arguments.update(overrides)
+    return rules.evaluate("probe_scenario", **arguments)
+
+
+def test_an_anchor_that_names_no_real_section_resolves_to_no_evidence():
+    """A `heading_path` no chunk carries yields `evidence: null`, not a fabricated chunk id.
+
+    G2 would strip a stale id silently, so the engine has to be able to say "nothing backs this".
+    """
+    assert rules.resolve_evidence("tax-and-location-addendum", "A Heading That Does Not Exist") is None
+
+
+def test_a_date_yaml_already_parsed_is_used_as_it_stands():
+    """`corpus/rules.yml` and a caller may both hand over a real `date`, not only an ISO string."""
+    context = rules.Context(
+        as_of=date(2026, 9, 1),
+        employee={"hire_date": date(2020, 9, 1)},
+        balance={},
+        parameters={},
+        holidays=frozenset(),
+        facts=FACTS,
+    )
+    assert context.tenure_days() == (date(2026, 9, 1) - date(2020, 9, 1)).days
+
+
+def test_an_unparseable_date_is_not_stated_rather_than_a_crash_or_a_zero():
+    """A date like `next tuesday` must not silently become "0 days of notice", and a verdict."""
+    context = rules.Context(
+        as_of=date(2026, 9, 1),
+        employee={"hire_date": "next tuesday"},
+        balance={},
+        parameters={"start_date": 20261005},
+        holidays=frozenset(),
+        facts=FACTS,
+    )
+    assert context.tenure_days() is None
+    assert context.notice_calendar_days() is None
+    assert context.notice_business_days() is None
+    assert context.claim_age_days() is None
+
+
+def test_a_request_with_no_dates_has_no_blackout_answer_at_all():
+    """Absent `start_date`, "does this overlap a blackout" is unanswerable — not `False`."""
+    context = rules.Context(
+        as_of=date(2026, 9, 1),
+        employee={},
+        balance={"blackout_dates": ["2026-09-02"]},
+        parameters={},
+        holidays=frozenset(),
+        facts=FACTS,
+    )
+    assert context.overlaps_blackout() is None
+
+
+def test_a_fact_key_that_does_not_resolve_stops_the_build():
+    rule_set = one_requirement({"subject": "parameters.amount", "operator": "lte"}, fact_key="no.such.fact")
+    with pytest.raises(rules.RuleError, match="unknown fact_key"):
+        run_probe(rule_set, {"amount": 10})
+
+
+def test_a_literal_compare_to_keeps_the_type_it_is_written_as():
+    """`literal:30` compares as a number and `literal:DE` as a string — "30" > 9 is not a verdict."""
+    numeric = one_requirement({"subject": "parameters.days", "operator": "lte", "compare_to": "literal:30"})
+    assert run_probe(numeric, {"days": 42})["verdict"] == "conditional"
+    assert run_probe(numeric, {"days": 9})["verdict"] == "compliant"
+
+    fractional = one_requirement({"subject": "parameters.rate", "operator": "lte", "compare_to": "literal:1.5"})
+    assert run_probe(fractional, {"rate": 1.4})["verdict"] == "compliant"
+    assert run_probe(fractional, {"rate": 1.6})["verdict"] == "conditional"
+
+    textual = one_requirement({"subject": "parameters.country", "operator": "eq", "compare_to": "literal:DE"})
+    assert run_probe(textual, {"country": "DE"})["verdict"] == "compliant"
+    assert run_probe(textual, {"country": "FR"})["verdict"] == "conditional"
+
+
+def test_a_compare_to_outside_the_vocabulary_stops_the_build():
+    rule_set = one_requirement({"subject": "parameters.days", "operator": "lte", "compare_to": "employee.level"})
+    with pytest.raises(rules.RuleError, match="unknown check.compare_to"):
+        run_probe(rule_set, {"days": 1})
+
+
+def test_a_boolean_parameter_compares_as_a_number():
+    """§8.4 types `parameters` as `string | number | boolean`, so `true` has to reach a comparison."""
+    rule_set = one_requirement({"subject": "parameters.approved", "operator": "gte", "compare_to": "literal:1"})
+    assert run_probe(rule_set, {"approved": True})["verdict"] == "compliant"
+    assert run_probe(rule_set, {"approved": False})["verdict"] == "conditional"
+
+
+def test_a_date_operator_against_something_that_is_not_a_date_stops_the_build():
+    rule_set = one_requirement(
+        {"subject": "parameters.effective_date", "operator": "date_lte", "compare_to": "literal:soon"}
+    )
+    with pytest.raises(rules.RuleError, match="needs two ISO-8601 dates"):
+        run_probe(rule_set, {"effective_date": "2026-10-05"})
+
+
+def test_a_numeric_operator_against_something_that_is_not_a_number_stops_the_build():
+    rule_set = one_requirement({"subject": "parameters.days", "operator": "lte", "compare_to": "literal:thirty"})
+    with pytest.raises(rules.RuleError, match="needs two numbers"):
+        run_probe(rule_set, {"days": 42})
+
+
+def test_a_guard_naming_a_requirement_the_scenario_does_not_carry_is_a_typo_not_a_pass():
+    """`unmet:remote.intl.duraton` must fail loudly; silently false would drop a Tax & Legal step."""
+    rule_set = one_requirement(
+        {"subject": "parameters.days", "operator": "lte", "compare_to": "literal:30"},
+        applies_when="unmet:probe.typo",
+    )
+    with pytest.raises(rules.RuleError, match="does not carry"):
+        run_probe(rule_set, {"days": 42})
+
+
+def test_a_requirement_with_no_check_stops_the_build():
+    with pytest.raises(rules.RuleError, match="carries no check"):
+        run_probe(one_requirement(None))
+
+
+def test_a_requirement_operator_outside_the_vocabulary_stops_the_build():
+    rule_set = one_requirement({"subject": "parameters.days", "operator": "approximately"})
+    with pytest.raises(rules.RuleError, match="unknown check.operator"):
+        run_probe(rule_set, {"days": 1})
+
+
+def test_a_requirement_subject_outside_the_vocabulary_stops_the_build():
+    rule_set = one_requirement({"subject": "computed.phase_of_the_moon", "operator": "lte"})
+    with pytest.raises(rules.RuleError, match="unknown check.subject"):
+        run_probe(rule_set, {"days": 1})
+
+
+def test_a_compare_to_parameter_nobody_supplied_is_not_stated_rather_than_unmet():
+    """Comparing against an absent parameter cannot prove non-compliance, even when blocking."""
+    rule_set = one_requirement(
+        {"subject": "parameters.days", "operator": "lte", "compare_to": "parameters.cap"},
+        blocking=True,
+    )
+    body = run_probe(rule_set, {"days": 42})
+    assert body["requirements"][0]["reason"].startswith("Not stated:")
+    assert body["requirements"][0]["met"] is False
+    assert body["verdict"] == "insufficient_evidence"
+
+
+def test_an_unknown_scenario_is_refused():
+    with pytest.raises(rules.RuleError, match="unknown scenario"):
+        rules.evaluate(
+            "teleportation_request",
+            employee={},
+            balance={},
+            parameters={},
+            holidays=(),
+            as_of="2026-09-01",
+            rule_set=RULE_SET,
+        )
+
+
+def test_an_unparseable_as_of_is_refused_rather_than_defaulted_to_today():
+    """Constraint 6: verdicts are computed against the snapshot, so a bad snapshot is fatal."""
+    rule_set = one_requirement({"subject": "parameters.days", "operator": "lte", "compare_to": "literal:30"})
+    with pytest.raises(rules.RuleError, match="unparseable as_of"):
+        run_probe(rule_set, {"days": 1}, as_of="the first of September")

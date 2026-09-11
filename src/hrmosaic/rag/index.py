@@ -363,5 +363,5 @@ def main(argv: list[str] | None = None) -> int:
     return selftest(args.index_path)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - a `RUN` line of the Dockerfile, not an import
     sys.exit(main())

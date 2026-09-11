@@ -42,7 +42,18 @@ make run          # uvicorn on http://127.0.0.1:8000
 make run-stdio    # the same MCP server over stdio, for MCP Inspector or the demo
 make lint         # ruff check . && ruff format --check .
 make test         # pytest -q over the whole suite
+make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
+
+**Tests and coverage.** `make test` runs the whole suite in one command — 1,901 tests as of
+2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
+the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
+under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
+`coverage report --fail-under=90`. Measured on 2026-09-11: **95% of statements and 87% of branches
+over 7,110 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
+developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
+a build artifact, with no third-party coverage service and no badge token involved.
 
 The app boots with no credentials: with `LLM_PROVIDER=stub` it replays a recorded script, and
 with a real provider but no key it still boots, reports `degraded` on `/health` and answers
@@ -76,7 +87,8 @@ make docker-run-512    # run it under the 512 MB memory gate
 **CI/CD.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on push to `main`, on pull
 request and on `workflow_dispatch`: `lint` (`ruff check` + `ruff format --check`, then a
 full-history gitleaks scan), `test` (`check_facts.py`, `ingest --verify-manifest`, the whole
-`pytest -q` suite against the stub provider including MCP tool discovery, then `pii_check.py`),
+suite against the stub provider including MCP tool discovery, under a **90% coverage gate**, then
+`pii_check.py`),
 `docker` (builds the image and asserts sqlite-vec loads and the templates and static assets ship),
 and `deploy`, which carries `needs: [test, docker]` so a red test or a broken image blocks the
 deploy — see the skipped-deploy run in

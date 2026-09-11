@@ -37,5 +37,5 @@ def main() -> int:
     return 1
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - the CI `test` job runs it as its own step (§15.1)
     sys.exit(main())
