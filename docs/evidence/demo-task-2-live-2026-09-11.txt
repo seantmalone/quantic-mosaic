@@ -1,0 +1,102 @@
+Demo task 2 — PTO request through the confirmation gate to a mock write, LIVE
+=============================================================================
+Command : BASE_URL=https://mosaic-hr-copilot.onrender.com APP_ACCESS_TOKEN=<redacted> sh scripts/demo_task_2.sh
+Run at  : 2026-09-11, against https://mosaic-hr-copilot.onrender.com (/health app.git_sha e13a772,
+          status ok, degradations [])
+Model   : anthropic claude-haiku-4-5 (the pinned agent), real MCP tools over the in-process mount
+Redaction: the bearer token is sent as a header and never appears in this transcript; nothing else
+          was edited. stderr carried the confirmation-card echo and is not reproduced here.
+
+Citation breadth: this run cited 4 chunks across 2 documents (pto-and-holidays,
+manager-approval-matrix). Live demo-2 turns are not deterministic on breadth — earlier live runs
+cited pto-and-holidays alone. Read the chips on screen rather than a documented expectation.
+
+== Demo task 2 — PTO request with a confirmation-gated mock write
+   https://mosaic-hr-copilot.onrender.com
+   "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 — and can you open the request for me?"
+
+-- the confirmation card (nothing has been created yet, and there is no token in this body)
+
+-- Confirm: POST /chat/confirm mints the one-time token and the write happens
+
+-- outcome: answered
+
+-- answer
+PTO requests must be submitted at least 5 business days in advance.
+
+Full-time employees with three or more years of service accrue 1.50 days of PTO per month.
+
+Every PTO request requires written approval from the employee's direct manager in MosaicOne.
+
+PTO requests of any length are approved by the direct manager.
+
+Recommendation — not company policy: Your PTO balance as of 2026-09-01 is 13.5 days remaining, and you have accrued 1.5 days per month at the three-year-plus rate. Your request for 3 days (15–17 September) meets the 5 business-day notice requirement (8 business days submitted) and is covered by your balance.
+
+Recommendation — not company policy: HR ticket MOCK-HR-000005 has been created to route your request. You must submit the formal request in MosaicOne so your manager Dana (E1007) can record written approval.
+
+Next steps:
+- Your manager will review and approve in writing.
+- Approval is expected within 3 business days.
+
+-- the confirmed write is reported as done: MOCK-HR-000005 is named in the answer
+-- and no next step asks for it again (2 step(s) kept)
+
+-- citations (4 from 2 document(s))
+  [pto-and-holidays] Requesting Time Off > Notice Requirements
+      PTO requests must be submitted at least 5 business days in advance. A request of six or more consecutive business days requires 15 business 
+      /dashboard/corpus/pto-and-holidays#c_16186f87d12c1302
+  [pto-and-holidays] Accrual > Standard Accrual Rates
+      PTO accrues monthly and is posted to the employee's MosaicOne balance on the first calendar day of each month. Accrual is not pro-rated with
+      /dashboard/corpus/pto-and-holidays#c_e178629918c7cd96
+  [pto-and-holidays] Requesting Time Off > Approval Chain
+      Every PTO request requires written approval from the employee's direct manager in MosaicOne. Verbal agreement, a message in chat and an emai
+      /dashboard/corpus/pto-and-holidays#c_d57a7964d974ba44
+  [manager-approval-matrix] Time Off
+      PTO requests of any length are approved by the employee's direct manager. Longer requests and requests overlapping a blackout period additio
+      /dashboard/corpus/manager-approval-matrix#c_9948839107acfaaf
+
+-- trace (29 spans)
+    1  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+    2  guardrail      G4_injection_shield               0 ms  verdict=allow · 1 user_message chunks clean
+    3  llm_call       anthropic:claude-haiku-4-5     3667 ms  purpose=route · 1358→131 tok
+    4  plan           router                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+    5  llm_call       anthropic:claude-haiku-4-5     1863 ms  purpose=act · 3813→178 tok
+    6  tool_call      check_pto_balance                 9 ms  check_pto_balance · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "computed_at": "2026-09-11T18:55:12Z", "accrual_rate_days_per_month": 1.5, "accrual_fact_key": "pto.accrual.ft_…
+    7  tool_call      check_policy_compliance          54 ms  check_policy_compliance · ok
+        args   {"scenario": "pto_request", "employee_id": "E1042", "parameters": {"start_date": "2026-09-15", "days": 3}}
+        result {"scenario": "pto_request", "verdict": "conditional", "as_of": "2026-09-01", "requirements": [{"id": "pto.request.notice", "text": "PTO requests must be submit…
+    8  guardrail      G4_injection_shield               0 ms  verdict=allow · 4 compliance_evidence chunks clean
+    9  llm_call       anthropic:claude-haiku-4-5     2947 ms  purpose=act · 5495→194 tok
+   10  llm_call       anthropic:claude-haiku-4-5     1965 ms  purpose=act · 5799→159 tok
+   11  tool_call      search_policy_documents         478 ms  search_policy_documents · ok
+        args   {"query": "PTO request manager approval requirement", "topic": "pto", "k": 5}
+        result {"hits": [{"chunk_id": "c_d57a7964d974ba44", "doc_id": "pto-and-holidays", "doc_title": "PTO & Holidays Policy", "heading_path": "Requesting Time Off > Approva…
+   12  retrieval      search_policy_documents         382 ms  5 chunks · top dense 0.7836 · manager-approval-matrix, pto-and-holidays, remote-and-hybrid-work
+   13  tool_call      lookup_employee_profile          91 ms  lookup_employee_profile · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "preferred_name": "Priya", "legal_name": "Priya Raghavan", "title": "Senior Robotics Engineer", "department": "…
+   14  guardrail      G4_injection_shield               0 ms  verdict=allow · 3 retrieval chunks clean
+   15  llm_call       anthropic:claude-haiku-4-5     2559 ms  purpose=act · 8006→116 tok
+   16  llm_call       anthropic:claude-haiku-4-5     4148 ms  purpose=act · 8183→314 tok
+   17  tool_call      create_mock_hr_ticket            72 ms  create_mock_hr_ticket · error
+        args   {"employee_id": "E1042", "queue": "hr-timeoff", "summary": "PTO Request: 3 days, 15–17 September 2026", "details": "Employee: Priya Raghavan (E1042), Senior Ro…
+        result {"status": "confirmation_required", "code": "CONFIRMATION_REQUIRED", "action": "create_mock_hr_ticket", "human_summary": "Open an HR ticket in hr-timeoff for E…
+   18  confirmation   create_mock_hr_ticket             0 ms  create_mock_hr_ticket · pending
+   19  plan           act_summary                       0 ms  intent=action workflow=pto_request catalog_reopened=false
+   20  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+   21  guardrail      G4_injection_shield               0 ms  verdict=allow · 4 compliance_evidence chunks clean
+   22  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+   23  confirmation   create_mock_hr_ticket             0 ms  create_mock_hr_ticket · confirmed
+   24  tool_call      create_mock_hr_ticket           187 ms  create_mock_hr_ticket · ok
+        args   {"employee_id": "E1042", "queue": "hr-timeoff", "summary": "PTO Request: 3 days, 15–17 September 2026", "details": "Employee: Priya Raghavan (E1042), Senior Ro…
+        result {"status": "created", "ticket_id": "MOCK-HR-000005", "queue": "hr-timeoff", "priority": "normal", "created_at": "2026-09-11T18:55:27Z", "employee_id": "E1042",…
+   25  guardrail      G1_evidence_gate                  0 ms  verdict=allow · max dense score 0.773, 7 supporting chunk(s)
+   26  llm_call       anthropic:claude-haiku-4-5    11316 ms  purpose=synthesize · 5030→404 tok
+   27  guardrail      G2_citation_resolvability         0 ms  verdict=allow · 4/4 citations resolved
+   28  guardrail      G3_fact_vs_recommendation         0 ms  verdict=allow · 6 block(s), every policy_fact cited
+   29  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+
+-- usage: 7 model call(s), 6 tool call(s), 1 retrieval(s), 37684→1496 tokens in 30135 ms
+-- dashboard: /dashboard/sessions/92f8eda3521df9d1cf08719ccb551685#turn-1

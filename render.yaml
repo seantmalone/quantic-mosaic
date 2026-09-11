@@ -23,6 +23,16 @@ services:
       - { key: LLM_PROVIDER,    value: anthropic }
       - { key: LLM_MODEL,       value: claude-haiku-4-5 }
       - { key: OMP_NUM_THREADS, value: "1" }
+      # The MCP mount's Host allowlist (§8.1). The SDK's Streamable HTTP transport auto-enables DNS
+      # rebinding protection with a loopback-only allowlist, so without the public hostname here the
+      # deployed endpoint answers `421 Invalid Host header` to every external MCP client. The two
+      # loopback entries stay: the agent reaches its own tools at http://127.0.0.1:${PORT}.
+      - { key: MCP_ALLOWED_HOSTS, value: "127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com" }
+      # The in-process keep-alive (§14.4). Unset, the self-ping does not run and the instance spins
+      # down after 15 minutes idle; a blueprint redeploy would silently undo an operator's value, so
+      # the blueprint carries it.
+      - { key: KEEP_ALIVE_URL,        value: "https://mosaic-hr-copilot.onrender.com" }
+      - { key: KEEP_ALIVE_INTERVAL_S, value: "600" }
       # GIT_SHA: Render exposes RENDER_GIT_COMMIT automatically and settings.py resolves
       # GIT_SHA -> RENDER_GIT_COMMIT -> "dev"; smoke_deployed.py asserts it is not "dev".
       - { key: ANTHROPIC_API_KEY,  sync: false }   # the agent (§9.8)

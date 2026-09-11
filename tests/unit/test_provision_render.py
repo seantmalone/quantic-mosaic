@@ -165,6 +165,12 @@ def test_the_blueprint_separates_plain_values_from_sync_false_secrets():
         "LLM_PROVIDER": "anthropic",
         "LLM_MODEL": "claude-haiku-4-5",
         "OMP_NUM_THREADS": "1",
+        # P23: the MCP mount's Host allowlist and the keep-alive switch. Both are plain values, and
+        # both matter to a *re-provision*: without them a re-run of this script would strip the
+        # allowlist (external MCP clients back to 421) and the self-ping.
+        "MCP_ALLOWED_HOSTS": "127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com",
+        "KEEP_ALIVE_URL": "https://mosaic-hr-copilot.onrender.com",
+        "KEEP_ALIVE_INTERVAL_S": "600",
     }
     assert set(blueprint.secret_keys) == set(SECRETS) | {"APP_ACCESS_TOKEN"}
 

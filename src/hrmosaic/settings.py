@@ -119,6 +119,7 @@ class Settings(BaseSettings):
     mcp_transport: Literal["http", "stdio"] = "http"
     mcp_server_url: str | None = None
     mcp_tools_disabled: str = ""
+    mcp_allowed_hosts: str = "127.0.0.1:*,localhost:*"
 
     # --- persistence -----------------------------------------------------------------------
     turso_database_url: str | None = None
@@ -175,6 +176,15 @@ class Settings(BaseSettings):
     def default_mcp_server_url(self) -> str:
         """The in-process loopback mount, resolved against the port Render actually injected."""
         return f"http://127.0.0.1:{self.port}/mcp-server/mcp"
+
+    @property
+    def mcp_allowed_hosts_list(self) -> list[str]:
+        """`MCP_ALLOWED_HOSTS` as the SDK's `allowed_hosts` wants it — blanks dropped.
+
+        A trailing comma or a stray space would otherwise put `""` on the allowlist, and an empty
+        allowed host is a host no request can carry: harmless, but it reads like a hole.
+        """
+        return [entry.strip() for entry in self.mcp_allowed_hosts.split(",") if entry.strip()]
 
     @property
     def mcp_transport_effective(self) -> str:

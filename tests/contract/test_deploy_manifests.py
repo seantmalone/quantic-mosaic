@@ -164,7 +164,32 @@ def test_the_plain_values_pin_the_environment_the_agent_model_and_the_thread_cou
         "LLM_PROVIDER": "anthropic",
         "LLM_MODEL": "claude-haiku-4-5",
         "OMP_NUM_THREADS": "1",
+        "MCP_ALLOWED_HOSTS": "127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com",
+        "KEEP_ALIVE_URL": "https://mosaic-hr-copilot.onrender.com",
+        "KEEP_ALIVE_INTERVAL_S": "600",
     }
+
+
+def test_the_blueprint_lets_an_external_mcp_client_reach_the_mount():
+    """Without the public hostname on the allowlist the endpoint is a 421 for everyone but loopback.
+
+    The SDK auto-enables DNS rebinding protection for a loopback bind address, so the *absence* of
+    this variable is not "no allowlist" — it is the loopback allowlist, and the deployed
+    `/mcp-server/mcp` that `mcp/README.md` invites a grader to attach MCP Inspector to answers
+    `421 Invalid Host header`. Both loopback entries must survive too: the agent reaches its own
+    tools at `http://127.0.0.1:${PORT}/mcp-server/mcp`.
+    """
+    plain = {entry["key"]: entry["value"] for entry in RENDER_SERVICE["envVars"] if "value" in entry}
+    hosts = [host.strip() for host in plain["MCP_ALLOWED_HOSTS"].split(",")]
+    assert "mosaic-hr-copilot.onrender.com" in hosts
+    assert {"127.0.0.1:*", "localhost:*"} <= set(hosts)
+
+
+def test_the_blueprint_carries_the_keep_alive_so_a_redeploy_cannot_drop_it():
+    """§14.4: the self-ping runs only when `KEEP_ALIVE_URL` is set, and a blueprint apply resets env."""
+    plain = {entry["key"]: entry["value"] for entry in RENDER_SERVICE["envVars"] if "value" in entry}
+    assert plain["KEEP_ALIVE_URL"] == "https://mosaic-hr-copilot.onrender.com"
+    assert int(plain["KEEP_ALIVE_INTERVAL_S"]) == 600
 
 
 # --- ci.yml: the docker job ---------------------------------------------------------------

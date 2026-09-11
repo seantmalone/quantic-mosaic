@@ -17,13 +17,13 @@ Four properties carry the argument, and each is asserted below:
   stops the loop — a missed ping costs only the cold start `deployed.md` publishes;
 * shutdown cancels it, like every other lifespan-owned task.
 
-A fifth property is about the **documents**, and it is here because it is a property of this
-feature and of nothing else: the loop only runs when an operator sets `KEEP_ALIVE_URL` on the
-service, and nothing in this repository sets it. So every graded document that publishes the
-keep-alive has to publish it in the conditional, and the day someone does set it — in
-`render.yaml`, in the `Dockerfile`, or on the live service — those documents have to be revisited.
-`test_the_published_keep_alive_claim_stays_conditional_while_nothing_sets_the_url` fails on both
-halves of that: an unconditional claim, or a repository that quietly starts setting the variable.
+Two further properties are about where the variable may be set, and about the **documents**, and
+they are here because they belong to this feature and to nothing else. `render.yaml` carries the
+public origin (P23) so that re-applying the blueprint cannot undo an operator's value; the
+`Dockerfile` must never carry it, because a baked origin would start the loop in every container
+including a developer's. And because the live service — created over the REST API, with
+`autoDeploy: false` — still does not carry it, every graded document that publishes the keep-alive
+has to publish it in the conditional, naming the switch that arms it.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from unittest import mock
 
 import httpx
 import pytest
+import yaml
 
 from hrmosaic.core import trace as trace_module
 from hrmosaic.settings import Settings
@@ -64,15 +65,13 @@ UNCONDITIONAL_CLAIM = re.compile(r"\b(now|already|does)\s+keeps?\s+the\s+instanc
 #: Any one of these, in a document, states the precondition the reader needs.
 CONDITIONAL_MARKERS = (
     "once `KEEP_ALIVE_URL` is set",
-    "is set nowhere in this repository",
-    "is set in no file of this repository",
     "not set on the live service",
     "has not been set on the live service",
     "not switched on",
 )
 
-#: Files that could set the variable for the deployed service without an operator lifting a finger.
-DEPLOY_FILES = ("render.yaml", "Dockerfile")
+#: The image must never bake an origin: one `Dockerfile` value would arm the loop everywhere it runs.
+DOCKERFILE_MUST_NOT_SET = "Dockerfile"
 
 
 def _settings(**overrides: object) -> Settings:
@@ -175,29 +174,38 @@ async def test_the_loop_pings_public_health_on_its_schedule_and_survives_a_failu
     assert timeouts == [web_main.KEEP_ALIVE_TIMEOUT_S]
 
 
-def test_the_published_keep_alive_claim_stays_conditional_while_nothing_sets_the_url():
+def test_the_blueprint_carries_the_url_and_the_image_never_does():
+    """§14.4: a blueprint apply must arm the loop; a baked image value would arm it everywhere.
+
+    P23 put `KEEP_ALIVE_URL` into `render.yaml` so that re-applying the blueprint cannot silently
+    undo an operator's value. That is a *blueprint* value: the live service was created over the
+    REST API and `autoDeploy: false` means no apply happens on its own, so committing it changes
+    no running service — which is why the documents below must still carry the precondition. The
+    `Dockerfile` is the opposite case: a value there would travel into every container, including a
+    developer's `make docker-run-512`, and start a loop pinging the public origin from a laptop.
+    """
+    blueprint = yaml.safe_load((REPO_ROOT / "render.yaml").read_text(encoding="utf-8"))["services"][0]
+    plain = {entry["key"]: entry["value"] for entry in blueprint["envVars"] if "value" in entry}
+    assert plain["KEEP_ALIVE_URL"] == PUBLIC_ORIGIN
+
+    dockerfile = (REPO_ROOT / DOCKERFILE_MUST_NOT_SET).read_text(encoding="utf-8")
+    assert "KEEP_ALIVE_URL" not in dockerfile, "the image must not bake the keep-alive origin"
+
+    example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^KEEP_ALIVE_URL=\s*(#|$)", example, re.M), (
+        ".env.example must carry the key with no value: unset is the local default"
+    )
+
+
+def test_the_published_keep_alive_claim_stays_conditional_while_the_live_service_is_unset():
     """The documents may promise a warm instance only where they name the switch that arms it.
 
     P21 replaced one over-claim (the GitHub cron "now keeps the instance warm", which its own
     finding disproved) and must not install another: the in-process loop is real, tested and
-    **off**, because `KEEP_ALIVE_URL` is unset by default and this repository sets it nowhere. A
-    grader reads `README.md` and gets the 71.0 s cold start `deployed.md` measures, so the claim
-    has to carry its precondition. Both halves are asserted — the repository's silence about the
-    variable, and each document's conditional — so that setting it in `render.yaml` tomorrow fails
-    here instead of quietly making three documents true by accident and one of them stale.
+    **off**, because `KEEP_ALIVE_URL` has not been set on the live service. A grader reads
+    `README.md` and gets the 71.0 s cold start `deployed.md` measures, so the claim has to carry
+    its precondition — in every document that publishes it.
     """
-    for name in DEPLOY_FILES:
-        body = (REPO_ROOT / name).read_text(encoding="utf-8")
-        assert "KEEP_ALIVE_URL" not in body, (
-            f"{name} now sets the keep-alive URL — the documents say the repository does not; "
-            "update them (and this test) in the same commit"
-        )
-
-    example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
-    assert re.search(r"^KEEP_ALIVE_URL=\s*(#|$)", example, re.M), (
-        ".env.example must carry the key with no value: unset is the documented default"
-    )
-
     for rel in PUBLISHED_DOCS:
         prose = " ".join((REPO_ROOT / rel).read_text(encoding="utf-8").split())
         assert not UNCONDITIONAL_CLAIM.search(prose), (
