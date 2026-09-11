@@ -86,3 +86,59 @@ async def test_the_trace_is_the_projection_of_the_spans_the_failed_turn_did_writ
 
     assert {entry["seq"] for entry in body["trace"]} == {row["seq"] for row in seqs}
     assert body["trace"], "the spans the turn got as far as writing are still reported"
+
+
+# --------------------------------------------------------------------------------------
+# ...and when the error path itself cannot reach the store
+# --------------------------------------------------------------------------------------
+#
+# Closing the turn above writes through `core/trace.py` to the store. An unreachable trace store is
+# one of the five modelled `degradations[]`, so the two failures coincide the moment Turso is down:
+# the unmodelled exception is caught, and then `TurnBuffer.close()` raises inside the handler's own
+# `except` clause. Before the fix that second exception escaped the ASGI middleware and uvicorn
+# answered a bare `500 Internal Server Error` with a plain-text body — exactly what constraint 11
+# and §12.3 forbid, on the one path that exists to honour them.
+#
+# The store is broken *after* `start_turn`'s batch so a turn buffer exists to close: the branch at
+# `unhandled_error_response`'s `buffer is None` was always safe, and it is the buffered branch that
+# was not. The turn stays `ended_at IS NULL` here — unavoidable when the store cannot be written —
+# and `sweep_stale_turns()` at boot is the existing backstop, so nothing below asserts on it.
+
+
+@pytest.fixture
+async def crashed_with_an_unreachable_store(web, store, monkeypatch):
+    from hrmosaic.core.db import StoreError
+
+    async with web("rag_only.json") as client:
+        answered = await client.post("/chat", json={"message": QUESTION})
+        assert answered.status_code == 200, answered.text
+
+        real_batch = store.batch
+        remaining = {"batches": 1}  # one for `start_turn`; the closing batch is the one that fails
+
+        def failing_batch(statements):
+            if remaining["batches"] > 0:
+                remaining["batches"] -= 1
+                return real_batch(statements)
+            raise StoreError("turso request failed: connection refused")
+
+        monkeypatch.setattr(store, "batch", failing_batch)
+        yield await client.post("/chat", json={"message": QUESTION})
+
+
+async def test_a_store_failure_inside_the_catch_all_still_answers_200(crashed_with_an_unreachable_store):
+    response = crashed_with_an_unreachable_store
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["code"] == "INTERNAL_ERROR"
+    assert body["detail"].startswith("Something went wrong")
+
+
+async def test_the_store_less_answer_still_carries_no_stack_trace(crashed_with_an_unreachable_store):
+    body = json.dumps(crashed_with_an_unreachable_store.json())
+
+    assert "Traceback" not in body
+    assert "StubScriptError" not in body
+    assert "StoreError" not in body
+    assert "connection refused" not in body

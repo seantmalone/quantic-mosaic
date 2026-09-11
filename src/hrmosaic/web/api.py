@@ -42,6 +42,7 @@ import re
 import secrets
 import time
 from collections import deque
+from html import escape
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlencode
@@ -629,6 +630,34 @@ def _open_buffer(turn_id: Any) -> trace_module.TurnBuffer | None:
     return next((buffer for buffer in trace_module.open_turns() if buffer.turn_id == turn_id), None)
 
 
+def _internal_error_json(answer: str) -> Response:
+    """The typed 200 body that needs neither the store nor a template to build."""
+    return JSONResponse({"code": "INTERNAL_ERROR", "detail": INTERNAL_ERROR_TEXT, "answer": answer})
+
+
+def _last_resort_error_response(scope: Any) -> Response:
+    """The handler of last resort: hard-coded, store-free, template-free — and still **200**.
+
+    Reached only when `unhandled_error_response` itself raised. That is not hypothetical: closing
+    the buffered turn writes through `core/trace.py` to the store, so an unreachable trace store —
+    one of the five modelled `degradations[]` — makes the error path fail inside its own `except`
+    clause, and uvicorn then answers a bare `500 Internal Server Error`. Constraint 11 has no
+    exception for *"the error path also failed"*, so this body comes from literals alone: no store,
+    no Jinja, no `render_answer`. The turn stays `ended_at IS NULL` in that case — unavoidable when
+    the store cannot be written — and `sweep_stale_turns()` at boot is the existing backstop.
+    """
+    htmx = any(
+        name.lower() == b"hx-request" and value.strip().lower() == b"true" for name, value in scope.get("headers") or ()
+    )
+    if htmx:
+        return HTMLResponse(
+            '<article class="turn" data-outcome="error">'
+            f"<p>{escape(INTERNAL_ERROR_TEXT)}</p><p>{escape(INTERNAL_ESCALATION_TEXT)}</p>"
+            "</article>"
+        )
+    return _internal_error_json(f"{INTERNAL_ERROR_TEXT}\n\n{INTERNAL_ESCALATION_TEXT}")
+
+
 def unhandled_error_response(request: Request, exc: BaseException) -> Response:
     """Close the turn an unmodelled exception left open, then answer **200** with a typed block.
 
@@ -649,42 +678,50 @@ def unhandled_error_response(request: Request, exc: BaseException) -> Response:
     if buffer is None:
         # Nothing was in flight (or the writer is already gone): there is no turn to close, so the
         # answer is the typed body without a trace.
-        return JSONResponse({"code": "INTERNAL_ERROR", "detail": INTERNAL_ERROR_TEXT, "answer": answer})
+        return _internal_error_json(answer)
 
-    buffer.add_span(
-        "error",
-        "web",
-        ErrorPayload(error_kind="internal", message=message, retryable=True, component="web"),
-        status="error",
-        error_message=message,
-    )
-    buffer.close(
-        outcome="error",
-        stop_reason="error",
-        error_kind="internal",
-        final_answer=answer,
-        answer_blocks=blocks,
-        citations=[],
-    )
-    store = _store(request)
-    usage, timings = _turn_rollups(store, buffer.turn_id)
-    response = ChatResponse(
-        session_id=buffer.session_id,
-        turn_id=buffer.turn_id,
-        trace_id=buffer.session_id,
-        outcome="error",
-        answer=answer,
-        answer_blocks=blocks,
-        citations=[],
-        trace=project(buffer.turn_id, session_id=buffer.session_id, store=store),
-        confirmation=None,
-        usage=usage,
-        timings=timings,
-        stream_url=f"/chat/stream?turn_id={buffer.turn_id}",
-        dashboard_url=f"/dashboard/sessions/{buffer.session_id}#turn-{buffer.seq}",
-    )
-    _publish_turn_completed(response)
-    return _render_turn(request, response)
+    # Everything below this line touches the trace store or the template engine, and each of them
+    # can fail for the same reason the request did (an unreachable store makes `close()` raise on
+    # its flush). The catch-all is only a catch-all if it cannot itself throw out of the `except`
+    # clause that called it, so the whole tail falls back to the buffer-less body.
+    try:
+        buffer.add_span(
+            "error",
+            "web",
+            ErrorPayload(error_kind="internal", message=message, retryable=True, component="web"),
+            status="error",
+            error_message=message,
+        )
+        buffer.close(
+            outcome="error",
+            stop_reason="error",
+            error_kind="internal",
+            final_answer=answer,
+            answer_blocks=blocks,
+            citations=[],
+        )
+        store = _store(request)
+        usage, timings = _turn_rollups(store, buffer.turn_id)
+        response = ChatResponse(
+            session_id=buffer.session_id,
+            turn_id=buffer.turn_id,
+            trace_id=buffer.session_id,
+            outcome="error",
+            answer=answer,
+            answer_blocks=blocks,
+            citations=[],
+            trace=project(buffer.turn_id, session_id=buffer.session_id, store=store),
+            confirmation=None,
+            usage=usage,
+            timings=timings,
+            stream_url=f"/chat/stream?turn_id={buffer.turn_id}",
+            dashboard_url=f"/dashboard/sessions/{buffer.session_id}#turn-{buffer.seq}",
+        )
+        _publish_turn_completed(response)
+        return _render_turn(request, response)
+    except Exception:
+        logger.exception("recording the unmodelled failure failed too; answering without a trace")
+        return _internal_error_json(answer)
 
 
 class UnhandledErrorMiddleware:
@@ -722,7 +759,14 @@ class UnhandledErrorMiddleware:
         except Exception as exc:
             if started:  # the headers are already on the wire; nothing can be substituted now
                 raise
-            await unhandled_error_response(Request(scope, receive), exc)(scope, receive, send)
+            try:
+                response = unhandled_error_response(Request(scope, receive), exc)
+            except Exception:
+                # Even building the typed answer failed. Anything that escaped here would leave
+                # uvicorn to send a bare 500, which constraint 11 forbids unconditionally.
+                logger.exception("the unmodelled-failure handler itself failed")
+                response = _last_resort_error_response(scope)
+            await response(scope, receive, send)
 
 
 # --------------------------------------------------------------------------------------
