@@ -1103,6 +1103,14 @@ class Orchestrator:
 
         Every failure here keeps the first answer: a turn must never lose a written answer to the
         step that was only trying to widen it.
+
+        **The second answer is verified with the pure rules first, and only a repair that is
+        accepted emits its `guardrail` spans.** A rejected repair is a draft nobody was shown, and
+        §13.3's `blocks_dropped_by_g2` — the count of grounded facts the citation guardrail
+        destroyed — sums every G2 span of the turn: a discarded draft's drop would be reported as a
+        fact the reader lost. The `repair` `llm_call` span still carries what the model wrote, so
+        nothing about the extra round trip is hidden; what is not recorded is a verdict on an
+        answer that was never served.
         """
         missing = breadth.uncited_documents(blocks, turn.citable())
         if not missing:
@@ -1119,26 +1127,33 @@ class Orchestrator:
             body = completion.parsed_json()
             if not isinstance(body, dict):
                 return None
-            second = g2.check(
+            draft = g2.apply(
                 list(body.get("blocks") or []),
-                turn=turn.buffer,
                 evidence=turn.evidence,
                 quarantined=turn.quarantined,
             )
-            relabelled = g3.check(second.blocks, turn=turn.buffer)
-            for block in relabelled.blocks:
+            widened = g3.apply(draft.blocks)
+            for block in widened.blocks:
                 AnswerBlock.model_validate(block)
         except (ProviderError, DailyCapExceeded, ValidationError, ValueError, json.JSONDecodeError):
             return None
         if not breadth.accepted(
             blocks,
-            relabelled.blocks,
+            widened.blocks,
             turn.citable(),
-            dropped_blocks=second.dropped_blocks,
-            refused=second.refused,
+            dropped_blocks=draft.dropped_blocks,
+            refused=draft.refused,
         ):
             return None
-        return body, second, relabelled
+        # Accepted: re-run the same two rules through the span-emitting path, so the answer the
+        # reader is served carries its own guardrail record like any other (§7.4, §11.6 page 8).
+        second = g2.check(
+            list(body.get("blocks") or []),
+            turn=turn.buffer,
+            evidence=turn.evidence,
+            quarantined=turn.quarantined,
+        )
+        return body, second, g3.check(second.blocks, turn=turn.buffer)
 
     def _synthesis_messages(self, turn: _Turn) -> list[Message]:
         """§7.2's two halves, rendered from the turn's accumulated evidence.

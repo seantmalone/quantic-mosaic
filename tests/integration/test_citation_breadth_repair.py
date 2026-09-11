@@ -13,6 +13,8 @@ the repair adds resolve — or fail to — against the committed chunks.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from hrmosaic.agent.client import McpClient
@@ -77,10 +79,12 @@ async def test_a_repair_that_fails_g2_keeps_the_first_answer(writer, spans):
     assert "USD 2,500" not in response.answer, "the block G2 dropped never reached the reader"
     assert response.outcome == "answered"
 
-    stripped = [
-        entry
-        for kind, name, payload in spans(response.turn_id)
-        if kind == "guardrail" and name.startswith("G2")
-        for entry in payload["details"]["stripped"]
+    # A rejected repair is a draft nobody was shown, so no `guardrail` span carries a verdict on
+    # it: §13.3's `blocks_dropped_by_g2` sums every G2 span of the turn, and a draft's drop would
+    # otherwise be published as a grounded fact the reader lost.
+    g2_spans = [
+        payload for kind, name, payload in spans(response.turn_id) if kind == "guardrail" and name.startswith("G2")
     ]
-    assert [entry["chunk_id"] for entry in stripped] == ["c_0000000000000000"]
+    assert len(g2_spans) == 1, "only the served answer's verification is recorded"
+    assert g2_spans[0]["details"]["blocks_dropped"] == 0
+    assert "c_0000000000000000" not in json.dumps(g2_spans)

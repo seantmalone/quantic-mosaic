@@ -56,11 +56,16 @@ SECTION_FALLBACK = "Reading the policy section…"
 
 #: `llm_call` → the sentence, keyed on `purpose` (§10.2). The span's name is `provider:model`, so
 #: the purpose is the only thing that distinguishes the router from the synthesis call.
+#:
+#: `repair` carries two callers and its line names neither: the act loop's one tool-call repair
+#: (§9.1) and P24's citation-breadth pass (§7.4), which re-asks the synthesis model to cover a
+#: document its answer left uncited. A line that said "that tool call" would be plainly wrong on
+#: every breadth turn, and the reader needs to know a second pass is running, not which one.
 PURPOSE_LABELS: dict[str, str] = {
     "route": "Understanding your question…",
     "act": "Deciding what to look up next…",
     "synthesize": "Writing the answer…",
-    "repair": "Working out what went wrong with that tool call…",
+    "repair": "Taking one more pass at that step…",
 }
 
 #: The guardrail pass, and the confirmation card's wait. Both are one sentence for the whole kind:
