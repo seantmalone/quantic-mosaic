@@ -68,8 +68,12 @@ numbered against the gate it belongs to rather than renumbering the list.
       Value: `127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com`. The MCP SDK enables
       DNS-rebinding protection for a loopback-bound server, so without it the deployed
       `/mcp-server/mcp` answered **HTTP 421** to an external MCP Inspector session. **Verified at
-      20:32Z**: an external `initialize` over the public hostname answered **HTTP 200**. That
-      `initialize` is the whole of the external verification recorded for this gate.
+      20:32Z**: an external `initialize` over the public hostname answered **HTTP 200**. A longer
+      external session on 2026-09-12 went further — `initialize` 200, `notifications/initialized`,
+      `tools/list` returning all nine tools and a real `search_policy_documents` call — and its
+      surviving capture is pinned at
+      [`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt).
+      That transcript is the whole of the external verification pinned for this gate.
       **`KEEP_ALIVE_URL` is no longer carried here as a gate.** It arms the in-process self-ping,
       which would remove the ~71 s cold start for a grader's first click at a cost of ~744 of the
       workspace's 750 free instance-hours a month — a reversible operator preference, not a

@@ -47,7 +47,7 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 2,002 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 2,003 tests as of
 2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
@@ -86,7 +86,13 @@ task 2 was then **re-run on the build being submitted** —
 [`docs/evidence/demo-task-2-live-2026-09-12.txt`](docs/evidence/demo-task-2-live-2026-09-12.txt)
 (the same gate, then `MOCK-HR-000006`, 4 citations across 2 documents, 32 spans, 40 s), run
 against `/health` sha `f5e86c3`. The trace store rolls, so these are the record of what the deployed
-instance actually did.
+instance actually did. The fourth pinned transcript is the **external MCP session** —
+[`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt)
+(plain `curl` from outside the service: `initialize` 200, `notifications/initialized`, `tools/list`
+returning all nine tools, a real `search_policy_documents` call with its retrieval span) — which is
+what makes the "attachable by an external MCP client" claim checkable rather than asserted. Its own
+header states which calls from that session were *not* captured and are therefore attributed to the
+build ledger rather than pinned.
 
 ## Deployment
 

@@ -296,11 +296,16 @@ allowlist does not name is answered `421 Invalid Host header`. `MCP_ALLOWED_HOST
 `127.0.0.1:*,localhost:*`) names the hostnames the endpoint accepts, `render.yaml` adds the
 deployment's own, and the live service carries the variable — **the public mount accepts external
 MCP clients**, verified on 2026-09-11 at 20:32Z when an external `initialize` over the public
-hostname answered HTTP 200 and the session went the whole way from there: `notifications/initialized`
-202, `tools/list` returning all nine tools, real `search_policy_documents` and `check_pto_balance`
-calls, then `create_mock_hr_ticket` refused `CONFIRMATION_REQUIRED` with no confirmation token and
-refused again with a forged one, while the same endpoint answered 401 to a request carrying no
-bearer.
+hostname answered HTTP 200, and again on 2026-09-12 in a longer session whose surviving capture is
+pinned at
+[`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt):
+`initialize` 200 with a `mcp-session-id`, `notifications/initialized`, `tools/list` returning all
+nine tools, and a real `search_policy_documents` call answered out of the deployed index with its
+retrieval span attached. The rest of that session as the 2026-09-12 01:45Z re-grade reports it —
+`check_pto_balance`, `create_mock_hr_ticket` refused `CONFIRMATION_REQUIRED` with no confirmation
+token and refused again with a forged one, and 401 to a request carrying no bearer — was not
+captured; it is attributed to that record rather than pinned, and both gates are held by the suite
+on every run regardless.
 [`mcp/README.md`](mcp/README.md) carries the SDK detail, the three transports and the live status.
 
 `app.mount("/mcp-server", mcp.streamable_http_app(transport_security=...))` with
@@ -738,7 +743,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,002 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,003 tests as of 2026-09-11) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 

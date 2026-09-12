@@ -118,15 +118,17 @@ the endpoint answers `421 Invalid Host header` to any `Host` the allowlist does 
 committed `render.yaml` carries
 `MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` and **the live service
 carries it too**. **The public mount accepts external MCP clients**, verified on 2026-09-11 at
-20:32Z, when an external `initialize` over the public hostname answered HTTP 200 — and that
-session went the whole way from there: `notifications/initialized` **202**, `tools/list` returning
-all **nine** tools, real `search_policy_documents` and `check_pto_balance` calls, then
+20:32Z, when an external `initialize` over the public hostname answered HTTP 200, and again on
+2026-09-12 in a longer session whose surviving capture is pinned at
+[`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt):
+`initialize` **200** with a `mcp-session-id`, `notifications/initialized`, `tools/list` returning
+all **nine** tools, and a real `search_policy_documents` call answered out of the deployed index.
+The remaining calls the 2026-09-12 01:45Z re-grade reports from that session — `check_pto_balance`,
 `create_mock_hr_ticket` refused **`CONFIRMATION_REQUIRED`** with no confirmation token and refused
-again with a forged one, while the same endpoint answered **401** to a request carrying no bearer.
-So the bearer gate and the confirmation gate are verified against the deployed service, not only in
-the test suite. The other
-two ways to see the same nine tools are unchanged: `/dashboard/mcp` and the stdio entrypoint
-(`mcp/run_stdio.sh`).
+again with a forged one, and **401** to a request carrying no bearer — were not captured, so they
+are attributed to that record rather than pinned here; the bearer gate and the confirmation gate
+are held by the test suite on every run. The other two ways to see the same nine tools are
+unchanged: `/dashboard/mcp` and the stdio entrypoint (`mcp/run_stdio.sh`).
 
 - Tokenized link: `https://mosaic-hr-copilot.onrender.com/?access=<token>`, written out in full on
   `README.md`'s `Deployed:` line and **nowhere else in the repository**. It is the grader's entry

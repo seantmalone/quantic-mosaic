@@ -449,6 +449,45 @@ def test_the_three_committed_screenshots_exist():
         assert (EVIDENCE / name).exists(), f"docs/evidence/{name} is missing"
 
 
+#: The one claim in this build a grader cannot re-derive from the repository, because the endpoint
+#: needs a bearer token to answer: that the deployed MCP mount is reachable by an external client.
+#: Three published documents state it, so all three must point at the artefact behind it.
+EXTERNAL_MCP_TRANSCRIPT = "docs/evidence/mcp-external-session-2026-09-12.txt"
+
+
+def test_the_external_mcp_session_is_pinned_and_every_document_that_claims_it_cites_it():
+    """R7.1 — the external-MCP claim carries its evidence, or it is not published.
+
+    This one went wrong once in exactly the way that matters. `mcp/README.md`, `deployed.md` and
+    `design-and-evaluation.md` were rewritten to assert a complete external session — nine tools
+    listed, both gates refused, `401` without a bearer — while the repository held no capture of
+    any of it, in a project whose integrity disclosure is built on evidence over prose. The
+    transcript is now pinned, and a document may make the claim only while it cites the file.
+    """
+    pinned = REPO_ROOT / EXTERNAL_MCP_TRANSCRIPT
+    assert pinned.exists(), f"{EXTERNAL_MCP_TRANSCRIPT} is missing — the external-MCP claim has no artefact"
+    body = pinned.read_text(encoding="utf-8")
+    for expected in ("tools/list", "search_policy_documents", "x-render-origin-server: uvicorn"):
+        assert expected in body, f"the pinned external MCP transcript does not contain {expected!r}"
+
+    claimants = {
+        "mcp/README.md": REPO_ROOT / "mcp" / "README.md",
+        "deployed.md": DEPLOYED,
+        "design-and-evaluation.md": DESIGN,
+    }
+    # Flattened, because the claim and the citation are both wrapped across lines in two of the three.
+    flattened = {name: " ".join(_text(path).split()) for name, path in claimants.items()}
+    missing = [
+        name
+        for name, text in flattened.items()
+        if "accepts external MCP clients" in text and "mcp-external-session-2026-09-12.txt" not in text
+    ]
+    assert missing == [], (
+        f"{missing} claim the public mount accepts external MCP clients without citing "
+        f"{EXTERNAL_MCP_TRANSCRIPT}. Cite the transcript or retract the claim."
+    )
+
+
 def test_the_gate_file_marks_a_committed_screenshot_as_committed():
     """`NEEDS-FROM-USER.md`'s evidence table is a gate state, and a stale one is worse than none.
 
@@ -664,7 +703,9 @@ def _git(*args: str) -> str | None:
     """`git <args>` in the repository, or `None` when git cannot answer.
 
     `None` covers both "there is no git here" (a source export, a shallow image layer) and "that
-    revision is unknown", which is why the caller skips rather than fails on it.
+    revision is unknown". The caller does not treat those as interchangeable: see
+    `test_the_commit_census_is_the_one_git_log_reports`, which skips only when it can prove the
+    checkout could not have had the commit, and fails otherwise.
     """
     try:
         done = subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True)
@@ -680,6 +721,18 @@ def test_the_commit_census_is_the_one_git_log_reports():
     total, sha, opus, fable, merges = match.groups()
 
     if _git("cat-file", "-e", f"{sha}^{{commit}}") is None:
+        # A skip here used to be indistinguishable from a pass, and that is how the guard went
+        # inert: CI checked out at the default `fetch-depth: 1`, the anchor was not in the clone,
+        # and the census could drift green. So the skip is now earned rather than assumed — it is
+        # reachable only from a checkout that *could not* hold the commit (no git at all, or a
+        # shallow clone). A full clone that cannot resolve the sha means the paragraph names a
+        # commit this history does not have, which is the drift this test exists to catch.
+        shallow = _git("rev-parse", "--is-shallow-repository")
+        assert shallow is None or shallow.strip() == "true", (
+            f"ai-tooling.md anchors its commit census to `{sha}`, and this full clone has no such "
+            "commit. Either the sha in the paragraph is wrong or the history was rewritten; a "
+            "skip would hide both."
+        )
         pytest.skip(f"git cannot resolve {sha}; the census cannot be recounted in this checkout")
 
     log = _git("log", "--format=%x1e%B", sha)

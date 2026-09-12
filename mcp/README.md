@@ -226,13 +226,18 @@ need a one-time confirmation token an external caller cannot obtain.
 clients.** The running instance had been created over the REST API before `MCP_ALLOWED_HOSTS`
 existed; the variable is now set on the service — the same
 `127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` the committed `render.yaml` carries — and
-an external `initialize` sent over the
-public hostname answered **HTTP 200** — and that session went the whole way from there:
-`notifications/initialized` **202**, `tools/list` returning all **nine** tools, real
-`search_policy_documents` and `check_pto_balance` calls, then `create_mock_hr_ticket` refused
-**`CONFIRMATION_REQUIRED`** with no confirmation token and refused again with a forged one, while
-the same endpoint answered **401** to a request carrying no bearer — so the access gate and the
-confirmation gate above are verified against the deployed service and not only by the test suite.
+an external `initialize` sent over the public hostname answered **HTTP 200**. The session went
+further on 2026-09-12, and the part of it that survives as a capture is pinned verbatim at
+[`docs/evidence/mcp-external-session-2026-09-12.txt`](../docs/evidence/mcp-external-session-2026-09-12.txt):
+`initialize` **200** with a `mcp-session-id`, `notifications/initialized`, `tools/list` returning
+all **nine** tools, and a real `search_policy_documents` call answered out of the deployed index
+with its retrieval span attached. The rest of that session as the 2026-09-12 01:45Z re-grade
+reports it — a `check_pto_balance` call, `create_mock_hr_ticket` refused
+**`CONFIRMATION_REQUIRED`** with no confirmation token and refused again with a forged one, and
+**401** to a request carrying no bearer — has no surviving capture, so it is attributed to that
+record (`docs/process/sdd/P27-brief.md` item 4) rather than pinned: the access gate and the
+confirmation gate above are covered by the test suite, and what the deployed service is *pinned*
+as answering is the transcript above.
 An MCP Inspector session therefore attaches to
 `https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` with
 `Authorization: Bearer $APP_ACCESS_TOKEN` as a custom header. **The other two ways to see the same

@@ -176,7 +176,7 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 2,002 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
+committed suite — 2,003 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 28-item evaluation whose real
 numbers, including the ones below target, are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
@@ -210,4 +210,7 @@ cases: **the trailer names the model that actually wrote the commit.**
 it as that rule, which is what the history has done since P0. None of those four figures is typed
 from memory: `tests/contract/test_docs_completeness.py` recounts them from `git log` at the commit
 this paragraph names and fails if they disagree — an earlier hand-typed census had drifted by
-fourteen commits before anyone noticed.
+fourteen commits before anyone noticed. That recount needs the history, so CI's `test` job checks
+out at `fetch-depth: 0` like its `lint` job; the test skips only where the commit genuinely cannot
+be present (no `git`, or a shallow clone) and **fails** rather than skipping in a full clone that
+does not have it, because a silent skip is how this guard went inert the first time.

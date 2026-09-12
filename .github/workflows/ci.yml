@@ -51,7 +51,12 @@ jobs:
       PYTHONPATH: src                              # belt-and-braces; `pip install -e .` below is what puts
                                                    # `hrmosaic` on the path, exactly as `make setup` does
     steps:
+      # `fetch-depth: 0`, the same as `lint`. The suite is not history-free: the commit census in
+      # `ai-tooling.md` is recomputed from `git log` at the commit that paragraph names
+      # (`tests/contract/test_docs_completeness.py`), and at the default depth of 1 that anchor is
+      # not in the clone, so the census guard skipped in CI and a stale census could land green.
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version-file: '.python-version' }
       - run: pip install -r requirements.txt -r requirements-dev.txt
