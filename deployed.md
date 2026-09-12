@@ -44,8 +44,10 @@ instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"`, `autoDe
 
 **Which commit served which evaluation run.** A run file carries two shas: `git_sha` is the
 **harness tree's** `git rev-parse HEAD` — the code that scored the run — and `target_git_sha` is
-what the target's own `/health` reported under `app.git_sha`, the build that answered the 26
-questions. `evaluation/REPORT.md` prints both.
+what the target's own `/health` reported under `app.git_sha`, the build that answered the
+questions. `evaluation/REPORT.md` prints both. The published run records both as
+`34717b52eb01312097ec41fe8a07394843d215d6`: the harness ran from the same commit the service was
+serving.
 
 **Runs recorded before 2026-09-11 carry neither.** Until P23 the harness took `git_sha` from
 `settings.git_sha`, which resolves `GIT_SHA` → `RENDER_GIT_COMMIT` → `"dev"`, and on the
@@ -53,11 +55,12 @@ development machine that is `"dev"`; there was no `target_git_sha` at all. The c
 are **not** rewritten — a result file is a record of what happened, not a document — so for those
 three runs the serving commit lives here, in prose, taken from the deploy ledger:
 
-| Run | Column | Deployed commit that served it |
-|---|---|---|
-| `r_1789055103_baseline` | before optimization | `5419ec5` |
-| `r_1789069158_baseline` | after the quality fixes (P13) | `b24ad32` |
-| **`r_1789086979_baseline`** | **published — quality + performance** | **`da0dca2`** |
+| Run | Column | Deployed commit that served it | Recorded in the run file |
+|---|---|---|---|
+| `r_1789055103_baseline` | before optimization | `5419ec5` | no — prose only |
+| `r_1789069158_baseline` | after the quality fixes (P13) | `b24ad32` | no — prose only |
+| `r_1789086979_baseline` | after the performance waves | `da0dca2` | no — prose only |
+| **`r_1789166880_baseline`** | **published — after the model-behaviour wave** | **`34717b5`** | **yes — `target_git_sha` and `git_sha`** |
 
 `scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
 before any of those runs is allowed to count, which is what keeps the two shas from being confused.
@@ -113,10 +116,14 @@ supports custom headers — **and with the service's own hostname on `MCP_ALLOWE
 SDK enables DNS-rebinding protection for a loopback-bound server, which the mounted topology is, so
 the endpoint answers `421 Invalid Host header` to any `Host` the allowlist does not name; the
 committed `render.yaml` carries
-`MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com`. **As of 2026-09-11 the
-live service does not carry the variable yet** — it predates it — so an external Inspector session
-against the deployed endpoint still gets 421, and MCP is demonstrated over the stdio entrypoint
-(`mcp/run_stdio.sh`) or `/dashboard/mcp` until one Environment entry arms it.
+`MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` and **the live service
+carries it too**. **The public mount accepts external MCP clients**, verified on 2026-09-11 at
+20:32Z: an external `initialize` over the public hostname answered HTTP 200, a full external client
+session then listed all nine tools and ran `search_policy_documents` and `check_pto_balance`, a
+`create_mock_hr_ticket` call without a confirmation token was refused with `CONFIRMATION_REQUIRED`
+(and refused the same way with a forged token), and a request without the bearer got 401. The other
+two ways to see the same nine tools are unchanged: `/dashboard/mcp` and the stdio entrypoint
+(`mcp/run_stdio.sh`).
 
 - Tokenized link: `https://mosaic-hr-copilot.onrender.com/?access=<token>`, written out in full on
   `README.md`'s `Deployed:` line and **nowhere else in the repository**. It is the grader's entry

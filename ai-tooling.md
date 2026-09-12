@@ -92,9 +92,10 @@ OAuth grant, an API key paste, or the recording itself. Nothing else.
   of real `claude-haiku-4-5` exchanges. That is how we discovered the model reproducibly answers
   demo task 1 with repeated searches rather than a heading fetch — a fact that changed the
   documented expectations rather than being papered over.
-- **Refusing to tune the number.** The published evaluation reports 0.808 strict pass against a
-  0.85 target and a null ablation, each failing item with its cause — and it reports the 0.692 it
-  started from beside it, so the optimization work is visible rather than implied. The
+- **Refusing to tune the number.** The published evaluation reports 0.893 strict pass against a
+  0.85 target — met at the fourth measurement, not the first — with a null ablation beside it and
+  each failing item named with its cause, and it reports the 0.692 it started from and both
+  intermediate columns, so the optimization work is visible rather than implied. The
   coordinating session's standing ruling was that the only permitted lever was fixing an actual
   defect, and that everything else gets published with its cause.
 - **`make` targets as the shared vocabulary.** CI runs the same targets a developer runs, so a

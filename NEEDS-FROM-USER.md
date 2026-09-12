@@ -8,9 +8,11 @@ Render account, the GitHub App, a payment method, the Turso token and the Render
 at `https://mosaic-hr-copilot.onrender.com`, the published evaluation sweep ran against it, and the
 cold start was measured on it. **Two gates are left, both irreducibly human:** recording the demo
 video (**gate 6**) and submitting (**gate 7**). The `quantic-grader` invitation is **accepted** —
-re-verified 2026-09-11, `permission: read` with no pending invitation — and one optional
-three-minute item (**2b**) would make the deployed MCP endpoint externally attachable and remove the
-cold start.
+re-verified 2026-09-11, `permission: read` with no pending invitation — and the last optional item
+(**2b**, `MCP_ALLOWED_HOSTS` on the live service) was **discharged on 2026-09-11**: the deployed MCP
+endpoint now accepts external MCP clients, verified at 20:32Z. The keep-alive variable that used to
+sit beside it is an operator preference that moves no published number, and it is tracked in
+`deployed.md` rather than as a gate.
 
 Item numbering follows design spec §19.1, so a number here means the same thing there. A
 **letter-suffixed** item (1a, 2a) is one the build discovered that §19.1 never anticipated; it is
@@ -36,25 +38,6 @@ numbered against the gate it belongs to rather than renumbering the list.
       20 lines of `README.md`, so it is a copy-paste.
       Needed by: the deadline. Blocked by gate 6.
 
-- [ ] **2b — Two environment variables on the live Render service.** *Optional; the project is
-      complete without them and every document says so.* The service was created over the REST API
-      before either variable existed, and a code deploy does not change a service's environment, so
-      only the Render dashboard (Environment → *Add* → *Save, rebuild, and deploy*) or a re-run of
-      `scripts/provision_render.py` can set them. **~3 minutes.**
-      - `MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` — the MCP SDK
-        enables DNS-rebinding protection for a loopback-bound server, so until this is set the
-        deployed `/mcp-server/mcp` answers **HTTP 421** to an external MCP Inspector session.
-        Nothing in the graded topology breaks either way (the agent reaches its own tools over
-        loopback), and `mcp/README.md`, `deployed.md` and `docs/architecture.html` all state the
-        421 plainly and point at `mcp/run_stdio.sh` and `/dashboard/mcp` instead. Setting it makes
-        the endpoint attachable.
-      - `KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` — arms the in-process self-ping and
-        removes the ~71 s cold start for a grader's first click. It spends ~744 of the workspace's
-        750 free instance-hours a month, which is why it is a decision rather than a default;
-        `deployed.md` § *Cold start* has the arithmetic and the one-menu way to turn it off again.
-      `render.yaml` carries both, so a blueprint apply sets them and a re-provision cannot drop
-      them. If neither is ever set: nothing regresses, and the documents stay true as written.
-
 ## Discharged
 
 - [x] **1 — Model API keys.** Provided **2026-09-09**: an Anthropic key (`ANTHROPIC_API_KEY`, the
@@ -76,6 +59,25 @@ numbered against the gate it belongs to rather than renumbering the list.
       (`402 Payment information is required`). No API can add it. Provided **2026-09-10**. The
       workspace stays on the free plan; nothing is billable, and `plan: free` is asserted from the
       API's own read-back before and after the service was created rather than from the request.
+- [x] **2b — `MCP_ALLOWED_HOSTS` on the live Render service.** *Optional; the project was complete
+      without it, and every document said so.* Set on the service on **2026-09-11** — the service
+      had been created over the REST API before the variable existed, and a code deploy does not
+      change a service's environment, so it was one Environment entry (`render.yaml` carries the
+      same value, so a blueprint apply or a re-run of `scripts/provision_render.py` sets it too).
+      Value: `127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com`. The MCP SDK enables
+      DNS-rebinding protection for a loopback-bound server, so without it the deployed
+      `/mcp-server/mcp` answered **HTTP 421** to an external MCP Inspector session. **Verified at
+      20:32Z**: an external `initialize` over the public hostname answered **HTTP 200**, a full
+      external session listed all nine tools and ran two of them, a `create_mock_hr_ticket` without
+      a confirmation token was refused `CONFIRMATION_REQUIRED` (and so was the same call with a
+      forged token), and a request with no bearer got 401.
+      **`KEEP_ALIVE_URL` is no longer carried here as a gate.** It arms the in-process self-ping,
+      which would remove the ~71 s cold start for a grader's first click at a cost of ~744 of the
+      workspace's 750 free instance-hours a month — a reversible operator preference, not a
+      prerequisite for anything published: every cold-start figure in this repository is measured
+      **without** it, so no number moves whichever way it is left. `render.yaml` carries it,
+      `deployed.md` § *Cold start* → *Keep-alive* records its state and both menus that change it,
+      and `tests/contract/test_keep_alive.py` holds the published wording to that state.
 - [x] **3 — Turso account + platform token.** Provided **2026-09-10**. Database `mosaic-hr` in
       organisation `seantm`, group `default`, location `aws-us-west-2`, Starter plan with
       `overages: false`. The live parity smoke answered P1's carry-forward: foreign keys **are**
@@ -238,12 +240,13 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` | **done** 2026-09-10 — FKs enforced |
 | Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 and 2026-09-11 (n=3; median 71.0 s cold, 22.5 s warm) |
 | Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` | **done** 2026-09-11 — build minutes ~11.5 of 500; instance hours unavailable from the API |
-| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** — `r_1789086979_baseline`, judged |
+| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-11 — `r_1789166880_baseline`, judged, 28 items |
 | `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` | **done** 2026-09-11 |
+| The deployed MCP endpoint reachable by an external client | 2b | one Environment entry (`MCP_ALLOWED_HOSTS`) | **done** 2026-09-11 — external `initialize` → HTTP 200 at 20:32Z |
 | Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` | **done** 2026-09-10 — demo 2 wrote `MOCK-HR-000001` behind the gate |
 | `/health.trace_store.eval_runs_imported` matching the committed count | 2 + 4 | the block in step 4 above | **done** 2026-09-10 |
 | The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above | **done** — all three committed |
 | The demo video, and therefore `README.md`'s `Demo video:` link | **6** | `docs/demo-script.md` | **open** |
-| The `quantic-grader` invitation confirmed as sent or accepted | **7** | `docs/pre-submission-checklist.md` `- [ ] SUB.3` | **open** |
+| The `quantic-grader` invitation confirmed as sent or accepted | **7** | `docs/pre-submission-checklist.md` `- [x] SUB.3` | **done** — accepted, re-verified 2026-09-11 |
 | The submission itself | **7** | the Quantic dashboard | **open** |
 | Gemini rate limits for the failover project (the judge's is on paid billing since 2026-09-10) | an authenticated AI Studio session | https://aistudio.google.com/rate-limit | still unread — affects nothing a published run depends on |

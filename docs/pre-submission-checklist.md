@@ -15,8 +15,11 @@ its own box would prove nothing.
 [`docs/evidence/grade-card-2026-09-11.md`](evidence/grade-card-2026-09-11.md). Its §4 is a
 checklist of what the recording has to show for the demo requirements to hold, and its §6 lists the
 things a grader is most likely to trip over. Read both before the take. The defects it found were
-fixed in the P23 commits; the two it names as outside the repository — the video link and the
-dashboard submission — are the `DEMO.1` and `SUB.1` boxes below.
+fixed in two waves — P23 for the documentation and provenance items, P24 for the model-behaviour
+ones, whose effect is the published run's 0.893 strict pass — and the deployed MCP endpoint it
+flagged now accepts external clients (verified 2026-09-11 20:32Z). The two items it names as
+outside the repository — the video link and the dashboard submission — are the `DEMO.1` and
+`SUB.1` boxes below.
 
 ---
 
@@ -24,10 +27,13 @@ dashboard submission — are the `DEMO.1` and `SUB.1` boxes below.
 
 - [x] Gates 2, 3 and 4 of `NEEDS-FROM-USER.md` are satisfied and `scripts/smoke_deployed.py`
       passes against the live URL. — **done 2026-09-10** (`NEEDS-FROM-USER.md`'s Discharged table).
+- [x] `MCP_ALLOWED_HOSTS` is set on the live service (`NEEDS-FROM-USER.md` gate **2b**), so the
+      deployed `/mcp-server/mcp` accepts an external MCP Inspector session — external `initialize`
+      → HTTP 200, nine tools listed. — **done 2026-09-11**, verified 20:32Z.
 - [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
       `design-and-evaluation.md`'s results table from it. — **done 2026-09-11**,
-      `r_1789086979_baseline`.
+      `r_1789166880_baseline` (28 items, judged, strict pass 0.893).
 - [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
       `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the

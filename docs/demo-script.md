@@ -58,8 +58,8 @@ of task 1.
 | **5:30–6:15** | Dashboard tour | `/dashboard/sessions/{id}` → `/dashboard/mcp` → `/dashboard/safety` | **Switch to the admin profile first** (or set the act-as selector to **HR admin**) — every route here is admin-only. The span waterfall for the turn just run — *"every LLM call with its verbatim messages, every retrieval with its scored chunks, every tool call with its arguments and result."* Then the MCP page: nine tools, their JSON Schemas, the transport and the handshake. Then the safety page: guardrail verdicts by rule, the confirmation ledger, the mock-action log |
 | **6:15–7:00** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count`, `rss_mb`. Then the measured numbers: about **300 MB** against a hard 512 MB cap — 293.6 MB when we measured it on 2026-09-10, 294.9 MB under the local gate, and `rss_mb` is right there on the payload, so read the number on screen, and the cold-start segments with their dates and their `n`: a median **71.0 s** cold to first answer over three probes (67.5–77.6 s), **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it three times with nothing pinging it, published the spread, and only then decided to add a ten-minute keep-alive — which costs 744 of our 750 free hours, so it is the last step, not the way we made the number look good."* Beat ⑥ of the optimization story belongs here |
 | **7:00–7:40** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. Four jobs: `lint` (ruff + gitleaks over full history), `test` (the full suite — over 1,800 tests; read the count off the run on screen — offline, with no API keys), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. Then the gate: **`deploy` declares `needs: [test, docker]`**, and Render's own auto-deploy is off, so CI is the only path to production. Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
-| **7:40–8:45** | Evaluation | `/dashboard/evals` → a run detail → the compare tab | **Admin profile again.** 26 items across all seven categories. Walk the metric chips: groundedness, citation accuracy, DocRecall, tool selection, workflow completion, action safety, over-refusal, latency split cold/warm. Open one item to show the **judge rationale**, then "view trace" to jump to the turn that produced it. Then the compare tab: the three-variant ablation chart. Beats ①–③ of the optimization story land here, on screen |
-| **8:45–9:15** | Close — **the optimization story**, then the limitations | `docs/optimization-log.md`'s three-column table, then `design-and-evaluation.md`'s *Known limitations*, then the repo | Tell the story from the beat list below (four beats fit here; the other four are seeded earlier where the screen already shows them). Then be straight about the numbers: *"strict pass is 0.808 against our own 0.85 target — five items, each with its failing clause named — and the `no_structured_tools` ablation moved workflow completion by 0.231 rather than the 0.25 we predicted, so we report it as a measurement, not as proof."* Then the repo link |
+| **7:40–8:45** | Evaluation | `/dashboard/evals` → a run detail → the compare tab | **Admin profile again.** 28 items across all seven categories. Walk the metric chips: groundedness, citation accuracy, DocRecall, tool selection, workflow completion, action safety, over-refusal, latency split cold/warm. Open one item to show the **judge rationale**, then "view trace" to jump to the turn that produced it. Then the compare tab: the three-variant ablation chart. Beats ①–③ of the optimization story land here, on screen |
+| **8:45–9:15** | Close — **the optimization story**, then the limitations | `docs/optimization-log.md`'s four-column table, then `design-and-evaluation.md`'s *Known limitations*, then the repo | Tell the story from the beat list below (four beats fit here; the other four are seeded earlier where the screen already shows them). Then be straight about the numbers: *"strict pass is 0.893 against our own 0.85 target — met at the fourth measurement, with the three items that still fail named by the clause each tripped — and the `no_structured_tools` ablation moved workflow completion by 0.143 rather than the 0.25 we predicted, so we report it as a measurement, not as proof."* Then the repo link |
 
 ---
 
@@ -71,9 +71,10 @@ rides the 6:15–7:00 deployment segment where the cold-start numbers are, ⑦ r
 where the streaming is visible, and ④⑤⑧ are the 8:45–9:15 close. Ten to fifteen seconds each — say
 the number and the run id, then move.
 
-- **① Three columns, one instance, one dataset.** *"We measured the same 26 items three times
-  against the same live service: before, after the quality fixes, after the performance work.
-  Strict pass 0.692 → 0.808 → 0.808; p50 17.6 s → 22.6 s → 16.7 s."*
+- **① Four columns, one instance.** *"We measured the same live service four times: before, after
+  the quality fixes, after the performance work, and after the model-behaviour wave. Strict pass
+  0.692 → 0.808 → 0.808 → 0.893; p50 17.6 s → 22.6 s → 16.7 s → 19.1 s. The first three columns are
+  the same 26 items; the last adds two out-of-scope questions, so it runs 28."*
 - **② Every claim has a run id.** *"Each column is a committed run file and the dashboard shows the
   same traces the analysis used — nothing here is a remembered number."*
 - **③ The quality fixes cost latency, and we say so.** *"The breadth reminder fires on most turns
@@ -92,10 +93,11 @@ the number and the run id, then move.
 - **⑦ The last wave was about the wait, not the score.** *"Streaming and the step narration do not
   move a single metric in that table — the harness waits for the whole answer. They change what a
   person experiences, which is why they were worth doing anyway."*
-- **⑧ What is still short.** *"0.808 against our 0.85 bar, five items, each with its failing clause
-  named. The ablation moved 0.231 against a pre-registered 0.25, so we report it as not supported —
-  and we say that the arm's meaning changed when we made the PTO workflow require the profile
-  lookup."*
+- **⑧ What is still short.** *"0.893 clears our 0.85 bar, and three items still fail, each with its
+  failing clause named — two remote-work items and the one turn that answered instead of stopping
+  at the confirmation card. The ablation moved 0.143 against a pre-registered 0.25, so we report it
+  as not supported — and we say that the arm's meaning changed when we made the PTO workflow
+  require the profile lookup."*
 
 ---
 
@@ -118,14 +120,18 @@ Tick all five on camera:
       `met: false` on the duration rule, the `verdict`, and the fact that **every requirement
       carries its own citation** — *"this verdict is a deterministic rules engine over
       `corpus/rules.yml`, with no LLM in the path."*
-- [ ] **④ Retrieved citations** — point at the citation chips under the answer. The recorded live
-      exchange and three of the four published baseline runs cite **three** documents
-      (`remote-and-hybrid-work`, `tax-and-location-addendum`, `manager-approval-matrix`); on the
-      most recent published run (`r_1789086979_baseline`) this prompt's dataset twin `remote-004`
-      lost the `manager-approval-matrix` block to G2 and cited two. **Read off the chips that are
-      actually on screen** — if two appear, say so and click both through. Then click one through
-      to the corpus browser and show the 30-day sentence highlighted at its exact character
-      offsets.
+- [ ] **④ Retrieved citations** — point at the citation chips under the answer. Breadth here is not
+      deterministic. The live run pinned as
+      [`docs/evidence/demo-task-1-live-2026-09-11.txt`](evidence/demo-task-1-live-2026-09-11.txt)
+      cited **8 chunks across three documents** (`remote-and-hybrid-work`,
+      `tax-and-location-addendum`, `manager-approval-matrix`); on the published run
+      (`r_1789166880_baseline`) this prompt's dataset twin `remote-004` cited **two** of its four
+      expected documents — no block was dropped by the citation guardrail this time
+      (`blocks_dropped_by_g2` = 0), the answer was simply narrower than its three-document end
+      state, which is why that item is one of the three the run reports as failing. **Read off the
+      chips that are actually on screen** — if two appear, say so and click both through. Then
+      click one through to the corpus browser and show the 30-day sentence highlighted at its
+      exact character offsets.
 - [ ] **⑤ Final answer** — read the verdict aloud: **conditional** — 42 days exceeds the 30-day
       threshold so Tax & Legal review is required before travel, Germany is on the approved-country
       list, a company-managed encrypted device with always-on VPN is mandatory, and written manager
@@ -166,7 +172,9 @@ Tick all five on camera:
       cited four chunks across **two** documents (`pto-and-holidays`, `manager-approval-matrix`),
       while earlier live turns cited `pto-and-holidays` alone. Two documents is the design
       expectation the executable record pins, not a promise about the turn on screen — so name what
-      is there and click one through to the notice-requirement sentence.
+      is there and click one through to the notice-requirement sentence. On the published run
+      (`r_1789166880_baseline`) this prompt's dataset twin `pto-003` met that end state and passed,
+      with workflow completion 1.00 for the `pto_request` workflow.
 - [ ] **⑤ Final answer and action** — the answer **opens with the ticket id**: *"Done: HR ticket
       `MOCK-HR-<n>` was opened in queue hr-timeoff…"*, then the balance-aware cited answer, the
       ticket in the `hr-timeoff` queue and the new row on the dashboard's mock-action log. Say why
@@ -208,4 +216,5 @@ Then, in order:
 | The model takes a path different from this script | Expected, and fine. The expectation records assert the **outcome** — the profile, the corpus, the deterministic verdict, the cited documents — not one exact path. Narrate what it actually did |
 | A dashboard page shows `{"code": "ADMIN_REQUIRED"}` | You are on the employee persona. Set the act-as selector to **HR admin** and reload. If you switched in the profile you are running chat in, switch back to `E1042` before the next task — `mosaic_actor` is one cookie shared by the chat and the dashboard |
 | Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. `evaluation/REPORT.md` already reports `remote-004` — the dataset twin of this prompt — failing its three-document end state on the published run; say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
+| More citation chips than an earlier run showed | Also expected: the published run added a bounded breadth-repair step, so a multi-document answer that cites fewer documents than its evidence spans gets one repair attempt. Narrate the chips on screen, not the number in this script |
 | You run past 10:00 | Cut the dashboard tour (5:30–6:15) to 20 seconds; it is the only segment whose content appears elsewhere in the recording |

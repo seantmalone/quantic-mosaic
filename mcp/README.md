@@ -206,7 +206,7 @@ allowlist** first whenever its `host` argument is `127.0.0.1`, `localhost` or `:
 public `Host` header gets `421 Invalid Host header`. That is what the deployed endpoint did until
 P23, and it is why an MCP Inspector session against
 `https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` failed with a bearer token that was
-perfectly valid.
+perfectly valid. It is fixed: see *Status on the live service* below.
 
 **So the allowlist is configured, and protection stays on.** `mcpserver/asgi.py` builds a
 `TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=…,
@@ -222,14 +222,19 @@ one refused, and loopback unchanged.
 access gate (`APP_ACCESS_TOKEN`, P8) and the per-IP rate limit, and the two state-changing tools
 need a one-time confirmation token an external caller cannot obtain.
 
-**Status on the live service, 2026-09-11.** The running instance was created over the REST API
-before `MCP_ALLOWED_HOSTS` existed, so it does not carry the variable yet and a `POST
-/mcp-server/mcp` with a valid bearer still answers `421 Invalid Host header` (re-checked 2026-09-11
-against `git_sha e13a772`). Arming it is one Environment entry of
-`MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` on the service (or one
-blueprint apply of the committed `render.yaml`), after which the endpoint answers Inspector.
-**Until then, demonstrate MCP over the stdio entrypoint (`mcp/run_stdio.sh`) or `/dashboard/mcp`**,
-both of which show the same nine tools from the same factory.
+**Status on the live service, verified 2026-09-11 at 20:32Z: the public mount accepts external MCP
+clients.** The running instance had been created over the REST API before `MCP_ALLOWED_HOSTS`
+existed; the variable is now set on the service — the same
+`127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` the committed `render.yaml` carries — and
+an external `initialize` sent over the
+public hostname answered **HTTP 200**. A full external client session then listed all **nine**
+tools and ran `search_policy_documents` and `check_pto_balance`; a `create_mock_hr_ticket` call
+with no confirmation token was refused with `CONFIRMATION_REQUIRED`, and so was the same call
+carrying a forged token; a request without the bearer header got **401**. So an MCP Inspector
+session attaches to `https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` with
+`Authorization: Bearer $APP_ACCESS_TOKEN` as a custom header. **The other two ways to see the same
+nine tools from the same factory are unchanged: the stdio entrypoint (`mcp/run_stdio.sh`) and
+`/dashboard/mcp`.**
 
 ## The nine tools
 

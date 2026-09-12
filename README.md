@@ -144,23 +144,27 @@ pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analys
 [`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 28 questions
 with their expected answers, the judge-agreement figures and the known limitations.
 
-**The published run** is `r_1789086979_baseline` — 26 items, `target: deployed`, judged by
-`gemini-3.5-flash-lite`, served by commit `da0dca2`. Beside it is the pre-optimization deployed
-baseline `r_1789055103_baseline`, run on the same instance and the same dataset before any of the
-quality or performance work:
+**The published run** is `r_1789166880_baseline` — 28 items, `target: deployed`, judged by
+`gemini-3.5-flash-lite`, served by commit `34717b5`. Beside it is the pre-optimization deployed
+baseline `r_1789055103_baseline`, run on the same instance before any of the quality or
+performance work, over the 26 items the dataset held then:
 
-| Metric | Before (`r_1789055103_baseline`) | Published (`r_1789086979_baseline`) |
+| Metric | Before (`r_1789055103_baseline`) | Published (`r_1789166880_baseline`) |
 |---|---|---|
-| Strict pass rate (target ≥ 0.85) | 0.692 | **0.808** |
-| Groundedness | 0.979 | 0.982 |
-| Citation accuracy | 0.847 | 0.925 |
-| Document recall | 0.855 | 0.974 |
-| Tool selection (F1) | 0.926 | 0.992 |
-| Workflow completion | 0.769 | 0.846 |
+| Strict pass rate (target ≥ 0.85) | 0.692 | **0.893** |
+| Groundedness | 0.979 | 0.984 |
+| Citation accuracy | 0.847 | 0.905 |
+| Document recall | 0.855 | 0.961 |
+| Tool selection (F1) | 0.926 | 0.993 |
+| Workflow completion | 0.769 | **0.893** |
 | Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
-| Latency p50 / p95 | 17.6 s / 47.7 s | **16.7 s** / **32.4 s** |
-| Judge agreement (blind seed subset) | 1.00 (n = 7) | 1.00 (n = 8) |
+| Latency p50 / p95 | 17.6 s / 47.7 s | 19.1 s / 38.7 s |
+| Judge agreement (blind seed subset) | 1.00 (n = 7) | 0.875 (n = 8) |
 | Judge agreement (hard subset, selection disclosed) | 1.00 (n = 8) | 0.875 (n = 8) |
+
+The project's own ≥ 0.85 strict-pass target is met; the three items that still fail, and the clause
+each of them tripped, are named in [`evaluation/REPORT.md`](evaluation/REPORT.md) and
+[`design-and-evaluation.md`](design-and-evaluation.md).
 
 **How it got there — and what it cost — is in [`docs/optimization-log.md`](docs/optimization-log.md)**:
 every optimization question asked, the evidence gathered, the decision taken, and the run id that
