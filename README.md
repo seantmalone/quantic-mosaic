@@ -122,15 +122,18 @@ a median **71.0 s** from cold to first answer (67.5–77.6 s across the three; t
 taken per segment, so they do not sum to it), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
 first and wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter
 while that happens. `deployed.md` carries the per-probe table and its provenance, and a two-layer
-keep-alive (added 2026-09-11 *after* these figures were published) keeps the instance warm **once
-`KEEP_ALIVE_URL` is set on the service**: the app then pings its own public `/health` every ten
-minutes from inside the process, with `.github/workflows/keepalive.yml` behind it as a second layer
-because GitHub's cron skipped most of its scheduled runs. `render.yaml` now carries the value so a
-blueprint apply cannot undo it, and the `Dockerfile` deliberately does not; but the live service was
-created over the REST API and `autoDeploy: false` means no apply runs on its own, so
-**`KEEP_ALIVE_URL` is still not set on the live service** — the in-process layer is not running and
-the numbers above are exactly what a visitor gets. Setting it is one single-key PUT with no rebuild;
-clearing it again and disabling that workflow puts the service back to them for good.
+keep-alive (added 2026-09-11 *after* these figures were published) holds the instance awake: the app
+pings its own public `/health` every ten minutes from inside the process, with
+`.github/workflows/keepalive.yml` behind it as a best-effort second layer because GitHub's cron
+skipped most of its scheduled runs. That primary layer has been **armed on the live service since
+2026-09-11 14:26Z**, when `KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` and
+`KEEP_ALIVE_INTERVAL_S=600` were set on it with a single-key PUT — `/health`'s `app.uptime_ms` read
+60 minutes at 18:37Z and 124.5 minutes at 00:51Z the next day, spanning windows with no traffic but
+a health read, which is well past the 15-minute spin-down. `render.yaml` carries the same value so a
+blueprint apply cannot undo it, and the `Dockerfile` deliberately does not, because a baked origin
+would start the loop in every container a developer runs. The numbers above are what a visitor gets
+if the loop is ever turned off: delete the variable on the service and no task is created on the
+next boot, and the workflow is stopped from the repository's **Actions** tab.
 
 ## Evaluation
 

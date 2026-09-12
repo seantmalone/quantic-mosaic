@@ -12,7 +12,8 @@ re-verified 2026-09-11, `permission: read` with no pending invitation — and th
 (**2b**, `MCP_ALLOWED_HOSTS` on the live service) was **discharged on 2026-09-11**: the deployed MCP
 endpoint now accepts external MCP clients, verified at 20:32Z. The keep-alive variable that used to
 sit beside it is an operator preference that moves no published number, and it is tracked in
-`deployed.md` rather than as a gate.
+`deployed.md` rather than as a gate: it **was set on the live service on 2026-09-11 at 14:26Z**, so
+the in-process self-ping is armed and a grader's first click should reach a warm instance.
 
 Item numbering follows design spec §19.1, so a number here means the same thing there. A
 **letter-suffixed** item (1a, 2a) is one the build discovered that §19.1 never anticipated; it is
@@ -73,9 +74,12 @@ numbered against the gate it belongs to rather than renumbering the list.
       which would remove the ~71 s cold start for a grader's first click at a cost of ~744 of the
       workspace's 750 free instance-hours a month — a reversible operator preference, not a
       prerequisite for anything published: every cold-start figure in this repository is measured
-      **without** it, so no number moves whichever way it is left. `render.yaml` carries it,
-      `deployed.md` § *Cold start* → *Keep-alive* records its state and both menus that change it,
-      and `tests/contract/test_keep_alive.py` holds the published wording to that state.
+      **without** it, so no number moves whichever way it is left. It was **set on the live service
+      on 2026-09-11 at 14:26Z** (single-key PUT, no rebuild) and the self-ping has been holding the
+      instance awake since — `/health`'s `app.uptime_ms` crosses the 15-minute idle timer.
+      `render.yaml` carries it, `deployed.md` § *Cold start* → *Keep-alive* records its state, the
+      evidence and both menus that turn it off again, and `tests/contract/test_keep_alive.py` holds
+      the published wording to that state.
 - [x] **3 — Turso account + platform token.** Provided **2026-09-10**. Database `mosaic-hr` in
       organisation `seantm`, group `default`, location `aws-us-west-2`, Starter plan with
       `overages: false`. The live parity smoke answered P1's carry-forward: foreign keys **are**

@@ -161,9 +161,10 @@ distinct from §13.5's cold-*turn* p50, which is an eval metric over a warm inst
 
 **On the live free instance — n=3, measured 2026-09-10 and 2026-09-11 without keep-alive.** The
 service carried no keep-alive pinger when these ran, so this is the behaviour of the instance with
-nothing touching it — and the behaviour a visitor sees whenever **both** keep-alive layers below
-are off, which is the in-process layer's state until an operator sets `KEEP_ALIVE_URL` on the
-service (unset by default; the repository sets it nowhere). Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
+nothing touching it — and the behaviour a visitor gets whenever **both** keep-alive layers below
+are off. That is not the live service's state today: the in-process layer has been armed on it
+since 2026-09-11 14:26Z, and this table is what comes back the moment the variable is cleared
+again. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
 ran on `da0dca2`, the build that served the published evaluation run, at 02:19Z and 02:37Z:
 
 | Segment | Probe 1 | Probe 2 | Probe 3 | Median |
@@ -202,9 +203,10 @@ timestamp and sha, are in
 
 Two layers, and the order matters. Both exist to keep the instance from reaching Render's
 15-minute idle timer, so a visitor gets the warm turn instead of the 71.0 s above. The primary
-layer is **conditional on one environment variable that the live service does not carry** — read
-the **Status** paragraph below before relying on it. Both landed on 2026-09-11, **after** the table:
-Sean's ruling of 2026-09-10 20:40Z was to publish the measurement first and mitigate it second, so every figure above is still the honest no-ping behaviour and
+layer runs on one environment variable, which **the live service has carried since 2026-09-11
+14:26Z** — the **Status** paragraph below carries the evidence that it is working. Both landed on
+2026-09-11, **after** the table: Sean's ruling of 2026-09-10 20:40Z was to publish the measurement
+first and mitigate it second, so every figure above is still the honest no-ping behaviour and
 nothing was re-measured to look better.
 
 **The primary layer is in the application.** `web/main.py` starts a background task in its lifespan
@@ -212,8 +214,8 @@ that GETs `{KEEP_ALIVE_URL}/health` every `KEEP_ALIVE_INTERVAL_S` (default 600 s
 timeout, logs the outcome at DEBUG, never raises and is cancelled at shutdown. The URL must be the
 service's **public** origin, not loopback: Render counts traffic at its edge, so the ping has to
 leave the container and come back to reset the idle timer. Unset `KEEP_ALIVE_URL` — the default,
-and the case on a laptop, in CI **and on the live service as of 2026-09-11** — and the task is
-never created and nothing is pinged from inside the process.
+and the case on a laptop and in CI — and the task is never created and nothing is pinged from
+inside the process.
 
 **Why the workflow below could not be the primary layer: it did not run.** GitHub's `schedule:` is
 best-effort and de-prioritises low-traffic repositories. In the nine hours after
@@ -226,19 +228,21 @@ external ping can wake one.
 **The arithmetic below is unchanged by the addition.** Both layers target the same state — an
 instance that is awake round the clock — so the ceiling is still 744 of 750 instance-hours in a
 31-day month, and pinging twice as often costs nothing extra because it is wakefulness, not
-requests, that is billed. It is a ceiling for the enabled case; while `KEEP_ALIVE_URL` is unset only
-the cron's best-effort runs touch the service.
+requests, that is billed. It is the ceiling for the enabled case, and since 2026-09-11 14:26Z that
+is the case this service is in.
 
-**Status, 2026-09-11: the in-process layer is shipped but not switched on.** `render.yaml` carries
-`KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` and `KEEP_ALIVE_INTERVAL_S=600`, so a
-blueprint apply arms the loop and cannot silently undo an operator's value; the `Dockerfile`
-deliberately carries neither, because a baked origin would start the loop in every container a
-developer runs. But the live service was created over the REST API rather than from the blueprint,
-and `autoDeploy: false` means no apply happens on its own, so **`KEEP_ALIVE_URL` has not been set on
-the live service**: the code path above exists and is tested, no self-ping is running, and a visitor
-still gets the measured cold start. Turning it on is one single-key PUT (or one dashboard
-Environment entry) of that same value, no rebuild; this line and the § *Environment variables* note
-below are what change when someone does.
+**Status, 2026-09-11 14:26Z: the in-process layer is armed on the live service.**
+`KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` and `KEEP_ALIVE_INTERVAL_S=600` were set on
+the service with a single-key PUT — no rebuild, no blueprint apply — and the loop has been running
+since the boot that followed. The evidence is `/health`'s own `app.uptime_ms`: **60 minutes at
+18:37Z**, then **69 minutes at 23:56Z → 86 minutes at 00:13Z**, a seventeen-minute window whose only
+other traffic was those two health reads and which is past Render's 15-minute spin-down, and
+**124.5 minutes at 00:51Z** on 2026-09-12. An instance with nothing pinging it cannot show an uptime
+that crosses its own idle timer. `render.yaml` carries the same two values (P23), so re-applying the
+blueprint arms the loop rather than clearing the operator's value; the `Dockerfile` deliberately
+carries neither, because a baked origin would start the loop in every container a developer runs.
+The table above therefore documents what a visitor gets if the loop is ever turned off — see *How
+to turn it off* below — rather than what one gets today.
 
 The cron job is one `curl` on `ubuntu-latest`: no checkout, no secret, and `permissions: {}`, because
 `/health` is an open route. It reads the URL from the repository **variable** `DEPLOY_URL` and falls
@@ -291,7 +295,9 @@ Every variable of §12.3 is in `.env.example` with its default and a `REQUIRED`/
 `tests/contract/test_env_example_covers_settings.py` asserts that bijection in both directions. What
 the **deployed service** sets is the `render.yaml` list — read back from the live service on
 2026-09-10 as exactly those ten keys — plus the two limiter variables added by a single-key PUT the
-same day. Every other variable runs at its coded default:
+same day. Two further single-key PUTs followed on 2026-09-11: `MCP_ALLOWED_HOSTS` (§ *MCP
+transport*) and the keep-alive pair described under the table. Every other variable runs at its
+coded default:
 
 | Variable | Deployed value | Set by |
 |---|---|---|
@@ -312,11 +318,11 @@ same day. Every other variable runs at its coded default:
 **`KEEP_ALIVE_URL` is the one variable that switches a behaviour on rather than tuning one.** The
 in-process keep-alive of § *Cold start* → *Keep-alive* is started only when it holds the service's
 own **public** origin; unset — the default, and the state on a laptop and in CI — no task is
-created and nothing is pinged. `render.yaml` carries it for a blueprint apply, but **it is not set
-on the live service as of 2026-09-11**, so it belongs in no row of the table above: the rows record
-values the service carries, and this one carries none. Setting it is a single-key PUT on the live
-service with no rebuild, exactly like the two limiter variables above, and `KEEP_ALIVE_INTERVAL_S`
-runs at its coded 600 s there too.
+created and nothing is pinged. It **is set on the live service**, to
+`https://mosaic-hr-copilot.onrender.com`, by a single-key PUT on **2026-09-11 at 14:26Z** with no
+rebuild, exactly like the two limiter variables above; `KEEP_ALIVE_INTERVAL_S=600` was set in the
+same PUT, which is also its coded default. `render.yaml` carries both, so a blueprint apply cannot
+undo them.
 
 **Why the service runs `LLM_RPM=60` / `LLM_BURST=30` while the code default stays 10.** The
 pre-optimization deployed sweep recorded a **3.9 s per turn mean** of token-bucket waiting inside
@@ -405,14 +411,15 @@ the index build — so this is the budget being spent deliberately, once per dep
 metrics and deploys endpoints, because Render publishes no usage endpoint, and it says so on every
 line it prints.
 
-**The instance-hour arithmetic, once the keep-alive is switched on.** The keep-alive (§*Cold start*
-→ *Keep-alive*) keeps the instance awake round the clock as soon as `KEEP_ALIVE_URL` is set on the
-service — which, as that subsection's status line records, has not happened yet — and from that
-point the month's consumption trends to ~744 of the 750 free hours **by design** rather than to the
-handful of hours an idle demo would use. That figure is the ceiling for both layers together — an awake
-instance is counted once however many things ping it — and it did not move when the in-process
-self-ping joined the GitHub schedule. Exhausting the 750 suspends the free service until the month
-resets and bills nothing; the levers are one Render environment variable and one Actions menu.
+**The instance-hour arithmetic, now that the keep-alive is armed.** The keep-alive (§*Cold start*
+→ *Keep-alive*) keeps the instance awake round the clock while `KEEP_ALIVE_URL` is set on the
+service — which it has been since 2026-09-11 14:26Z, as that subsection's status paragraph records
+with its uptime evidence — so the month's consumption trends to ~744 of the 750 free hours **by
+design** rather than to the handful of hours an idle demo would use. That figure is the ceiling for
+both layers together — an awake instance is counted once however many things ping it — and it did
+not move when the in-process self-ping joined the GitHub schedule. Exhausting the 750 suspends the
+free service until the month resets and bills nothing; the levers are one Render environment
+variable and one Actions menu.
 
 ### Memory — the 512 MB gate, measured 2026-09-10
 

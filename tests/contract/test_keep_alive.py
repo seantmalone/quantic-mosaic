@@ -21,9 +21,19 @@ Two further properties are about where the variable may be set, and about the **
 they are here because they belong to this feature and to nothing else. `render.yaml` carries the
 public origin (P23) so that re-applying the blueprint cannot undo an operator's value; the
 `Dockerfile` must never carry it, because a baked origin would start the loop in every container
-including a developer's. And because the live service — created over the REST API, with
-`autoDeploy: false` — still does not carry it, every graded document that publishes the keep-alive
-has to publish it in the conditional, naming the switch that arms it.
+including a developer's.
+
+**The document property flipped on 2026-09-11 at 14:26Z.** Until then the variable was set nowhere
+but `render.yaml`, the live service carried none, and the graded documents had to publish the
+keep-alive in the conditional — naming the switch that arms it — so that a grader reading the
+promise of a warm instance was not handed the 71 s cold start instead. At 14:26Z
+`KEEP_ALIVE_URL=https://mosaic-hr-copilot.onrender.com` and `KEEP_ALIVE_INTERVAL_S=600` were set on
+the live service with a single-key PUT, and `/health`'s `app.uptime_ms` shows the loop working: 60
+min at 18:37Z, 69 min at 23:56Z → 86 min at 00:13Z (a 17-minute window with no traffic but two
+health reads, past Render's 15-minute spin-down) and 124.5 min at 00:51Z on 2026-09-12. So the
+conditional wording is now the false one, and this file pins the opposite: every graded document
+that publishes the keep-alive must name the live service's armed state and its date, and must carry
+none of the wording that said the layer was off.
 """
 
 from __future__ import annotations
@@ -59,15 +69,19 @@ PUBLISHED_DOCS = (
     "docs/architecture.html",
 )
 
-#: A claim that the instance *is* being kept warm, with no precondition attached.
-UNCONDITIONAL_CLAIM = re.compile(r"\b(now|already|does)\s+keeps?\s+the\s+instance\s+(warm|awake)\b", re.I)
+#: Any one of these, in a document, states the live service's armed state to the reader.
+ARMED_MARKERS = (
+    "armed on the live service since 2026-09-11",
+    "is set on the live service",
+)
 
-#: Any one of these, in a document, states the precondition the reader needs.
-CONDITIONAL_MARKERS = (
-    "once `KEEP_ALIVE_URL` is set",
+#: Wording from before 14:26Z on 2026-09-11. Any of it left in a published document is now false.
+STALE_MARKERS = (
     "not set on the live service",
-    "has not been set on the live service",
+    "not been set on the live service",
     "not switched on",
+    "until an operator sets",
+    "once KEEP_ALIVE_URL is set",
 )
 
 #: The image must never bake an origin: one `Dockerfile` value would arm the loop everywhere it runs.
@@ -179,10 +193,11 @@ def test_the_blueprint_carries_the_url_and_the_image_never_does():
 
     P23 put `KEEP_ALIVE_URL` into `render.yaml` so that re-applying the blueprint cannot silently
     undo an operator's value. That is a *blueprint* value: the live service was created over the
-    REST API and `autoDeploy: false` means no apply happens on its own, so committing it changes
-    no running service — which is why the documents below must still carry the precondition. The
-    `Dockerfile` is the opposite case: a value there would travel into every container, including a
-    developer's `make docker-run-512`, and start a loop pinging the public origin from a laptop.
+    REST API and `autoDeploy: false` means no apply happens on its own, so committing it changed no
+    running service — the operator's single-key PUT of 2026-09-11 14:26Z is what armed the loop, and
+    this line is what keeps a later blueprint apply from clearing it again. The `Dockerfile` is the
+    opposite case: a value there would travel into every container, including a developer's
+    `make docker-run-512`, and start a loop pinging the public origin from a laptop.
     """
     blueprint = yaml.safe_load((REPO_ROOT / "render.yaml").read_text(encoding="utf-8"))["services"][0]
     plain = {entry["key"]: entry["value"] for entry in blueprint["envVars"] if "value" in entry}
@@ -197,21 +212,22 @@ def test_the_blueprint_carries_the_url_and_the_image_never_does():
     )
 
 
-def test_the_published_keep_alive_claim_stays_conditional_while_the_live_service_is_unset():
-    """The documents may promise a warm instance only where they name the switch that arms it.
+def test_the_published_keep_alive_claim_names_the_armed_live_service_and_its_date():
+    """The documents must publish the state the service is actually in, with the date it changed.
 
-    P21 replaced one over-claim (the GitHub cron "now keeps the instance warm", which its own
-    finding disproved) and must not install another: the in-process loop is real, tested and
-    **off**, because `KEEP_ALIVE_URL` has not been set on the live service. A grader reads
-    `README.md` and gets the 71.0 s cold start `deployed.md` measures, so the claim has to carry
-    its precondition — in every document that publishes it.
+    P21 wrote the conditional wording because the loop was off; P26 flips it because the variable
+    was set on the live service on 2026-09-11 at 14:26Z and `app.uptime_ms` proves the self-ping
+    keeps the instance past Render's fifteen-minute idle timer. A grader reads one of these four
+    documents and decides whether to expect a warm instance or the 71.0 s cold start, so each of
+    them has to name the armed state and date it — and none of them may still say the layer is off.
     """
     for rel in PUBLISHED_DOCS:
-        prose = " ".join((REPO_ROOT / rel).read_text(encoding="utf-8").split())
-        assert not UNCONDITIONAL_CLAIM.search(prose), (
-            f"{rel} claims the instance is being kept warm; it is not, until an operator sets "
-            "KEEP_ALIVE_URL on the service"
+        prose = " ".join((REPO_ROOT / rel).read_text(encoding="utf-8").split()).replace("`", "")
+        stale = [marker for marker in STALE_MARKERS if marker in prose]
+        assert not stale, (
+            f"{rel} still says the keep-alive is off ({stale}); it has been armed on the live "
+            "service since 2026-09-11 14:26Z"
         )
-        assert any(marker in prose for marker in CONDITIONAL_MARKERS), (
-            f"{rel} publishes the keep-alive without naming the variable that arms it"
+        assert any(marker in prose for marker in ARMED_MARKERS), (
+            f"{rel} publishes the keep-alive without naming the live service's armed state"
         )

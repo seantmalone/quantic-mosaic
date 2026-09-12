@@ -714,8 +714,9 @@ segments in `docs/evidence/cold-start-probes.json`. The design decision is the o
 refusal: publish the number the rubric asks us to explain, then add a keep-alive (Sean's ruling of
 2026-09-10; `.github/workflows/keepalive.yml` landed 2026-09-11, after the three probes, with an
 in-process self-ping added the same day as the primary layer — it starts only when `KEEP_ALIVE_URL`
-is set on the service, which is **not set on the live service**, so the table above is still what a
-visitor gets). Pinging round the clock costs about 744 of the 750 free instance-hours a month and
+is set on the service, which was set there at **14:26Z on 2026-09-11**, after every figure above had
+been measured and published, so the table is what a visitor gets if the loop is turned off again).
+Pinging round the clock costs about 744 of the 750 free instance-hours a month and
 exhausting them suspends the service until the month resets rather than billing anything, which is
 why it is a reversible last step rather than the first thing built — and why the measured table
 stays exactly as published. Independently of it: `/ready`
@@ -901,7 +902,7 @@ are kept, each with the run id and the deployed commit that produced it:
 | `nudge_rate` | 0.115 | 0.577 | 0.577 | 0.536 |
 | Latency p50 | 17.6 s | 22.6 s | **16.7 s** | 19.1 s |
 | Latency p95 | 47.7 s | 39.2 s | **32.4 s** | 38.7 s |
-| Judge agreement, seed / hard | 1.00 (n=7) / 1.00 (n=8) | not labelled | 1.00 (n=8) / 0.875 (n=8) | 0.875 (n=8) / 0.875 (n=8) |
+| Judge agreement, seed / hard | 1.00 (n=7) / 1.00 (n=8) | not published (labels are authored per published run) | 1.00 (n=8) / 0.875 (n=8) | 0.875 (n=8) / 0.875 (n=8) |
 | Ablation delta (tools removed, workflow completion) | −0.154 | −0.192 | −0.231 | −0.143 (bar 0.25) |
 
 **The last column is measured over 28 items, the first three over 26.** The final wave added two
@@ -957,7 +958,11 @@ pre-registered 0.25 bar as **not supported**. Second, the **middle columns carry
 judge-agreement figure for column 2**. Blind reference labels are re-authored once per published
 run, and re-labelling an intermediate column would have spent a labelling round on a run nobody
 reads; column 2's judged metrics are therefore published with no human-agreement number beside
-them, and that is a gap in that column rather than a figure carried over from another run.
+them, and that is a gap in that column rather than a figure carried over from another run. The run
+file `r_1789069158_baseline.json` does carry a mechanically computed `judge_agreement_rate` of 1.00
+(n=8) — the harness scores whatever labels it finds, and the labels it found there were authored
+for another run's answers — which is precisely why that number is not published as column 2's
+agreement figure.
 
 **Where the published strict pass rate goes.** `strict_pass` is an AND over six clauses, so a
 failure always has a named cause. These are recomputed from the committed per-item scores by the

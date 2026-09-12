@@ -65,7 +65,11 @@ outside the repository — the video link and the dashboard submission — are t
       the recorded presentation and the GitHub repository. Both are pre-staged in the first
       20 lines of `README.md`, so this is a copy-paste.
 - [ ] **SUB.2** — the deployed application URL is in `README.md` (the `Deployed:` line), and the
-      link opens the app for someone who is not signed in anywhere.
+      link opens the app for someone who is not signed in anywhere. **Its first half is already
+      verified** — `docs/requirements-traceability.md` marks SUB.2 `verified` on 2026-09-11 for the
+      tokenized `Deployed:` line, and `test_docs_completeness.py` holds that line to its `?access=`
+      form — so this box is open for the second half only: on the day, open that exact link in a
+      private window, signed into nothing, and confirm the app loads.
 - [x] **SUB.3** — the repository is shared with the GitHub account **`quantic-grader`**, and the
       invitation has been **accepted**: `gh api
       repos/seantmalone/quantic-mosaic/collaborators/quantic-grader/permission` returns
