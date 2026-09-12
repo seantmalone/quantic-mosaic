@@ -335,7 +335,7 @@ wake.
 
 **Status: `.github/workflows/keepalive.yml` landed 2026-09-11, after these probes, and an
 in-process self-ping joined it the same day as the primary layer — but that layer starts only when
-`KEEP_ALIVE_URL` is set on the service and it is **not set on the live service**, so every figure
+`KEEP_ALIVE_URL` is set on the service; it **was set on the live service on 2026-09-11 at 14:26Z** and verified by uptime (60 min at 18:37Z, 124 min at 00:51Z next day, with no traffic but health reads), so every figure
 above is still the behaviour a visitor gets; disabling the workflow and leaving the variable clear
 keeps it that way.**
 
