@@ -16,16 +16,26 @@ the disclosure against the artifacts rather than take it on trust.
 | `grade-card-2026-09-11.md` | An independent, read-only grading pass against `docs/project-requirements.md` — the source of the P23 fixes |
 | `constraints.md` | The global constraints every phase was held to, copied from the design spec |
 
+**Coverage: P0 through P27** — 28 briefs and 29 reports (P19 ran without a written brief; P11 needed
+three passes, so `P11b`/`P11c` have their own records). The copy runs one document behind by
+construction: a phase's report is written *after* the phase has copied its own brief across, so the
+last report here is P26's and `P27-report.md` lands with the next sync. `progress.md` is re-copied
+whole every time, so the ledger is always current to the last completed phase.
+
 ## What is deliberately not here
 
 * **The review diffs** (`review-<a>..<b>.diff`). They are byte-for-byte reproducible from the
   repository — `git diff <a>..<b>` — and together they run to tens of megabytes.
 * **The controller's handoff JSON.** It is scheduling state for the orchestration, not a record of
   a decision, and it carries no argument a reader would want.
-* **`.env` and every credential.** Nothing here was ever allowed to read it. The files were scanned
-  for `sk-ant-…`, `sk-…`, `AIza…`, JWT and GitHub-token shapes and for the live access token before
-  being copied; the only matches are the deliberately synthetic placeholders quoted inside test
-  output (`sk-ant-api03-AAAA…`, `ci-access-token`), and `gitleaks` 8.30.1 reads the tree clean.
+* **`.env` and every credential.** Nothing here was ever allowed to read it. Every file was scanned
+  for `sk-ant-…`, `sk-…`, `AIza…`, JWT, GitHub- and Slack-token shapes, private-key headers and
+  `Bearer …`/`?access=` literals before being copied, and the P23 batch was additionally scanned for
+  the live access token by exact match; the only matches anywhere in the directory are the
+  deliberately synthetic placeholders quoted inside test output (`sk-ant-api03-AAAA…`,
+  `ci-access-token`), which is why `.gitleaks.toml` carries a rule/path/line carve-out for exactly
+  those and `gitleaks` 8.30.1 read the tree clean at P23. The P24–P27 batch was scanned the same way
+  and added no match of any shape.
 
 ## How to read it
 

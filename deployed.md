@@ -118,9 +118,13 @@ the endpoint answers `421 Invalid Host header` to any `Host` the allowlist does 
 committed `render.yaml` carries
 `MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` and **the live service
 carries it too**. **The public mount accepts external MCP clients**, verified on 2026-09-11 at
-20:32Z, when an external `initialize` over the public hostname answered HTTP 200. That `initialize`
-is the extent of the external verification; the bearer gate and the confirmation gate are asserted
-by the test suite rather than by that session. The other
+20:32Z, when an external `initialize` over the public hostname answered HTTP 200 — and that
+session went the whole way from there: `notifications/initialized` **202**, `tools/list` returning
+all **nine** tools, real `search_policy_documents` and `check_pto_balance` calls, then
+`create_mock_hr_ticket` refused **`CONFIRMATION_REQUIRED`** with no confirmation token and refused
+again with a forged one, while the same endpoint answered **401** to a request carrying no bearer.
+So the bearer gate and the confirmation gate are verified against the deployed service, not only in
+the test suite. The other
 two ways to see the same nine tools are unchanged: `/dashboard/mcp` and the stdio entrypoint
 (`mcp/run_stdio.sh`).
 

@@ -176,7 +176,7 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 2,001 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
+committed suite — 2,002 tests as of 2026-09-11, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 28-item evaluation whose real
 numbers, including the ones below target, are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
@@ -200,10 +200,14 @@ history carries one commit per phase with the requirement ids it satisfies in th
 was copied, what was not, and how it was scanned for secrets first.)
 
 **One detail a reader of `git log` will notice.** Two `Co-Authored-By` trailers run through the
-history, and the split is not random: of 146 commits, **113 carry `Claude Opus 5 (1M context)`** —
-every phase commit from `P0`'s `ad593a3` onward, because an implementer or reviewer subagent wrote
-them — **30 carry `Claude Fable 5.1`**, the coordinating session's own commits (the spec, the
-roadmap, the optimization log, the merges of adjudicated rulings), and three are branch merges with
-no trailer at all. The rule is the same in all three cases: **the trailer names the model that
-actually wrote the commit.** `docs/process/sdd/constraints.md` line 14 said it as a fixed string
-until 2026-09-11 and now says it as that rule, which is what the history has done since P0.
+history, and the split is not random: of the 160 commits through `5b1bd51`, **122 carry
+`Claude Opus 5 (1M context)`** — every phase commit from `P0`'s `ad593a3` onward, because an
+implementer or reviewer subagent wrote them — **35 carry `Claude Fable 5.1`**, the coordinating
+session's own commits (the spec, the roadmap, the optimization log, the merges of adjudicated
+rulings), and **3 are branch merges** with no trailer at all. The rule is the same in all three
+cases: **the trailer names the model that actually wrote the commit.**
+`docs/process/sdd/constraints.md` line 14 said it as a fixed string until 2026-09-11 and now says
+it as that rule, which is what the history has done since P0. None of those four figures is typed
+from memory: `tests/contract/test_docs_completeness.py` recounts them from `git log` at the commit
+this paragraph names and fails if they disagree — an earlier hand-typed census had drifted by
+fourteen commits before anyone noticed.

@@ -184,6 +184,16 @@ Tick all five on camera:
       wrote, so a confirmed write can never be reported as something the assistant declined to do.
       The same step also clears the **next steps** of anything that sends the viewer off to file
       the request themselves, so nothing under "Next steps:" contradicts the ticket on screen.
+      **What the final build actually did** (pinned in
+      [`docs/evidence/demo-task-2-live-2026-09-12.txt`](evidence/demo-task-2-live-2026-09-12.txt),
+      run against `/health` sha `f5e86c3` on 2026-09-12 at 01:39Z): the gate held, the confirmed
+      write landed as **`MOCK-HR-000006`**, and the answer named that id itself — inside its
+      recommendation, which is why the deterministic *"Done: …"* opener is absent from that
+      transcript rather than doubled. `agent/outcome.py` inserts the opener only when the model has
+      **not** already stated the id; either way the id is in the answer and no next step asks for
+      the ticket again. 4 citations across 2 documents, 40 s. If the take on camera opens with
+      *"Done: HR ticket …"*, that is the same rule firing the other way — say so rather than
+      re-shooting.
 
 ### The safety beat (do not rush this — it is the best 40 seconds in the demo)
 

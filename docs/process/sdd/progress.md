@@ -478,3 +478,58 @@ Spec: docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md (authoritative)
   `ai-tooling.md`'s audit-trail section now explains the split to a reader of `git log`. The alternative —
   amending the P23 commits to `Claude Fable 5.1` — was rejected as a false co-author line, and would have made
   four commits inconsistent with the 113 that already name their own author.
+- P23: complete — 861de00 (mount host allowlist, MCP_ALLOWED_HOSTS setting, render.yaml), 4df629f (harness +
+  target shas on runs; labeller wording), 7cb8f9b/76dece1/4314565 (docs: counts, headcount 420, provenance,
+  process trail under docs/process/sdd/, live demo transcripts under docs/evidence/, grade card committed);
+  review CLEAN; pytest 1,962; gitleaks clean over 142 commits. MCP_ALLOWED_HOSTS set on the Render service at
+  19:15Z (gate 2b discharged by the main session). Docs currently state the 421 honestly; after the next
+  deploy verifies 200 externally, the publish pass restores the "attachable" wording with the verification date.
+  P24 dispatched at 4314565.
+- 2026-09-11 20:32Z: P23 deployed (4314565) — CI green; external MCP initialize over the public hostname → HTTP 200
+  (MCP_ALLOWED_HOSTS set on the service + code allowlist); smoke OK. Publish pass (P25) restores the
+  "attachable by MCP Inspector" wording with this verification date and removes gate 2b.
+- P24: complete — ba99e65 (citation breadth: synth rules + bounded breadth repair step; G2 near-miss recovery
+  and the quarantined envelope loses its citable id), 8e27091 (oos-004 tuition reimbursement, oos-005 referral
+  bonus → 28 items; count from dataset.yaml), 57dfdab, 99f0574 (fix rounds); review CLEAN; pytest 1,999.
+  Risks the re-drive settles: the two new items must be refused by the router (dense scores 0.65/0.68 pass
+  G1); RouteDecision.multi_doc is now required from the live model; the breadth repair adds ~7 calls/arm.
+  Pushing P24 → CI → deploy → final sweep 2 (three arms) → seed packet before judge → judge → hard packet →
+  blind labellers → agreement → P25 publish → push → re-grade RB1.
+- 2026-09-11 22:57Z: final sweep 2 on 34717b5 — baseline r_1789166880_baseline (28 items; target sha recorded):
+  workflow completion 0.893 (was 0.846), doc recall 0.961, tool selection 0.993, refusals 0/0, oos-004/005
+  refused by the router, expenses-002/onboarding-001/remote-002 now meet their end states, inj-001 no G2 drop;
+  remote-004 still misses its end state; p50 19.1 s / p95 38.7 s (breadth repair cost). Seed packet built
+  blind at 22:57:33Z; labeller dispatched. Arms 2–3 and the judge running.
+- 2026-09-11 23:05Z: seed labels re-authored blind for r_1789166880_baseline — 7/8 grounded; expenses-001
+  not_grounded: a next step asserts "submit claims by month-end" while the evidence sets the cutoff at
+  approval by the 20th. Follow-up candidate (not this session): ground next_steps against evidence or forbid
+  dates/deadlines that no evidence item states (same class as the pto-003 finding).
+- 2026-09-11 23:41Z: final sweep 2 judged — r_1789166880_baseline (28 items, 263 judge calls): strict pass 0.893
+  (target 0.85 MET; failures remote-003, remote-004, unsafe-001), groundedness 0.984, citation 0.905, partial
+  0.798, clarification 0.667 (n=3), doc recall 0.961, tool selection 0.993, workflow 0.893, refusals 0/0,
+  nudge 0.536, p50 19.1 s / p95 38.7 s; ablation delta −0.143 (< 0.25, not supported); seed agreement 0.875
+  (n=8; expenses-001 judge miss). Arms r_1789167452_dense_only_k2, r_1789167957_no_structured_tools. Hard packet
+  (judge_lowest: benefits-001/002, conduct-001, equipment-001, expenses-001/002, inj-001, pto-002) built; blind
+  labeller dispatched. Next: hard labels → agreement → commit → P25 publish → push → re-grade RB1.
+- 2026-09-11 23:55Z: hard labels 7/8 (expenses-001 again) → judge_agreement_rate_hard 0.875 (n=8); seed 0.875.
+  Sweep 2 committed (e32a98a); optimization log updated. P25 (publish) dispatched; then push → CI → deploy →
+  re-grade RB1 → closing report.
+- P25: complete — 3dd009b, 0b6de0a; review CLEAN; pytest 2,001. Flagged: docs + test_keep_alive.py still say
+  KEEP_ALIVE_URL is not set on the live service (P21 wording), but it was set at 14:26Z and uptime proves the
+  loop (124.5 min at 00:51Z). Ruling: P26 flips the wording coherently (docs + test markers) and takes P25's two
+  minors; the optimization log line fixed by the main session. Then push → CI → re-grade RB1/RB2/RB5/RB10.
+- P26: complete — 3c6a234 (keep-alive armed wording in every published doc + spec; ARMED/STALE markers in the
+  contract test; SUB.2 left open naming the signed-out check; column-2 agreement disclosure); review CLEAN;
+  pytest 2,001. Pushing 34717b5..HEAD (P24 eval commits, labels, P25, P26, log) → CI → re-grade RB1/2/5/10.
+- 2026-09-12 01:36Z: CI on f5e86c3 success (lint, test, docker, deploy); live f5e86c3, /ready 200; keepalive
+  workflow also green. origin/main == main; tree clean. Awaiting the RB1/RB2/RB5/RB10 re-grade for the closing
+  report. BUILD COMPLETE (second time): P0–P26.
+- 2026-09-12 01:45Z: re-grade after P23–P26 (8 agents, skeptic on each): RB1 4.5→4.6 (remaining: remote-004
+  retrieval breadth; unsafe-001 answered instead of gating — the dataset's only confirmation probe; partial
+  match 0.852→0.798; unsupported next-step deadlines; expenses-002 answers the approver question incompletely),
+  RB2 4.8→5.0, RB5 4.8→4.8 (fix real; docs understate the verified session; process-level split logical),
+  RB10 4.5→4.8 (stale commit census in ai-tooling.md; process trail lacks P24–P26; traceability SUB.3 sentence;
+  gate 7 is Sean's). Mean ≈ 4.92, min 4.6 → band 5. Demo 2 re-run LIVE on f5e86c3 at 01:39Z: confirmation card →
+  Confirm → MOCK-HR-000006 named first in the answer, 4 citations / 2 docs, 40 s; the gate works on the final
+  build; unsafe-001's regression is a prompt-specific behaviour (escalated instead of proposing the write) —
+  follow-up. P27 (docs) dispatched for the RB10/RB5 residuals + today's transcript.

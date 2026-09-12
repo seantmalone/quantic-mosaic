@@ -38,6 +38,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 README = REPO_ROOT / "README.md"
@@ -628,6 +630,84 @@ def test_ai_tooling_carries_the_ownership_disclosure():
     body = _section(AI_TOOLING, "## AI use and ownership")
     for phrase in ["correctness", "security", "integrity"]:
         assert phrase in body, f"the ownership disclosure does not mention {phrase!r}"
+
+
+# --- the commit census ------------------------------------------------------------------------
+#
+# DOCS.9 again: the disclosure explains the two `Co-Authored-By` trailers by counting them, and a
+# hand-typed count went stale within two days of being written (the 2026-09-11 re-grade found
+# "146 commits" against a history of 160). The four figures are therefore recomputed from `git log`
+# here rather than trusted.
+#
+# The paragraph names the commit it was taken at, and the census is computed **through that
+# commit** — not through `HEAD`. Anchoring on `HEAD` would be worse than no test at all: the very
+# next commit, including the one that lands this paragraph, would falsify a sentence that was true
+# when written and leave the suite red until someone retyped four numbers. Anchored, the only way
+# to break this test is to edit the paragraph or the history it quotes, which is exactly the drift
+# it exists to catch. Refreshing the census means moving the sha and the numbers together.
+
+#: `of the 160 commits through `5b1bd51`, **122 carry `Claude Opus 5 (1M context)`** … ` — read
+#: against the paragraph with its line wrapping flattened, so re-wrapping the prose cannot break it.
+COMMIT_CENSUS = re.compile(
+    r"of the ([\d,]+) commits through `([0-9a-f]{7,40})`, "
+    r"\*\*([\d,]+) carry `Claude Opus 5 \(1M context\)`\*\*.*?"
+    r"\*\*([\d,]+) carry `Claude Fable 5\.1`\*\*.*?"
+    r"\*\*([\d,]+) are branch merges\*\*"
+)
+
+#: A trailer **line**, never a substring of the body: a phase report pasted into a commit message
+#: can quote the other model's name, and that is not a co-authorship.
+CO_AUTHORED_BY = re.compile(r"^Co-Authored-By: (.+?) <noreply@anthropic\.com>\s*$", re.M)
+
+
+def _git(*args: str) -> str | None:
+    """`git <args>` in the repository, or `None` when git cannot answer.
+
+    `None` covers both "there is no git here" (a source export, a shallow image layer) and "that
+    revision is unknown", which is why the caller skips rather than fails on it.
+    """
+    try:
+        done = subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True)
+    except OSError:  # pragma: no cover - no git binary on this machine
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def test_the_commit_census_is_the_one_git_log_reports():
+    """DOCS.9 — the trailer split `ai-tooling.md` publishes is recounted from the history."""
+    match = COMMIT_CENSUS.search(" ".join(_text(AI_TOOLING).split()))
+    assert match, "ai-tooling.md no longer states the commit census in the form this test reads"
+    total, sha, opus, fable, merges = match.groups()
+
+    if _git("cat-file", "-e", f"{sha}^{{commit}}") is None:
+        pytest.skip(f"git cannot resolve {sha}; the census cannot be recounted in this checkout")
+
+    log = _git("log", "--format=%x1e%B", sha)
+    assert log is not None, f"git log {sha} failed"
+    bodies = [body for body in log.split("\x1e") if body.strip()]
+    counted = {
+        name: sum(1 for body in bodies if name in set(CO_AUTHORED_BY.findall(body)))
+        for name in ("Claude Opus 5 (1M context)", "Claude Fable 5.1")
+    }
+    merge_shas = _git("rev-list", "--merges", sha)
+    assert merge_shas is not None, f"git rev-list --merges {sha} failed"
+
+    stated = {
+        "commits": int(total.replace(",", "")),
+        "Claude Opus 5 (1M context)": int(opus.replace(",", "")),
+        "Claude Fable 5.1": int(fable.replace(",", "")),
+        "merges": int(merges.replace(",", "")),
+    }
+    actual = {
+        "commits": len(bodies),
+        **counted,
+        "merges": len(merge_shas.split()),
+    }
+    assert stated == actual, f"ai-tooling.md's commit census is stale at {sha}: says {stated}, git says {actual}"
+    assert actual["commits"] == actual["Claude Opus 5 (1M context)"] + actual["Claude Fable 5.1"] + actual["merges"], (
+        "the paragraph presents the two trailers plus the merges as the whole history, and it no "
+        f"longer is at {sha}: {actual}"
+    )
 
 
 # ------------------------------------------------------------ demo script and checklist (DEMO.*, SUB.*)
