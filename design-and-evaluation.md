@@ -296,7 +296,7 @@ allowlist does not name is answered `421 Invalid Host header`. `MCP_ALLOWED_HOST
 `127.0.0.1:*,localhost:*`) names the hostnames the endpoint accepts, `render.yaml` adds the
 deployment's own, and the live service carries the variable — **the public mount accepts external
 MCP clients**, verified on 2026-09-11 at 20:32Z when an external `initialize` over the public
-hostname answered HTTP 200 and a full client session listed the nine tools and called two of them.
+hostname answered HTTP 200. That `initialize` is the extent of what was checked from outside.
 [`mcp/README.md`](mcp/README.md) carries the SDK detail, the three transports and the live status.
 
 `app.mount("/mcp-server", mcp.streamable_http_app(transport_security=...))` with

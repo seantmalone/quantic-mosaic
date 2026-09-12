@@ -29,7 +29,7 @@ outside the repository — the video link and the dashboard submission — are t
       passes against the live URL. — **done 2026-09-10** (`NEEDS-FROM-USER.md`'s Discharged table).
 - [x] `MCP_ALLOWED_HOSTS` is set on the live service (`NEEDS-FROM-USER.md` gate **2b**), so the
       deployed `/mcp-server/mcp` accepts an external MCP Inspector session — external `initialize`
-      → HTTP 200, nine tools listed. — **done 2026-09-11**, verified 20:32Z.
+      → HTTP 200. — **done 2026-09-11**, verified 20:32Z.
 - [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
       `design-and-evaluation.md`'s results table from it. — **done 2026-09-11**,

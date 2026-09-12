@@ -227,11 +227,10 @@ clients.** The running instance had been created over the REST API before `MCP_A
 existed; the variable is now set on the service — the same
 `127.0.0.1:*,localhost:*,mosaic-hr-copilot.onrender.com` the committed `render.yaml` carries — and
 an external `initialize` sent over the
-public hostname answered **HTTP 200**. A full external client session then listed all **nine**
-tools and ran `search_policy_documents` and `check_pto_balance`; a `create_mock_hr_ticket` call
-with no confirmation token was refused with `CONFIRMATION_REQUIRED`, and so was the same call
-carrying a forged token; a request without the bearer header got **401**. So an MCP Inspector
-session attaches to `https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` with
+public hostname answered **HTTP 200**. That single `initialize` is the whole of what was verified
+externally and the whole of what is claimed here; the access gate and the confirmation gate above
+are asserted by the test suite, not by that session. So an MCP Inspector session attaches to
+`https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` with
 `Authorization: Bearer $APP_ACCESS_TOKEN` as a custom header. **The other two ways to see the same
 nine tools from the same factory are unchanged: the stdio entrypoint (`mcp/run_stdio.sh`) and
 `/dashboard/mcp`.**
