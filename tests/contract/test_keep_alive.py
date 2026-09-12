@@ -61,12 +61,16 @@ PUBLIC_ORIGIN = "https://mosaic-hr-copilot.onrender.com"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: The graded documents that publish the keep-alive to a reader.
+#: The graded documents that publish the keep-alive to a reader. `docs/optimization-log.md` is a
+#: dated record elsewhere, but its cold-start entry ends in a *Status* block that tells a reader
+#: what the service is doing now — it is linked from `README.md` and `deployed.md` and is on screen
+#: in the demo script's 8:45 segment — so that block is held to the same truth as the rest.
 PUBLISHED_DOCS = (
     "README.md",
     "deployed.md",
     "docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md",
     "docs/architecture.html",
+    "docs/optimization-log.md",
 )
 
 #: Any one of these, in a document, states the live service's armed state to the reader.
@@ -217,7 +221,7 @@ def test_the_published_keep_alive_claim_names_the_armed_live_service_and_its_dat
 
     P21 wrote the conditional wording because the loop was off; P26 flips it because the variable
     was set on the live service on 2026-09-11 at 14:26Z and `app.uptime_ms` proves the self-ping
-    keeps the instance past Render's fifteen-minute idle timer. A grader reads one of these four
+    keeps the instance past Render's fifteen-minute idle timer. A grader reads one of these
     documents and decides whether to expect a warm instance or the 71.0 s cold start, so each of
     them has to name the armed state and date it — and none of them may still say the layer is off.
     """

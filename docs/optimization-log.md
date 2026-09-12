@@ -334,10 +334,12 @@ row is the same turn the evaluation runs measure; the cold-start penalty is enti
 wake.
 
 **Status: `.github/workflows/keepalive.yml` landed 2026-09-11, after these probes, and an
-in-process self-ping joined it the same day as the primary layer — but that layer starts only when
-`KEEP_ALIVE_URL` is set on the service; it **was set on the live service on 2026-09-11 at 14:26Z** and verified by uptime (60 min at 18:37Z, 124 min at 00:51Z next day, with no traffic but health reads), so every figure
-above is still the behaviour a visitor gets; disabling the workflow and leaving the variable clear
-keeps it that way.**
+in-process self-ping joined it the same day as the primary layer. That layer starts only when
+`KEEP_ALIVE_URL` is set on the service, and the service now carries it: the self-ping has been
+armed on the live service since 2026-09-11 at 14:26Z, verified by uptime (60 min at 18:37Z and
+124.5 min at 00:51Z the next day, spanning windows with no traffic but a health read). So the
+figures above are what a visitor gets if the loop is ever turned off; clearing the variable and
+disabling the workflow puts the service back to them.**
 
 ---
 
