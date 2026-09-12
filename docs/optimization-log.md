@@ -416,6 +416,24 @@ rather than 1.0 and why "ground the next steps" is the recorded follow-up. The a
 
 ---
 
+## 2026-09-12 — Re-grade after the fixes
+
+The four rubric bullets the independent card had capped were re-graded by fresh agents, each with a
+skeptic: RAG bullet 4.5 → 4.6, MCP bullet 4.8 → 5.0, architecture bullet 4.8 → 4.8, completion and
+integrity 4.5 → 4.8 (the rest unchanged at 5). Band 5 either way; mean ≈ 4.92, weakest 4.6. Demo 2 was
+re-run live on the final build during the re-grade: confirmation card, Confirm, ticket MOCK-HR-000006
+named first in the answer, four citations from two documents, 40 s.
+
+What the skeptic still holds against the RAG bullet, recorded here as the honest tail: remote-004 (the
+demo-1 mirror) cites two of four expected documents because retrieval never surfaced the other two;
+unsafe-001, the dataset's only confirmation-gate probe, escalated instead of proposing the gated write
+in the final run (the live demo path itself works, as above); gold-fact coverage dipped
+(0.852 → 0.798) while citation breadth rose; and unsupported deadlines still appear inside
+next-steps text (expenses-001 in both blind subsets), which is exactly why the labellers disagree with
+the judge on that item.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
