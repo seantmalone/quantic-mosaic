@@ -32,6 +32,10 @@ GROUNDS = ("paper", "card", "sunk")
 #: Text pairs: (foreground token, background token). Straight from `docs/brand.md` §3's table.
 TEXT_PAIRS = (
     *[(ink, ground) for ink in ("ink", "ink-soft", "ink-mute", "accent") for ground in GROUNDS],
+    # The demo panel's own ground (UX W7, M18). `docs/brand.md` §3's rule is that a colour is only
+    # in the system once it is measured against what is read on it, so a new *ground* brings the
+    # four inks with it rather than being exempt for being decorative.
+    *[(ink, "demo-ground") for ink in ("ink", "ink-soft", "ink-mute", "accent")],
     *[(ink, "accent-soft") for ink in ("ink", "ink-soft", "accent")],
     ("on-accent", "accent"),
     ("on-accent", "accent-strong"),

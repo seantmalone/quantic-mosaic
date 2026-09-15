@@ -33,7 +33,11 @@
       words the reader can see, so the outline and the page agree. -#}
   <h2 class="visually-hidden" id="turn-heading-{{ turn.turn_id }}">{{ question or 'Mosaic replied' }}</h2>
   {% if question %}
-  <div class="message message-user"><p>{{ question }}</p></div>
+  {#- Spoken once. The turn is named by the heading above, and the heading is the question, so a
+      bubble that repeated it in the accessibility tree had a screen reader hear the same sentence
+      three times a turn — as the region's name, in the headings list, and as its first paragraph
+      (UX W7, cpux2-8). The words stay on screen; the heading is what says them. -#}
+  <div class="message message-user" aria-hidden="true"><p>{{ question }}</p></div>
   {% endif %}
 
   <div class="message message-agent">
@@ -184,8 +188,11 @@
             <blockquote>{{ citation.snippet }}</blockquote>
             {#- Named for the document it opens. Six links per answer whose entire accessible name
                 was "Open the full policy" is six controls a screen-reader user cannot tell apart
-                (UX W6, nav-reaudit-9). -#}
-            <p class="source-more"><a class="source-link" href="{{ citation.source_url }}">Open {{ citation.doc_title }}</a></p>
+                (UX W6, nav-reaudit-9) — and an answer citing two sections of ONE document shipped
+                two links with one name again, so the section joins the accessible name while the
+                visible text stays the document it opens (UX W7, cpux2-9). -#}
+            <p class="source-more"><a class="source-link" href="{{ citation.source_url }}"
+              aria-label="Open {{ citation.doc_title }} · {{ citation.section }}">Open {{ citation.doc_title }}</a></p>
           </details>
         </li>
         {% endfor %}

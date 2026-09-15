@@ -28,7 +28,7 @@ import re
 
 import pytest
 
-from tests.ux.conftest import TOKEN, VIEWPORTS
+from tests.ux.conftest import TOKEN, VIEWPORTS, resolve
 
 pytestmark = pytest.mark.ux
 
@@ -223,8 +223,22 @@ def test_p11_the_composer_stays_reachable_and_the_newest_message_stays_in_view(f
 
     assert fresh_page.eval_on_selector_all("#messages .turn", "els => els.length") == 3
     assert not _document_scrolls_sideways(fresh_page)
-    grew = fresh_page.evaluate("() => document.documentElement.scrollHeight > window.innerHeight + 1")
-    assert not grew, "the page is an app, not a growing document: the transcript scrolls, not the page"
+    # The page is an app, not a growing document: the transcript scrolls, not the page. Since UX W7
+    # (Addendum 2) the demo panel is always expanded and the transcript keeps an 18rem floor, so
+    # the page *may* scroll by what the panel costs once it carries a turn's summary — that is the
+    # panel's room, the same after one turn as after three, and it is bounded by the panel itself.
+    # What may never happen is the transcript's content leaking into the page's height, which is
+    # what `min-height: 0` on `.conversation` (W2) and `contain: size` on `.transcript` (W7) stop.
+    geometry = fresh_page.evaluate(
+        """() => ({
+          doc: document.documentElement.scrollHeight, inner: window.innerHeight,
+          panel: document.querySelector('section.demo-panel').getBoundingClientRect().height,
+          transcript: document.getElementById('transcript').clientHeight,
+          content: document.getElementById('transcript').scrollHeight })"""
+    )
+    assert geometry["content"] > geometry["transcript"], f"the transcript is not what scrolls: {geometry}"
+    assert geometry["transcript"] >= 18 * 16 - 1, f"the transcript is below its floor: {geometry}"
+    assert geometry["doc"] - geometry["inner"] < geometry["panel"], f"the page grew with the conversation: {geometry}"
 
     send = fresh_page.eval_on_selector("#send-button", "e => e.getBoundingClientRect().toJSON()")
     assert send["top"] >= 0 and send["bottom"] <= 900 + 1, f"the send control is off screen: {send}"
@@ -321,142 +335,103 @@ def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page
     assert re.fullmatch(expected, produced), produced
 
 
-#: Everything the at-rest panel spends of the transcript's budget, measured in the browser. The
-#: starter questions are the plan's §3.1 wireframe: a starter counts only while its whole box is
-#: inside the transcript's *visible* box, because a starter the reader has to scroll to find is a
-#: starter the wireframe does not have.
-PANEL_BUDGET_JS = r"""
+#: The panel as painted: what it holds, whether every control is on the page without a click, and
+#: what is left of the conversation beside it.
+PANEL_JS = r"""
 () => {
   const panel = document.querySelector("section.demo-panel");
-  const details = document.getElementById("demo-details");
   const transcript = document.getElementById("transcript");
-  const box = transcript.getBoundingClientRect();
-  const starters = Array.from(document.querySelectorAll(".starter"));
-  const note = panel.querySelector(".demo-note");
-  const noteBox = note.getBoundingClientRect();
+  const painted = (el) => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+  const controls = ["#actor-select", ".demo-button", "#demo-no-turn", ".demo-env", ".demo-signout button"];
   return {
-    open: details.open,
-    heading: panel.querySelector("h2").textContent,
-    note: note.textContent.trim(),
-    note_painted: noteBox.height > 0 && noteBox.width > 0,
-    panel: panel.getBoundingClientRect().height,
+    disclosures: panel.querySelectorAll("details, summary").length,
+    scripts: panel.querySelectorAll("script").length,
+    heading: panel.querySelector("h2").textContent.trim(),
+    note: panel.querySelector(".demo-note").textContent.trim(),
+    note_painted: painted(panel.querySelector(".demo-note")),
+    unpainted: controls.filter((s) => !Array.from(panel.querySelectorAll(s)).every(painted)),
     panel_scroll: panel.scrollHeight,
     panel_client: panel.clientHeight,
-    transcript: box.height,
-    starters: starters.length,
-    starters_in_view: starters.filter((el) => {
-      const s = el.getBoundingClientRect();
-      return s.top >= box.top - 1 && s.bottom <= box.bottom + 1;
-    }).length,
+    transcript: transcript.getBoundingClientRect().height,
+    transcript_overflow: getComputedStyle(transcript).overflowY,
+    starters: document.querySelectorAll(".starter").length,
     send: document.getElementById("send-button").getBoundingClientRect().toJSON(),
+    doc: document.documentElement.scrollHeight,
+    inner: window.innerHeight,
   };
 }
 """
 
+#: Each starter question, scrolled to by the reader's own means and then measured against the
+#: viewport: a starter is reachable when scrolling brings the whole of it on screen.
+STARTERS_REACHABLE_JS = r"""
+() => Array.from(document.querySelectorAll(".starter")).map((el) => {
+  el.scrollIntoView({ block: "nearest" });
+  const r = el.getBoundingClientRect();
+  return r.top >= -1 && r.bottom <= window.innerHeight + 1;
+})
+"""
 
-def test_p8_the_panel_ships_collapsed_so_the_conversation_keeps_its_room(browser, ux_server):
-    """W2's review: `body.chat` has a definite height, so the panel spends the transcript's budget.
+PANEL_VIEWPORTS = (("desktop", 1440, 900), ("laptop", 1280, 800), ("phone", 390, 844))
 
-    W3 first shipped the panel expanded above 40rem, and that regressed the at-rest chat screen on
-    every desktop viewport: at 1440x900 one of the four starter questions was wholly in view, and at
-    1280x800 — one of the three viewports the harness measures — the panel hit its own `max-height`,
-    scrolled inside itself, and left the transcript 174px with no starter in it at all. Hence this
-    test at all three viewports rather than the phone alone, and hence the second half: an opened
-    panel must show all of itself, because an `overflow-y: auto` box hides its last rows silently.
-    """
-    measurements = {}
-    for label, width, height in (("desktop", 1440, 900), ("laptop", 1280, 800), ("phone", 390, 844)):
+
+def test_p8_the_panel_is_always_expanded_and_the_conversation_keeps_its_floor(browser, ux_server):
+    """UX W7, Addendum 2 — the owner's decision, overriding the collapsed `<details>` of W3 and its
+    remembered open state: the panel is a plain section with every control on the page at every
+    viewport, and the conversation is not what pays for it. `.transcript` has an 18rem floor, so on
+    a viewport the panel does not fit beside, the page scrolls; on a phone it already did."""
+    for label, width, height in PANEL_VIEWPORTS:
         context = browser.new_context(viewport={"width": width, "height": height})
         tab = context.new_page()
         try:
             tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
             tab.wait_for_timeout(250)
-            at_rest = tab.evaluate(PANEL_BUDGET_JS)
-            at_rest["sideways"] = _document_scrolls_sideways(tab)
-            tab.click(".demo-summary")
-            tab.wait_for_timeout(250)
-            opened = tab.evaluate(PANEL_BUDGET_JS)
-            opened["sideways"] = _document_scrolls_sideways(tab)
-            measurements[label] = {"at_rest": at_rest, "opened": opened, "viewport": (width, height)}
+            panel = tab.evaluate(PANEL_JS)
+            assert panel["disclosures"] == 0, f"{label}: the panel still has a collapsed state: {panel}"
+            assert panel["scripts"] == 0, f"{label}: the panel still carries a script (nothing to remember)"
+            assert "Demo" in panel["heading"], f"{label}: the section says what it is: {panel['heading']!r}"
+            assert panel["note_painted"], f"{label}: the disclaimer is not painted: {panel}"
+            assert panel["note"] == "For evaluation only — a real user never sees this panel.", panel["note"]
+            assert not panel["unpainted"], f"{label}: controls not on the page without a click: {panel['unpainted']}"
+            assert panel["panel_scroll"] <= panel["panel_client"] + 1, (
+                f"{label}: the panel scrolls inside itself: {panel}"
+            )
+            assert panel["starters"] == 4, "the plan's §3.1 wireframe is four starter questions"
+            assert not _document_scrolls_sideways(tab), f"{label}: the document scrolls sideways"
+            assert panel["send"]["bottom"] <= height + 1, f"{label}: the composer is off screen on arrival: {panel}"
+            if label == "phone":
+                assert panel["transcript_overflow"] == "visible", "on a phone the page is the scroller"
+                assert panel["doc"] > panel["inner"], f"the phone page does not scroll: {panel}"
+            else:
+                assert panel["transcript"] >= 18 * 16 - 1, f"{label}: the transcript is below its floor: {panel}"
+            if label == "desktop":
+                assert panel["doc"] <= panel["inner"] + 1, f"at 1440x900 the page grew to fit the panel: {panel}"
+            reachable = tab.evaluate(STARTERS_REACHABLE_JS)
+            assert all(reachable), f"{label}: a starter question cannot be scrolled into view: {reachable}"
         finally:
             context.close()
 
-    for label, measured in measurements.items():
-        at_rest, (width, height) = measured["at_rest"], measured["viewport"]
-        assert at_rest["open"] is False, f"the panel is open at rest at {label}: {measured}"
-        assert "Demo" in at_rest["heading"], f"the collapsed panel says what it is at {label}"
-        assert at_rest["note_painted"], f"the collapsed panel hides its disclaimer at {label}: {at_rest}"
-        assert at_rest["note"] == "For evaluation only — a real user never sees this panel.", at_rest["note"]
-        assert at_rest["panel_scroll"] <= at_rest["panel_client"] + 1, (
-            f"the panel at rest hides part of itself at {label}: {at_rest}"
-        )
-        assert at_rest["starters"] == 4, "the plan's §3.1 wireframe is four starter questions"
-        assert at_rest["starters_in_view"] == 4, (
-            f"the panel pushed {4 - at_rest['starters_in_view']} starter(s) out of the transcript at {label}: {at_rest}"
-        )
-        assert not at_rest["sideways"], f"the document scrolls sideways at {label}"
-        assert at_rest["send"]["bottom"] <= height + 1, f"the composer is off screen at {label}: {at_rest}"
 
-    # The phone budget W2's review asked for, kept as a budget rather than a pixel. It used to be
-    # measured as the transcript's own height, because the transcript was a viewport-sized scroll
-    # box; at 390px it no longer is (UX W6, dgc-re-1 — the page scrolls so that an open panel can
-    # show all of itself), so the budget is measured where it is actually spent: the collapsed
-    # panel and the composer together may not take more than half the phone's viewport.
-    phone = measurements["phone"]["at_rest"]
-    spent = phone["panel"] + (844 - phone["send"]["top"])
-    assert spent < 844 * 0.50, f"the phone loses its room: {spent}px of 844 spent on chrome: {phone}"
-
-    # Opened, the panel is the grader's, and it must show all of itself. Two columns bring the
-    # content to ~390px on a wide screen, which fits inside its 60vh cap; on a phone it is one
-    # column and there is no cap at all, because there the page scrolls.
-    for label in ("desktop", "laptop"):
-        opened = measurements[label]["opened"]
-        assert opened["open"] is True, f"the summary did not open the panel at {label}"
-        assert opened["panel_scroll"] <= opened["panel_client"] + 1, (
-            f"the opened panel scrolls inside itself at {label}: {opened}"
-        )
-    phone_open = measurements["phone"]["opened"]
-    assert phone_open["transcript"] > 0, f"the conversation vanished behind the open panel: {phone_open}"
-    assert phone_open["panel_scroll"] <= phone_open["panel_client"] + 1, (
-        f"the opened panel still scrolls inside itself on a phone: {phone_open}"
-    )
-    assert phone_open["starters_in_view"] == 4, f"the open panel took the conversation's room on a phone: {phone_open}"
-    for label, measured in measurements.items():
-        opened = measured["opened"]
-        height = measured["viewport"][1]
-        assert opened["send"]["bottom"] <= height + 1, f"the opened panel pushed the composer off {label}: {opened}"
-        assert not opened["sideways"], f"the opened panel scrolls the document sideways at {label}"
-
-
-def test_p8_the_panel_remembers_that_a_grader_opened_it(browser, ux_server):
-    """Collapsed is the *default*, not a state a grader has to re-establish on every page load."""
-    context = browser.new_context(viewport={"width": 1440, "height": 900})
-    try:
-        tab = context.new_page()
-        tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
-        assert tab.eval_on_selector("#demo-details", "e => e.open") is False, "it ships collapsed"
-        tab.click(".demo-summary")
-        tab.wait_for_timeout(200)
-
-        tab.reload(wait_until="networkidle")
-        assert tab.eval_on_selector("#demo-details", "e => e.open") is True, "the open state is not remembered"
-
-        tab.click(".demo-summary")
-        tab.wait_for_timeout(200)
-        tab.reload(wait_until="networkidle")
-        assert tab.eval_on_selector("#demo-details", "e => e.open") is False, "closing it again is remembered too"
-    finally:
-        context.close()
-
-    # A second browser profile has never opened it, so it is collapsed there — the memory is one
-    # reader's, not a change of default.
-    other = browser.new_context(viewport={"width": 1440, "height": 900})
-    try:
-        tab = other.new_page()
-        tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
-        assert tab.eval_on_selector("#demo-details", "e => e.open") is False
-    finally:
-        other.close()
+def test_p8_the_panel_has_no_collapsed_state_to_remember(browser, ux_server):
+    """It used to remember an explicit open in `localStorage`. There is no open to remember: a
+    reload and a second browser profile both show the same expanded panel."""
+    for _profile in range(2):
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
+        try:
+            tab = context.new_page()
+            tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+            before = tab.evaluate(PANEL_JS)
+            tab.reload(wait_until="networkidle")
+            after = tab.evaluate(PANEL_JS)
+            for panel in (before, after):
+                assert panel["disclosures"] == 0 and not panel["unpainted"], panel
+            remembered = tab.evaluate(
+                "() => { try { return Object.keys(window.localStorage).filter(k => k.includes('demo')); }"
+                " catch (e) { return []; } }"
+            )
+            assert remembered == [], f"the page still remembers a panel state: {remembered}"
+        finally:
+            context.close()
 
 
 def test_p8_a_demo_prompt_fills_the_composer_and_sends_nothing(page, ux_server):
@@ -465,7 +440,6 @@ def test_p8_a_demo_prompt_fills_the_composer_and_sends_nothing(page, ux_server):
     page.goto(f"{ux_server}/", wait_until="networkidle")
     before = page.eval_on_selector_all("#messages .turn", "els => els.length")
 
-    page.click(".demo-summary")  # the panel ships collapsed at every viewport
     page.click(".demo-button")
     page.wait_for_timeout(400)
 
@@ -503,7 +477,9 @@ ANNOUNCEMENT_CASES = (
         "out_of_corpus_tuition.json",
         "What is Mosaic's tuition reimbursement cap for a part-time master's degree, and how many "
         "years of service do I need to qualify?",
-        "I can't answer that one — see below.",
+        # No direction in it: the line is visually hidden once the turn has finished, so "see
+        # below" pointed at the composer (UX W7, cpux2-3).
+        "I can't answer that one.",
     ),
     ("fault_ambiguous.json", "Can I take some time off soon?", "Could you clarify?"),
 )
@@ -554,3 +530,129 @@ def test_p2_and_p13_nothing_technical_survives_onto_the_painted_page(fresh_page,
     for pattern in TEXT_FORBIDDEN:
         found = re.findall(pattern, painted, flags=re.I)
         assert not found, f"the painted page says {pattern!r} — {found[:3]}"
+
+
+# -- UX W7: the phone, and the viewport that changes under the page ---------------------------
+#
+# cpux2-1 = a11y-re2-2 (the wave's Critical), cpux2-2 = a11y-re2-4 and npo3-03 = dgc-r2-4 were all
+# W6 regressions this file could not see: every chat test above loads the page at 1440x900, and
+# where the suite looked at a phone at all it *resized* an already-loaded page — a state no reader
+# reaches by loading (the scorer's §6). Each test below is a fresh load at its own viewport, and the
+# one that does resize is testing the resize.
+
+#: The newest turn's bottom edge against the viewport, and how far the document has scrolled.
+NEWEST_TURN_JS = """
+() => {
+  const turns = document.querySelectorAll('#messages .turn');
+  const box = turns[turns.length - 1].getBoundingClientRect();
+  return { bottom: Math.round(box.bottom), viewport: window.innerHeight, scrollY: Math.round(window.scrollY) };
+}
+"""
+
+#: Whether the composer's box holds its placeholder. An empty textarea's `scrollHeight` measures
+#: its empty value, not the two lines the placeholder wraps to at 390px — which is how W6's on-load
+#: `autogrow()` shipped green while the placeholder was clipped mid-glyph on 17 of the 29 phone
+#: screens (npo3-03). The placeholder is therefore measured *as* the value, with the box's own
+#: height left exactly as the page set it.
+COMPOSER_FIT_JS = """
+() => {
+  const box = document.getElementById('message');
+  const value = box.value;
+  box.value = box.placeholder;
+  const fit = { scrollHeight: box.scrollHeight, clientHeight: box.clientHeight, height: box.style.height };
+  box.value = value;
+  return fit;
+}
+"""
+
+CHAT_SCREENS = ("/", "{conversation}")
+
+
+def _fresh_tab(browser, base_url: str, width: int, height: int):
+    """A signed-in tab whose FIRST paint is at this viewport."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    tab.goto(f"{base_url}/?access={TOKEN}", wait_until="networkidle")
+    return context, tab
+
+
+def _transcript_is_stuck(page) -> bool:
+    return bool(page.eval_on_selector("#transcript", "e => e.scrollHeight - e.scrollTop - e.clientHeight <= 48"))
+
+
+def test_the_newest_turn_is_brought_into_view_on_a_phone_and_jump_to_latest_works(browser, fresh_server):
+    """cpux2-1 = a11y-re2-2 — Critical. W6 rightly made a phone a document (the transcript stops
+    being a scroll box below 30rem), and every scroll mechanism went on writing
+    `transcript.scrollTop` — a no-op on a box that does not scroll. `atBottom()` then said "yes"
+    forever, `#jump-latest` never appeared, and a reader who sent a question was left looking at it
+    with the answer a screen below and nothing offering to take them there."""
+    context, page = _fresh_tab(browser, fresh_server, 390, 844)
+    try:
+        _ask(page, DEMO_1)
+        overflow = page.eval_on_selector("#transcript", "e => getComputedStyle(e).overflowY")
+        assert overflow == "visible", "on a phone the document is the scroller, not the transcript"
+        newest = page.evaluate(NEWEST_TURN_JS)
+        assert newest["scrollY"] > 0, f"the page never moved after the turn landed: {newest}"
+        assert newest["bottom"] <= newest["viewport"], f"the newest turn's end is below the fold: {newest}"
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden"), "at the bottom there is nothing to jump to"
+
+        page.evaluate("() => window.scrollTo(0, 0)")
+        page.wait_for_timeout(250)
+        assert not page.eval_on_selector("#jump-latest", "e => e.hidden"), "scrolled up, the way back is offered"
+        # The button rides the viewport above the composer on a phone, so it is in view from the
+        # top of the transcript and this is a real click — not a scroll-into-view then a click,
+        # which would have been the mechanism under test doing the test's work.
+        offered = page.eval_on_selector("#jump-latest", "e => e.getBoundingClientRect().toJSON()")
+        assert 0 <= offered["top"] and offered["bottom"] <= 844, f"the way back is off screen: {offered}"
+        page.click("#jump-latest")
+        page.wait_for_timeout(300)
+        newest = page.evaluate(NEWEST_TURN_JS)
+        assert newest["bottom"] <= newest["viewport"], f"Jump to latest did not: {newest}"
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden")
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("label,width,height", VIEWPORTS, ids=[label for label, _, _ in VIEWPORTS])
+@pytest.mark.parametrize("route", CHAT_SCREENS, ids=("at-rest", "with-an-answer"))
+def test_the_composer_holds_its_placeholder_on_a_fresh_load(browser, surfaces, route, label, width, height):
+    """npo3-03 = dgc-r2-4 = a11y-re2-4: at 390px the placeholder wraps to two lines, and the box
+    opened one line tall with the second line cut through the middle of its glyphs — the first
+    thing a phone reader saw of the primary control."""
+    context, page = _fresh_tab(browser, surfaces["base_url"], width, height)
+    try:
+        page.goto(surfaces["base_url"] + resolve(route, surfaces), wait_until="networkidle")
+        page.wait_for_timeout(300)
+        fit = page.evaluate(COMPOSER_FIT_JS)
+        assert fit["scrollHeight"] <= fit["clientHeight"], (
+            f"{route} at {label}: the placeholder overflows the box: {fit}"
+        )
+    finally:
+        context.close()
+
+
+def test_the_transcript_and_the_composer_follow_the_viewport_across_the_phone_breakpoint(browser, fresh_server):
+    """cpux2-2 = a11y-re2-4: both were made viewport-dependent at W6 and neither was re-run on
+    resize. Narrowed across 30rem the answer stayed clipped with the document at 0; widened back,
+    the transcript sat pinned at its top and the composer kept a phone-sized inline height."""
+    context, page = _fresh_tab(browser, fresh_server, 1440, 900)
+    try:
+        _ask(page, DEMO_1)
+        assert _transcript_is_stuck(page)
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.wait_for_timeout(500)  # `RESIZE_SETTLE_MS` is 120
+        newest = page.evaluate(NEWEST_TURN_JS)
+        assert newest["bottom"] <= newest["viewport"], f"narrowed to a phone, the newest turn is off screen: {newest}"
+        fit = page.evaluate(COMPOSER_FIT_JS)
+        assert fit["scrollHeight"] <= fit["clientHeight"], f"narrowed, the composer keeps a desktop height: {fit}"
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden")
+
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.wait_for_timeout(500)
+        assert _transcript_is_stuck(page), "widened back, the transcript is pinned at its top"
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden")
+        fit = page.evaluate(COMPOSER_FIT_JS)
+        assert fit["scrollHeight"] <= fit["clientHeight"], f"widened, the composer keeps a phone height: {fit}"
+    finally:
+        context.close()

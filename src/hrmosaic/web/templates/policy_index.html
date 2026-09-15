@@ -20,11 +20,15 @@
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to the library</a>
-<div class="app-chrome">
+<div class="app-chrome" id="app-chrome">
 {% include "_masthead.html" %}
 </div>
 
 <main class="reader" id="main-content" tabindex="-1">
+  {#- The three lines `/policy/{doc_id}` received at W6 and this page did not (UX W7, nav-r2-7):
+      the way back, a human effective date below, and the measured chrome height at the foot. -#}
+  <p class="reader-back"><a class="back-to-chat" href="{{ conversation_url }}">← Back to your conversation</a></p>
+
   <article class="reader-doc">
     <h2 class="reader-title">Mosaic's policy library</h2>
     <p class="reader-meta">Every policy I answer from. Open one to read it in full.</p>
@@ -33,7 +37,7 @@
       {% for document in documents %}
       <li class="library-item">
         <a href="/policy/{{ document.doc_id }}">{{ document.doc_title }}</a>
-        <span class="library-meta">version {{ document.version }} · effective {{ document.effective_date }}</span>
+        <span class="library-meta">version {{ document.version }} · effective {{ document.effective_date|human_date }}</span>
       </li>
       {% else %}
       <li class="library-item">The library is not loaded on this instance yet.</li>
@@ -41,5 +45,6 @@
     </ul>
   </article>
 </main>
+{% include "_chrome_height.html" %}
 </body>
 </html>

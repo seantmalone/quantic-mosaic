@@ -361,30 +361,14 @@ TURN_FACTS_JS = "e => ({session: e.dataset.sessionId, turn: e.dataset.turnId, ou
 
 
 def expand_all(page: Any) -> None:
-    """Every disclosure on the *turn*, open — and not the demo panel.
+    """Every disclosure on the page, open.
 
-    The panel is a `<details>` too, so a blanket `details { open = true }` used to open it and leave
-    it open for every screen captured after it on the same page. That is how a chat screen ends up
-    photographed with chrome it does not ship (UX W3 review, finding 1: an after-screen has to be
-    the build it claims to be). Screens that want the panel open ask for it by name.
+    The demo panel used to be a `<details>` this had to leave alone, so that a chat screen was not
+    photographed with chrome it does not ship (UX W3 review, finding 1). Since UX W7 (Addendum 2)
+    the panel is always expanded and holds no disclosure of its own, so there is nothing to except.
     """
-    others = "els => els.forEach(d => { if (d.id !== 'demo-details') { d.open = true; } })"
-    page.eval_on_selector_all("details", others)
+    page.eval_on_selector_all("details", "els => els.forEach(d => { d.open = true; })")
     page.wait_for_timeout(200)
-
-
-def set_demo_panel(page: Any, *, open_: bool) -> None:
-    """The panel ships collapsed at every viewport (UX W3 review, finding 2), so a screen that is
-    *of* the panel has to open it first — a 49px strip is not evidence of what the panel holds."""
-    page.evaluate(
-        "wanted => { const d = document.getElementById('demo-details'); if (d) { d.open = wanted; } }",
-        open_,
-    )
-    page.wait_for_timeout(200)
-
-
-def open_demo_panel(page: Any) -> None:
-    set_demo_panel(page, open_=True)
 
 
 def sign_in(context: Any, base_url: str, actor: str) -> Any:
@@ -520,13 +504,11 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             page,
             "demo-panel",
             route="/",
-            state="persona E1042, panel opened",
-            notes="NEW at W1, rebuilt at W3: every demo affordance, in one labelled panel. It ships "
-            "collapsed, so this screen opens it.",
+            state="persona E1042, panel always expanded",
+            notes="NEW at W1, rebuilt at W3: every demo affordance, in one labelled panel. Always "
+            "expanded since W7 (Addendum 2): no disclosure to open.",
             selector="section.demo-panel",
-            before=open_demo_panel,
         )
-        set_demo_panel(page, open_=False)
 
         ask(page, urls["demo_1"], PROMPTS["demo_1"], hold=True)
         shot.screen(
@@ -555,13 +537,11 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             page,
             "demo-panel-after-answer",
             route="/",
-            state="one answered turn, panel opened",
-            notes="NEW at W3: the grader's summary of the last turn and the deep link into its "
-            "record, both written by the page after the turn landed.",
+            state="one answered turn, panel always expanded",
+            notes="NEW at W3: the grader's summary of the last turn, the session id and the deep "
+            "link into its record, all written by the page after the turn landed.",
             selector="section.demo-panel",
-            before=open_demo_panel,
         )
-        set_demo_panel(page, open_=False)
         shot.screen(
             page,
             "chat-answer-expanded",
@@ -829,12 +809,11 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             page,
             "demo-panel-dark",
             route="/",
-            state="persona E1042, panel opened, prefers-color-scheme: dark",
-            notes="NEW at W5: the demo panel's dashed border and muted ground in dark.",
+            state="persona E1042, panel always expanded, prefers-color-scheme: dark",
+            notes="NEW at W5: the demo panel's dashed border and its own ground in dark (W7: "
+            "`--demo-ground` lifts rather than sinks there).",
             selector="section.demo-panel",
-            before=open_demo_panel,
         )
-        set_demo_panel(page, open_=False)
         page.goto(f"{urls['dash']}/?session={session}", wait_until="networkidle")
         shot.screen(
             page,

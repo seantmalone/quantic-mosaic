@@ -103,6 +103,8 @@ input:focus-within {
    Below its 132px minimum there is no lockup to shrink into, so the height holds and the nav wraps
    underneath instead. */
 .wordmark-lockup { display: block; width: auto; height: 26px; }
+/* The lockup is a link home (UX W7, nav-r2-12); `inline-flex` so the 44px phone rule has a box. */
+.wordmark-link { display: inline-flex; align-items: center; border-radius: var(--radius-tile); }
 /* `min-width: 0` + `flex-wrap` is the structural guard behind the 390px fix: no child of the nav
    may push the document sideways, whatever lands in it later. */
 .masthead-nav { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
@@ -144,44 +146,30 @@ input:focus-within {
 .demo-panel {
   flex: none;
   width: 100%; max-width: var(--measure); margin: 0 auto; padding: var(--space-2) var(--space-4);
-  border: 2px dashed var(--line-strong); border-radius: var(--radius); background: var(--sunk);
-  /* The panel ships collapsed (`_demo_controls.html`), so at rest this is a ~70px disclosure row —
-     the heading and the one line that says who the controls are not for — and the transcript keeps
-     the whole empty state, all four starter questions included at 390x844. The cap is the safety valve for the *opened* panel:
-     `body.chat` has a definite height, so without one an open panel would push the composer off a
-     short viewport. Narrow, the groups are one column (~642px) and nothing can make that fit in
-     844px beside a conversation, so the panel scrolls inside itself and the transcript keeps a
-     sliver. Wide, it is two columns (~390px) and 60vh lets the whole thing open without scrolling
-     at 800px of viewport height — see the `min-width: 48rem` block. */
-  max-height: 45vh; overflow-y: auto;
+  border: 2px dashed var(--line-strong); border-radius: var(--radius); background: var(--demo-ground);
+  /* Always expanded and never capped (UX W7, Addendum 2 — the owner's decision). It shipped as a
+     collapsed `<details>` from W3 with a 45vh/60vh cap on the opened state, and an `overflow-y:
+     auto` box hides its own last rows with no affordance a grader would notice. Now every control
+     is on the page; where the panel does not fit beside the conversation the *page* scrolls, and
+     `.transcript` keeps its 18rem floor (dgc-r2-1). */
 }
-/* ...but not on a phone. At 390px the groups are one column, the panel is exactly 380px, and the
-   deep link, the environment disclosure and the demo sign-out sat behind an inner scroll with no
-   affordance at all — the rule the comment above states, broken by the block that states it
-   (UX W6, dgc-re-1). The cap exists so an open panel cannot push the composer off a short
-   viewport; on a phone the answer is to let the page scroll instead. */
-/* The cap does not apply on a phone: see the `max-width: 30rem` block further down, where the
-   whole chat column stops being a fixed-height box (UX W6, dgc-re-1). */
-.demo-panel h2 { margin: 0; font: var(--text-h3); display: inline; }
-.demo-summary { cursor: pointer; list-style-position: outside; }
-.demo-summary::marker { color: var(--ink-soft); }
-/* Inside the `<summary>`: the collapsed panel is a heading *and* the sentence that says who the
-   controls are not for, which is the whole of P8 at rest. */
+.demo-panel h2 { margin: 0; font: var(--text-h3); }
+/* The sentence that says who the controls are not for, right under the heading (P8). */
 .demo-note { margin: var(--space-1) 0 0; font: var(--text-meta); color: var(--ink-soft); }
 .demo-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
 .demo-group { margin-top: var(--space-4); }
-/* Outside the collapse and therefore outside `.demo-body`'s two columns (UX W6, dgc-re-2). */
-.demo-persona { margin-top: var(--space-3); }
-/* Two balanced columns once there is width for them. Expanded, this panel spends the transcript's
-   height budget, and the conversation is what the page is for (P11) — which is why it ships
-   collapsed. Two columns are what make the opened panel 390px instead of 642px, and 390px is what
-   fits inside 60vh at the shortest viewport the harness measures (1280x800). The old 45vh cap was
-   360px there: the panel scrolled inside itself, and an `overflow-y: auto` box hides its own last
-   rows with no affordance a grader would notice (UX W3 review, finding 2). */
+/* Outside `.demo-body`'s two columns (UX W6, dgc-re-2), and FIRST in the section after the heading
+   since UX W7 (M12) — so the margin is below it, not above it. */
+.demo-persona { margin-top: var(--space-3); margin-bottom: var(--space-3); }
+/* The conversation's own id beside the link into its record (UX W7, M17). */
+.demo-session { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; }
+/* Two balanced columns once there is width for them. The panel is always expanded and spends the
+   page's height, and the conversation is what the page is for (P11): two columns are what make it
+   ~330px instead of ~640px on a wide screen, which is what leaves the transcript above its floor
+   at 1440x900 without the page scrolling at all. */
 @media (min-width: 48rem) {
   .demo-body { columns: 2; column-gap: var(--space-5); }
   .demo-body > * { break-inside: avoid; margin: 0 0 var(--space-4); }
-  .demo-panel { max-height: 60vh; }
 }
 .demo-group h3 { margin: 0 0 var(--space-2); font: var(--text-small); color: var(--ink-soft); }
 .demo-hint { margin: var(--space-2) 0 0; font: var(--text-meta); color: var(--ink-soft); }
@@ -225,8 +213,18 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
+/* `min-height: 0` is deliberately **not** here (UX W7, dgc-r2-1). A flex item's automatic minimum
+   size is what stops it being squeezed below its own content, and the content here is the
+   transcript's 18rem floor plus the composer. Without it the column was shrunk to whatever the
+   opened demo panel left and its composer painted over the panel; with it the flex line overflows
+   `.layout` instead, and the page — not the conversation — is what scrolls.
+
+   The floor is only the floor because `.transcript` below has `contain: size`: without size
+   containment the transcript's *content* — two answers, ~2,000px — is its contribution to this
+   column's minimum, and the page grew with every turn, which is the W2 defect `min-height: 0`
+   had been there to stop (`test_p11_the_composer_stays_reachable_…`). */
 .conversation {
-  flex: 1 1 auto; min-height: 0;
+  flex: 1 1 auto;
   display: flex; flex-direction: column;
   width: 100%; max-width: var(--measure); margin-inline: auto;
 }
@@ -238,7 +236,21 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
    shades are self-cancelling: `background-attachment: local` scrolls the paper-coloured half away
    at each end, so the shadow only shows on the side there is more to see. */
 .transcript {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  /* **A floor, not a ceiling** (UX W7, dgc-r2-1). `body.chat` has a definite height, so an opened
+     demo panel took its room out of the conversation: one answer on screen inside 111px of
+     transcript at 1280x800, and the open state is remembered, so a grader who opened the panel once
+     kept the 111px on every later load. With a floor the panel spends the PAGE's scroll instead —
+     the same answer W6 already adopted below 30rem, applied at every viewport. */
+  flex: 1 1 auto; min-height: 18rem; overflow-y: auto; overscroll-behavior: contain;
+  /* Sized by its floor, never by its content: see `.conversation` above. Off below 30rem, where
+     the transcript is a document and must be as tall as what it holds. */
+  contain: size;
+  /* Load-bearing, like `.turn`'s: `#turn-status` is `.visually-hidden` once a turn has finished
+     (UX W7, cpux2-3), and `.visually-hidden` is `position: absolute`. Without a positioned
+     scroll container the live region escaped the transcript to its static position — the foot of
+     ~1,800px of scrolled content — and the *document* grew by that much with every turn, which is
+     the W2 defect `test_p11_the_composer_stays_reachable_…` exists to catch. */
+  position: relative;
   padding-right: var(--space-2);
   scrollbar-width: thin;
   background:
@@ -256,6 +268,8 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 .empty-state { padding: var(--space-6) 0 var(--space-5); }
 .empty-state h2 { margin: 0 0 var(--space-2); font: var(--text-h2); }
 .empty-lede { margin: 0 0 var(--space-5); color: var(--ink-soft); }
+/* The library's entry point from chat at rest (UX W7, nav-r2-5). */
+.empty-library { margin: var(--space-4) 0 0; font: var(--text-small); color: var(--ink-soft); }
 .starters { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .starter {
   width: 100%; text-align: left; cursor: pointer;
@@ -403,7 +417,13 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   background: var(--card); border: var(--edge); border-radius: var(--radius);
   box-shadow: var(--lift-2);
 }
+/* `field-sizing: content` is the mechanism, and the script in `chat.html` is the fallback for a
+   browser that has not got it. The box has to be sized from the PLACEHOLDER while the value is
+   empty — at 390px it wraps to two lines — and an empty textarea's `scrollHeight` measures its
+   empty value, which is why W6's `autogrow()`-on-load changed nothing and the composer went on
+   opening clipped mid-glyph on 17 of the 29 phone screens (UX W7, npo3-03 = dgc-r2-4 = a11y-re2-4). */
 .composer textarea {
+  field-sizing: content;
   width: 100%; min-height: 2.75rem; max-height: 12.5rem; padding: var(--space-3);
   font: var(--text-body); color: var(--ink); background: var(--card);
   border: var(--edge-strong); border-radius: var(--radius-tile); resize: none; overflow-y: auto;
@@ -473,14 +493,23 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
      because it is `position: sticky` on the page rather than on a box inside it. */
   body.chat { height: auto; min-height: 100dvh; }
   .layout, .conversation { flex: none; }
-  .transcript { flex: none; overflow-y: visible; background: none; padding-right: 0; }
-  /* The always-visible persona picker (dgc-re-2) costs the collapsed panel about fifty pixels, and
-     a phone's first screen does not have fifty pixels spare: at 390x844 the fourth starter question
-     went off the bottom. Every one of these is padding, and together they are the fifty pixels
-     back — `test_p8_the_panel_ships_collapsed_…` measures all four starters in view. */
-  .demo-panel { max-height: none; overflow-y: visible; padding: var(--space-1) var(--space-3); }
+  /* The column is full-bleed with padding of its own, so the composer's negative margin (below)
+     ends at the column's edge rather than 12px past it: P7's mechanical rule read
+     `section.conversation` as 378px of content in a 366px box on every phone screen, though
+     nothing was clipped (UX W7, cpux2-10 = npo3-13). `width: auto` lets the flex item stretch
+     into the margin it is given; `width: 100%` would not. */
+  .conversation { width: auto; margin-inline: calc(var(--space-3) * -1); padding-inline: var(--space-3); }
+  .transcript { flex: none; overflow-y: visible; contain: none; background: none; padding-right: 0; }
+  /* With the document as the scroller the button's place in the flow is the foot of a 2,000px
+     transcript — offered, and out of reach from the top of it. It rides the viewport just above
+     the sticky composer instead; `--composer-h` is published by `autogrow()` (UX W7, cpux2-1). */
+  .jump-latest { position: sticky; bottom: calc(var(--composer-h, 8rem) + var(--space-3)); z-index: 2; }
+  /* The panel's phone padding. It is always expanded (UX W7, Addendum 2), the page scrolls, and
+     `test_p8_the_panel_is_always_expanded_…` measures every control on the page and all four
+     starter questions reachable. */
+  .demo-panel { padding: var(--space-1) var(--space-3); }
   .demo-note { margin-top: 0; }
-  .demo-persona { margin-top: var(--space-2); }
+  .demo-persona { margin-bottom: var(--space-2); }
   /* The masthead wrapped to three stacked rows inside the sticky container, so total pinned
      chrome reached 224px — 27% of a 390x844 viewport, larger than the 163px the plan had measured
      as the defect (UX W6, a11y-reaudit-4). One wrapping row of controls beside a smaller lockup,
@@ -491,8 +520,7 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   .identity-chip { max-width: 9rem; }
   .layout { padding: var(--space-3) var(--space-3) var(--space-4); gap: var(--space-2); }
   /* Holding the masthead's controls to 44px (UX W5) costs the transcript about twenty pixels, and
-     the greeting's generous top padding is where they come back from: at 390x844 all four starter
-     questions stay inside the transcript, which `test_p8_the_panel_ships_collapsed_…` measures. */
+     the greeting's generous top padding is where they come back from. */
   .empty-state { padding: var(--space-2) 0 var(--space-2); }
   .empty-lede { margin-bottom: var(--space-3); }
   .starters { gap: var(--space-1); }

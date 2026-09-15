@@ -23,7 +23,10 @@
       its own light/dark fallback; the accessible name is the alt text, which is the product name
       the h1 used to hold as literal characters. -#}
   <h1 class="wordmark">
-    <img class="wordmark-lockup" src="/static/brand/wordmark.svg" alt="Mosaic HR Copilot" width="219" height="30">
+    {#- The lockup goes home. It was an inert `<img>` on every surface — the one thing in the
+        masthead that looks like a brand anchor, and the only one that did nothing (UX W7,
+        nav-r2-12). The link's name is the image's alt, so nothing is announced twice. -#}
+    <a class="wordmark-link" href="/"><img class="wordmark-lockup" src="/static/brand/wordmark.svg" alt="Mosaic HR Copilot" width="219" height="30"></a>
   </h1>
   <nav class="masthead-nav" aria-label="Primary">
     <div class="nav-switch">

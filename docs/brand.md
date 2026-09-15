@@ -104,6 +104,7 @@ default UI palette.
 | `--paper` | `#F3F6F5` | the window; the ground everything else sits on |
 | `--card` | `#FFFFFF` | a raised surface: message, panel, table, tile |
 | `--sunk` | `#E9EEEC` | an inset surface: table header, code block, disabled field |
+| `--demo-ground` | `#E9EEEC` | the demo & grader panel's ground — never the product's own |
 | `--ink` | `#101D1C` | body copy, headings, table values |
 | `--ink-soft` | `#4C5F5D` | ledes, labels, metadata, the lockup's descriptor |
 | `--ink-mute` | `#586967` | the least important text on the page; never below 14 px |
@@ -128,17 +129,21 @@ Measured contrast (WCAG 2.1 relative-luminance formula; **4.5:1** is the AA floo
 | `--ink` on `--paper` | **15.90:1** | 4.5 | pass |
 | `--ink` on `--sunk` | **14.74:1** | 4.5 | pass |
 | `--ink` on `--accent-soft` | **13.38:1** | 4.5 | pass |
+| `--ink` on `--demo-ground` | **14.74:1** | 4.5 | pass |
 | `--ink-soft` on `--card` | **6.77:1** | 4.5 | pass |
 | `--ink-soft` on `--paper` | **6.23:1** | 4.5 | pass |
 | `--ink-soft` on `--sunk` | **5.77:1** | 4.5 | pass |
 | `--ink-soft` on `--accent-soft` | **5.24:1** | 4.5 | pass |
+| `--ink-soft` on `--demo-ground` | **5.77:1** | 4.5 | pass |
 | `--ink-mute` on `--card` | **5.78:1** | 4.5 | pass |
 | `--ink-mute` on `--paper` | **5.32:1** | 4.5 | pass |
 | `--ink-mute` on `--sunk` | **4.93:1** | 4.5 | pass |
+| `--ink-mute` on `--demo-ground` | **4.93:1** | 4.5 | pass |
 | `--accent` on `--card` | **7.82:1** | 4.5 | pass |
 | `--accent` on `--paper` | **7.19:1** | 4.5 | pass |
 | `--accent` on `--sunk` | **6.67:1** | 4.5 | pass |
 | `--accent` on `--accent-soft` | **6.05:1** | 4.5 | pass |
+| `--accent` on `--demo-ground` | **6.67:1** | 4.5 | pass |
 | `--on-accent` on `--accent` fill | **7.82:1** | 4.5 | pass |
 | `--on-accent` on `--accent-strong` fill | **11.77:1** | 4.5 | pass |
 | `--warn` on `--warn-soft` / `--card` / `--paper` | **6.49 / 7.41 / 6.81:1** | 4.5 | pass |
@@ -165,6 +170,7 @@ accent lifts to a verdigris that can carry text, and shadows are replaced by hai
 | `--paper` | `#0C1413` | the window |
 | `--card` | `#131E1C` | a raised surface |
 | `--sunk` | `#080F0E` | an inset surface — in dark, "sunk" is *darker* than the window |
+| `--demo-ground` | `#1D2A28` | the demo & grader panel's ground — it *lifts* in dark, where a sunk one was invisible |
 | `--ink` | `#E8EEEC` | body copy |
 | `--ink-soft` | `#A2B2AF` | ledes, labels, metadata |
 | `--ink-mute` | `#8C9C99` | least important text |
@@ -186,17 +192,21 @@ accent lifts to a verdigris that can carry text, and shadows are replaced by hai
 | `--ink` on `--paper` | **15.89:1** | 4.5 | pass |
 | `--ink` on `--sunk` | **16.47:1** | 4.5 | pass |
 | `--ink` on `--accent-soft` | **11.91:1** | 4.5 | pass |
+| `--ink` on `--demo-ground` | **12.64:1** | 4.5 | pass |
 | `--ink-soft` on `--card` | **7.74:1** | 4.5 | pass |
 | `--ink-soft` on `--paper` | **8.46:1** | 4.5 | pass |
 | `--ink-soft` on `--sunk` | **8.78:1** | 4.5 | pass |
 | `--ink-soft` on `--accent-soft` | **6.34:1** | 4.5 | pass |
+| `--ink-soft` on `--demo-ground` | **6.73:1** | 4.5 | pass |
 | `--ink-mute` on `--card` | **5.96:1** | 4.5 | pass |
 | `--ink-mute` on `--paper` | **6.52:1** | 4.5 | pass |
 | `--ink-mute` on `--sunk` | **6.76:1** | 4.5 | pass |
+| `--ink-mute` on `--demo-ground` | **5.18:1** | 4.5 | pass |
 | `--accent` on `--card` | **9.20:1** | 4.5 | pass |
 | `--accent` on `--paper` | **10.06:1** | 4.5 | pass |
 | `--accent` on `--sunk` | **10.43:1** | 4.5 | pass |
 | `--accent` on `--accent-soft` | **7.54:1** | 4.5 | pass |
+| `--accent` on `--demo-ground` | **8.00:1** | 4.5 | pass |
 | `--on-accent` on `--accent` fill | **10.37:1** | 4.5 | pass |
 | `--on-accent` on `--accent-strong` fill | **12.81:1** | 4.5 | pass |
 | `--warn` on `--warn-soft` / `--card` / `--paper` | **7.86 / 8.58 / 9.39:1** | 4.5 | pass |

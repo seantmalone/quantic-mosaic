@@ -37,7 +37,10 @@
   {#- The way back, above the document and not at the end of it: a citation is the most travelled
       link in an answer and this is the only route home that returns the reader to the conversation
       they were reading rather than to an empty composer (UX W6, nav-reaudit-1). -#}
-  <p class="reader-back"><a class="back-to-chat" href="{{ conversation_url }}">← Back to your conversation</a></p>
+  {#- …and the library beside it (UX W7, nav-r2-5): the reader was reachable only from a citation
+      and the library only from a refusal, so a reader inside one document had no way to the rest. -#}
+  <p class="reader-back"><a class="back-to-chat" href="{{ conversation_url }}">← Back to your conversation</a>
+    · <a class="back-to-chat" href="/policy">Policy library</a></p>
 
   <article class="reader-doc">
     <h2 class="reader-title">{{ view.document.doc_title }}</h2>

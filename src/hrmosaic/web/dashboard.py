@@ -2949,6 +2949,9 @@ async def page_policy_index(request: Request) -> Response:
                 }
                 for document in corpusread.list_documents()
             ],
+            # The same way back the reader carries (UX W7, nav-r2-7): the index was the one route
+            # of the three that offered none.
+            "conversation_url": api.conversation_url(request),
             **api.shell_context(request, surface="chat"),
         },
     )

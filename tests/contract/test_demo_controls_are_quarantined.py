@@ -4,10 +4,10 @@
 > heading that says so.*
 
 The detection rule, run over the rendered chat page: no `#actor-select`, no `.demo-button` and no
-`/dashboard/…#turn-` link exists outside `section.demo-panel`, and the panel says what it is. The
-plan writes the last clause as `section.demo-panel > h2`; the heading is one level deeper here
-because the panel is a `<details>` whose `<summary>` is that heading — the phone layout W2's review
-asked for — so this file asserts the heading is inside the panel and inside no other section.
+`/dashboard/…#turn-` link exists outside `section.demo-panel`, and the panel says what it is —
+`section.demo-panel > h2`, exactly as the plan writes it. From W3 to W7 the panel was a `<details>`
+whose `<summary>` held that heading; since UX W7 (Addendum 2, the owner's decision) it is always
+expanded, so there is no summary, no collapsed state and nothing remembered in `localStorage`.
 
 Why it is worth a permanent test rather than a screenshot: every one of these controls was in
 production chrome before W3 and each arrived there innocently. The `<select>` was in the masthead
@@ -83,12 +83,11 @@ async def test_the_panel_says_what_it_is(web):
         panel = _panel((await client.get("/")).text)
 
     assert re.search(r"<h2>Demo &amp; grader controls</h2>", panel), "a heading that names the section"
-    # Both inside the `<summary>`, so the collapsed panel carries the whole disclosure: the name of
-    # the section and the sentence saying who it is not for (UX W3 review).
-    summary = re.search(r"<summary class=\"demo-summary\">.*?</summary>", panel, re.S)
-    assert summary, "the collapsed panel is the summary"
-    assert "Demo &amp; grader controls" in summary.group(0)
-    assert "For evaluation only — a real user never sees this panel." in summary.group(0)
+    assert "For evaluation only — a real user never sees this panel." in panel, "…and who it is not for"
+    # Always expanded (UX W7, Addendum 2 — the owner's decision): nothing to open, and nothing to
+    # remember it with.
+    assert "<details" not in panel and "<summary" not in panel, "the panel has no collapsed state"
+    assert "<script" not in panel and "localStorage" not in panel, "the panel remembers nothing"
 
 
 async def test_no_demo_control_is_in_the_masthead_or_in_the_composer(web):

@@ -109,16 +109,20 @@ async def test_a_rejected_key_says_so_in_three_places_a_reader_can_reach(web):
         blank = await client.get("/access", headers=HTML)
 
     for response in (rejected, posted):
-        assert "<title>Key not recognised — " in response.text
+        assert "<title>Key not recognised · Mosaic HR Copilot</title>" in response.text
         assert 'aria-invalid="true"' in response.text
         assert 'aria-describedby="access-message"' in response.text
         assert 'id="access-message"' in response.text
-        assert "autofocus" in response.text
 
     for response in (anonymous, blank):
-        assert "<title>Key not recognised — " not in response.text
+        # §3.8's own shape, and the one the rest of the product wears (UX W7, nav-r2-10).
+        assert "<title>Sign in · Mosaic HR Copilot</title>" in response.text
         assert "aria-invalid" not in response.text
-        assert "autofocus" not in response.text
+
+    # The field is focused on arrival, rejected or not: it is the only control on the page, and
+    # hiding the focus behind a rejection was the open half of chat-production-ux-29 (UX W7).
+    for response in (rejected, posted, anonymous, blank):
+        assert "autofocus" in response.text
 
 
 async def test_the_cookie_alone_opens_a_gated_route(web):

@@ -65,6 +65,13 @@ MARKUP_FORBIDDEN = (
     # over the markup, not the text, because an id can arrive as an attribute as easily as a
     # sentence — and the demo panel, whose persona control names ids on purpose, is already cut.
     r"\bE1[0-9]{3}\b",
+    # **The product naming itself in the third person** (UX W7, R25). `chat.html`'s conversation
+    # region was labelled *"Conversation with the HR copilot"* — the one string P13 forbids, in
+    # the one piece of chat copy only a screen-reader user receives. The `copilot` rule below runs
+    # over the page's *text*, and an `aria-label` is an attribute, so it never saw it. This runs
+    # over the markup; the brand lockup's `alt="Mosaic HR Copilot"` is the product's name, not a
+    # sentence about it, and does not match.
+    r"\b[Tt]he HR [Cc]opilot\b",
     r"data-chunk-id",
     r"\bc_[0-9a-f]{8}",
     r"stub:stub",

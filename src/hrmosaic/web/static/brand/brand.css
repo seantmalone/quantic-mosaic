@@ -127,6 +127,12 @@
   --paper: #f3f6f5;
   --card: #ffffff;
   --sunk: #e9eeec;
+  /* The demo & grader panel's ground (**P8**: it is the one part of chat that does not look like
+     the product). It was `--sunk`, which is a designed inset in light and, in dark, four points per
+     channel away from `--paper` — invisible, so the panel's quarantine was a dashed border and
+     nothing else in half the themes the product ships (UX W7, M18 = dgc-r2-7). It SINKS in light
+     and LIFTS in dark; what it may never do is read as the product's own ground. */
+  --demo-ground: #e9eeec;
 
   --ink: #101d1c;
   --ink-soft: #4c5f5d;
@@ -158,6 +164,7 @@
     --paper: #0c1413;
     --card: #131e1c;
     --sunk: #080f0e;
+    --demo-ground: #1d2a28;
 
     --ink: #e8eeec;
     --ink-soft: #a2b2af;
@@ -194,6 +201,7 @@
   --paper: #0c1413;
   --card: #131e1c;
   --sunk: #080f0e;
+  --demo-ground: #1d2a28;
 
   --ink: #e8eeec;
   --ink-soft: #a2b2af;

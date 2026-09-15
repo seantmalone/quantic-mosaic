@@ -1084,7 +1084,10 @@ TURN_ANNOUNCEMENTS = {
     "partial": "Partial answer ready.",
     "escalated": "Answer ready — it points you to a person.",
     "awaiting_confirmation": "Waiting for your confirmation.",
-    "refused": "I can't answer that one — see below.",
+    # No direction in it (UX W7, cpux2-3). `.turn-status` is visually-hidden once a turn has
+    # finished, so "see below" pointed a screen-reader user at the composer and the demo panel;
+    # the refusal itself is *above* the line that said it.
+    "refused": "I can't answer that one.",
     "clarify": "Could you clarify?",
     "error": "Something went wrong — you can retry.",
 }

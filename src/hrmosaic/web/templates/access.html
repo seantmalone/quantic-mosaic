@@ -6,7 +6,7 @@
   {#- The title is the first thing a screen reader announces after a navigation, and a page that
       answered 401 to a wrong key used to announce the same words as the blank form
       (UX W5, accessibility-and-responsive-12). -#}
-  <title>{% if invalid %}Key not recognised — {% endif %}Mosaic HR Copilot — access key</title>
+  <title>{% if invalid %}Key not recognised{% else %}Sign in{% endif %} · Mosaic HR Copilot</title>
   <link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -30,8 +30,10 @@
   {% if message %}<p id="access-message" class="access-error">{{ message }}</p>{% endif %}
   <form method="post" action="/access" class="access-form">
     <label for="access">Access key</label>
-    <input id="access" name="access" type="password" autocomplete="off" required
-           {% if invalid %}aria-invalid="true" aria-describedby="access-message" autofocus{% endif %}>
+    {#- Focused on first load as well as after a rejection (UX W7, chat-production-ux-29 / §3.8):
+        the one field on a one-field page is where the reader is going anyway. -#}
+    <input id="access" name="access" type="password" autocomplete="off" required autofocus
+           {% if invalid %}aria-invalid="true" aria-describedby="access-message"{% endif %}>
     <button class="button" type="submit">Enter</button>
   </form>
 </main>

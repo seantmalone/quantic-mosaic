@@ -23,7 +23,9 @@
 <p id="cold-start-banner" class="banner" hidden>Just waking up — the first answer may take a little longer.</p>
 
 <main class="layout" id="main-content" tabindex="-1">
-  <section class="conversation" aria-label="Conversation with the HR copilot">
+  {#- "Conversation with the HR copilot" named the product in the third person — the one string
+      P13 forbids, in the one piece of chat copy only a screen-reader user receives (UX W7, a11y-re2-5). -#}
+  <section class="conversation" aria-label="Your conversation">
     {% if session_notice %}<p class="session-notice" role="status">{{ session_notice }}</p>{% endif %}
 
     {#- The conversation scrolls inside this box; the document does not grow (P11). -#}
@@ -37,6 +39,10 @@
           <li><button class="starter" type="button" data-prompt="{{ starter }}">{{ starter }}</button></li>
           {% endfor %}
         </ul>
+        {#- The library's one entry point in the whole product was a line on a refused turn
+            (UX W7, nav-r2-5). Below the starters, so the phone budget they are measured against
+            (`test_p8_the_panel_ships_collapsed_…`) is unchanged. -#}
+        <p class="empty-library">Or <a href="/policy">read the policies themselves</a>.</p>
       </section>
 
       <div id="messages" class="messages">
@@ -65,7 +71,13 @@
           the answer as the model writes it. Replaced wholesale by the finished turn (§11.3). -#}
       <article id="pending-turn" class="turn turn-pending" hidden>
         <div class="message message-user"><p id="pending-question"></p></div>
+        {#- The assistant's side of the turn exists from the first moment, not from the first token:
+            the genuinely in-flight capture showed the question echoed over ~400px of empty ground,
+            because this bubble stayed hidden until the model streamed text (UX W7, dgc-r2-3). It
+            ships with the speaker row, so the pending state has a subject; `#turn-status` below
+            carries the one line that says what is happening. -#}
         <div id="provisional-answer" class="message message-agent turn-provisional" aria-hidden="true" hidden>
+          <p class="speaker"><span class="speaker-mark" aria-hidden="true">M</span>Mosaic</p>
           <div id="provisional-blocks"></div>
         </div>
       </article>
@@ -136,10 +148,16 @@
     var statusTimer = null;
     var statusShownAt = 0;
 
-    function paintStatus(text) {
+    // `announced` is the finished turn's sentence. It is written for the live region and it is
+    // correct there, but `.turn-status` had no `visually-hidden` treatment, so every finished turn
+    // also painted "● Answer ready." as a second visible sentence below the transcript — and on a
+    // refusal it pointed the reader at empty space (UX W7, cpux2-3). In flight, and for the
+    // `STOPPED` line, the same element stays visible: that one IS the state of the page.
+    function paintStatus(text, announced) {
       statusShownAt = Date.now();
       statusPending = null;
       if (status.textContent !== text) { status.textContent = text; }
+      status.classList.toggle("visually-hidden", Boolean(announced));
       stickToBottom();
     }
 
@@ -161,6 +179,7 @@
       statusPending = null;
       statusShownAt = 0;
       status.textContent = "";
+      status.classList.remove("visually-hidden");
     }
 
     // -- scrolling ------------------------------------------------------------------------
@@ -169,33 +188,103 @@
     // has scrolled up to re-read something, in which case it stays put and offers a way back.
     var STICK_SLACK_PX = 48;
 
-    function atBottom() {
-      return transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight <= STICK_SLACK_PX;
+    // **Which element actually scrolls is a question, not a constant** (UX W7, cpux2-1 =
+    // a11y-re2-2). W6 correctly stopped `#transcript` being a viewport-sized scroll box below 30rem
+    // — a phone is a document — but every mechanism here went on writing `transcript.scrollTop`,
+    // which is a no-op on a box whose computed `overflow-y` is `visible`. `atBottom()` then
+    // returned true forever, `#jump-latest` stayed hidden, and a phone reader was left looking at
+    // their own question with the answer a screen below and no control to reach it.
+    function scroller() {
+      return getComputedStyle(transcript).overflowY === "visible" ? document.scrollingElement : transcript;
     }
 
+    function atBottom() {
+      var box = scroller();
+      return box.scrollHeight - box.scrollTop - box.clientHeight <= STICK_SLACK_PX;
+    }
+
+    //: Whether the reader is following the conversation — true until they scroll up to re-read
+    //: something. It is what a resize restores: the scroller can change identity when the viewport
+    //: crosses 30rem, and re-measuring after the change would only ever say "at the bottom".
+    var following = true;
+
+    //: A viewport change in progress (`onViewportChange`, below). While it settles, a `scroll`
+    //: event is the browser clamping the old offset to the new box — widening from a phone drops
+    //: the document's `scrollY` to 0 — and not the reader moving, so `onScroll` leaves `following`
+    //: alone until the change has been answered.
+    var RESIZE_SETTLE_MS = 120;
+    var resizeTimer = null;
+
     function stickToBottom(force) {
+      var box = scroller();
       if (force || atBottom()) {
-        transcript.scrollTop = transcript.scrollHeight;
+        box.scrollTop = box.scrollHeight;
+        following = true;
         jumpButton.hidden = true;
       } else {
+        following = false;
         jumpButton.hidden = false;
       }
     }
 
-    transcript.addEventListener("scroll", function () { jumpButton.hidden = atBottom(); });
+    function onScroll() {
+      if (resizeTimer !== null) { return; }
+      following = atBottom();
+      jumpButton.hidden = following;
+    }
+    transcript.addEventListener("scroll", onScroll);
+    // …and on the window, because below 30rem the document is the scroller and the box below it
+    // never fires a `scroll` event at all.
+    window.addEventListener("scroll", onScroll);
     jumpButton.addEventListener("click", function () { stickToBottom(true); messageBox.focus(); });
 
     // -- the composer ---------------------------------------------------------------------
+    //
+    // `field-sizing: content` (see `app.css`) is what sizes this box with no script at all; the
+    // measurement below is what sizes it in a browser that has not got the property, and it is what
+    // the guard measures, so it runs either way — an inline `height` wins over `field-sizing`, and
+    // both are computing the same number. The box is sized from the PLACEHOLDER while the value is
+    // empty: an empty textarea's `scrollHeight` reflects its empty value, not the two lines the
+    // placeholder wraps to at 390px, so W6's `autogrow()`-on-load could not and did not change the
+    // rendered box and the composer still opened clipped mid-glyph on every phone
+    // (UX W7, npo3-03 = dgc-r2-4 = a11y-re2-4).
+    var MAX_COMPOSER_PX = 200;
     function autogrow() {
+      var empty = !messageBox.value;
+      if (empty) { messageBox.value = messageBox.placeholder; }
       messageBox.style.height = "auto";
-      messageBox.style.height = Math.min(messageBox.scrollHeight, 200) + "px";
+      // `box-sizing: border-box` is on everything here, so an inline `height` of `scrollHeight`
+      // leaves the content box short by the border and the placeholder is clipped by 2px.
+      var chrome = messageBox.offsetHeight - messageBox.clientHeight;
+      messageBox.style.height = Math.min(messageBox.scrollHeight + chrome, MAX_COMPOSER_PX) + "px";
+      if (empty) { messageBox.value = ""; }
+      // Below 30rem `#jump-latest` is sticky above the composer, and the composer's height is
+      // whatever the box above just became — measured, not guessed, the way `_chrome_height.html`
+      // measures the masthead (UX W7, cpux2-1).
+      document.documentElement.style.setProperty("--composer-h", form.offsetHeight + "px");
     }
     messageBox.addEventListener("input", autogrow);
-    // …and once on load. The box is one row of `min-height: 2.75rem`, and at 390px the placeholder
-    // wraps to two lines inside it, so the composer opened clipped on every phone (UX W6,
-    // cpux-re-7). `autogrow` was bound to `input` and called in `htmx:afterSwap` and never on the
-    // state the reader actually arrives in.
-    autogrow();
+    // …and after layout, not during parse: a box measured before the stylesheet has laid the page
+    // out is measured at the wrong width.
+    requestAnimationFrame(autogrow);
+    window.addEventListener("load", autogrow);
+
+    // -- the viewport changes under both of them (UX W7, cpux2-2 = a11y-re2-4) --------------
+    //
+    // W6 made the transcript and the composer viewport-dependent and re-ran neither on resize, so
+    // crossing 30rem in either direction left the desktop transcript pinned at scrollTop 0 with the
+    // answer clipped, or the phone composer holding a desktop-sized inline height. Debounced,
+    // because a drag fires this continuously.
+    function onViewportChange() {
+      if (resizeTimer !== null) { clearTimeout(resizeTimer); }
+      resizeTimer = setTimeout(function () {
+        resizeTimer = null;
+        autogrow();
+        stickToBottom(following);
+      }, RESIZE_SETTLE_MS);
+    }
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("orientationchange", onViewportChange);
 
     // Enter sends, Shift+Enter (and Alt+Enter) writes a new line. Without this the only way to
     // send was the button, and Enter silently grew the box (chat-production-ux-3).
@@ -226,10 +315,17 @@
       if (actor) { actor.disabled = busy; }
     }
 
+    //: §3.2's pending state, seeded rather than waited for (UX W7, dgc-r2-3). The narration
+    //: replaces it the moment the first span opens; until then the turn still has a subject and a
+    //: sentence, instead of an echoed question over empty ground.
+    var PENDING_STATUS = "Working on it…";
+
     function showPending(question) {
       if (emptyState) { emptyState.hidden = true; }
       pendingQuestion.textContent = question;
       pendingTurn.hidden = false;
+      provisional.hidden = false;
+      paintStatus(PENDING_STATUS);
       stickToBottom(true);
     }
 
@@ -297,7 +393,7 @@
         // here, in plain language, with nothing technical in it — and it says what actually
         // happened: "Answer ready." announced over a refusal, a clarifying question or a crash was
         // the opposite of the truth three outcomes out of five (UX W3).
-        paintStatus(announcementFor(JSON.parse(event.data).outcome));
+        paintStatus(announcementFor(JSON.parse(event.data).outcome), true);
         clearProvisional();
         stopStream();
       });
@@ -333,8 +429,10 @@
         event.detail.parameters.turn_id = turnId;
         turnField.value = turnId;
         setBusy(true);
-        showPending(String(event.detail.parameters.message || ""));
+        // The stream first, then the pending state: `openStream` resets the status line and the
+        // preview, and the seed `showPending` paints has to survive that reset (UX W7, dgc-r2-3).
         openStream(turnId, true);
+        showPending(String(event.detail.parameters.message || ""));
         return;
       }
       if (event.detail.path === "/chat/confirm") {
@@ -363,21 +461,32 @@
     var demoLink = document.getElementById("demo-dashboard-link");
     var demoProduced = document.getElementById("demo-produced");
     var demoNoTurn = document.getElementById("demo-no-turn");
+    var demoSessionId = document.getElementById("demo-session-id");
+
+    // The eight-character chip the dashboard prints, built here the same way the template builds it
+    // on a rehydrated page (UX W7, M17): `id_chip` shows the first eight characters of an opaque
+    // hex id and keeps the whole of it in `title`.
+    var ID_CHIP_CHARS = 8;
 
     function describeLastTurn(turn) {
       if (!turn) { return; }
       var url = turn.dataset.dashboardUrl || "";
       if (url) { demoLink.href = url; demoLink.hidden = false; }
       demoProduced.textContent = turn.dataset.produced || "";
+      var sessionId = turn.dataset.sessionId || "";
+      if (demoSessionId && sessionId) {
+        demoSessionId.title = sessionId;
+        demoSessionId.textContent = sessionId.slice(0, ID_CHIP_CHARS) + "…";
+        demoSessionId.hidden = false;
+      }
       demoNoTurn.hidden = true;
     }
 
-    // The panel is load-bearing for layout: `body.chat` has a definite height, so an expanded panel
-    // takes its room out of the transcript (UX W2 report §7.1). It therefore ships collapsed at
-    // every viewport and the reader opens it — which is the `<details>` element's own behaviour, so
-    // there is no script here at all any more. A media query used to force it open above 40rem;
-    // that regressed the at-rest chat screen on every desktop viewport (UX W3 review, finding 2)
-    // and made the collapse depend on JavaScript for no gain.
+    // The panel is load-bearing for layout: `body.chat` has a definite height, so the panel takes
+    // its room out of the transcript (UX W2 report §7.1). It is always expanded (UX W7, Addendum 2
+    // — the owner's decision, overriding W3's collapsed `<details>`), and the transcript's 18rem
+    // floor is what keeps the conversation from paying for it: where the two do not fit, the page
+    // scrolls. There is no script for the panel at all.
 
     // -- the conversation's own address (UX W6, nav-reaudit-1 / navigation-and-ia-16) ------
     //
@@ -409,7 +518,7 @@
       // the page's `EventSource` has connected, and the region then said nothing at all. Both
       // paths paint the same sentence and `paintStatus` skips a write that changes nothing, so a
       // turn is still announced exactly once.
-      if (lastTurn) { paintStatus(announcementFor(lastTurn.dataset.outcome)); }
+      if (lastTurn) { paintStatus(announcementFor(lastTurn.dataset.outcome), true); }
       if (event.detail.requestConfig && event.detail.requestConfig.path === "/chat") { messageBox.value = ""; }
       autogrow();
       if (emptyState) { emptyState.hidden = true; }
@@ -467,7 +576,7 @@
     // At rest the greeting is the TOP of the transcript box, not its bottom: a conversation with
     // no turns in it has nothing newest to follow, and sticking it to the bottom hides
     // "Hi … — ask me anything about HR" above the starters (chat-production-ux-1).
-    if (document.querySelectorAll("#messages .turn").length) { stickToBottom(true); } else { transcript.scrollTop = 0; }
+    if (document.querySelectorAll("#messages .turn").length) { stickToBottom(true); } else { scroller().scrollTop = 0; }
 
     // The cold-start notice: a `/health` preflight (§11.5).
     //
