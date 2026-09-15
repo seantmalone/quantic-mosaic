@@ -298,7 +298,9 @@ async def test_a_clarifying_question_offers_two_quick_replies_that_prefill(web):
     assert 'data-outcome="clarify"' in response.text
     chips = re.findall(r'<button class="quick-reply" type="button" data-prompt="([^"]+)">', response.text)
     assert len(chips) == 2, "two quick replies, as §3.5 specifies"
-    assert chips == list(orchestrator.clarify_chips("pto_request"))
+    # Keyed on the slot the question asks about, not on the workflow (W8, C18): this turn gave no
+    # dates, so the slot is `start_date` and the chips are the two ways to give them.
+    assert chips == list(orchestrator.clarify_chips("start_date"))
     assert "hx-post" not in response.text.split('<ul class="quick-replies">')[1].split("</ul>")[0]
     # They prefill through the same delegated handler the starter questions use.
     assert PREFILL_HANDLER in payload.text

@@ -84,7 +84,8 @@ async def test_no_sentence_on_the_confirmed_page_tells_the_reader_to_file_the_re
     assert body
     text = _text(body.group(0))
     assert text.startswith("Done — your request is with the HR Time Off team.")
-    assert "Your manager's written approval is the next step." in text
+    # …and the manager is named, because the turn's own envelope resolved the chain (W8, C06).
+    assert "Your manager Dana's written approval is the next step." in text
     assert not DIRECTIVE.search(text), f"a sentence still tells the reader to file the request: {text}"
 
 

@@ -43,22 +43,37 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from hrmosaic.agent import breadth, prompts
+from hrmosaic.agent import approvers as approver_resolution
+from hrmosaic.agent import arithmetic as arithmetic_consistency
+from hrmosaic.agent import breadth, prompts, session
+from hrmosaic.agent import capability as capability_check
+from hrmosaic.agent import compliance as compliance_restatement
 from hrmosaic.agent import dates as date_consistency
+from hrmosaic.agent import entailment as step_entailment
 from hrmosaic.agent import outcome as outcome_consistency
 from hrmosaic.agent import snapshot as snapshot_consistency
 from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
 from hrmosaic.agent.guardrails import g1, g2, g3, g4, g5, g6
 from hrmosaic.agent.guardrails import span_name as guardrail_span_name
-from hrmosaic.agent.router import RouteDecision, allowed_tools, clamp_rationale, fallback_decision, normalise, offered
+from hrmosaic.agent.router import (
+    EMPLOYEE_ID,
+    RouteDecision,
+    allowed_tools,
+    clamp_rationale,
+    fallback_decision,
+    normalise,
+    offered,
+)
 from hrmosaic.agent.workflows import EVIDENCE_TOOLS, LoopState, WorkflowSpec
 from hrmosaic.agent.workflows import get as get_workflow
 from hrmosaic.core import corpusread, trace
@@ -103,6 +118,30 @@ OUT_OF_CORPUS_PHRASES: tuple[str, ...] = (
 #: The gated write tools of §8.4. A `CONFIRMATION_REQUIRED` from either parks the turn.
 WRITE_TOOLS = ("create_mock_hr_ticket", "draft_hr_email")
 
+#: Which queue a deterministically-proposed write goes to, by the scenario the turn scored
+#: (W8, C09). Only the scenarios whose write the product actually offers: a card the orchestrator
+#: mints must describe a request the turn itself resolved, and a scenario with no queue produces
+#: no card rather than a guess.
+DETERMINISTIC_QUEUES: dict[str, str] = {
+    "pto_request": "hr-timeoff",
+    "international_remote": "hr-mobility",
+    "domestic_remote": "hr-general",
+    "benefits_change": "hr-benefits",
+    "equipment_request": "it-equipment",
+}
+
+#: What that card calls the request, by the same key.
+DETERMINISTIC_SUBJECTS: dict[str, str] = {
+    "pto_request": "PTO request",
+    "international_remote": "Request to work from another country",
+    "domestic_remote": "Request to work from another location",
+    "benefits_change": "Benefits election change",
+    "equipment_request": "Equipment request",
+}
+
+#: An ISO date, for the span a deterministic card names.
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
 #: The deterministic compliance engine (§8.4 tool 4). Its per-requirement evidence names
 #: committed chunks, which `_engine_evidence` scores so G1 can weigh them (§7.4, P13 R7).
 COMPLIANCE_TOOL = "check_policy_compliance"
@@ -146,12 +185,28 @@ BUDGET_STOPS = ("max_steps", "max_tool_calls", "timeout")
 #: assistant message the request replays, and an unanswered `tool_use` is a 400 on the pinned model.
 NOT_RUN_YET = json.dumps({"status": "not_run", "hint": "an earlier call in this step was rejected"})
 
-#: The single question a clarification asks, per workflow (UX W2, §3.5 of the UX plan). One
+#: The single question a clarification asks, keyed on **the first unfilled slot** (W8, C18). One
 #: question, never the slot list: `WorkflowSpec.required_slots` documents the completion predicate
 #: for the dashboard, and reading it aloud was the defect jargon-and-exposure-4 recorded.
+#:
+#: Keyed on the workflow, it asked the wrong question. The admin turn of 2026-09-15 was asked
+#: *"which dates are you thinking of?"* by a message that had given the dates in full: what was
+#: missing was an employee record, because `admin` has none. A question is only worth asking about
+#: the slot that is actually empty.
 CLARIFY_QUESTIONS: dict[str, str] = {
-    "pto_request": "Happy to check — which dates are you thinking of?",
-    "remote_work_eligibility": "Happy to check — where would you be working from, and for how long?",
+    "identity": "Happy to help — whose record should I look this up against?",
+    "start_date": "Happy to check — which dates are you thinking of?",
+    "days": "Happy to check — how many days would that be?",
+    "destination_country": "Happy to check — where would you be working from?",
+    "duration_days": "Happy to check — how long would you be there?",
+    "amount_usd": "Happy to check — how much is the claim for?",
+}
+
+#: Which slot a workflow asks about first when it holds none of them. The order is the order a
+#: person would be asked in, not the order `required_slots` documents.
+CLARIFY_SLOT_ORDER: dict[str, tuple[str, ...]] = {
+    "pto_request": ("identity", "start_date", "days"),
+    "remote_work_eligibility": ("identity", "destination_country", "duration_days"),
 }
 
 #: When the router named no workflow. Still one question, still in the first person.
@@ -163,13 +218,29 @@ CLARIFY_FALLBACK = "Happy to help — could you tell me a little more about what
 #: would send**, so it prefills the composer and sends nothing — the reader still edits and presses
 #: Enter, which is the difference between a shortcut and an answer put in their mouth.
 CLARIFY_CHIPS: dict[str, tuple[str, ...]] = {
-    "pto_request": (
+    "identity": (
+        "It is for E1042",
+        "Look it up for me",
+    ),
+    "start_date": (
         "Three days, 15–17 September 2026",
         "One day, this Friday",
     ),
-    "remote_work_eligibility": (
-        "Berlin, for six weeks",
-        "Within the UK, for the rest of the year",
+    "days": (
+        "Three days",
+        "Just the one day",
+    ),
+    "destination_country": (
+        "Berlin, in Germany",
+        "Within the UK",
+    ),
+    "duration_days": (
+        "About six weeks",
+        "Two weeks",
+    ),
+    "amount_usd": (
+        "About USD 3,000",
+        "Under USD 100",
     ),
 }
 
@@ -180,9 +251,37 @@ CLARIFY_FALLBACK_CHIPS: tuple[str, ...] = (
 )
 
 
-def clarify_chips(workflow: str | None) -> tuple[str, ...]:
-    """The quick replies for a clarification, by workflow name. Shared with the replay path."""
-    return CLARIFY_CHIPS.get(workflow or "", CLARIFY_FALLBACK_CHIPS)
+def clarify_chips(slot: str | None) -> tuple[str, ...]:
+    """The quick replies for a clarification, by the slot it asks about. Shared with the replay path."""
+    return CLARIFY_CHIPS.get(slot or "", CLARIFY_FALLBACK_CHIPS)
+
+
+def clarify_slot_of(question: str) -> str | None:
+    """Which slot a stored clarifying question was asking about (W8, C18).
+
+    `turns` stores the question the reader was shown but not the slot it came from, and the replay
+    path has to offer the same two quick replies the live turn did. The questions are a closed set,
+    so the reverse lookup is exact — and it is the *stored text* that decides, not the workflow,
+    which is the whole point of keying on the slot.
+    """
+    return next((slot for slot, text in CLARIFY_QUESTIONS.items() if text == question.strip()), None)
+
+
+def unfilled_slot(workflow: str | None, *, known: Collection[str], has_record: bool) -> str | None:
+    """The first slot this turn still needs, or `None` when the session already holds them all.
+
+    `known` is what `agent/session.py` carried forward from the last three turns, so a follow-up is
+    never asked for a detail the session settled — the other half of C12's defect, and the reason
+    C18 keys on the slot rather than on the workflow.
+    """
+    for slot in CLARIFY_SLOT_ORDER.get(workflow or "", ()):
+        if slot == "identity":
+            if not has_record:
+                return slot
+            continue
+        if slot not in known:
+            return slot
+    return None
 
 
 #: The write a confirmed resume re-issued came back `isError`: the token validated, the write did
@@ -212,6 +311,15 @@ WORKFLOW_INCOMPLETE = (
     "Close each gap above with the tools you were offered, then conclude. If the user also asked "
     "for something to be created, propose it once the policy supports it; a human confirms it "
     "before anything is created."
+)
+
+#: The third reminder (W8, C10): the turn is about somebody's own record and has not read it. The
+#: live failures were a question about the reader's own office declined outright, and an answer
+#: that described E1042 as "a fully remote employee" when the profile tool — never called — says
+#: hybrid. Same rule as the others: it names the debt, never the tool that settles it.
+DATA_OUTSTANDING = (
+    "Not yet — this turn is about one person's own HR record and nothing in state carries it. "
+    "Read the record this question is about before you answer it."
 )
 
 #: The second reminder, for the other way a turn can quietly drop what the user asked for: the
@@ -598,6 +706,13 @@ class _Turn:
     write_failed: bool = False
     #: The gated `tool_call` span payload a resumed turn re-issues (§8.6 step 4).
     gated: dict[str, Any] | None = None
+    #: The last three closed turns of this session, rendered into both prompts' user half (W8, C12).
+    history: list[session.PriorTurn] = field(default_factory=list)
+    #: Why the write was refused, when a `non_compliant` verdict forbade it (W8, C02). Set means
+    #: the action debt is settled — deliberately, not by the model — and the answer opens with it.
+    write_blocked: str | None = None
+    #: Which slot a clarification is asking about (W8, C18); the quick replies follow it.
+    clarify_slot: str | None = None
 
     @property
     def elapsed_s(self) -> float:
@@ -688,6 +803,9 @@ class Orchestrator:
             return self._degraded(turn, str(exc), cold_start=cold_start)
 
         # -- 0. pre-checks: deterministic, zero LLM (§9.1 step 0) -----------------------
+        # What this session has already settled, for both prompts' user half (W8, C12). One
+        # indexed read per turn; a first turn reads nothing and renders nothing.
+        turn.history = session.recent(turn.buffer.session_id)
         g4.check([_RawText("user_message", req.message)], turn=turn.buffer, source="user_message")
         phrase = self._out_of_corpus(req.message)
         if phrase is not None:
@@ -725,6 +843,7 @@ class Orchestrator:
             "act.j2",
             persona=prompts.persona_block(employee_id=req.employee_id, actor_source=req.actor_source),
             question=req.message,
+            session_context=session.render(turn.history),
         )
         turn.messages = [Message(role="system", content=system), Message(role="user", content=user)]
         try:
@@ -768,6 +887,17 @@ class Orchestrator:
             verdict = g1.check(turn.citable(), turn=turn.buffer)
         if not verdict.passed:
             return self._refuse(turn, verdict.reason, cold_start=cold_start)
+
+        # -- 3b. the terminal debts (W8, C09 and C10) ------------------------------------
+        # `_nudge` reports these on the step where the model stops calling tools. It cannot report
+        # them on the step where the model stops for some other reason — a budget, a completion
+        # predicate it satisfied another way — and on 9 of 12 recorded runs of `unsafe-001` the
+        # turn reached synthesis with the write it was asked to propose still unmade, and answered
+        # *"I cannot submit PTO requests in MosaicOne on your behalf"*. So the debt is terminal:
+        # one more act step with the reminder, and then the orchestrator settles it itself.
+        parked = await self._settle_debts(turn, cold_start=cold_start)
+        if parked is not None:
+            return parked
 
         # -- 4. synthesize ---------------------------------------------------------------
         try:
@@ -816,7 +946,8 @@ class Orchestrator:
         # there to bound. The wall clock is re-read rather than trusted to `stop_reason` alone:
         # the act loop can end inside 90 s and synthesis carry the turn past it.
         inside_budget = turn.stop_reason not in BUDGET_STOPS and turn.elapsed_s < self.settings.agent_wall_clock_s
-        if breadth.applies(decision) and inside_budget:
+        widened = breadth.applies(decision) and inside_budget
+        if widened:
             broadened = await self._broaden(turn, raw, relabelled.blocks)
             if broadened is not None:
                 raw, repaired, relabelled = broadened
@@ -838,19 +969,65 @@ class Orchestrator:
         # record `record` rather than leaving it under "not company policy" (JX2-05); the blocks
         # G3 demoted from an uncited `policy_fact` are handed over so a policy claim is never
         # retyped as the reader's data.
-        consistent = outcome_consistency.apply(
-            relabelled.blocks,
+        # -- 5c. merge the claims the breadth round duplicated (W8, C26) --------------------
+        # The model answered the breadth instruction by adding a second block rather than a second
+        # citation, so `remote-004` told the reader the same rule twice in different words with
+        # different sources. Blocks whose normalised claim matches are folded into the first, and
+        # their citations are unioned onto it.
+        merged, _merged_away = breadth.merge(relabelled.blocks)
+        # …and where the repair round was actually bought and the answer is **still** narrower than
+        # its own evidence, the shortfall is recorded rather than left advisory. Only there: a
+        # narrow answer on a turn that never bought the repair is not a failed invariant.
+        if widened:
+            minimum = turn.workflow.min_distinct_docs if turn.workflow is not None else breadth.MIN_DISTINCT_DOCS
+            shortfall = breadth.distinct_docs_shortfall(merged, turn.citable(), minimum=minimum)
+            if shortfall:
+                self._error(
+                    turn,
+                    "distinct_docs_shortfall",
+                    f"the served answer cites {shortfall} document(s) fewer than the {minimum} expected",
+                    component=breadth.STEP_NAME,
+                )
+
+        # -- 5d. compliance restatement (W8, C03) — NOT a guardrail, and no G-number --------
+        # The engine scored the notice requirement met with eight business days and the answer
+        # denied it using the same eight relabelled as calendar days, then sent the reader to
+        # chase a waiver she did not need. A sentence whose polarity opposes the engine's own row
+        # is replaced by that row's result, in the reader's voice.
+        restated = compliance_restatement.apply(
+            merged,
             turn.envelopes,
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
+        )
+
+        # -- 5e. the capability check (W8, C09, C10) ---------------------------------------
+        # A block asserting the assistant cannot do what a permitted tool does, or stating a
+        # profile attribute the reader's own envelope contradicts, is dropped.
+        capable = capability_check.apply(restated.blocks, turn.envelopes, permitted=self._permitted(turn))
+
+        consistent = outcome_consistency.apply(
+            capable.blocks,
+            turn.envelopes,
+            next_steps=restated.next_steps,
             policy_claims=relabelled.relabelled,
         )
+
+        # -- 5f. approver resolution (W8, C06) ---------------------------------------------
+        # "requires approval from your director", served to the Director of Engineering. The chain
+        # is resolved on the envelope; this is the backstop for the answer that wrote the role.
+        named = approver_resolution.apply(consistent.blocks, turn.envelopes, next_steps=consistent.next_steps)
+
+        # -- 5g. arithmetic consistency (W8, C13) — the numeric twin of 5h ------------------
+        # "8.0 days … (13.5 accrued minus 4.0 used, plus 2.5 carryover)" comes to 12.0. The total
+        # is the tool's and stays; the working is replaced by the envelope's own, or removed.
+        summed = arithmetic_consistency.apply(named.blocks, turn.envelopes, next_steps=named.next_steps)
 
         # -- 5d. date consistency (UX W6, npo2-02) — NOT a guardrail, and no G-number -------
         # Where the answer shows its arithmetic — "(21 days before 3 November)" — the arithmetic is
         # redone from the two operands in the sentence and the stated deadline is corrected. The
         # recorded failure told the reader to file on 13 September against a 13 October deadline it
         # had computed itself. Nothing else about the sentence is touched.
-        dated = date_consistency.apply(consistent.blocks, next_steps=consistent.next_steps)
+        dated = date_consistency.apply(summed.blocks, next_steps=summed.next_steps)
 
         # -- 5e. snapshot consistency (P29, npo2-08/-13) — NOT a guardrail, and no G-number ----
         # The employee-data snapshot is stated once, by the page's own footer ("Based on employee
@@ -862,11 +1039,35 @@ class Orchestrator:
         # dates the turn's own envelopes carry are touched: a deadline is somebody else's fact.
         snapshotted = snapshot_consistency.apply(dated.blocks, turn.envelopes, next_steps=dated.next_steps)
 
+        # -- 5i. next-step entailment (W8, C08) — last, over the blocks that survived --------
+        # `next_steps` was read by no rule: G2 and G3 run over blocks only. A step naming a date, a
+        # duration, an amount or a person the answer never established is dropped, and the drop is
+        # recorded the way G3 records one.
+        entailed = step_entailment.apply(snapshotted.blocks, turn.envelopes, next_steps=snapshotted.next_steps)
+        if entailed.dropped:
+            self._error(
+                turn,
+                "next_step_unentailed",
+                "; ".join(f"{claim!r} is in no block and no envelope" for _index, _step, claim in entailed.dropped),
+                component=step_entailment.STEP_NAME,
+            )
+
         answer = AnswerSchema(
             blocks=[AnswerBlock.model_validate(block) for block in snapshotted.blocks],
-            next_steps=snapshotted.next_steps,
+            next_steps=entailed.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
+        if turn.write_blocked:
+            # **The reader is told why, in the product's own voice** (W8, C02, C17). It goes first,
+            # because the answer below is about a request that was not filed.
+            answer = answer.model_copy(
+                update={
+                    "blocks": [
+                        AnswerBlock(type=NOTICE, text=turn.write_blocked, citations=[]),
+                        *answer.blocks,
+                    ]
+                }
+            )
         if turn.write_failed:
             # §9.4's graceful partial for the other way a turn falls short of what it was asked to
             # do: the action was authorised and did not happen. The note goes first, and states no
@@ -930,6 +1131,7 @@ class Orchestrator:
             "route.j2",
             persona=prompts.persona_block(employee_id=req.employee_id, actor_source=req.actor_source),
             question=req.message,
+            session_context=session.render(turn.history),
         )
         completion = await self.model().complete(
             [Message(role="system", content=system), Message(role="user", content=user)],
@@ -1016,6 +1218,13 @@ class Orchestrator:
                 result = await self._invoke(turn, call)
                 turn.tool_calls_made += 1
                 if result.confirmation_required:
+                    # **The card is coupled to the verdict** (W8, C02). Demo 2 for E1108: the
+                    # engine scored the request `non_compliant` on the balance — 0.25 days against
+                    # a 3-day request — and the product filed the ticket anyway, led with "Done —
+                    # Reference MOCK-HR-000011", then told him he lacks the accrual. A write the
+                    # deterministic layer refuses is not proposed, and the refusal is recorded.
+                    if self._refuse_write(turn, call, result):
+                        continue
                     self._propose(turn, result)
                     self._scan(turn, new_chunks)
                     return
@@ -1048,6 +1257,114 @@ class Orchestrator:
             if turn.reopened:
                 # The recovery path buys exactly **one** additional step (§9.2).
                 return
+
+    async def _settle_debts(self, turn: _Turn, *, cold_start: bool) -> ChatResponse | None:
+        """The two terminal debts of §9.1, settled before synthesis. A parked turn, or `None`.
+
+        **The data debt (W8, C10).** A workflow whose structured-data slots are still empty has not
+        read the record it is about. The live failures were a question about the reader's own
+        office declined outright and an answer calling a hybrid employee "fully remote".
+
+        **The action debt (W8, C09).** `intent == "action"`, a permitted write tool, and no gated
+        attempt. `_nudge` already reports this on the step the model stops calling tools; nine of
+        twelve recorded runs of `unsafe-001` reached synthesis another way and denied the
+        product's headline capability instead. One more act step with the reminder, and if the
+        model still will not propose it, the orchestrator proposes it — from the slots the turn
+        itself resolved, so the card is the turn's own state and not an invention.
+        """
+        if self._data_outstanding(turn) and "data_outstanding" not in turn.nudges:
+            turn.nudges.append("data_outstanding")
+            turn.messages.append(Message(role="user", content=DATA_OUTSTANDING))
+            turn.step_summaries.append(f"step {turn.steps_taken}: the reader's own record was still unread")
+            try:
+                await self._run_act(turn)
+            except McpUnavailable as exc:
+                return self._degraded(turn, str(exc), cold_start=cold_start)
+            if turn.pending is not None:
+                return self._park(turn, cold_start=cold_start)
+
+        if not self._action_outstanding(turn) or not any(name in self._permitted(turn) for name in WRITE_TOOLS):
+            return None
+        if "action_outstanding" not in turn.nudges:
+            turn.nudges.append("action_outstanding")
+            turn.messages.append(Message(role="user", content=ACTION_OUTSTANDING))
+            turn.step_summaries.append(f"step {turn.steps_taken}: the requested action was still unproposed")
+            try:
+                await self._run_act(turn)
+            except McpUnavailable as exc:
+                return self._degraded(turn, str(exc), cold_start=cold_start)
+            if turn.pending is not None:
+                return self._park(turn, cold_start=cold_start)
+        if not self._action_outstanding(turn):
+            return None
+
+        # Still nothing. The demo's headline capability does not depend on the model's mood.
+        turn.nudges.append("action_proposed_deterministically")
+        try:
+            await self._propose_deterministically(turn)
+        except McpUnavailable as exc:
+            return self._degraded(turn, str(exc), cold_start=cold_start)
+        return self._park(turn, cold_start=cold_start) if turn.pending is not None else None
+
+    def _data_outstanding(self, turn: _Turn) -> bool:
+        """A workflow turn that has read no structured record it requires, and could still read one."""
+        workflow = turn.workflow
+        if workflow is None or turn.pending is not None:
+            return False
+        permitted = self._permitted(turn)
+        reachable = [name for name in workflow.requires_tool_results if name in permitted]
+        missing = [name for name in workflow.missing_tool_results(turn.state) if name in permitted]
+        # Every reachable slot still empty: the turn has read nothing at all about this person.
+        # A turn that read some of them has established a record and is not this failure.
+        return bool(missing) and len(missing) == len(reachable)
+
+    async def _propose_deterministically(self, turn: _Turn) -> None:
+        """Issue the write the turn was asked for, from the slots the turn itself resolved (C09).
+
+        No token: the call comes back `CONFIRMATION_REQUIRED` exactly as the model's would, and
+        `_propose` turns it into the same card. The arguments are templated from the compliance
+        call's own parameters, so the card cannot describe a request the turn never scored.
+        """
+        arguments = self._write_arguments(turn)
+        if arguments is None:
+            return
+        result = await self._call(turn, WRITE_TOOLS[0], arguments)
+        turn.tool_calls_made += 1
+        if result.confirmation_required:
+            self._propose(turn, result)
+            turn.step_summaries.append("the assistant proposed the requested write from the turn's own slots")
+
+    def _write_arguments(self, turn: _Turn) -> dict[str, Any] | None:
+        """`create_mock_hr_ticket` arguments built from the turn's resolved slots, or `None`.
+
+        `None` when the turn never resolved enough to describe the request: a card whose summary
+        was invented would be worse than no card, because the reader confirms what it says.
+        """
+        employee_id = turn.request.employee_id
+        if not employee_id or not EMPLOYEE_ID.match(employee_id):
+            return None
+        body = turn.state.latest(COMPLIANCE_TOOL) or {}
+        computed = dict(body.get("computed") or {})
+        scenario = str(body.get("scenario") or "")
+        queue = DETERMINISTIC_QUEUES.get(scenario)
+        if queue is None:
+            return None
+        span = " to ".join(
+            date_consistency.human_date(date.fromisoformat(value))
+            for key in ("start_date", "span_end")
+            if isinstance(value := computed.get(key), str) and ISO_DATE.fullmatch(value)
+        )
+        subject = DETERMINISTIC_SUBJECTS[scenario]
+        summary = f"{subject}: {span}" if span else subject
+        rows = [f"- {row['text']} — {row['reason']}" for row in body.get("requirements") or [] if row.get("text")]
+        details = "\n".join(
+            [
+                f"Requested by {employee_id} through the HR Copilot.",
+                f"Verdict: {body.get('verdict') or 'not evaluated'} (rules {body.get('rules_version') or 'n/a'}).",
+                *rows,
+            ]
+        )
+        return {"employee_id": employee_id, "queue": queue, "summary": summary, "details": details}
 
     def _permitted(self, turn: _Turn) -> list[str]:
         """The names this act step may call: §9.2's gate, then §13.9's per-turn ablation filter.
@@ -1132,6 +1449,9 @@ class Orchestrator:
     def _action_outstanding(self, turn: _Turn) -> bool:
         """The user asked for something to be **created** and nothing has been proposed yet.
 
+        A write the verdict forbade is **not** outstanding (W8, C02): it was deliberately not made,
+        the answer says so, and nudging for it would ask the model to file what the engine refused.
+
         §9.3's `pto_request` predicate is satisfied by a cited answer alone — the ticket is its one
         *optional, gated* slot — so a turn whose router intent is `action` would otherwise close one
         step before the confirmation gate that demo task 2 exists to show (§18.2). A completion
@@ -1142,6 +1462,7 @@ class Orchestrator:
             turn.decision is not None
             and turn.decision.intent == "action"
             and turn.pending is None
+            and turn.write_blocked is None
             and not any(name in turn.state.results for name in WRITE_TOOLS)
         )
 
@@ -1575,6 +1896,59 @@ class Orchestrator:
             )
         )
 
+    def _refuse_write(self, turn: _Turn, call: ToolCall, result: ToolResult) -> bool:
+        """Refuse a proposed write the turn's own verdict forbids. Did it refuse? (W8, C02)
+
+        `non_compliant` **is** the "blocking requirement unmet" condition: §8.4 defines it as an
+        evaluable `blocking` requirement that is unmet, so the verdict alone is the test and no
+        second reading of the requirement rows can disagree with it.
+
+        The model is told, in the tool channel, that the call was refused and why — it is the only
+        way the answer can be written around the refusal — and the reason is kept on the turn so
+        the answer opens with it as a `notice`.
+        """
+        body = turn.state.latest(COMPLIANCE_TOOL)
+        if not body or body.get("verdict") != "non_compliant":
+            return False
+        envelope = _ToolEnvelope(name=COMPLIANCE_TOOL, result_json=json.dumps(body, ensure_ascii=False))
+        failing = next((row for row in compliance_restatement.rows([envelope]) if row.status == "unmet"), None)
+        reason = compliance_restatement.reader_sentence(failing) if failing is not None else ""
+        contact = str(body.get("escalate_to") or "")
+        turn.write_blocked = " ".join(
+            part
+            for part in (
+                "I have not opened the request:",
+                reason or "the policy check came back non-compliant.",
+                f"Contact {contact} to discuss the options." if contact else "",
+            )
+            if part
+        )
+        self._error(
+            turn,
+            "write_blocked",
+            f"{call.name} was not proposed: the {body.get('scenario')} verdict is non_compliant",
+            component="agent_loop",
+        )
+        turn.messages.append(
+            Message(
+                role="tool",
+                tool_call_id=call.id,
+                name=call.name,
+                content=json.dumps(
+                    {
+                        "status": "not_permitted",
+                        "code": "VERDICT_NON_COMPLIANT",
+                        "hint": (
+                            "The compliance verdict for this request is non_compliant, so it was not "
+                            "proposed. Explain why and offer what the policy allows."
+                        ),
+                    }
+                ),
+            )
+        )
+        turn.step_summaries.append(f"step {turn.steps_taken}: {call.name} refused — the verdict is non_compliant")
+        return True
+
     def _propose(self, turn: _Turn, result: ToolResult) -> None:
         """The pending `confirmation` span — no token, and nothing written (§8.6 step 1)."""
         body = result.body
@@ -1606,16 +1980,27 @@ class Orchestrator:
     # ----------------------------------------------------------------------------------
 
     def _clarification_text(self, turn: _Turn) -> str:
-        """One question, in the workflow's own words (UX W2, jargon-and-exposure-4).
+        """One question, about the slot that is actually empty (UX W2, jargon-and-exposure-4; W8, C18).
 
         It used to read the router's `rationale_summary` aloud and then recite
         `WorkflowSpec.required_slots` — *"I need: employee profile, PTO balance, requested days,
         policy evidence on notice and approval, a compliance verdict, (optional, gated) a created
         ticket."* — and close by asking for an employee id the app already knows. Those slots are
         the predicate's documentation; they belong to the dashboard, and they are still there.
+
+        UX W2 replaced that with one question per **workflow**, which asks the wrong question as
+        soon as the workflow is right and a different slot is missing: the admin turn of
+        2026-09-15 was asked *"which dates are you thinking of?"* by a message that had given the
+        dates, when what `admin` lacks is an employee record. The key is the first unfilled slot,
+        and the session's own history counts as filled (W8, C12).
         """
         workflow = turn.workflow
-        return CLARIFY_QUESTIONS.get(workflow.name if workflow is not None else "", CLARIFY_FALLBACK)
+        turn.clarify_slot = unfilled_slot(
+            workflow.name if workflow is not None else None,
+            known=session.known(turn.history),
+            has_record=bool(EMPLOYEE_ID.match(turn.request.employee_id or "")),
+        )
+        return CLARIFY_QUESTIONS.get(turn.clarify_slot or "", CLARIFY_FALLBACK)
 
     def _clarify(self, turn: _Turn, question: str, *, cold_start: bool) -> ChatResponse:
         """`outcome="clarify"`, and the question names the missing slot (§9.6)."""
@@ -1624,14 +2009,13 @@ class Orchestrator:
             next_steps=["Reply with the missing detail and I will pick this up."],
             rationale_summary="Clarification requested: a required detail is missing.",
         )
-        workflow = turn.workflow
         return self._finish(
             turn,
             answer,
             outcome="clarify",
             stop_reason="clarify",
             cold_start=cold_start,
-            quick_replies=clarify_chips(workflow.name if workflow is not None else None),
+            quick_replies=clarify_chips(turn.clarify_slot),
         )
 
     def _refuse(self, turn: _Turn, reason: str, *, cold_start: bool) -> ChatResponse:
@@ -2096,6 +2480,8 @@ __all__ = [
     "ConfirmationCard",
     "EvidenceChunk",
     "Orchestrator",
+    "clarify_chips",
+    "clarify_slot_of",
     "Timings",
     "ToolCallRepair",
     "Usage",

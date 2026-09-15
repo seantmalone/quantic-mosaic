@@ -71,6 +71,7 @@ SPEC = WorkflowSpec(
         "a compliance verdict",
     ),
     policy_docs=POLICY_DOCS,
+    min_distinct_docs=MIN_DISTINCT_DOCS,
     is_complete=is_complete,
     requires_tool_results=("lookup_employee_profile", "check_policy_compliance"),
     slot_descriptions=SLOT_DESCRIPTIONS,

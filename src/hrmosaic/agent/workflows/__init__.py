@@ -101,6 +101,9 @@ class WorkflowSpec:
     #: The documents the workflow's evidence is expected to span, for the same reason.
     policy_docs: tuple[str, ...]
     is_complete: Callable[[LoopState], bool]
+    #: How many **distinct** documents a served answer on this workflow is expected to cite
+    #: (W8, C26). `agent/breadth.py` measures the shortfall against it after the repair round.
+    min_distinct_docs: int = 2
     #: The structured-data tools whose results the predicate requires (§9.3, §13.9).
     requires_tool_results: tuple[str, ...] = ()
     #: What each of those results **is**, in workflow words: the debt the slot leaves while it is

@@ -68,6 +68,7 @@ from hrmosaic.agent.orchestrator import (
     Timings,
     Usage,
     clarify_chips,
+    clarify_slot_of,
     parse_next_steps,
     project,
     render_answer,
@@ -1518,6 +1519,19 @@ def _owns(session_row: dict[str, Any] | None, identity: Identity) -> bool:
     return identity.is_admin or session_row.get("employee_id") == identity.actor
 
 
+def _replayed_clarify_slot(row: Mapping[str, Any]) -> str | None:
+    """Which slot a stored clarifying question asked about (W8, C18).
+
+    The question the reader was shown is the first block of the stored answer, and the questions
+    are a closed set, so the slot is recoverable exactly. Keying the replay on `workflow` would
+    offer the wrong two chips on the very turn C18 exists for: an `admin` PTO clarification is
+    asking for an identity, not for dates.
+    """
+    blocks = json.loads(row["answer_blocks_json"] or "[]")
+    text = str(blocks[0].get("text") or "") if blocks else ""
+    return clarify_slot_of(text)
+
+
 def _replayed_next_steps(row: Mapping[str, Any]) -> list[str]:
     """`turns.next_steps_json`, or — for a row older than migration 002 — the joined answer.
 
@@ -1575,10 +1589,11 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
             # section `render_answer()` closes the stored answer with.
             next_steps=_replayed_next_steps(row),
             # `turns` stores the blocks and the citations, not the chrome built around them. The
-            # quick replies are not model output — they are `CLARIFY_CHIPS` keyed by the workflow,
-            # which the row does carry — so a replayed clarification still offers the same two ways
-            # to answer it that the live one did (chat-production-ux-7).
-            quick_replies=list(clarify_chips(row["workflow"])) if outcome == "clarify" else [],
+            # quick replies are not model output — they are `CLARIFY_CHIPS` keyed by the slot the
+            # question asked about, which `clarify_slot_of` recovers from the stored question text
+            # — so a replayed clarification still offers the same two ways to answer it that the
+            # live one did (chat-production-ux-7; W8, C18).
+            quick_replies=list(clarify_chips(_replayed_clarify_slot(row))) if outcome == "clarify" else [],
             answer_blocks=[AnswerBlock.model_validate(item) for item in json.loads(row["answer_blocks_json"] or "[]")],
             citations=citations,
             trace=project(turn_id, session_id=session_id, store=store),
