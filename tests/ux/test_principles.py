@@ -14,7 +14,9 @@ defects were found:
   sticky composer, the newest message in view, and no rail of technical output beside it;
 * **P12** (UX W2) keyboard and screen-reader parity — Enter sends, focus returns, one live region,
   one plain-language announcement per turn, distinct names on every disclosure, type in `rem`;
-* **P2 / P13** (UX W2) nothing technical survives onto the painted page.
+* **P2 / P13** (UX W2) nothing technical survives onto the painted page;
+* **P8** (UX W3) the demo controls are quarantined and labelled — one panel, and the conversation
+  keeps its room on a phone.
 
 Every test is marked `ux` and deselected from `pytest -q` (see `pyproject.toml`); CI runs them in a
 job of its own that installs chromium.
@@ -280,6 +282,149 @@ def test_p12_no_two_disclosures_on_a_turn_share_an_accessible_name(fresh_page, f
 
 
 # -- P2 and P13, on the painted page ----------------------------------------------------
+
+
+# -- P8, on the painted page ------------------------------------------------------------
+
+
+DEMO_CONTROL_SELECTORS = ("#actor-select", ".demo-button", 'a[href*="#turn-"]')
+
+
+def _outside_the_panel(page, selector: str) -> int:
+    return page.evaluate(
+        "selector => Array.from(document.querySelectorAll(selector))"
+        ".filter(el => !el.closest('section.demo-panel')).length",
+        selector,
+    )
+
+
+def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page, fresh_server):
+    """The contract suite asserts the bytes of the page at rest; this asserts the live DOM, after a
+    turn, when the deep link and the summary have been written into the panel by script."""
+    fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
+    _ask(fresh_page, DEMO_1)
+
+    panel = fresh_page.query_selector("section.demo-panel")
+    assert panel is not None, "one visually distinct section, and it is on the page"
+    heading = fresh_page.eval_on_selector("section.demo-panel h2", "e => e.textContent")
+    assert "Demo" in heading, f"the section says what it is: {heading!r}"
+
+    for selector in DEMO_CONTROL_SELECTORS:
+        loose = _outside_the_panel(fresh_page, selector)
+        assert loose == 0, f"{loose} `{selector}` outside the demo panel"
+
+    link = fresh_page.eval_on_selector(
+        "#demo-dashboard-link", "e => ({href: e.getAttribute('href'), hidden: e.hidden})"
+    )
+    assert not link["hidden"] and re.match(r"^/dashboard/sessions/[0-9a-f]+#turn-\d+$", link["href"] or ""), link
+    produced = fresh_page.eval_on_selector("#demo-produced", "e => e.textContent.trim()")
+    assert re.fullmatch(r"Used \d+ tools?, read \d+ policy sections? and passed \d+ safety checks?\.", produced), (
+        produced
+    )
+
+
+def test_p8_the_panel_is_collapsed_on_a_phone_so_the_conversation_keeps_its_room(browser, ux_server):
+    """W2's review: `body.chat` has a definite height, so the panel spends the transcript's budget."""
+    measurements = {}
+    for label, width, height in (("desktop", 1440, 900), ("phone", 390, 844)):
+        context = browser.new_context(viewport={"width": width, "height": height})
+        tab = context.new_page()
+        try:
+            tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+            tab.wait_for_timeout(250)
+            measurements[label] = {
+                "open": tab.eval_on_selector("#demo-details", "e => e.open"),
+                "panel": tab.eval_on_selector("section.demo-panel", "e => e.getBoundingClientRect().height"),
+                "transcript": tab.eval_on_selector("#transcript", "e => e.getBoundingClientRect().height"),
+                "sideways": _document_scrolls_sideways(tab),
+                "heading": tab.eval_on_selector("section.demo-panel h2", "e => e.textContent"),
+            }
+        finally:
+            context.close()
+
+    phone, desktop = measurements["phone"], measurements["desktop"]
+    assert desktop["open"] is True, "there is room for it on a desktop, so it is open"
+    assert phone["open"] is False, "and it is collapsed on a phone"
+    assert "Demo" in phone["heading"], "with the same heading, which is the summary"
+    assert phone["panel"] < desktop["panel"], f"the collapsed panel is not smaller: {measurements}"
+    assert phone["transcript"] > 844 / 2, f"the conversation keeps its room: {measurements}"
+    assert not phone["sideways"] and not desktop["sideways"]
+
+
+def test_p8_a_demo_prompt_fills_the_composer_and_sends_nothing(page, ux_server):
+    """navigation-and-ia-19: one click used to submit someone else's question into the reader's
+    conversation. It fills the box; the reader still presses Send."""
+    page.goto(f"{ux_server}/", wait_until="networkidle")
+    before = page.eval_on_selector_all("#messages .turn", "els => els.length")
+
+    page.click(".demo-button")
+    page.wait_for_timeout(400)
+
+    prompt = page.eval_on_selector(".demo-button", "e => e.dataset.prompt")
+    assert page.eval_on_selector("#message", "e => e.value") == prompt
+    assert page.evaluate("() => document.activeElement && document.activeElement.id") == "message"
+    assert page.eval_on_selector_all("#messages .turn", "els => els.length") == before, "nothing was sent"
+
+
+def test_p8_the_deep_link_opens_the_dashboard_at_this_turn(fresh_page, fresh_server):
+    """demo-and-grader-controls-4: the grader's route from a conversation to its record."""
+    fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
+    _ask(fresh_page, DEMO_1)
+
+    href = fresh_page.eval_on_selector("#demo-dashboard-link", "e => e.getAttribute('href')")
+    response = fresh_page.goto(fresh_server + href, wait_until="domcontentloaded")
+    assert response is not None and response.status == 200, href
+    anchor = href.split("#")[1]
+    assert fresh_page.query_selector(f"#{anchor}") is not None, f"{href} lands on nothing"
+
+
+# -- P12, the outcome sentences ----------------------------------------------------------
+
+
+#: One recording per outcome the live region has a sentence for, and the question that reaches it.
+ANNOUNCEMENT_CASES = (
+    ("demo_task_1.json", DEMO_1, "Answer ready."),
+    (
+        "demo_task_2.json",
+        "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
+        "— and can you open the request for me?",
+        "Waiting for your confirmation.",
+    ),
+    (
+        "out_of_corpus_tuition.json",
+        "What is Mosaic's tuition reimbursement cap for a part-time master's degree, and how many "
+        "years of service do I need to qualify?",
+        "I can't answer that one — see below.",
+    ),
+    ("fault_ambiguous.json", "Can I take some time off soon?", "Could you clarify?"),
+)
+
+
+@pytest.mark.parametrize(
+    "scripted_server,question,expected",
+    ANNOUNCEMENT_CASES,
+    indirect=["scripted_server"],
+    ids=[script.removesuffix(".json") for script, _, _ in ANNOUNCEMENT_CASES],
+)
+def test_p12_the_live_region_announces_the_outcome(scripted_page, scripted_server, question, expected):
+    """Every outcome used to be announced as *"Answer ready."*, three of five of them falsely."""
+    scripted_page.goto(f"{scripted_server}/", wait_until="networkidle")
+    _ask(scripted_page, question)
+
+    assert scripted_page.eval_on_selector("#turn-status", "e => e.textContent") == expected
+
+
+@pytest.mark.parametrize("scripted_server", ["fault_ambiguous.json"], indirect=True)
+def test_p12_a_failed_turn_is_announced_as_one(scripted_page, scripted_server):
+    """`fault_ambiguous` holds one scripted reply; the second question exhausts it (§12.3)."""
+    scripted_page.goto(f"{scripted_server}/", wait_until="networkidle")
+    _ask(scripted_page, "Can I take some time off soon?")
+    _ask(scripted_page, "And what about carrying unused days into next year?")
+
+    assert scripted_page.eval_on_selector("#messages .turn:last-child", "e => e.dataset.outcome") == "error"
+    assert scripted_page.eval_on_selector("#turn-status", "e => e.textContent") == (
+        "Something went wrong — you can retry."
+    )
 
 
 def test_p2_and_p13_nothing_technical_survives_onto_the_painted_page(fresh_page, fresh_server):

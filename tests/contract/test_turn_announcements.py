@@ -57,6 +57,10 @@ async def test_the_page_reads_the_sentences_from_the_server_rather_than_keeping_
     assert "return ANNOUNCEMENTS[outcome] || ANNOUNCEMENT_FALLBACK;" in html
     assert 'var ANSWER_READY = "Answer ready.";' not in html, "the one-sentence-for-every-outcome constant is gone"
 
+    # And the swapped-in turn announces itself too: a short turn can finish before the page's
+    # `EventSource` has connected, and the region then said nothing at all.
+    assert "paintStatus(announcementFor(lastTurn.dataset.outcome));" in html
+
 
 def test_the_completed_frame_carries_the_outcome_the_announcement_is_chosen_by(monkeypatch):
     """A guard on the one wire the page's choice depends on: `turn_completed` states the outcome."""

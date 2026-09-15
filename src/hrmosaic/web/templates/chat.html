@@ -368,8 +368,15 @@
 
     document.body.addEventListener("htmx:afterSwap", function (event) {
       var turns = document.querySelectorAll("#messages .turn");
-      if (turns.length) { sessionField.value = turns[turns.length - 1].dataset.sessionId || ""; }
-      describeLastTurn(turns[turns.length - 1]);
+      var lastTurn = turns[turns.length - 1];
+      if (lastTurn) { sessionField.value = lastTurn.dataset.sessionId || ""; }
+      describeLastTurn(lastTurn);
+      // The announcement is painted from the turn that just landed, not only from the SSE frame
+      // that preceded it: a short turn (a clarification, a refusal, a failure) can finish before
+      // the page's `EventSource` has connected, and the region then said nothing at all. Both
+      // paths paint the same sentence and `paintStatus` skips a write that changes nothing, so a
+      // turn is still announced exactly once.
+      if (lastTurn) { paintStatus(announcementFor(lastTurn.dataset.outcome)); }
       if (event.detail.requestConfig && event.detail.requestConfig.path === "/chat") { messageBox.value = ""; }
       autogrow();
       if (emptyState) { emptyState.hidden = true; }
@@ -419,7 +426,10 @@
       }).catch(function () { /* a denied clipboard is not an error worth a sentence */ });
     });
 
-    stickToBottom(true);
+    // At rest the greeting is the TOP of the transcript box, not its bottom: a conversation with
+    // no turns in it has nothing newest to follow, and sticking it to the bottom hides
+    // "Hi … — ask me anything about HR" above the starters (chat-production-ux-1).
+    if (document.querySelectorAll("#messages .turn").length) { stickToBottom(true); } else { transcript.scrollTop = 0; }
 
     // The cold-start notice: a `/health` preflight (§11.5).
     //

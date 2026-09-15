@@ -71,7 +71,7 @@ async def test_the_panel_offers_a_way_out_of_the_demo_when_there_is_a_key_to_cle
 
     panel = _panel(gated)
     assert "Sign out of the demo" in panel
-    assert "This clears the shared access key for this whole browser" in panel
+    assert "This clears the shared access key for the whole browser." in panel
     assert "Sign out of the demo" not in _outside_the_panel(gated), "the masthead's own control is not this one"
     assert "Sign out of the demo" not in open_app, "nothing to sign out of when the gate is off"
 
@@ -124,10 +124,7 @@ async def test_a_demo_prompt_is_the_question_it_asks_and_only_fills_the_box(web)
         html = (await client.get("/")).text
 
     panel = _panel(html)
-    labels = [
-        label.strip()
-        for label in re.findall(r'class="button demo-button"[^>]*>(.*?)</button>', panel, re.S)
-    ]
+    labels = [label.strip() for label in re.findall(r'class="button demo-button"[^>]*>(.*?)</button>', panel, re.S)]
     assert labels == [escape(prompt) for prompt in api.DEMO_PROMPTS.values()], (
         "each button is labelled with the question it asks, in §18's own words"
     )

@@ -132,6 +132,18 @@ def fresh_server(tmp_path_factory) -> Iterator[str]:
         yield base_url
 
 
+@pytest.fixture
+def scripted_server(tmp_path_factory, request) -> Iterator[str]:
+    """A server of its own running the stub script this test was parametrized with.
+
+    `pytest.mark.parametrize(..., indirect=["scripted_server"])` is how a test asks for a turn of a
+    particular *shape* — a refusal, a clarification, a confirmation card — because each shape needs
+    its own recording and `StubAdapter` spends a recording once per process.
+    """
+    with _serve(tmp_path_factory.mktemp("ux-script"), request.param) as base_url:
+        yield base_url
+
+
 @pytest.fixture(scope="session")
 def browser() -> Iterator[object]:
     sync_api = pytest.importorskip(
@@ -166,6 +178,16 @@ def page(browser, ux_server):
 def fresh_page(browser, fresh_server):
     """The same, on a server whose stub script still has a whole turn in it."""
     context, tab = _signed_in(browser, fresh_server)
+    try:
+        yield tab
+    finally:
+        context.close()
+
+
+@pytest.fixture
+def scripted_page(browser, scripted_server):
+    """A signed-in page on `scripted_server` — one unspent recording, chosen by the test."""
+    context, tab = _signed_in(browser, scripted_server)
     try:
         yield tab
     finally:

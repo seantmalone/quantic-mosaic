@@ -14,11 +14,11 @@
   `tests/contract/test_demo_controls_are_quarantined.py` is **P8**: `#actor-select`, `.demo-button`
   and any `/dashboard/…#turn-` link exist inside `section.demo-panel` and inside nothing else.
 
-  **Why a `<details>`.** `body.chat` has a definite height (P11: the transcript scrolls, the
-  document does not grow), so this panel and the composer take their room out of the transcript's.
-  At 390×844 an expanded panel leaves the conversation about 430px. The page script collapses it
-  below 40rem and opens it above, and the markup ships `open` so a reader with no JavaScript keeps
-  exactly what W2 shipped.
+  **Why a `<details>`, and why two columns.** `body.chat` has a definite height (P11: the transcript
+  scrolls, the document does not grow), so this panel and the composer take their room out of the
+  transcript's. The groups flow into two balanced columns on a wide screen, and the page script
+  collapses the whole thing below 40rem and opens it above. The markup ships `open`, so a reader
+  with no JavaScript keeps exactly what W2 shipped.
 
   **No nested `<section>`.** The P2/P13 denylists cut this panel out of the rendered page with
   `<section class="demo-panel">.*?</section>` before judging the product's own words — a grader
@@ -34,60 +34,59 @@
     <p class="demo-note">These controls exist for evaluation. A real user of this assistant never
       sees them.</p>
 
-    {#- Moved out of the masthead at W1 and given its real home here. The id and the name are
-        unchanged: `POST /session/actor` and the contract tests both key on them. -#}
-    <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select"
-          hx-on::after-request="window.location.reload()">
-      <label for="actor-select">Act as</label>
-      <select id="actor-select" name="actor" aria-label="Act as">
-        {% for employee in employees %}
-        <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
-          {{ employee.employee_id }} — {{ employee.name }}, {{ employee.title }}
-        </option>
-        {% endfor %}
-        <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
-      </select>
-    </form>
-
-    <div class="demo-group">
-      <h3>Try a demo prompt</h3>
-      <div class="demo-actions">
-        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
-          {{ demo_prompts.demo_1 }}
-        </button>
-        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
-          {{ demo_prompts.demo_2 }}
-        </button>
+    <div class="demo-body">
+      {#- Moved out of the masthead at W1 and given its real home here. The id and the name are
+          unchanged: `POST /session/actor` and the contract tests both key on them. -#}
+      <div class="demo-group">
+        <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select"
+              hx-on::after-request="window.location.reload()">
+          <label for="actor-select">Act as</label>
+          <select id="actor-select" name="actor" aria-label="Act as">
+            {% for employee in employees %}
+            <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
+              {{ employee.employee_id }} — {{ employee.name }}, {{ employee.title }}
+            </option>
+            {% endfor %}
+            <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
+          </select>
+        </form>
       </div>
-      <p class="demo-hint">Each one fills the question box; you still choose to send it.</p>
-    </div>
 
-    {% set last = transcript[-1] if transcript else none %}
-    <div class="demo-group">
-      <h3>This conversation</h3>
-      <p class="demo-hint" id="demo-no-turn"{% if last %} hidden{% endif %}>Ask something first — the
-        record of the conversation opens from here.</p>
-      <p class="demo-produced" id="demo-produced">{% if last %}{{ last.produced }}{% endif %}</p>
-      <p><a class="demo-link" id="demo-dashboard-link"
-            {%- if last %} href="{{ last.turn.dashboard_url }}"{% else %} hidden{% endif %}>Open this
-        conversation in the dashboard</a></p>
-    </div>
+      <div class="demo-group">
+        <h3>Try a demo prompt — each one fills the question box above</h3>
+        <div class="demo-actions">
+          <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
+            {{ demo_prompts.demo_1 }}
+          </button>
+          <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
+            {{ demo_prompts.demo_2 }}
+          </button>
+        </div>
+      </div>
 
-    <div class="demo-group">
-      <h3>Demo environment</h3>
-      <dl class="demo-env">
-        <div><dt>Model provider</dt><dd>{{ demo_environment.provider }}</dd></div>
-        <div><dt>Employee data snapshot</dt><dd>{{ demo_environment.snapshot }}</dd></div>
-      </dl>
-      <p class="demo-hint">{{ demo_environment.writes }}</p>
-    </div>
+      {% set last = transcript[-1] if transcript else none %}
+      <div class="demo-group">
+        <h3>This conversation</h3>
+        <p class="demo-hint" id="demo-no-turn"{% if last %} hidden{% endif %}>Ask something first — the
+          record of the conversation opens from here.</p>
+        <p class="demo-produced" id="demo-produced">{% if last %}{{ last.produced }}{% endif %}</p>
+        <p><a class="demo-link" id="demo-dashboard-link"
+              {%- if last %} href="{{ last.turn.dashboard_url }}"{% else %} hidden{% endif %}>Open this
+          conversation in the dashboard</a></p>
+      </div>
 
-    {% if gate_on %}
-    <form class="demo-group demo-signout" method="post" action="/access/logout">
-      <button class="button" type="submit">Sign out of the demo</button>
-      <p class="demo-hint">This clears the shared access key for this whole browser, so you will
-        need the link you were given again.</p>
-    </form>
-    {% endif %}
+      <div class="demo-group">
+        <h3>Demo environment</h3>
+        <p class="demo-env">Model provider: {{ demo_environment.provider }} ·
+          Employee data snapshot: {{ demo_environment.snapshot }} · {{ demo_environment.writes }}</p>
+      </div>
+
+      {% if gate_on %}
+      <form class="demo-group demo-signout" method="post" action="/access/logout">
+        <button class="button" type="submit">Sign out of the demo</button>
+        <p class="demo-hint">This clears the shared access key for the whole browser.</p>
+      </form>
+      {% endif %}
+    </div>
   </details>
 </section>
