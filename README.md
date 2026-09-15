@@ -53,8 +53,8 @@ the scripted stub provider, so no credential is involved. Eleven of those are th
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
 and CI runs them in a job of their own that never blocks `test` or `deploy`. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
-`coverage report --fail-under=90`. Measured on 2026-09-11: **95% of statements and 87% of branches
-over 7,362 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+`coverage report --fail-under=90`. Measured on 2026-09-14: **95% of statements and 87% of branches
+over 7,423 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
