@@ -97,13 +97,19 @@ def test_the_span_records_the_observed_scores(writer, spans):
 
 
 def test_the_refusal_names_what_the_corpus_covers_from_the_real_index():
-    answer = g1.refusal(g1.OUT_OF_SCOPE, tool_names=("search_policy_documents",))
+    answer = g1.refusal(g1.OUT_OF_SCOPE)
     titles = [document.doc_title for document in corpusread.list_documents()]
 
     assert [block.type for block in answer.blocks] == ["recommendation"], "a refusal cites nothing"
     assert answer.blocks[0].citations == []
     covered = " ".join(answer.next_steps)
     assert titles and all(title in covered for title in titles)
+    # The reader is told the boundary; the clause that measured it stays on the span (UX W2,
+    # numbers-precision-overflow-3, jargon-and-exposure-3).
+    assert answer.blocks[0].text == g1.USER_REFUSAL
+    assert g1.OUT_OF_SCOPE not in answer.blocks[0].text
+    assert g1.OUT_OF_SCOPE in answer.rationale_summary
+    assert "tools" not in answer.blocks[0].text, "a reader counting the assistant's tools is a grader"
 
 
 async def test_an_out_of_scope_turn_makes_no_tool_call(run_agent, spans):

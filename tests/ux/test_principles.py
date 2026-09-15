@@ -1,15 +1,20 @@
 """The plan's principles, asserted on the **rendered** page (`pytest -m ux`).
 
 `docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` §1 states each principle with a
-mechanical detection rule, and these are the first five of them. The contract suite already asserts
-the server's bytes; this suite asserts what a browser actually paints, at the three viewports the
-audit measured, because that is where the defects were found:
+mechanical detection rule. The contract suite already asserts the server's bytes; this suite asserts
+what a browser actually paints, at the three viewports the audit measured, because that is where the
+defects were found:
 
 * **P3** one global nav on every page — identical markup, identical position;
 * **P4** one gate, not two — the role gates writes, never reads and never navigation;
 * **P5** no link is offered to a persona that cannot follow it;
 * **P6** no dead-end error;
 * **P7** nothing overflows — the document never scrolls sideways.
+* **P11** (UX W2) the primary surface owns the page — one centred column at a readable measure, a
+  sticky composer, the newest message in view, and no rail of technical output beside it;
+* **P12** (UX W2) keyboard and screen-reader parity — Enter sends, focus returns, one live region,
+  one plain-language announcement per turn, distinct names on every disclosure, type in `rem`;
+* **P2 / P13** (UX W2) nothing technical survives onto the painted page.
 
 Every test is marked `ux` and deselected from `pytest -q` (see `pyproject.toml`); CI runs them in a
 job of its own that installs chromium.
@@ -179,3 +184,116 @@ def test_the_access_token_opens_the_suite_at_all(browser, ux_server):
         assert allowed is not None and allowed.status == 200
     finally:
         context.close()
+
+
+# -- P11 --------------------------------------------------------------------------
+
+
+def _ask(page, question: str) -> None:
+    before = page.eval_on_selector_all("#messages .turn", "els => els.length")
+    page.fill("#message", question)
+    page.click("#send-button")
+    page.wait_for_function("n => document.querySelectorAll('#messages .turn').length > n", arg=before, timeout=180_000)
+    page.wait_for_timeout(800)
+
+
+DEMO_1 = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
+
+
+def test_p11_the_conversation_owns_the_page_at_a_readable_measure(page, ux_server):
+    """navigation-and-ia-18 / chat-production-ux-16: 836 of 1440px, at 99–107 characters."""
+    page.goto(f"{ux_server}/", wait_until="networkidle")
+
+    assert page.query_selector("aside.rail") is None, "the technical rail is not co-resident with the product"
+    box = page.eval_on_selector(".conversation", "e => e.getBoundingClientRect().toJSON()")
+    assert 37 * 16 <= box["width"] <= 40 * 16 + 1, f"the measure is {box['width']}px"
+    centre = box["left"] + box["width"] / 2
+    assert abs(centre - 1440 / 2) <= 2, f"the column is not centred: {box}"
+
+
+def test_p11_the_composer_stays_reachable_and_the_newest_message_stays_in_view(fresh_page, fresh_server):
+    """chat-production-ux-2: after one answer the document was 1406px against a 900px viewport."""
+    fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
+    assert fresh_page.eval_on_selector("#chat-form", "e => getComputedStyle(e).position") == "sticky"
+
+    for question in (DEMO_1, "And what about the notice period?", "And carrying unused days over?"):
+        _ask(fresh_page, question)
+
+    assert fresh_page.eval_on_selector_all("#messages .turn", "els => els.length") == 3
+    assert not _document_scrolls_sideways(fresh_page)
+    grew = fresh_page.evaluate("() => document.documentElement.scrollHeight > window.innerHeight + 1")
+    assert not grew, "the page is an app, not a growing document: the transcript scrolls, not the page"
+
+    send = fresh_page.eval_on_selector("#send-button", "e => e.getBoundingClientRect().toJSON()")
+    assert send["top"] >= 0 and send["bottom"] <= 900 + 1, f"the send control is off screen: {send}"
+
+    stuck = fresh_page.eval_on_selector("#transcript", "e => e.scrollHeight - e.scrollTop - e.clientHeight <= 48")
+    assert stuck, "the newest message is not in view"
+
+
+# -- P12 --------------------------------------------------------------------------------
+
+
+def test_p12_enter_sends_and_focus_comes_back_to_the_composer(page, ux_server):
+    """chat-production-ux-3: Enter inserted a newline and there was no hint that it did."""
+    page.goto(f"{ux_server}/", wait_until="networkidle")
+    before = page.eval_on_selector_all("#messages .turn", "els => els.length")
+    page.fill("#message", DEMO_1)
+    page.press("#message", "Enter")
+    page.wait_for_function("n => document.querySelectorAll('#messages .turn').length > n", arg=before, timeout=180_000)
+    page.wait_for_timeout(500)
+
+    assert page.evaluate("() => document.activeElement && document.activeElement.id") == "message"
+    assert page.eval_on_selector("#message", "e => e.value") == "", "the composer is cleared for the next question"
+
+
+def test_p12_the_page_has_exactly_one_live_region(page, ux_server):
+    """accessibility-and-responsive-3: the rail was an `aria-live` firehose, 46 additions a turn."""
+    page.goto(f"{ux_server}/", wait_until="networkidle")
+    regions = page.eval_on_selector_all(
+        "[role=status], [role=alert], [aria-live]", "els => els.map(e => e.id || e.className)"
+    )
+    assert regions == ["turn-status"], f"one live region, not a rail of them: {regions}"
+
+
+def test_p12_the_finished_answer_is_announced_once_in_plain_language(fresh_page, fresh_server):
+    """…and the rail never announced the answer at all — only the steps that produced it."""
+    fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
+    _ask(fresh_page, DEMO_1)
+
+    assert fresh_page.eval_on_selector("#turn-status", "e => e.textContent") == "Answer ready."
+
+
+def test_p12_body_type_scales_with_the_browser_default(page, ux_server):
+    """A `px` body size ignores the reader's own font setting."""
+    css = page.evaluate("url => fetch(url).then(r => r.text())", f"{ux_server}/static/app.css")
+    assert "font: 16px/" not in css, "body copy is declared in rem, through the brand type tokens"
+    assert "var(--text-body)" in css
+
+
+def test_p12_no_two_disclosures_on_a_turn_share_an_accessible_name(fresh_page, fresh_server):
+    fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
+    _ask(fresh_page, DEMO_1)
+    names = fresh_page.eval_on_selector_all("#messages summary", "els => els.map(e => e.textContent.trim())")
+    assert names, "the answer offers its sources"
+    assert len(names) == len(set(names)), f"two disclosures share a name: {names}"
+
+
+# -- P2 and P13, on the painted page ----------------------------------------------------
+
+
+def test_p2_and_p13_nothing_technical_survives_onto_the_painted_page(fresh_page, fresh_server):
+    """The contract suite asserts the bytes; this asserts what a person is actually shown."""
+    from tests.contract.test_chat_has_no_jargon import TEXT_FORBIDDEN
+
+    fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
+    _ask(fresh_page, DEMO_1)
+    fresh_page.eval_on_selector_all("details", "els => els.forEach(d => { d.open = true; })")
+    # The demo panel is labelled scaffolding and W3 owns it; everything else is the product.
+    fresh_page.evaluate("() => { const d = document.querySelector('section.demo-panel'); if (d) d.remove(); }")
+    fresh_page.wait_for_timeout(200)
+
+    painted = fresh_page.evaluate("() => document.body.innerText")
+    for pattern in TEXT_FORBIDDEN:
+        found = re.findall(pattern, painted, flags=re.I)
+        assert not found, f"the painted page says {pattern!r} — {found[:3]}"

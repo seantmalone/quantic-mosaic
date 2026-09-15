@@ -71,27 +71,30 @@ def envelopes(*results) -> list[_ToolEnvelope]:
     ]
 
 
-def test_a_created_ticket_is_stated_first_with_its_id_and_queue():
+def test_a_created_ticket_is_stated_first_with_its_reference():
+    """One sentence, rewritten at UX W2 (chat-production-ux-11, demo-and-grader-controls-15).
+
+    It used to read *"Done: HR ticket MOCK-HR-000002 was opened in queue hr-timeoff (priority
+    normal) — this is a mock ticket, nothing was sent outside this app."*: a routing slug, an enum
+    and a disclosure about the demo, in the one sentence that tells a person their request went
+    through. All three are still recorded — `queue` and `priority` on the `tool_call` span and in
+    `mock_writes`, the *"writes are simulated"* line once in the demo panel (P15).
+    """
     result = outcome.apply([POLICY_BLOCK], envelopes(TICKET))
 
     assert result.changed
     first = result.blocks[0]
     assert first["type"] == "recommendation", "tool data, not company policy (§7.3)"
     assert first["citations"] == [], "a tool result has no chunk_id to cite"
-    assert first["text"] == (
-        "Done: HR ticket MOCK-HR-000002 was opened in queue hr-timeoff (priority normal) — this is "
-        "a mock ticket, nothing was sent outside this app."
-    )
+    assert first["text"] == "Done — your request is with HR. Reference MOCK-HR-000002."
+    assert "hr-timeoff" not in first["text"] and "priority" not in first["text"]
     assert result.blocks[1:] == [POLICY_BLOCK], "the model's own blocks follow, untouched"
 
 
 def test_a_drafted_email_is_stated_first_with_its_id():
     result = outcome.apply([POLICY_BLOCK], envelopes(DRAFT))
 
-    assert result.blocks[0]["text"] == (
-        "Done: HR email draft MOCK-EMAIL-000001 was prepared for Priya Raman — this is a mock "
-        "draft, nothing was sent outside this app."
-    )
+    assert result.blocks[0]["text"] == ("Done — the email draft is ready for Priya Raman. Reference MOCK-EMAIL-000001.")
 
 
 def test_an_id_the_answer_already_states_is_not_repeated():
@@ -108,12 +111,20 @@ def test_an_id_the_answer_already_states_is_not_repeated():
 
 
 def test_an_escalation_denying_the_performed_write_is_replaced_by_a_pointer_to_it():
+    """One account of the write, at the top; the denial becomes the one line it was in the way of.
+
+    Both halves of chat-production-ux-11: the pointer no longer re-states the id under a statement
+    that has just stated it, and `apply()`'s de-dup guard reads the **repaired** blocks, so nothing
+    this step writes can ever be duplicated by the statement above it.
+    """
     result = outcome.apply([POLICY_BLOCK, DENIAL_BLOCK], envelopes(TICKET))
 
     assert [block["type"] for block in result.blocks] == ["recommendation", "policy_fact", "recommendation"]
+    assert result.blocks[0]["text"] == "Done — your request is with HR. Reference MOCK-HR-000002."
     replaced = result.blocks[2]
-    assert "MOCK-HR-000002" in replaced["text"]
+    assert replaced["text"] == "That is already taken care of — there is nothing further for you to file."
     assert "cannot" not in replaced["text"].lower()
+    assert result.blocks.count(replaced) == 1, "the write is reported once, not twice in two voices"
     assert result.replaced == [1], "the model's block index, before the outcome block is inserted"
 
 
@@ -181,19 +192,18 @@ def test_an_escalation_denying_a_performed_draft_points_at_the_draft():
 
     result = outcome.apply([denial], envelopes(DRAFT))
 
-    assert result.blocks[1]["type"] == "recommendation"
-    assert "MOCK-EMAIL-000001" in result.blocks[1]["text"]
+    assert [block["type"] for block in result.blocks] == ["recommendation", "recommendation"]
+    assert "MOCK-EMAIL-000001" in result.blocks[0]["text"]
+    assert result.blocks[1]["text"] == "That is already taken care of — the draft is ready for you to review."
 
 
-def test_a_result_missing_its_queue_states_what_it_has_and_no_more():
-    """The sentence is assembled from the result, so a thinner result makes a shorter sentence."""
+def test_a_result_missing_its_queue_says_exactly_what_a_full_one_says():
+    """The sentence is the reference, so a thinner result makes no difference to the reader."""
     thin = {"status": "created", "ticket_id": "MOCK-HR-000009"}
 
     result = outcome.apply([POLICY_BLOCK], envelopes(thin))
 
-    assert result.blocks[0]["text"] == (
-        "Done: HR ticket MOCK-HR-000009 was opened — this is a mock ticket, nothing was sent outside this app."
-    )
+    assert result.blocks[0]["text"] == "Done — your request is with HR. Reference MOCK-HR-000009."
 
 
 def test_a_success_status_with_no_id_is_not_a_write_to_report():

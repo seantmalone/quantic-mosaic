@@ -45,9 +45,18 @@ async def test_not_one_tool_call_was_made(clarified, store):
 
 
 async def test_the_question_names_the_missing_information(clarified):
+    """One question, and only one (UX W2, jargon-and-exposure-4).
+
+    It used to recite `WorkflowSpec.required_slots` — six internal slot names, one of them
+    *"(optional, gated) a created ticket"* — and then ask for an employee id the app already knows.
+    Those slots document the completion predicate and are still on the dashboard; what the reader
+    gets is the single detail the turn is actually missing.
+    """
     answer = clarified["answer"]
     assert "dates" in answer or "date" in answer
-    assert "E1042" in answer, "and shows the shape of the other slot it may need"
+    assert "E1042" not in answer, "the app already knows who is asking"
+    assert "I need:" not in answer, "the slot list is the predicate's documentation, not a question"
+    assert answer.count("?") == 1, "one question"
 
 
 async def test_exactly_one_model_call_was_spent(clarified, store):

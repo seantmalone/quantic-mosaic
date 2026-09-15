@@ -1,7 +1,7 @@
 """One real server and one real browser for the UX principle suite (`pytest -m ux`).
 
 This suite is deliberately not part of `pytest -q`: it needs `requirements-ux.txt` and a chromium
-build, and the plan's principles P3–P7 are about the **rendered** page — what a person is shown at
+build, and the plan's principles are about the **rendered** page — what a person is shown at
 1440x900, 1280x800 and 390x844 — which is a level of evidence the contract tests cannot reach and
 should not pay for.
 
@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -63,15 +64,14 @@ def _wait_for_health(base_url: str, *, timeout_s: float = 120.0) -> None:
     raise RuntimeError(f"{base_url} never became healthy")
 
 
-@pytest.fixture(scope="session")
-def ux_server(tmp_path_factory) -> Iterator[str]:
-    """The shipped app on a real uvicorn, with the access gate on and the stub model."""
-    workdir = tmp_path_factory.mktemp("ux")
+@contextmanager
+def _serve(workdir: Path, script: str) -> Iterator[str]:
+    """One uvicorn on a free loopback port, with the access gate on and the stub model."""
     port = _free_port()
     env = {
         **os.environ,
         "LLM_PROVIDER": "stub",
-        "LLM_STUB_SCRIPT": str(LLM_SCRIPTS / "demo_task_1.json"),
+        "LLM_STUB_SCRIPT": str(LLM_SCRIPTS / script),
         "APP_ACCESS_TOKEN": TOKEN,
         "APP_ENV": "local",
         "PERSIST_BACKEND": "sqlite",
@@ -112,6 +112,27 @@ def ux_server(tmp_path_factory) -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
+def ux_server(tmp_path_factory) -> Iterator[str]:
+    """One server for the whole suite. Its stub script is spent by the first turn a test asks for,
+    so a test that needs a *cited* answer takes `fresh_page` instead."""
+    with _serve(tmp_path_factory.mktemp("ux"), "demo_task_1.json") as base_url:
+        yield base_url
+
+
+@pytest.fixture
+def fresh_server(tmp_path_factory) -> Iterator[str]:
+    """A server of its own, with an unspent script.
+
+    `StubAdapter` consumes its entries in order for the life of the process and the orchestrator
+    caches one adapter, so `demo_task_1.json`'s six entries are **one** turn per server. A test that
+    asserts on a real answer — its sources, its geometry — needs a server nobody has asked a
+    question of yet.
+    """
+    with _serve(tmp_path_factory.mktemp("ux-fresh"), "demo_task_1.json") as base_url:
+        yield base_url
+
+
+@pytest.fixture(scope="session")
 def browser() -> Iterator[object]:
     sync_api = pytest.importorskip(
         "playwright.sync_api", reason="install requirements-ux.txt and `playwright install chromium`"
@@ -124,12 +145,27 @@ def browser() -> Iterator[object]:
             instance.close()
 
 
+def _signed_in(browser, base_url: str):
+    context = browser.new_context(viewport={"width": 1440, "height": 900})
+    tab = context.new_page()
+    tab.goto(f"{base_url}/?access={TOKEN}", wait_until="networkidle")
+    return context, tab
+
+
 @pytest.fixture
 def page(browser, ux_server):
     """A signed-in page in the **default** persona — the one W1 exists for."""
-    context = browser.new_context(viewport={"width": 1440, "height": 900})
-    tab = context.new_page()
-    tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+    context, tab = _signed_in(browser, ux_server)
+    try:
+        yield tab
+    finally:
+        context.close()
+
+
+@pytest.fixture
+def fresh_page(browser, fresh_server):
+    """The same, on a server whose stub script still has a whole turn in it."""
+    context, tab = _signed_in(browser, fresh_server)
     try:
         yield tab
     finally:

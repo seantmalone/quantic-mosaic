@@ -36,7 +36,7 @@ async def test_a_reload_replays_the_transcript_for_the_persona_that_owns_it(web)
     html = page.text
     assert QUESTION in html, "the question is back in the transcript"
     assert f'id="turn-{turn["turn_id"]}"' in html, "rendered through the same partial a live turn uses"
-    assert 'class="citation-chip"' in html, "with its citations"
+    assert 'class="source-link"' in html, "with its sources"
     # The composer is seeded, so the next question continues the same conversation rather than
     # silently opening a second one.
     assert f'id="session-id" value="{turn["session_id"]}"' in html

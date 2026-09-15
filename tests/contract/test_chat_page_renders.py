@@ -1,9 +1,15 @@
 """The named UI smoke test (spec §11.5, R6.2).
 
-`GET /` returns 200 and the HTML carries the act-as `<select>`, both demo buttons and the span-rail
-container; then a tool-using message is posted and the **rendered turn** is asserted: a
-`policy_fact` badge, a `recommendation` badge with the literal *"Recommendation — not company
-policy"*, and at least one citation chip whose `href` is the chunk's `source_url` deep link.
+`GET /` returns 200 and the HTML carries the act-as `<select>`, both demo buttons and the status
+line; then a tool-using message is posted and the **rendered turn** is asserted: a cited
+`policy_fact` block, the grouped suggestions with their one footnote, and at least one source link
+whose `href` is the chunk's `source_url` deep link.
+
+**Amended at UX W2.** The rail this used to assert on is gone, and so are the per-sentence badges:
+the technical record lives on the dashboard, a fact is prose with a friendly reference under it,
+and the labelling guarantee — a suggestion must never read as company policy — is stated once per
+turn by `SUGGESTION_FOOTNOTE` and, unchanged, by `orchestrator.render_answer()` in the plain-text
+`answer` the JSON contract and the eval harness read.
 
 `POST /chat` is one endpoint with two representations: JSON for API clients (the contract of §11.1)
 and the same `ChatResponse` rendered server-side for an htmx request from the page. §11.8's endpoint
@@ -23,10 +29,10 @@ pytestmark = pytest.mark.anyio
 HTMX = {"HX-Request": "true"}
 TOOL_USING_QUESTION = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
 SENSITIVE_QUESTION = "A colleague has been harassing me in meetings and I want to raise it formally."
-RECOMMENDATION_BADGE = "Recommendation — not company policy"
+SUGGESTION_FOOTNOTE = "Suggestions are guidance, not company policy."
 
 
-async def test_the_chat_page_carries_the_selector_the_demo_buttons_and_the_rail(web):
+async def test_the_chat_page_carries_the_selector_the_demo_buttons_and_the_status_line(web):
     async with web() as client:
         response = await client.get("/")
 
@@ -36,9 +42,23 @@ async def test_the_chat_page_carries_the_selector_the_demo_buttons_and_the_rail(
     assert html.count('<option value="E1') == 24, "the 24 mock employees"
     assert '<option value="admin"' in html, "plus HR admin"
     assert html.count('class="button demo-button"') == 2
-    assert 'id="span-rail"' in html
+    assert 'id="turn-status"' in html, "one progress line, where the 22rem rail used to be"
     assert 'id="cold-start-banner"' in html
     assert 'value="E1042" selected' in html, "the default persona is pre-selected"
+
+
+async def test_the_empty_conversation_greets_the_persona_and_offers_four_starters(web):
+    """chat-production-ux-1: at rest the page was an unlabelled textarea and two buttons."""
+    async with web() as client:
+        html = (await client.get("/")).text
+
+    assert "Hi Priya — ask me anything about HR" in html
+    assert html.count('class="starter"') == 4
+    # A starter prefills the composer and focuses it; nothing is submitted for the reader.
+    starters = html.split('document.querySelectorAll(".starter")')[1].split("document.querySelectorAll")[0]
+    assert "messageBox.value = button.dataset.prompt" in starters
+    assert "requestSubmit" not in starters
+    assert "Enter to send · Shift+Enter for a new line" in html
 
 
 async def test_at_rest_the_page_carries_neither_a_banner_nor_an_empty_answer_preview(web):
@@ -51,13 +71,19 @@ async def test_at_rest_the_page_carries_neither_a_banner_nor_an_empty_answer_pre
     true` when `/health` answered, and the provisional-answer box was painted empty under its
     *"Writing the answer…"* caption before a question had been asked. One `!important` declaration
     gives the pages back their one visibility switch; these assertions are what keep it.
+
+    The preview is `aria-hidden` since UX W2: it is a preview, the finished answer is what the one
+    live region announces, and a region that appended a paragraph per streamed block was half of
+    the 46-announcements-a-turn firehose the audit measured (accessibility-and-responsive-3).
     """
     async with web() as client:
         html = (await client.get("/")).text
         css = (await client.get("/static/app.css")).text
 
-    assert '<div id="cold-start-banner" class="banner" hidden>' in html
-    assert '<article id="provisional-answer" class="turn turn-provisional" aria-live="polite" hidden>' in html
+    assert '<p id="cold-start-banner" class="banner" hidden>' in html
+    assert (
+        '<div id="provisional-answer" class="message message-agent turn-provisional" aria-hidden="true" hidden>'
+    ) in html
     assert re.search(r"\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}", css), (
         "`hidden` must beat every author `display:` rule, or neither area can be hidden at all"
     )
@@ -78,27 +104,29 @@ async def test_at_rest_the_page_carries_neither_a_banner_nor_an_empty_answer_pre
     assert "banner.hidden = true" in preflight, "and hides it if it was already on screen"
 
 
-async def test_the_rail_narrates_each_step_and_the_answer_streams_under_it(web):
-    """§11.3's two additions, asserted on the markup and the script a grader actually loads."""
+async def test_one_status_line_narrates_the_turn_and_the_answer_streams_under_it(web):
+    """§11.3's two additions, asserted on the markup and the script a grader actually loads.
+
+    The rail that used to carry this — 22rem of `span.kind · span.name — span.summary`, a 100 ms
+    elapsed ticker per running step and a `turn completed · awaiting_confirmation` line — is gone
+    (jargon-and-exposure-1, -13). What is left is one throttled `role="status"` line fed by
+    `narration.label_for()`, and it is the page's only live region.
+    """
     async with web() as client:
         html = (await client.get("/")).text
-        css = (await client.get("/static/app.css")).text
 
-    # The rail is `aria-live="polite"` — unchanged — and its in-progress line carries a spinner and
-    # a live elapsed counter that the closed span then replaces, matched on `span_id`.
-    assert '<ol id="span-rail" class="span-rail" aria-live="polite">' in html
+    assert '<p id="turn-status" class="turn-status" role="status">' in html
     assert 'stream.addEventListener("step_started"' in html
-    assert "item.dataset.spanId = step.span_id" in html
-    assert "span-spinner" in html and "span-elapsed" in html
-    assert "rail.querySelector('[data-span-id=\"' + span.span_id + '\"]')" in html
-    assert "@keyframes span-spin" in css
+    assert "setStatus(JSON.parse(event.data).label)" in html, "the label, and nothing else off the span"
+    assert "STATUS_MIN_MS" in html, "throttled, or the same label is announced six times a turn"
+    assert html.count('role="status"') == 1, "one live region on the page at rest, not a rail of them"
+    assert 'aria-live="polite"' not in html, "the rail's `aria-live` firehose is gone with the rail"
 
-    # The provisional answer, and the JS mirror of `render_answer()` that keeps a recommendation
-    # labelled even before the turn is over (§7.3).
+    # The provisional answer, and the JS mirror of `render_answer()`: complete blocks only, with
+    # the one footnote the finished turn carries rather than a badge per sentence (§7.3).
     assert 'id="provisional-answer"' in html
     assert 'stream.addEventListener("answer_delta"' in html
-    assert RECOMMENDATION_BADGE + ": " in html, "the JS mirror carries render_answer's own prefix"
-    assert '"Escalation: "' in html
+    assert "Suggestions are guidance, not company policy." in html
     assert "clearProvisional();" in html, "`turn_completed` is a hard replace, never a merge"
 
 
@@ -116,7 +144,7 @@ async def test_the_provisional_render_mirrors_g3s_relabel_of_an_uncited_policy_f
         html = (await client.get("/")).text
 
     assert 'block.type === "policy_fact" && (block.citations || []).length === 0' in html
-    assert 'if (block.type === "recommendation" || uncitedFact)' in html
+    assert 'return block.type === "recommendation" || uncitedFact;' in html
 
 
 async def test_the_page_resubscribes_for_the_resumed_half_of_a_gated_turn(web):
@@ -164,12 +192,13 @@ async def test_a_rendered_turn_shows_typed_blocks_badges_and_citation_chips(web)
     assert response.headers["content-type"].startswith("text/html")
     html = response.text
 
-    assert 'class="badge badge-policy_fact"' in html
-    assert 'class="badge badge-recommendation"' in html
-    assert RECOMMENDATION_BADGE in html
+    assert 'class="answer-block answer-block-policy_fact"' in html
+    assert 'class="answer-block answer-block-recommendation"' in html
+    assert SUGGESTION_FOOTNOTE in html, "the labelling guarantee, once per turn instead of once per sentence"
+    assert 'class="badge' not in html, "no chip on any sentence (chat-production-ux-8)"
 
-    chips = re.findall(r'<a class="citation-chip" href="([^"]+)"', html)
-    assert chips, "at least one citation chip"
+    chips = re.findall(r'<a class="source-link" href="([^"]+)"', html)
+    assert chips, "at least one source link"
     # UX W1 repointed `SOURCE_URL` at the reader route: a citation is a promise to a person that
     # they can go and read the passage, and the dashboard's chunk inspector was neither readable
     # nor reachable for the default persona.
@@ -192,7 +221,7 @@ async def test_an_escalation_block_renders_its_own_badge(web):
 
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("text/html")
-    assert 'class="badge badge-escalation"' in response.text
+    assert 'class="answer-block answer-block-escalation"' in response.text
 
 
 async def test_a_rendered_turn_carries_the_snapshot_note_when_a_tool_result_has_an_as_of(web):
@@ -201,7 +230,7 @@ async def test_a_rendered_turn_carries_the_snapshot_note_when_a_tool_result_has_
         response = await client.post("/chat", json={"message": TOOL_USING_QUESTION}, headers=HTMX)
 
     assert 'class="snapshot-note"' in response.text
-    assert "Employee data as of 1 September 2026" in response.text
+    assert "Based on employee data from 1 September 2026" in response.text
 
 
 async def test_the_same_post_returns_json_to_an_api_client(web):

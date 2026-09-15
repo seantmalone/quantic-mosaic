@@ -283,7 +283,7 @@ async def test_demo_task_2_pto_request_through_confirm_to_write(web, store):
     # it denies was already in `mock_writes`. The deterministic step states the outcome first and
     # replaces that denial with a line pointing at the ticket, so neither survives into the answer.
     blocks = body["answer_blocks"]
-    assert blocks[0]["type"] == "recommendation" and blocks[0]["text"].startswith("Done: HR ticket ")
+    assert blocks[0]["type"] == "recommendation" and blocks[0]["text"].startswith("Done — your request is with HR.")
     assert "escalation" not in {block["type"] for block in blocks}
     assert "cannot open PTO requests" not in body["answer"]
 

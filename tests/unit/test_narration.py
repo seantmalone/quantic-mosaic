@@ -63,9 +63,21 @@ def test_the_guardrail_pass_and_the_confirmation_wait_each_have_one_line():
     assert narration.label_for("confirmation", "create_mock_hr_ticket") == narration.CONFIRMATION_LABEL
 
 
+def test_every_kind_a_turn_opens_has_a_sentence_and_none_of_them_is_the_span_name():
+    """UX W2: these three used to fall through to `Working…`, six times a turn.
+
+    The rail that showed them is gone and the labels are all that is left, so an unmapped kind is
+    now a visible defect rather than one line among twenty-eight (chat-production-ux-5).
+    """
+    assert narration.label_for("mcp_discovery", "hr-mcp") == "Getting ready…"
+    assert narration.label_for("retrieval", "hybrid_rrf") == "Searching the policy library…"
+    assert narration.label_for("plan", "route") == "Working out what to check…"
+    for kind, label in narration.KIND_LABELS.items():
+        assert kind not in label, "a label is prose for a person, never the span's own name"
+
+
 def test_an_unmapped_span_is_neutral_and_never_the_span_name():
-    assert narration.label_for("mcp_discovery", "hr-mcp") == narration.WORKING
-    assert narration.label_for("retrieval", "hybrid_rrf") == narration.WORKING
+    assert narration.label_for("something_new", "whatever") == narration.WORKING
     assert narration.label_for("tool_call", "a_tool_that_does_not_exist") == narration.WORKING
 
 

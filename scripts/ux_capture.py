@@ -437,16 +437,16 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             "zoom-composer-rest",
             route="/",
             state="persona E1042",
-            notes="The composer at rest.",
+            notes="The composer at rest — sticky, one row, Enter to send.",
             selector="#chat-form",
         )
         shot.screen(
             page,
-            "zoom-rail-rest",
+            "zoom-empty-state",
             route="/",
-            state="persona E1042",
-            notes="The activity rail at rest.",
-            selector="aside.rail",
+            state="persona E1042, no turns",
+            notes="NEW at W2: the greeting and the four starter questions.",
+            selector="#empty-state",
         )
         shot.screen(
             page,
@@ -490,33 +490,17 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         )
         shot.screen(
             page,
-            "zoom-citation-drawer",
+            "zoom-sources",
             route="/",
-            state="citation drawer open",
-            notes="The sources drawer.",
-            selector=".citation-drawer",
+            state="sources expanded",
+            notes="NEW at W2: the always-visible sources strip, each reference opened.",
+            selector=".sources",
             before=expand_all,
-        )
-        shot.screen(
-            page,
-            "zoom-trace-panel",
-            route="/",
-            state="trace panel open",
-            notes="The in-turn trace panel (W2 removes it).",
-            selector=".trace-panel",
-            before=expand_all,
-        )
-        shot.screen(
-            page,
-            "zoom-rail-answer",
-            route="/",
-            state="after the answer",
-            notes="The rail once the turn is over.",
-            selector="aside.rail",
         )
 
         # the citation's destination, and the conversation opened again from its id
-        chip = page.eval_on_selector(".citation-chip", "e => e.getAttribute('href')")
+        expand_all(page)
+        chip = page.eval_on_selector(".source-link", "e => e.getAttribute('href')")
         facts["citation_href"] = chip
         page.goto(urls["demo_1"] + chip, wait_until="networkidle")
         shot.screen(
@@ -571,14 +555,6 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             notes="The gated turn with every disclosure open.",
             before=expand_all,
         )
-        shot.screen(
-            page,
-            "zoom-rail-confirm",
-            route="/",
-            state="awaiting_confirmation",
-            notes="The rail at the safety moment.",
-            selector="aside.rail",
-        )
         page.set_viewport_size({"width": 1440, "height": 900})
         page.click(".button-confirm")
         page.wait_for_selector(".confirm-card", state="detached", timeout=180_000)
@@ -606,14 +582,6 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             notes="The resumed turn with every disclosure open.",
             before=expand_all,
         )
-        shot.screen(
-            page,
-            "zoom-rail-after-confirm",
-            route="/",
-            state="confirmed",
-            notes="The rail across the gate.",
-            selector="aside.rail",
-        )
         context.close()
 
         # -- server 3: the refusal --------------------------------------------------------
@@ -635,14 +603,6 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             notes="The refusal with every disclosure open.",
             before=expand_all,
         )
-        shot.screen(
-            page,
-            "zoom-rail-chat-refusal",
-            route="/",
-            state="refused",
-            notes="The rail on a refused turn.",
-            selector="aside.rail",
-        )
         context.close()
 
         # -- server 4: clarification, the error turn, and every dashboard route -----------
@@ -661,14 +621,6 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             notes="The clarification with every disclosure open.",
             before=expand_all,
         )
-        shot.screen(
-            page,
-            "zoom-rail-chat-clarify",
-            route="/",
-            state="clarify",
-            notes="The rail on a clarification.",
-            selector="aside.rail",
-        )
 
         # a second question exhausts the one-entry stub script: the graceful error turn
         page.set_viewport_size({"width": 1440, "height": 900})
@@ -681,14 +633,6 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             route="/",
             state="server-side failure mid-turn",
             notes="What a human sees when the turn fails.",
-        )
-        shot.screen(
-            page,
-            "zoom-rail-error",
-            route="/",
-            state="failed turn",
-            notes="The rail on a failed turn.",
-            selector="aside.rail",
         )
 
         # the dashboard, as the employee persona — the whole point of W1

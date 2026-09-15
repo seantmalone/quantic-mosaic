@@ -27,6 +27,7 @@ RESPONSE_KEYS = {
     "outcome",
     "answer",
     "answer_blocks",
+    "next_steps",
     "citations",
     "trace",
     "confirmation",
