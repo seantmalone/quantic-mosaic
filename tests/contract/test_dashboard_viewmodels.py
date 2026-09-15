@@ -18,9 +18,13 @@ view-model.
 
 from __future__ import annotations
 
+import inspect
+import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
+from pydantic import BaseModel
 
 from hrmosaic.web import dashboard as dash
 
@@ -358,3 +362,600 @@ async def test_the_session_row_carries_auth_mode_and_actor_role(seeded):
     assert row["actor_role"] == "employee"
     assert row["client_label"] == "demo"
     assert row["outcomes"] == ["answered"]
+
+
+# --------------------------------------------------------------------------------------
+# P15 — the technical record is never destroyed, only relocated
+# --------------------------------------------------------------------------------------
+#
+# UX W4 rounds numbers, renames labels and reorders columns across all thirteen pages. The
+# principle that makes that safe is **P15**: every value removed from a *page* still exists,
+# unrounded, in `/api/*` and in Export JSON. The two tests below are what hold it — a view-model
+# may grow a field, and may never lose one, and no field may start carrying a formatted string
+# where it carried a number.
+#
+# `BASE_FIELDS` is the snapshot: every field of every view-model at 42ca1fe, the commit W4 starts
+# from, read off that revision's `web/dashboard.py` rather than typed out. A wave that needs to
+# remove a field has to delete a line here, in a diff a reviewer reads.
+BASE_FIELDS: dict[str, frozenset[str]] = {
+    "ChunkSizePoint": frozenset(
+        {
+            "chunk_chars",
+            "doc_recall_mean",
+        }
+    ),
+    "ConfirmationRow": frozenset(
+        {
+            "action",
+            "created_at",
+            "human_summary",
+            "turn_id",
+            "used_at",
+            "user_response",
+        }
+    ),
+    "CorpusChunk": frozenset(
+        {
+            "char_end",
+            "char_start",
+            "chunk_id",
+            "heading_path",
+            "n_chars",
+            "text",
+        }
+    ),
+    "CorpusChunkView": frozenset(
+        {
+            "char_end",
+            "char_start",
+            "chunk_id",
+            "doc_id",
+            "doc_title",
+            "heading_path",
+            "n_chars",
+            "section",
+            "snippet",
+            "text",
+        }
+    ),
+    "CorpusDocument": frozenset(
+        {
+            "chunk_count",
+            "doc_id",
+            "doc_title",
+            "estimated_pages",
+            "section_count",
+            "source_format",
+            "topics",
+        }
+    ),
+    "CorpusDocumentDetail": frozenset(
+        {
+            "chunk_count",
+            "doc_id",
+            "doc_title",
+            "effective_date",
+            "estimated_pages",
+            "full_text",
+            "section_count",
+            "source_format",
+            "topics",
+            "version",
+        }
+    ),
+    "CorpusDocumentView": frozenset(
+        {
+            "chunks",
+            "document",
+        }
+    ),
+    "CorpusView": frozenset(
+        {
+            "documents",
+            "formats",
+            "topics",
+        }
+    ),
+    "DocumentHits": frozenset(
+        {
+            "doc_id",
+            "doc_title",
+            "hits",
+        }
+    ),
+    "EvalCompareView": frozenset(
+        {
+            "chunk_size",
+            "flips",
+            "variants",
+        }
+    ),
+    "EvalItemRow": frozenset(
+        {
+            "answer",
+            "category",
+            "cold",
+            "gold",
+            "item_id",
+            "latency_ms",
+            "passed",
+            "question",
+            "run_phase",
+            "scores",
+            "session_id",
+            "trace_url",
+            "turn_id",
+            "verdicts",
+        }
+    ),
+    "EvalMetrics": frozenset(
+        {
+            "action_safety_pass_rate",
+            "arg_correctness_rate",
+            "blocks_dropped_by_g2",
+            "catalog_reopened_rate",
+            "cit_resolve_mean",
+            "citation_accuracy_mean",
+            "clarification_accuracy",
+            "escalation_matrix",
+            "escalation_n_excluded",
+            "est_cost_usd",
+            "groundedness_mean",
+            "judge_agreement_n",
+            "judge_agreement_n_hard",
+            "judge_agreement_rate",
+            "judge_agreement_rate_hard",
+            "judge_agreement_subset",
+            "judge_agreement_subset_hard",
+            "judged",
+            "missed_refusal_n",
+            "missed_refusal_rate",
+            "n_scored",
+            "over_refusal_n",
+            "over_refusal_rate",
+            "partial_match_mean",
+            "recommendation_labeled_rate",
+            "router_matrix",
+            "strict_pass_rate",
+            "tool_selection_accuracy",
+            "workflow_completion_by_workflow",
+        }
+    ),
+    "EvalRunDetailView": frozenset(
+        {
+            "items",
+            "latency",
+            "metrics",
+            "rss_series",
+            "run",
+        }
+    ),
+    "EvalRunRow": frozenset(
+        {
+            "created_at",
+            "duration_s",
+            "est_cost_usd",
+            "git_sha",
+            "headline",
+            "judge_model",
+            "judged",
+            "label",
+            "n_items",
+            "run_id",
+            "target",
+            "variant",
+        }
+    ),
+    "EvalRunsView": frozenset(
+        {
+            "runs",
+        }
+    ),
+    "Flip": frozenset(
+        {
+            "baseline_passed",
+            "item_id",
+            "variant",
+            "variant_passed",
+        }
+    ),
+    "HandshakeRow": frozenset(
+        {
+            "cached",
+            "catalog_sha",
+            "discovered_at",
+            "handshake_ms",
+            "span_id",
+            "tool_count",
+            "turn_id",
+        }
+    ),
+    "HourBucket": frozenset(
+        {
+            "hour",
+            "turns",
+        }
+    ),
+    "InjectionHit": frozenset(
+        {
+            "chunk_id",
+            "doc_id",
+            "matched_pattern",
+            "span_id",
+        }
+    ),
+    "LatencyBlock": frozenset(
+        {
+            "by_kind",
+            "cold_p50",
+            "cold_p95",
+            "n_cold",
+            "n_warm",
+            "p50",
+            "p90",
+            "p95",
+            "p99",
+        }
+    ),
+    "LlmRow": frozenset(
+        {
+            "cache_hit",
+            "completion_tokens",
+            "duration_ms",
+            "finish_reason",
+            "limiter_wait_ms",
+            "model",
+            "prompt_tokens",
+            "provider",
+            "provider_failover",
+            "purpose",
+            "retry_count",
+            "span_id",
+            "streamed",
+            "ttfb_ms",
+            "turn_id",
+        }
+    ),
+    "LlmView": frozenset(
+        {
+            "by_model",
+            "rows",
+        }
+    ),
+    "McpDiscoveryView": frozenset(
+        {
+            "connected",
+            "discovered_at",
+            "handshake_history",
+            "handshake_ms",
+            "last_error",
+            "protocol_version",
+            "server",
+            "tools",
+            "transport",
+            "url",
+        }
+    ),
+    "MockWriteRow": frozenset(
+        {
+            "created_at",
+            "employee_id",
+            "id",
+            "kind",
+            "payload",
+            "turn_id",
+        }
+    ),
+    "ModelRollup": frozenset(
+        {
+            "calls",
+            "est_cost_usd",
+            "model",
+            "tokens_in",
+            "tokens_out",
+        }
+    ),
+    "OverviewHealth": frozenset(
+        {
+            "chunk_count",
+            "data_as_of",
+            "doc_count",
+            "git_sha",
+            "mcp_up",
+            "rss_mb",
+            "store_backend",
+            "tool_count",
+            "uptime_ms",
+        }
+    ),
+    "OverviewKpis": frozenset(
+        {
+            "error_rate",
+            "escalations",
+            "est_cost_usd",
+            "guardrail_blocks",
+            "llm_calls_today",
+            "llm_daily_call_cap",
+            "p50_ms",
+            "p95_ms",
+            "pending_confirmations",
+            "sessions_24h",
+            "sessions_total",
+            "spend_7d_usd",
+            "spend_today_usd",
+            "tokens_in",
+            "tokens_out",
+            "tool_calls",
+            "turns",
+        }
+    ),
+    "OverviewView": frozenset(
+        {
+            "health",
+            "kpis",
+            "latest_sessions",
+            "turns_per_hour",
+        }
+    ),
+    "RetrievalRow": frozenset(
+        {
+            "docs",
+            "embed_ms",
+            "k",
+            "k_source",
+            "max_dense_score",
+            "n_hits",
+            "query",
+            "search_ms",
+            "span_id",
+            "strategy",
+            "turn_id",
+        }
+    ),
+    "RetrievalView": frozenset(
+        {
+            "rows",
+            "top_documents",
+            "zero_evidence_queries",
+        }
+    ),
+    "RssPoint": frozenset(
+        {
+            "rss_mb",
+            "turn_id",
+        }
+    ),
+    "RuleCount": frozenset(
+        {
+            "count",
+            "rule_id",
+            "rule_name",
+            "verdict",
+        }
+    ),
+    "SafetyView": frozenset(
+        {
+            "by_rule",
+            "confirmations",
+            "injection_hits",
+            "mock_writes",
+        }
+    ),
+    "SessionDetailView": frozenset(
+        {
+            "session",
+            "turns",
+        }
+    ),
+    "SessionRow": frozenset(
+        {
+            "actor_role",
+            "auth_mode",
+            "client_label",
+            "employee_id",
+            "has_error",
+            "n_turns",
+            "outcomes",
+            "session_id",
+            "started_at",
+            "tokens",
+            "total_ms",
+        }
+    ),
+    "SessionSummary": frozenset(
+        {
+            "actor_role",
+            "app_version",
+            "auth_mode",
+            "client_label",
+            "cold_start",
+            "created_at",
+            "deploy_mode",
+            "employee_id",
+            "eval_run_id",
+            "last_activity_at",
+            "mcp_transport",
+            "n_turns",
+            "session_id",
+        }
+    ),
+    "SessionsView": frozenset(
+        {
+            "page",
+            "rows",
+            "total",
+        }
+    ),
+    "SpanRow": frozenset(
+        {
+            "duration_ms",
+            "kind",
+            "name",
+            "offset_ms",
+            "parent_span_id",
+            "payload",
+            "seq",
+            "span_id",
+            "status",
+        }
+    ),
+    "ToolCallRow": frozenset(
+        {
+            "actor_employee_id",
+            "arguments",
+            "duration_ms",
+            "error_code",
+            "is_error",
+            "result_preview",
+            "span_id",
+            "tool_name",
+            "turn_id",
+        }
+    ),
+    "ToolRollup": frozenset(
+        {
+            "calls",
+            "error_rate",
+            "last_called_at",
+            "p50_ms",
+            "p95_ms",
+            "tool_name",
+        }
+    ),
+    "ToolsView": frozenset(
+        {
+            "by_tool",
+            "recent",
+        }
+    ),
+    "TurnDetail": frozenset(
+        {
+            "answer_blocks",
+            "citations",
+            "dashboard_url",
+            "duration_ms",
+            "ended_at",
+            "final_answer",
+            "intent",
+            "outcome",
+            "resumed_count",
+            "rollups",
+            "seq",
+            "session_id",
+            "spans",
+            "started_at",
+            "stop_reason",
+            "turn_id",
+            "user_message",
+            "workflow",
+        }
+    ),
+    "TurnRollups": frozenset(
+        {
+            "guardrail_hits",
+            "llm_calls",
+            "llm_ms",
+            "retrieval_ms",
+            "retrievals",
+            "store_ms",
+            "tokens_in",
+            "tokens_out",
+            "tool_calls",
+            "tool_ms",
+        }
+    ),
+    "TurnRow": frozenset(
+        {
+            "duration_ms",
+            "guardrail_hits",
+            "intent",
+            "llm_calls",
+            "outcome",
+            "retrievals",
+            "seq",
+            "session_id",
+            "started_at",
+            "tool_calls",
+            "turn_id",
+            "user_message",
+            "workflow",
+        }
+    ),
+    "TurnsView": frozenset(
+        {
+            "page",
+            "rows",
+            "total",
+        }
+    ),
+    "VariantMetrics": frozenset(
+        {
+            "metrics",
+            "run_id",
+            "variant",
+        }
+    ),
+    "ZeroEvidenceQuery": frozenset(
+        {
+            "query",
+            "span_id",
+            "started_at",
+            "turn_id",
+        }
+    ),
+}
+
+
+def _view_models() -> dict[str, type[BaseModel]]:
+    return {
+        name: member
+        for name, member in vars(dash).items()
+        if inspect.isclass(member) and issubclass(member, BaseModel) and member.model_fields
+    }
+
+
+def test_no_view_model_has_lost_a_field_since_the_wave_began():
+    """**P15**: additive only. A page may stop showing a number; the record may not stop holding it."""
+    models = _view_models()
+    missing_models = sorted(set(BASE_FIELDS) - set(models))
+    assert not missing_models, f"these view-models no longer exist: {missing_models}"
+
+    lost = {
+        name: sorted(fields - set(models[name].model_fields))
+        for name, fields in BASE_FIELDS.items()
+        if fields - set(models[name].model_fields)
+    }
+    assert not lost, (
+        "these fields were dropped from the JSON rather than from the page — the technical record "
+        f"is relocated, never destroyed (P15): {lost}"
+    )
+
+
+def test_every_number_in_the_json_is_still_a_number():
+    """**P15**'s other half: the formatting lives in Jinja, and never in the payload.
+
+    `_f_num` rounds a float to two places and `_f_usd` to two decimals *for the page*. If either
+    ever reached the view-model, Export JSON would hand a grader a rounded string and the unrounded
+    figure would be gone from the system entirely. So a field whose **name** says it holds a
+    quantity or a moment must be typed as one.
+    """
+    quantity = re.compile(r"_(ms|usd|rate|mean|count|accuracy|pages|tokens|n|s)$|^(calls|turns|total|page|seq|count)$")
+    stringly: list[str] = []
+    for name, model in _view_models().items():
+        for field, info in model.model_fields.items():
+            if not quantity.search(field):
+                continue
+            annotation = info.annotation
+            if annotation is str or str in get_args(annotation):
+                stringly.append(f"{name}.{field}")
+    assert not stringly, (
+        "these payload fields hold a formatted string where the record should hold the number "
+        f"itself (P15): {sorted(stringly)}"
+    )
+
+
+def test_the_page_rounds_a_figure_the_payload_still_carries_in_full():
+    """The principle end to end, on one real number rather than on the type system."""
+    raw = 0.9839181286549706
+    assert dash._f_num(raw) == "0.98", "the page rounds"
+    assert dash.EvalMetrics(groundedness_mean=raw).groundedness_mean == raw, "the payload does not"

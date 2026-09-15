@@ -46,7 +46,7 @@ class RecordingStore:
         return [(sql, count) for sql, count in self.calls if "payload_json FROM spans" in sql]
 
 
-def _tool_calls(writer, *, name: str, count: int, errors: int = 0) -> None:
+def _tool_calls(writer, *, name: str, count: int, errors: int = 0, error_code: str = "TOOL_ERROR") -> None:
     """`count` real `tool_call` spans through `core/trace.py` — never a hand-written INSERT."""
     session = SessionSpec(employee_id="E1042", client_label="web")
     turn = writer.start_turn(session, user_message="How much PTO do I have?")
@@ -62,7 +62,7 @@ def _tool_calls(writer, *, name: str, count: int, errors: int = 0) -> None:
                 # A payload of the size §10.5 actually allows, so a scan of all of them is felt.
                 result_json="x" * 4_000,
                 is_error=index < errors,
-                error_code="TOOL_ERROR" if index < errors else None,
+                error_code=error_code if index < errors else None,
                 duration_ms=index + 1,
             ),
             started_at=1_000_000 + index,
@@ -109,3 +109,57 @@ def test_the_tool_filters_narrow_both_the_rollup_and_the_rows(writer):
     failing = dash.build_tools(_request(), dash.Filters(errors_only=True))
     assert [(row.tool_name, row.calls) for row in failing.by_tool] == [("check_pto_balance", 2)]
     assert all(row.is_error for row in failing.recent)
+
+
+def test_a_confirmation_pause_is_counted_as_one_and_never_as_an_error(writer):
+    """`dashboard-readability-13`: the flagship safety behaviour, reported as a 50% failure rate.
+
+    The confirmation gate refuses an unconfirmed write inside the MCP server (§8.6), so the span
+    records `is_error` with `error_code="CONFIRMATION_REQUIRED"` — which is what the tool server
+    returned and must stay on the record. But it is the design working, not a failure: page 7
+    counts it in its own column, leaves it out of the error numerator, and leaves it out of the
+    "Errors only" filter, which exists to find things that went wrong.
+    """
+    _tool_calls(writer, name="create_mock_hr_ticket", count=1)
+    _tool_calls(writer, name="create_mock_hr_ticket", count=1, errors=1, error_code=dash.CONFIRMATION_REQUIRED)
+
+    rollup = {row.tool_name: row for row in dash.build_tools(_request(), dash.Filters()).by_tool}
+    ticket = rollup["create_mock_hr_ticket"]
+    assert ticket.calls == 2
+    assert ticket.sample_n == 2, "the denominator the page shows beside the rate (P14)"
+    assert ticket.errors == 0, "the pause is not an error"
+    assert ticket.confirmation_pauses == 1
+    assert ticket.error_rate == 0.0, "50.0% from one of two calls was the defect"
+
+    view = dash.build_tools(_request(), dash.Filters())
+    paused = [row for row in view.recent if row.paused_for_confirmation]
+    assert len(paused) == 1
+    assert paused[0].outcome_label == "paused"
+    assert [row.outcome_label for row in view.recent if not row.is_error] == ["ok"]
+
+    failing = dash.build_tools(_request(), dash.Filters(errors_only=True))
+    assert failing.recent == [], '"Errors only" lists things that went wrong, and a pause did not'
+    assert failing.by_tool == []
+
+
+def test_a_genuine_tool_error_is_still_counted_and_still_listed(writer):
+    """The other half of the pair: nothing above made the page blind to a real failure."""
+    _tool_calls(writer, name="check_pto_balance", count=4, errors=1)
+
+    ticket = dash.build_tools(_request(), dash.Filters()).by_tool[0]
+    assert ticket.errors == 1
+    assert ticket.confirmation_pauses == 0
+    assert ticket.error_rate == 0.25
+
+    failing = dash.build_tools(_request(), dash.Filters(errors_only=True))
+    assert [(row.tool_name, row.calls) for row in failing.by_tool] == [("check_pto_balance", 1)]
+    assert [row.outcome_label for row in failing.recent] == ["error"]
+
+
+def test_the_rollup_reports_the_sample_behind_each_percentile(writer):
+    """**P14**: a p95 over one call is `n=1` on the page, and this is the field that says so."""
+    _tool_calls(writer, name="check_pto_balance", count=1)
+
+    row = dash.build_tools(_request(), dash.Filters()).by_tool[0]
+    assert row.duration_n == 1
+    assert dash._f_ms_n(row.p95_ms, row.duration_n) == "n=1"
