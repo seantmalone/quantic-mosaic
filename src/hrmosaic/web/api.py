@@ -884,6 +884,10 @@ TURN_ANNOUNCEMENTS = {
 TURN_ANNOUNCEMENT_FALLBACK = TURN_ANNOUNCEMENTS["error"]
 
 
+#: What the panel calls that line, in the plan's own words (§3.7 item 4).
+PRODUCED_LEAD = "How this answer was produced"
+
+
 def _count(number: int, noun: str) -> str:
     """`1 tool` / `7 tools` — the plural follows the count, and no `(s)` is ever rendered (P9)."""
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
@@ -903,9 +907,9 @@ def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str
     """
     checks = sum(1 for span in spans if span["kind"] == "guardrail" and span["payload"].get("verdict") == "allow")
     return (
-        f"Used {_count(response.usage.tool_calls, 'tool')}, "
-        f"read {_count(len(response.citations), 'policy section')} "
-        f"and passed {_count(checks, 'safety check')}."
+        f"{PRODUCED_LEAD}: {_count(response.usage.tool_calls, 'tool')} used, "
+        f"{_count(len(response.citations), 'policy section')} read, "
+        f"{_count(checks, 'safety check')} passed."
     )
 
 
@@ -1816,6 +1820,8 @@ __all__ = [
     "DEGRADATIONS",
     "DEMO_PROMPTS",
     "LABELLED_OUTCOMES",
+    "LIVE_PROVIDER",
+    "PRODUCED_LEAD",
     "RECORDED_PROVIDER",
     "SIMULATED_WRITES",
     "STARTER_PROMPTS",

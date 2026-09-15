@@ -152,6 +152,17 @@ async def test_the_panel_states_the_demo_environment_once(web):
     assert api.SIMULATED_WRITES not in rest, "stated once, in the panel — not inside the answers"
 
 
+async def test_the_environment_block_says_so_when_a_live_model_is_answering(web):
+    """The stub is the demo's normal state; the deployed app is not, and the line has to differ."""
+    from hrmosaic.web import api
+
+    async with web(llm_provider="anthropic") as client:
+        panel = _panel((await client.get("/")).text)
+
+    assert api.LIVE_PROVIDER in panel
+    assert api.RECORDED_PROVIDER not in panel
+
+
 async def test_the_panel_summarises_how_the_last_turn_was_produced(web):
     """Plan §3.7 item 4: three counts, in plain language, with no identifier in them."""
     async with web("demo_task_1.json") as client:
@@ -162,6 +173,7 @@ async def test_the_panel_summarises_how_the_last_turn_was_produced(web):
     produced = re.search(r'data-produced="([^"]+)"', turn.text)
     assert produced, "the rendered turn carries the summary the panel shows"
     summary = produced.group(1)
-    assert re.fullmatch(r"Used \d+ tools?, read \d+ policy sections? and passed \d+ safety checks?\.", summary), summary
+    expected = r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, \d+ safety checks? passed\."
+    assert re.fullmatch(expected, summary), summary
     assert "(s)" not in summary, "the plural follows the count (P9)"
     assert summary in _panel(reloaded), "and a replayed conversation shows the same sentence"

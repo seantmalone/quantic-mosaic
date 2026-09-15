@@ -281,9 +281,6 @@ def test_p12_no_two_disclosures_on_a_turn_share_an_accessible_name(fresh_page, f
     assert len(names) == len(set(names)), f"two disclosures share a name: {names}"
 
 
-# -- P2 and P13, on the painted page ----------------------------------------------------
-
-
 # -- P8, on the painted page ------------------------------------------------------------
 
 
@@ -318,9 +315,8 @@ def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page
     )
     assert not link["hidden"] and re.match(r"^/dashboard/sessions/[0-9a-f]+#turn-\d+$", link["href"] or ""), link
     produced = fresh_page.eval_on_selector("#demo-produced", "e => e.textContent.trim()")
-    assert re.fullmatch(r"Used \d+ tools?, read \d+ policy sections? and passed \d+ safety checks?\.", produced), (
-        produced
-    )
+    expected = r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, \d+ safety checks? passed\."
+    assert re.fullmatch(expected, produced), produced
 
 
 def test_p8_the_panel_is_collapsed_on_a_phone_so_the_conversation_keeps_its_room(browser, ux_server):
@@ -425,6 +421,9 @@ def test_p12_a_failed_turn_is_announced_as_one(scripted_page, scripted_server):
     assert scripted_page.eval_on_selector("#turn-status", "e => e.textContent") == (
         "Something went wrong — you can retry."
     )
+
+
+# -- P2 and P13, on the painted page ----------------------------------------------------
 
 
 def test_p2_and_p13_nothing_technical_survives_onto_the_painted_page(fresh_page, fresh_server):
