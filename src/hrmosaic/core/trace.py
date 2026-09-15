@@ -93,7 +93,8 @@ LLM_MESSAGE_INSERT = "INSERT INTO llm_messages (span_id, seq, role, content) VAL
 
 TURN_CLOSE = """
 UPDATE turns SET ended_at = ?, duration_ms = ?, final_answer = ?, answer_blocks_json = ?,
-                 citations_json = ?, outcome = ?, stop_reason = ?, intent = ?, workflow = ?,
+                 citations_json = ?, next_steps_json = ?, outcome = ?, stop_reason = ?,
+                 intent = ?, workflow = ?,
                  error_kind = ?, total_tokens_in = ?, total_tokens_out = ?, llm_calls = ?,
                  tool_calls = ?, retrievals = ?, guardrail_hits = ?, llm_ms = ?, retrieval_ms = ?,
                  tool_ms = ?, store_ms = ?, provider = ?, model = ?, provider_failover = ?,
@@ -703,6 +704,7 @@ class TurnBuffer:
         final_answer: str | None = None,
         answer_blocks: Any = None,
         citations: Any = None,
+        next_steps: Any = None,
         intent: str | None = None,
         workflow: str | None = None,
         error_kind: str | None = None,
@@ -770,6 +772,7 @@ class TurnBuffer:
                     redact_text(final_answer) if final_answer else final_answer,
                     _dump_redacted_json(answer_blocks),
                     _dump_redacted_json(citations),
+                    _dump_redacted_json(next_steps),
                     outcome,
                     stop_reason,
                     intent,
@@ -809,9 +812,9 @@ def _dump_json(value: Any) -> str | None:
 
 
 def _dump_redacted_json(value: Any) -> str | None:
-    """Serialise, then redact — `answer_blocks_json` and `citations_json` hold the same
-    model-generated prose as `final_answer`, and §10.4 runs `redact()` over all of it. Scrubbing
-    one column and persisting the leak verbatim in the next is the failure §17 forbids."""
+    """Serialise, then redact — `answer_blocks_json`, `citations_json` and `next_steps_json` hold
+    the same model-generated prose as `final_answer`, and §10.4 runs `redact()` over all of it.
+    Scrubbing one column and persisting the leak verbatim in the next is the failure §17 forbids."""
     dumped = _dump_json(value)
     if dumped is None:
         return None

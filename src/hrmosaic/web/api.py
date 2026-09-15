@@ -1153,6 +1153,16 @@ def _owns(session_row: dict[str, Any] | None, identity: Identity) -> bool:
     return identity.is_admin or session_row.get("employee_id") == identity.actor
 
 
+def _replayed_next_steps(row: Mapping[str, Any]) -> list[str]:
+    """`turns.next_steps_json`, or — for a row older than migration 002 — the joined answer."""
+    stored = row["next_steps_json"]
+    if stored:
+        parsed = json.loads(stored)
+        if isinstance(parsed, list):
+            return [str(step) for step in parsed]
+    return parse_next_steps(row["final_answer"] or "")
+
+
 def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
     """Replay a stored session's turns into the shape `_turn.html` renders a live one in (§11.5).
 
@@ -1163,10 +1173,17 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
     `confirmation` is deliberately never rebuilt: a confirmation token is minted in exactly one
     place (`POST /chat/confirm`, §11.2) and a replayed card offering a Confirm button that cannot
     write would be a lie. A parked turn replays as the transcript it is.
+
+    **What `_owns()` above is, and is not.** A raw session id is not enough on its own; the persona
+    cookie is the boundary. It is not an authentication boundary and this docstring will not call
+    it one: the persona is audit-only (§8.7), anyone holding the one shared access token can set
+    `mosaic_actor` or send `X-Actor`, and every record behind it is synthetic. It stops a shared id
+    from replaying someone else's conversation by accident, which is the whole of its job.
     """
     store = _store(request)
     rows = store.execute(
-        "SELECT id, seq, started_at, user_message, final_answer, answer_blocks_json, citations_json, outcome, "
+        "SELECT id, seq, started_at, user_message, final_answer, answer_blocks_json, citations_json, "
+        "next_steps_json, outcome, "
         "workflow, llm_calls, tool_calls, retrievals, total_tokens_in, total_tokens_out, duration_ms "
         "FROM turns WHERE session_id = ? AND ended_at IS NOT NULL ORDER BY seq",
         (session_id,),
@@ -1182,10 +1199,11 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
             trace_id=session_id,
             outcome=outcome,
             answer=row["final_answer"] or "",
-            # `turns` stores the blocks, not the steps beside them — so a replay used to drop
-            # `next_steps`, and a refusal came back from a reload without its redirect. They are in
-            # the stored answer, as the section `render_answer()` closes with.
-            next_steps=parse_next_steps(row["final_answer"] or ""),
+            # The steps are their own column since UX W3, so a refusal comes back from a reload
+            # with the redirect that is the most useful half of it. Rows written before that
+            # migration hold `NULL`, and only those fall back to reading the steps out of the
+            # section `render_answer()` closes the stored answer with.
+            next_steps=_replayed_next_steps(row),
             # `turns` stores the blocks and the citations, not the chrome built around them. The
             # quick replies are not model output — they are `CLARIFY_CHIPS` keyed by the workflow,
             # which the row does carry — so a replayed clarification still offers the same two ways

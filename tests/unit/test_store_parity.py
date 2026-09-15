@@ -230,7 +230,7 @@ def test_both_backends_agree_on_the_same_sequence(stores):
 def test_the_sequence_actually_produced_data(stores):
     results = _run_sequence(stores[0])
     applied, re_applied, batched, selected, aggregate, *_ = results
-    assert applied == ["001_initial"]
+    assert applied == ["001_initial", "002_turn_next_steps"]
     assert re_applied == []
     assert [row["seq"] for row in selected.dicts()] == [1, 2, 3]
     assert aggregate.dicts() == [{"n": 3, "total": 30}]

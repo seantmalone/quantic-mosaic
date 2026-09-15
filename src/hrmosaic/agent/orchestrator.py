@@ -1712,6 +1712,10 @@ class Orchestrator:
             final_answer=rendered,
             answer_blocks=list(answer.blocks),
             citations=list(citations),
+            # Beside the blocks, not inside the joined string: a replayed refusal's redirect used
+            # to depend on `parse_next_steps()` finding the section `render_answer()` had appended
+            # (UX W3).
+            next_steps=list(answer.next_steps),
             intent=decision.intent if decision is not None else None,
             workflow=decision.workflow if decision is not None else None,
             error_kind=error_kind,

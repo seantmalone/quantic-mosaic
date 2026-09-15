@@ -1499,6 +1499,8 @@ CREATE TABLE turns (
   user_message TEXT NOT NULL, final_answer TEXT,
   answer_blocks_json TEXT,             -- [{type, text, citations[]}]
   citations_json TEXT,                 -- the §7.3 Citation model, all nine fields
+  next_steps_json TEXT,                -- ["…"] — the redirect beside the blocks; ADDed by
+                                       -- core/migrations/002_turn_next_steps.sql (UX W3)
   outcome TEXT,                        -- answered|clarify|refused|escalated|awaiting_confirmation
                                        -- |partial|error|configuration_required|maintenance
   stop_reason TEXT, intent TEXT, workflow TEXT, error_kind TEXT,

@@ -13,6 +13,8 @@ never confirms whether the id exists.
 
 from __future__ import annotations
 
+import html as html_module
+import json
 import re
 
 import pytest
@@ -133,6 +135,55 @@ async def test_a_replayed_turn_renders_exactly_what_the_live_one_did(web):
     # Not just the two strings: the whole agent message is the same markup, modulo the turn's own
     # clock time, which is the only thing in it that depends on when it is rendered.
     assert _agent_message(live.text) == _agent_message(reloaded.text)
+
+
+async def test_a_replayed_refusal_still_carries_its_redirect(web, store):
+    """The redirect survives a reload because the turn **stores** it (UX W3).
+
+    A refusal's `next_steps` are the half of it worth reading: what the library does cover, and who
+    to ask when it does not. `turns` held the blocks and the citations but not the steps, so the
+    replay had to take the joined `final_answer` back apart to find them — a redirect that existed
+    only as long as one string format held. `next_steps_json` is the column beside
+    `answer_blocks_json`; rewriting `final_answer` out from under the row proves the replay no
+    longer depends on it.
+    """
+    question = (
+        "What is Mosaic's tuition reimbursement cap for a part-time master's degree, and how many "
+        "years of service do I need to qualify?"
+    )
+    async with web("out_of_corpus_tuition.json") as client:
+        refused = await client.post("/chat", json={"message": question})
+        assert refused.status_code == 200, refused.text
+        body = refused.json()
+        assert body["outcome"] == "refused"
+        assert body["next_steps"], "a refusal redirects"
+
+        stored = store.execute("SELECT next_steps_json FROM turns WHERE id = ?", (body["turn_id"],)).scalar()
+        assert json.loads(stored) == body["next_steps"], "the steps are a column, not a parse"
+
+        # Nothing else in the row can stand in for them now.
+        store.execute("UPDATE turns SET final_answer = ? WHERE id = ?", ("(the answer)", body["turn_id"]))
+        page = await client.get(f"/?session={body['session_id']}")
+
+    assert page.status_code == 200
+    for step in body["next_steps"]:
+        assert html_module.escape(step) in page.text, f"the replayed refusal lost {step!r}"
+
+
+async def test_a_turn_written_before_the_column_existed_still_replays_its_steps(web, store):
+    """Forward-only migration: an older row has `next_steps_json = NULL` and falls back to the join."""
+    question = (
+        "What is Mosaic's tuition reimbursement cap for a part-time master's degree, and how many "
+        "years of service do I need to qualify?"
+    )
+    async with web("out_of_corpus_tuition.json") as client:
+        refused = await client.post("/chat", json={"message": question})
+        body = refused.json()
+        store.execute("UPDATE turns SET next_steps_json = NULL WHERE id = ?", (body["turn_id"],))
+        page = await client.get(f"/?session={body['session_id']}")
+
+    for step in body["next_steps"]:
+        assert html_module.escape(step) in page.text, f"the pre-migration row lost {step!r}"
 
 
 def _session_of(fragment: str) -> str:
