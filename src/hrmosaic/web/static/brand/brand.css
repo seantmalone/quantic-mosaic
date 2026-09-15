@@ -1,0 +1,231 @@
+/* Mosaic Robotics — brand layer for Mosaic HR Copilot.
+   Self-contained: @font-face rules for the two self-hosted OFL faces, then the token block.
+   Not imported anywhere yet. W2 imports it (or pastes the token block into app.css).
+
+   Every file referenced here sits in this directory. No external font host, no CDN, no @import
+   of anything off-origin — the page a grader loads is the page in the repo.
+
+   Fonts: Archivo (Omnibus-Type) and Public Sans (USWDS), both SIL Open Font License 1.1.
+   Licences: ./OFL-Archivo.txt and ./OFL-PublicSans.txt. Provenance: docs/brand.md. */
+
+/* ============================================================================ @font-face
+   Subset to Latin (Google Fonts' `latin` range plus the arrows and geometric marks the UI
+   uses). `swap` because the fallback metrics below are close enough that the swap is quiet. */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("Archivo-Medium-latin.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215,
+    U+25A0-25A1, U+25B2-25BC, U+2713, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo";
+  src: url("Archivo-SemiBold-latin.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215,
+    U+25A0-25A1, U+25B2-25BC, U+2713, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Public Sans";
+  src: url("PublicSans-Regular-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215,
+    U+25A0-25A1, U+25B2-25BC, U+2713, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Public Sans";
+  src: url("PublicSans-Italic-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215,
+    U+25A0-25A1, U+25B2-25BC, U+2713, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Public Sans";
+  src: url("PublicSans-SemiBold-latin.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215,
+    U+25A0-25A1, U+25B2-25BC, U+2713, U+FEFF, U+FFFD;
+}
+
+/* ================================================================================= tokens
+   This is the block reproduced verbatim in docs/brand.md §7. Light is the default on
+   `:root`; dark arrives two ways — by preference, and by an explicit `data-theme` — and the
+   preference rule is guarded with `:not([data-theme="light"])` so an explicit light choice
+   always wins over the OS. Every colour pair is checked in docs/brand.md §3. */
+
+:root {
+  color-scheme: light dark;
+
+  /* -- type --------------------------------------------------------------------------- */
+  --font-display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Public Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --text-eyebrow: 500 0.75rem/1.2 var(--font-display);
+  --text-h1: 600 1.375rem/1.25 var(--font-display);
+  --text-h2: 600 1.125rem/1.3 var(--font-display);
+  --text-h3: 600 1rem/1.35 var(--font-display);
+  --text-body: 400 1rem/1.55 var(--font-body);
+  --text-small: 400 0.875rem/1.5 var(--font-body);
+  --text-meta: 400 0.8125rem/1.45 var(--font-body);
+  --track-display: -0.011em;   /* Archivo is set slightly tight; body copy is never tracked */
+  --track-eyebrow: 0.08em;
+
+  /* -- the tessera grid: every length is a multiple of 4px ----------------------------- */
+  --space-1: 0.25rem;   /*  4px */
+  --space-2: 0.5rem;    /*  8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.5rem;    /* 24px */
+  --space-6: 2rem;      /* 32px */
+  --space-7: 3rem;      /* 48px */
+  --space-8: 4rem;      /* 64px */
+
+  --radius-tile: 3px;   /* chips, buttons, inputs, badges, the id code chips */
+  --radius: 6px;        /* cards, panels, message bubbles, tables */
+  --radius-bar: 0;      /* anything full-bleed: masthead, sticky nav, composer on mobile */
+
+  --measure: 40rem;     /* the conversation column — about 80 characters of Public Sans */
+
+  /* -- elevation: hairlines first, shadow only where something really floats ----------- */
+  --edge: 1px solid var(--line);
+  --edge-strong: 1px solid var(--line-strong);
+  --lift-0: none;
+  --lift-1: 0 1px 2px rgb(16 29 28 / 0.07);
+  --lift-2: 0 2px 8px rgb(16 29 28 / 0.11);
+  --focus-ring: 0 0 0 2px var(--card), 0 0 0 4px var(--focus);
+
+  /* -- light: porcelain grounds, verdigris accent -------------------------------------- */
+  --paper: #f3f6f5;
+  --card: #ffffff;
+  --sunk: #e9eeec;
+
+  --ink: #101d1c;
+  --ink-soft: #4c5f5d;
+  --ink-mute: #586967;
+
+  --accent: #0d5c57;
+  --accent-strong: #083f3b;
+  --accent-soft: #d5e6e2;
+  --on-accent: #ffffff;
+
+  --line: #dbe2e0;
+  --line-strong: #7f8d8b;
+  --focus: #0d5c57;
+
+  --warn: #7a4b04;
+  --warn-soft: #faefd9;
+  --danger: #96251e;
+  --danger-soft: #fbe7e4;
+  --ok: #1e6335;
+  --ok-soft: #e2efe6;
+
+  --mark-a: #58958e;
+  --mark-b: #2c736c;
+  --mark-c: #0d5c57;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0c1413;
+    --card: #131e1c;
+    --sunk: #080f0e;
+
+    --ink: #e8eeec;
+    --ink-soft: #a2b2af;
+    --ink-mute: #8c9c99;
+
+    --accent: #6acfc2;
+    --accent-strong: #93e1d6;
+    --accent-soft: #11312d;
+    --on-accent: #08100f;
+
+    --line: #24302e;
+    --line-strong: #5f6e6a;
+    --focus: #6acfc2;
+
+    --warn: #e0b063;
+    --warn-soft: #2c2211;
+    --danger: #f0918a;
+    --danger-soft: #33191a;
+    --ok: #72c990;
+    --ok-soft: #12291b;
+
+    --mark-a: #3a7c75;
+    --mark-b: #4e9e95;
+    --mark-c: #6acfc2;
+
+    /* shadows read as smudges on a dark ground; the hairline carries the elevation */
+    --lift-1: 0 0 0 1px #24302e;
+    --lift-2: 0 2px 10px rgb(0 0 0 / 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #0c1413;
+  --card: #131e1c;
+  --sunk: #080f0e;
+
+  --ink: #e8eeec;
+  --ink-soft: #a2b2af;
+  --ink-mute: #8c9c99;
+
+  --accent: #6acfc2;
+  --accent-strong: #93e1d6;
+  --accent-soft: #11312d;
+  --on-accent: #08100f;
+
+  --line: #24302e;
+  --line-strong: #5f6e6a;
+  --focus: #6acfc2;
+
+  --warn: #e0b063;
+  --warn-soft: #2c2211;
+  --danger: #f0918a;
+  --danger-soft: #33191a;
+  --ok: #72c990;
+  --ok-soft: #12291b;
+
+  --mark-a: #3a7c75;
+  --mark-b: #4e9e95;
+  --mark-c: #6acfc2;
+
+  --lift-1: 0 0 0 1px #24302e;
+  --lift-2: 0 2px 10px rgb(0 0 0 / 0.5);
+}
+
+/* ================================================================ the mark, two ways
+   mark.svg and wordmark.svg paint their tiles with `fill: var(--mark-a, <literal>)`, and
+   flip the literal under `prefers-color-scheme: dark` inside the file. So:
+     • as <img src="mark.svg"> or as the favicon — nothing defines --mark-a, the literal
+       wins, and the OS preference switches it;
+     • inlined into the page — the tokens above are already in scope, so the mark follows
+       the live theme, including an explicit `data-theme="dark"` on a light OS.
+   Nothing extra is needed here; do not re-declare --mark-* on `.brand-mark` or the two
+   paths diverge.
+
+   Numbers in tables, KPI tiles and anything that gets compared down a column. Public Sans
+   and Archivo both ship `tnum`; without it the dashboard's digits shift under each other. */
+.tabular {
+  font-variant-numeric: tabular-nums lining-nums;
+}

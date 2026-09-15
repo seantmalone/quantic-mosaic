@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" class="brand-mark" role="img" aria-label="Mosaic Robotics">
+<title>Mosaic Robotics</title>
+<style>
+.brand-mark .ta{fill:var(--mark-a,#58958E)}.brand-mark .tb{fill:var(--mark-b,#2C736C)}.brand-mark .tc{fill:var(--mark-c,#0D5C57)}
+@media (prefers-color-scheme:dark){.brand-mark .ta{fill:var(--mark-a,#3A7C75)}.brand-mark .tb{fill:var(--mark-b,#4E9E95)}.brand-mark .tc{fill:var(--mark-c,#6ACFC2)}}
+</style>
+<rect class="ta" x="0" y="0" width="5" height="5" rx="0.5"/><rect class="ta" x="6" y="0" width="5" height="5" rx="0.5"/><rect class="ta" x="0" y="6" width="5" height="5" rx="0.5"/><rect class="ta" x="6" y="6" width="5" height="5" rx="0.5"/><rect class="tb" x="13" y="0" width="11" height="5" rx="0.5"/><rect class="tb" x="13" y="6" width="11" height="5" rx="0.5"/><rect class="tb" x="0" y="13" width="5" height="11" rx="0.5"/><rect class="tb" x="6" y="13" width="5" height="11" rx="0.5"/><rect class="tc" x="13" y="13" width="11" height="11" rx="0.5"/>
+</svg>

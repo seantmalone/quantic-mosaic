@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" class="brand-favicon" role="img" aria-label="Mosaic Robotics">
+<title>Mosaic Robotics</title>
+<style>
+.brand-favicon .bg{fill:#0D5C57}.brand-favicon .ta{fill:#7FB0AB}.brand-favicon .tb{fill:#B9D6D3}.brand-favicon .tc{fill:#FFFFFF}
+@media (prefers-color-scheme:dark){.brand-favicon .bg{fill:#6ACFC2}.brand-favicon .ta{fill:#2C736C}.brand-favicon .tb{fill:#1A605A}.brand-favicon .tc{fill:#0C1413}}
+</style>
+<rect class="bg" x="0" y="0" width="32" height="32" rx="6"/>
+<g transform="translate(3 3) scale(1.0833)"><rect class="ta" x="0" y="0" width="5" height="5" rx="0.6"/><rect class="ta" x="6" y="0" width="5" height="5" rx="0.6"/><rect class="ta" x="0" y="6" width="5" height="5" rx="0.6"/><rect class="ta" x="6" y="6" width="5" height="5" rx="0.6"/><rect class="tb" x="13" y="0" width="11" height="5" rx="0.6"/><rect class="tb" x="13" y="6" width="11" height="5" rx="0.6"/><rect class="tb" x="0" y="13" width="5" height="11" rx="0.6"/><rect class="tb" x="6" y="13" width="5" height="11" rx="0.6"/><rect class="tc" x="13" y="13" width="11" height="11" rx="0.6"/></g>
+</svg>
