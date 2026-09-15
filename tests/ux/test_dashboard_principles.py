@@ -220,8 +220,12 @@ def test_p9_the_guardrail_figures_agree_with_the_checks_listed_below_them(dashbo
     )
     checks_rendered = tab.eval_on_selector_all('.span-row[data-kind="guardrail"]', "els => els.length")
 
-    assert "Guardrail blocks" in figures and "Guardrail checks" in figures, figures
-    blocks, checks = int(figures["Guardrail blocks"]), int(figures["Guardrail checks"])
+    assert "Guardrail blocks" in figures and "Safety checks" in figures, figures
+    # "5 of 6 applied · 7 checks run" (UX W7, npo3-04): the spans that ran are the third figure.
+    blocks = int(figures["Guardrail blocks"])
+    applied = re.fullmatch(r"(\d+) of 6 applied · (\d+) checks? run", figures["Safety checks"])
+    assert applied, figures["Safety checks"]
+    checks = int(applied.group(2))
     assert checks == checks_rendered, f"the count and the list it counts disagree: {checks} vs {checks_rendered}"
     assert blocks <= checks, f"more blocks than checks: {figures}"
 

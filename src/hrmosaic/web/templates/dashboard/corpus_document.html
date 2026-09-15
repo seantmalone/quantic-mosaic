@@ -10,12 +10,16 @@
 {% block content %}
 <section class="panel" id="corpus-document">
   <dl class="facts">
-    <div><dt>Format</dt><dd><span class="pill">{{ view.document.source_format }}</span></dd></div>
-    <div><dt>Topics</dt><dd>{% for topic in view.document.topics %}<span class="pill">{{ topic }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor %}</dd></div>
+    {#- The reader's conventions (UX W7, JX2-03 = M16 = M17): the same document one click away at
+        `/policy/{doc_id}` prints its topics through `enum_label`, its date through `human_date`
+        and its headings joined with `·` — this page was the last one printing the raw enum, the
+        ISO date and `A > B`. -#}
+    <div><dt>Format</dt><dd><span class="pill">{{ view.document.source_format|enum_label }}</span></dd></div>
+    <div><dt>Topics</dt><dd>{% for topic in view.document.topics %}<span class="pill">{{ topic|enum_label }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor %}</dd></div>
     <div><dt>Sections</dt><dd>{{ view.document.section_count|num }}</dd></div>
     <div><dt>Passages</dt><dd>{{ view.document.chunk_count|num }}</dd></div>
     <div><dt>Words</dt><dd>{{ view.document.word_count|num }}</dd></div>
-    <div><dt>Effective</dt><dd>{{ view.document.effective_date }}</dd></div>
+    <div><dt>Effective</dt><dd>{{ view.document.effective_date|human_date }}</dd></div>
     <div><dt>Version</dt><dd>{{ view.document.version }}</dd></div>
     <div><dt>Id</dt><dd><code class="id-chip" title="{{ view.document.doc_id }}">{{ view.document.doc_id }}</code></dd></div>
   </dl>
@@ -25,9 +29,15 @@
   <h3>Passages <span class="muted">({{ view.chunks|length|num }})</span></h3>
   <nav class="chunk-contents" aria-label="Passages in this document">
     <h4>Contents</h4>
+    {#- One entry per passage still — this is the chunk inspector, and a passage is what a citation
+        names — but a repeated heading is disambiguated by its passage ordinal rather than printed
+        twice as if it were two sections (UX W7, M17 = DR2-11). -#}
     <ol>
+      {% set ns = namespace(previous=none, ordinal=1) %}
       {% for chunk in view.chunks %}
-      <li><a href="#{{ chunk.chunk_id }}">{{ chunk.heading_path }}</a></li>
+      {% if chunk.heading_path == ns.previous %}{% set ns.ordinal = ns.ordinal + 1 %}{% else %}{% set ns.ordinal = 1 %}{% endif %}
+      {% set ns.previous = chunk.heading_path %}
+      <li><a href="#{{ chunk.chunk_id }}">{{ chunk.heading_path|heading_path }}{% if ns.ordinal > 1 %} <span class="muted">(passage {{ ns.ordinal }})</span>{% endif %}</a></li>
       {% else %}<li class="muted">This document has no passages.</li>{% endfor %}
     </ol>
   </nav>
@@ -37,7 +47,7 @@
       <details class="chunk" id="{{ chunk.chunk_id }}">
         <summary>
           <span class="chunk-head">
-            <span class="chunk-path">{{ chunk.heading_path }}</span>
+            <span class="chunk-path">{{ chunk.heading_path|heading_path }}</span>
             <code class="id-chip" title="{{ chunk.chunk_id }}">{{ chunk.chunk_id }}</code>
             <span class="chunk-offsets">{{ chunk.n_chars|num }} characters, at
               {{ chunk.char_start|num }}–{{ chunk.char_end|num }} of the document</span>

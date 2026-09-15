@@ -93,10 +93,10 @@
   <div class="table-scroll">
     <table id="escalation-matrix" class="data-table">
       <thead><tr><th scope="col">gold ↓ / predicted →</th>
-        {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}<th scope="col">{{ predicted }}</th>{% endfor %}</tr></thead>
+        {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}<th scope="col">{{ predicted|enum_label }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for gold in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
-        <tr><th scope="row">{{ gold }}</th>
+        <tr><th scope="row">{{ gold|enum_label }}</th>
           {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
           <td class="cell-num">{{ view.metrics.escalation_matrix.get(gold, {}).get(predicted, 0)|num }}</td>
           {% endfor %}
@@ -298,10 +298,10 @@
       new Chart(document.getElementById("chart-rss"), {
         type: "line",
         data: { labels: data.rss_series.map(function (point) { return point.turn_id.slice(0, 8); }),
-                datasets: [{ label: "RSS MB", borderColor: "#3b6fb0", tension: 0.25,
+                datasets: [{ label: "Memory (MB)", borderColor: "#3b6fb0", tension: 0.25,
                              data: data.rss_series.map(function (point) { return point.rss_mb; }) }] },
         options: { responsive: true, maintainAspectRatio: false,
-                   plugins: { title: { display: true, text: "RSS at the end of each turn" } } }
+                   plugins: { title: { display: true, text: "Memory at the end of each turn" } } }
       });
     });
   })();

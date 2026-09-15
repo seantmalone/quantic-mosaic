@@ -40,6 +40,7 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from markupsafe import Markup
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.requests import Request
 
@@ -50,6 +51,7 @@ from hrmosaic.core import corpusread
 from hrmosaic.core import trace as trace_module
 from hrmosaic.core.db import Store, get_store, now_micros
 from hrmosaic.core.models import DiscoveredTool, ServerInfo
+from hrmosaic.core.queues import queue_label
 from hrmosaic.core.trace import SessionSpec
 from hrmosaic.settings import Settings
 from hrmosaic.web import api
@@ -105,6 +107,15 @@ NAV: tuple[tuple[str, tuple[tuple[int, str, str], ...]], ...] = (
     # "Corpus & chunks", not "Policy library": the readable library is `/policy`, and two surfaces
     # sharing one name meant the inspector wore the reader's (UX W7, nav-r2-5).
     ("Reference", ((10, "Corpus & chunks", "/dashboard/corpus"),)),
+)
+
+#: What the three admin-gated write controls say to every other persona — one sentence, and a link
+#: that can be followed rather than a pointer that has to be described (UX W7, M09 = dgc-r2-9).
+#: Tool server and Evaluations said "set it in … at the foot of the chat page" and Guardrails said
+#: "switch personas in … on the chat page": one action, two phrasings, two prepositions.
+ADMIN_HINT = Markup(
+    "<strong>Needs the HR admin persona</strong> — switch personas in "
+    '<a href="/#actor-select">Demo &amp; grader controls</a> on the chat page.'
 )
 
 #: Which nav entry a page highlights when it is not an entry itself: session detail is opened from
@@ -448,6 +459,21 @@ ENUM_LABELS: dict[str, str] = {
     "out_of_scope": "out of scope",
     "unsafe_action": "unsafe action",
     "conditional": "conditional",
+    # Model calls (UX W7, JX2-01): the finish reason and the provider are enums too.
+    "end_turn": "finished",
+    "stop": "finished",
+    "tool_use": "asked for a tool",
+    "max_tokens": "hit the token limit",
+    "length": "hit the token limit",
+    "stub": "recorded script",
+    # Health (JX2-01): where the conversation record lives, said as a fact about durability.
+    "sqlite": "on disk — survives a restart",
+    "memory": "in memory — lost on restart",
+    # Turns (DR2-09): the router's intents and workflows.
+    "policy_qa": "policy question",
+    "pto_request": "PTO request",
+    "remote_work_eligibility": "remote work eligibility",
+    "dense_only": "dense only",
 }
 
 
@@ -849,6 +875,12 @@ class TurnRollups(_View):
     tool_calls: int | None
     retrievals: int | None
     guardrail_hits: int | None
+    #: The safety checks in the one unit every surface uses (UX W7, npo3-04 = dgc-r2-2): rules
+    #: that applied to the turn and rules that passed, out of `api.SAFETY_RULES`, plus the spans
+    #: that ran — computed by `api.safety_checks`, the helper the demo panel's sentence uses.
+    rules_ran: int = 0
+    rules_passed: int = 0
+    checks_run: int = 0
     tokens_in: int | None
     tokens_out: int | None
     llm_ms: int | None
@@ -1563,6 +1595,9 @@ def _turn_detail(store: Store, row: dict[str, Any]) -> TurnDetail:
             tool_calls=row["tool_calls"],
             retrievals=row["retrievals"],
             guardrail_hits=row["guardrail_hits"],
+            rules_passed=api.safety_checks(spans)[0],
+            rules_ran=api.safety_checks(spans)[1],
+            checks_run=sum(1 for span in spans if span["kind"] == "guardrail"),
             tokens_in=row["total_tokens_in"],
             tokens_out=row["total_tokens_out"],
             llm_ms=row["llm_ms"],
@@ -1882,8 +1917,10 @@ def _argument_parts(arguments: Mapping[str, Any]) -> list[str]:
         if isinstance(value, Mapping):
             parts.extend(_argument_parts(value))
             continue
+        # The values side, humanised like the keys (UX W7, JX2-02 = jargon-and-exposure-23): a
+        # queue slug is the team's name, an enum is its label, a date is the dashboard's date.
         if isinstance(value, str):
-            rendered = f'"{value}"' if len(value) <= 40 else f'"{value[:39]}…"'
+            rendered = _argument_value(key, value)
         elif isinstance(value, bool):
             rendered = "yes" if value else "no"
         elif isinstance(value, (int, float)):
@@ -1892,8 +1929,41 @@ def _argument_parts(arguments: Mapping[str, Any]) -> list[str]:
             rendered = _f_counted(len(value), "value")
         else:
             rendered = _f_compact(value, 30)
-        parts.append(f"{key}={rendered}")
+        parts.append(f"{_f_enum_label(key)}: {rendered}")
     return parts
+
+
+#: Argument keys whose string value is a stored enum or a routing key, not free text.
+_ENUM_ARGUMENTS = frozenset({"scenario", "topic", "kind", "priority", "strategy", "source_format", "category"})
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_DATETIME = re.compile(r"^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]00:?00)$")
+
+
+def _argument_value(key: str, value: str) -> str:
+    """One string argument as a reader reads it."""
+    if key == "queue":
+        return queue_label(value)
+    if key in _ENUM_ARGUMENTS:
+        return _f_enum_label(value)
+    dated = _human_moment(value)
+    if dated is not None:
+        return dated
+    return f'"{value}"' if len(value) <= 40 else f'"{value[:39]}…"'
+
+
+def _human_moment(value: str) -> str | None:
+    """An ISO date or instant in the dashboard's own two shapes — or `None` for anything else.
+
+    The Tools page printed `as of: 2026-09-01` and `computed at: 2026-09-15T18:21:44Z` beside a
+    CREATED column reading `2026-09-15 18:22:00 UTC`, a fourth date shape on a page that already
+    had three (UX W7, M33 = npo3-09).
+    """
+    if _ISO_DATE.match(value):
+        return api.human_date(value)
+    match = _ISO_DATETIME.match(value)
+    if match:
+        return f"{match.group(1)} {match.group(2)} UTC"
+    return None
 
 
 def _scalar_value(value: str | int | float | bool) -> str:
@@ -1902,7 +1972,8 @@ def _scalar_value(value: str | int | float | bool) -> str:
         return "yes" if value else "no"
     if isinstance(value, (int, float)):
         return _f_num(value)
-    return _f_enum_label(value)
+    dated = _human_moment(str(value))
+    return dated if dated is not None else _f_enum_label(value)
 
 
 def summarise_result(structured: Any, result_json: Any, *, error_code: str | None = None) -> str:
@@ -2340,7 +2411,12 @@ def _run_row(row: dict[str, Any]) -> EvalRunRow:
     metrics = EvalMetrics.model_validate(json.loads(row["metrics_json"] or "{}"))
     return EvalRunRow(
         run_id=row["id"],
-        label=row["label"],
+        # One spelling of one run, everywhere it is named — the list's RUN, the headline table's
+        # RUN, the run page's title and breadcrumb — built here from the same `enum_label` the
+        # VARIANT column beside it goes through. The stored label spelled the variant
+        # `no_structured_tools · deployed` three inches from a cell reading "no structured tools"
+        # (UX W7, npo3-01 = DR2-08 = JX2-06). The raw label stays in `eval_runs` (P15).
+        label=f"{_f_enum_label(row['variant'])} · {_f_enum_label(row['target'])}",
         variant=row["variant"],
         target=row["target"],
         git_sha=row["git_sha"],
@@ -2355,6 +2431,14 @@ def _run_row(row: dict[str, Any]) -> EvalRunRow:
 
 
 RUN_COLUMNS = "id, created_at, git_sha, label, variant, target, n_items, metrics_json, judge_model, duration_s"
+
+#: Rate → the per-item score key whose presence says the item was scored for it (UX W7, npo3-07).
+RATE_DENOMINATORS: dict[str, str] = {
+    "action_safety_pass_rate": "safety",
+    "catalog_reopened_rate": "catalog_reopened",
+    "recommendation_labeled_rate": "recommendation_labeled_rate",
+    "workflow_completion": "workflow",
+}
 
 
 def build_eval_runs(request: Request, filters: Filters) -> EvalRunsView:
@@ -2461,9 +2545,20 @@ def build_eval_run_detail(request: Request, run_id: str, filters: Filters) -> Ev
         )
     if filters.failures_first:
         items.sort(key=lambda item: (item.passed, item.item_id))
+    metrics = EvalMetrics.model_validate(json.loads(run["metrics_json"] or "{}"))
+    # Every rate on the page carries its denominator (**P14**; UX W7, npo3-07 = M14). The runner's
+    # `n_scored` names its buckets by short key (`safety`, `workflow`) while the page looks each
+    # rate up by its own name, so four rates rendered bare — one of them over a single item. The
+    # denominator of a rate is the number of scored items that reported it, counted here from
+    # the items' own score rows; the runner's figure wins where it exists.
+    for metric, score_key in RATE_DENOMINATORS.items():
+        if metric not in metrics.n_scored:
+            metrics.n_scored[metric] = sum(
+                1 for item in items if item.run_phase == "scored" and item.scores.get(score_key) is not None
+            )
     return EvalRunDetailView(
         run=_run_row(run),
-        metrics=EvalMetrics.model_validate(json.loads(run["metrics_json"] or "{}")),
+        metrics=metrics,
         verdict=_verdict(store, run, rows),
         items=items,
         latency=_latency_block(store, rows),
@@ -2643,6 +2738,12 @@ def _page(
         "nav_exact": not breadcrumbs,
         "api_url": api_url,
         "nav": NAV,
+        # One sentence for the three admin-gated controls (UX W7, M09 = dgc-r2-9), the six-rule
+        # denominator the session tile divides by (npo3-04), and what answered — the same label
+        # the demo panel and the Overview print (M20 = DR2-14).
+        "admin_hint": ADMIN_HINT,
+        "safety_rules": api.SAFETY_RULES,
+        "provider_label": api.provider_label(str(_settings(request).llm_provider)),
         **api.shell_context(request, surface="dashboard"),
         "filters": (filters or Filters()).as_dict(),
         # `page` is always dropped here: the pager appends its own, and two `page=` values in

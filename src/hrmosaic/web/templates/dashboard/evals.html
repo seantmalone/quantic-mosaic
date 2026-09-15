@@ -31,7 +31,7 @@
   <h3>Runs</h3>
   {{ t.table('eval-runs-table', [
       {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
-      {'label': 'Run', 'key': 'label', 'href_prefix': '/dashboard/evals/', 'link_key': 'run_id'},
+      {'label': 'Run', 'key': 'label', 'kind': 'run', 'href_prefix': '/dashboard/evals/', 'link_key': 'run_id'},
       {'label': 'Variant', 'key': 'variant', 'kind': 'badge'},
       {'label': 'Target', 'key': 'target', 'kind': 'badge'},
       {'label': 'Items', 'key': 'n_items', 'kind': 'num'},
@@ -48,15 +48,17 @@
   <h4>Headline metrics</h4>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Headline metrics by run">
     <table id="eval-headline-table" class="data-table">
-      <thead><tr><th scope="col">Run</th>{% for metric in headline_metrics %}<th data-col="{{ metric }}"
+      <thead><tr><th scope="col" class="cell-time">Created</th><th scope="col">Run</th>{% for metric in headline_metrics %}<th data-col="{{ metric }}"
         scope="col" class="cell-num">{{ metric|metric_label }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for run in view.runs %}
         <tr>
-          {#- One line. The label and the timestamp wrapped into a two-line cell that set the
-              height of every row in the table (UX W6). The timestamp is the row's `title`. -#}
-          <td class="cell-run" data-label="Run" title="{{ run.created_at|ts }}"><a
-            href="/dashboard/evals/{{ run.run_id }}">{{ run.label }}</a></td>
+          {#- The run's identity in painted text (UX W7, DR2-01): W6 put the timestamp in a
+              hover-only `title` to keep the RUN cell to one line, and fifteen rows collapsed back
+              to six repeated strings for a touch or screen-reader user. A Created column, first,
+              as the Runs table above has it; the label stays one line. -#}
+          <td class="cell-time" data-label="Created"><time datetime="{{ run.created_at }}">{{ run.created_at|ts }}</time></td>
+          <td class="cell-run" data-label="Run"><a href="/dashboard/evals/{{ run.run_id }}">{{ run.label }}</a></td>
           {% for metric in headline_metrics %}
           <td data-col="{{ metric }}" data-label="{{ metric|metric_label }}" class="cell-num">
             {% if run.headline[metric] is none %}
@@ -69,7 +71,7 @@
           {% endfor %}
         </tr>
       {% else %}
-        <tr class="empty-row"><td class="muted" colspan="{{ headline_metrics|length + 1 }}">No run to summarise.</td></tr>
+        <tr class="empty-row"><td class="muted" colspan="{{ headline_metrics|length + 2 }}">No run to summarise.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -90,7 +92,7 @@
     <button id="run-smoke-eval" class="button button-send is-locked" type="submit"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>Run smoke eval</button>
     <span class="note">Bounded to at most <strong>{{ smoke_max_items|num }}</strong> items and one
       variant; anything larger is refused, never trimmed. It asks the assistant the same way a
-      person does, so what this measures is what the offline runner measures.{% if not is_admin %} <strong>Needs the HR admin persona</strong> — set it in <em>Demo &amp; grader controls</em> at the foot of the chat page.{% endif %}</span>
+      person does, so what this measures is what the offline runner measures.{% if not is_admin %} {{ admin_hint }}{% endif %}</span>
   </form>
 </section>
 

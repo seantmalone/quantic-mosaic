@@ -1101,6 +1101,9 @@ TURN_ANNOUNCEMENT_FALLBACK = TURN_ANNOUNCEMENTS["error"]
 
 #: What the panel calls that line, in the plan's own words (§3.7 item 4).
 PRODUCED_LEAD = "How this answer was produced"
+#: …and the lead for a turn that produced no answer — a refusal, a clarifying question, a
+#: confirmation card, a crash — which *"How this answer was produced"* misdescribed (UX W7, M10).
+HANDLED_LEAD = "How this was handled"
 
 
 def _count(number: int, noun: str) -> str:
@@ -1121,6 +1124,10 @@ def human_duration(total_ms: int | None) -> str:
         return "under a second"
     seconds = milliseconds / 1_000
     return f"{seconds:.1f} seconds"
+
+
+#: The six rules of §7.4 — the denominator every surface states "checks" against (UX W7, npo3-04).
+SAFETY_RULES = 6
 
 
 def safety_checks(spans: list[dict[str, Any]]) -> tuple[int, int]:
@@ -1156,11 +1163,18 @@ def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str
     check, and the denominator is printed so the figure agrees with the Guardrails page (UX W6).
     """
     passed, ran = safety_checks(spans)
+    # One meaning for "checks" (UX W7, npo3-04 = dgc-r2-2): the six rules are the system's, the
+    # ones that *applied* to this answer are a subset, and both numbers are said — "5 of the 6
+    # safety checks applied to this answer; all 5 passed" — so the panel agrees with the session
+    # tile ("Safety checks: 5 of 6 applied · 7 checks run") and the Guardrails lede ("The six
+    # safety checks…") by construction. `SAFETY_RULES` is the same six the tile divides by.
+    lead = PRODUCED_LEAD if response.outcome in LABELLED_OUTCOMES else HANDLED_LEAD
+    verdict = f"all {ran} passed" if passed == ran else f"{passed} of the {ran} passed"
     return (
-        f"{PRODUCED_LEAD}: {_count(response.usage.tool_calls, 'tool')} used, "
+        f"{lead}: {_count(response.usage.tool_calls, 'tool')} used, "
         f"{_count(len(response.citations), 'policy section')} read, "
-        f"{passed} of {_count(ran, 'safety check')} passed, "
-        f"in {human_duration(response.timings.total_ms)}."
+        f"in {human_duration(response.timings.total_ms)}. "
+        f"{ran} of the {SAFETY_RULES} safety checks applied to this answer; {verdict}."
     )
 
 

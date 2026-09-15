@@ -716,7 +716,12 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
 .data-table th.cell-time, .data-table th.cell-badge, .data-table th.cell-bool, .data-table th.cell-id {
   white-space: nowrap;
 }
-.data-table td.cell-text, .data-table td.cell-code { max-width: 24rem; overflow-wrap: anywhere; }
+/* A prose column keeps a measure and breaks between words (UX W7, npo3-02): `anywhere` shredded
+   the retrieval QUERY column into a 55px ribbon of word fragments once the humanised STRATEGY
+   label beside it grew, and a badge column is never wider than its own content. */
+.data-table td.cell-text, .data-table td.cell-code { min-width: 10rem; max-width: 24rem; overflow-wrap: break-word; }
+.data-table td.cell-code { overflow-wrap: anywhere; }
+.data-table th.cell-badge, .data-table td.cell-badge { width: 1%; }
 /* The headline-metrics table's run column: one line, so the label and the timestamp beside it stop
    setting the height of every row (UX W6). The timestamp is the cell's `title`. */
 .data-table td.cell-run { white-space: nowrap; }
@@ -809,7 +814,10 @@ a .id-chip { color: var(--accent); }
 .facts dd { margin: 0; font: var(--text-small); }
 
 /* -- page 1 -------------------------------------------------------------------------- */
-.kpi-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+/* `auto-fit`, not `auto-fill` (UX W7, M18 = DR2-12): a group of four tiles in seven reserved
+   tracks left ~600px of empty page beside every row and squeezed the tiles until their labels
+   wrapped; empty tracks now collapse and the four share the row. */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
 .kpi {
   display: flex; flex-direction: column; gap: 0.15rem;
   padding: 0.8rem 0.9rem; background: var(--card);

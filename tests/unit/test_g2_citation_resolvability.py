@@ -136,7 +136,7 @@ def test_the_span_names_every_stripped_citation(writer, spans):
 
     payload = next(payload for kind, _, payload in spans(turn.turn_id) if kind == "guardrail")
     assert (payload["rule_id"], payload["verdict"]) == ("G2", "repair")
-    assert payload["reason"] == "1/2 citations resolved"
+    assert payload["reason"] == "1 of 2 citation links resolved (1 source)"
     assert payload["details"]["stripped"] == [{"chunk_id": UNKNOWN, "reason": "unknown chunk_id"}]
     assert outcome.citations[0].score == 0.71, "the displayed dense score rides on the citation (§7.3)"
 
@@ -223,6 +223,6 @@ def test_the_span_names_every_recovered_citation(writer, spans):
 
     payload = next(payload for kind, _, payload in spans(turn.turn_id) if kind == "guardrail")
     assert (payload["rule_id"], payload["verdict"]) == ("G2", "repair")
-    assert payload["reason"] == "1/1 citations resolved"
+    assert payload["reason"] == "1 of 1 citation link resolved (1 source)"
     assert payload["details"]["recovered"] == [{"cited": cited, "chunk_id": chunk.chunk_id}]
     assert outcome.citations[0].chunk_id == chunk.chunk_id

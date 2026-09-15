@@ -191,14 +191,19 @@ async def test_the_panel_summarises_how_the_last_turn_was_produced(web):
     produced = re.search(r'data-produced="([^"]+)"', turn.text)
     assert produced, "the rendered turn carries the summary the panel shows"
     summary = produced.group(1)
+    # One meaning for "checks" (UX W7, npo3-04 = dgc-r2-2): the six rules are the system's, the
+    # ones that applied to this answer are said against them, and the verdict follows.
     expected = (
         r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, "
-        r"(?P<passed>\d+) of (?P<ran>\d+) safety checks? passed, "
-        r"in (under a second|\d+\.\d+ (seconds|minutes))\."
+        r"in (under a second|\d+\.\d+ (seconds|minutes))\. "
+        r"(?P<ran>\d+) of the (?P<total>\d+) safety checks applied to this answer; "
+        r"(all (?P<all>\d+)|(?P<passed>\d+) of the (?P<of>\d+)) passed\."
     )
     match = re.fullmatch(expected, summary)
     assert match, summary
     assert "(s)" not in summary, "the plural follows the count (P9)"
-    assert int(match.group("ran")) <= len(RULE_LABELS), "a check is one of the six rules, not one span"
-    assert int(match.group("passed")) <= int(match.group("ran")), summary
+    assert int(match.group("total")) == len(RULE_LABELS) == 6, "the denominator is the six rules of §7.4"
+    assert int(match.group("ran")) <= 6, "a check is one of the six rules, not one span"
+    passed = int(match.group("all") or match.group("passed"))
+    assert passed <= int(match.group("ran")), summary
     assert summary in _panel(reloaded), "and a replayed conversation shows the same sentence"

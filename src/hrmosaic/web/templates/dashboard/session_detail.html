@@ -81,7 +81,10 @@
   {% if turn.citations %}
   <ul class="citation-chips">
     {% for citation in turn.citations %}
-    <li><a class="citation-chip" href="{{ citation.source_url }}">{{ citation.doc_id }} · {{ citation.section }}</a></li>
+    {#- The document's title, as chat and the reader name it; the slug stays as a trailing chip
+        (UX W7, M03 = JX2-09 = nav-r2-9). -#}
+    <li><a class="citation-chip" href="{{ citation.source_url }}">{{ citation.doc_title }} · {{ citation.section }}
+      <code class="id-chip">{{ citation.doc_id }}</code></a></li>
     {% endfor %}
   </ul>
   {% endif %}
@@ -91,7 +94,10 @@
     <div><dt>Tool calls</dt><dd>{{ turn.rollups.tool_calls|num }}</dd></div>
     <div><dt>Retrievals</dt><dd>{{ turn.rollups.retrievals|num }}</dd></div>
     <div><dt>Guardrail blocks</dt><dd>{{ turn.rollups.guardrail_hits|num }}</dd></div>
-    <div><dt>Guardrail checks</dt><dd>{{ turn.spans|selectattr('kind', 'equalto', 'guardrail')|list|length|num }}</dd></div>
+    {#- One unit for "checks" on every surface (UX W7, npo3-04 = dgc-r2-2): the rules that applied
+        out of the six, and the spans that ran — the demo panel's sentence for the same turn reads
+        "5 of the 6 safety checks applied to this answer", from the same helper. -#}
+    <div><dt>Safety checks</dt><dd>{{ turn.rollups.rules_ran|num }} of {{ safety_rules|num }} applied · {{ turn.rollups.checks_run|counted('check') }} run</dd></div>
     <div><dt>Tokens</dt><dd>{{ turn.rollups.tokens_in|num }} → {{ turn.rollups.tokens_out|num }}</dd></div>
     <div><dt>Model time</dt><dd>{{ turn.rollups.llm_ms|ms }}</dd></div>
   </dl>

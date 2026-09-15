@@ -31,7 +31,7 @@
         hx-on::after-request="window.location.reload()">
     <button id="rediscover" class="button button-send is-locked" type="submit"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>Re-discover now</button>
     <span class="note">Asks the tool server for its catalog again, from scratch, and records the
-      handshake below.{% if not is_admin %} <strong>Needs the HR admin persona</strong> — set it in <em>Demo &amp; grader controls</em> at the foot of the chat page.{% endif %}</span>
+      handshake below.{% if not is_admin %} {{ admin_hint }}{% endif %}</span>
   </form>
 </section>
 

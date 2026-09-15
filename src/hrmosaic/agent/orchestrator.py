@@ -471,6 +471,12 @@ def _summary(kind: str, name: str, payload: dict[str, Any]) -> str:
     if kind == "error":
         return f"{payload.get('error_kind')}: {payload.get('message', '')}"
     if kind == "tool_call":
+        # The designed confirmation pause is not a failure: the waterfall's summary cell said
+        # "create_mock_hr_ticket · error" on the very row whose chip said "paused for
+        # confirmation", and /dashboard/tools called the same call "paused" (UX W7, npo3-05).
+        # One mapper for the chip, the summary and the `/chat` trace.
+        if payload.get("error_code") == "CONFIRMATION_REQUIRED":
+            return f"{payload.get('tool_name')} · paused for confirmation"
         return f"{payload.get('tool_name')} · {'error' if payload.get('is_error') else 'ok'}"
     return name
 

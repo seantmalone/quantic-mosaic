@@ -330,7 +330,8 @@ def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page
     produced = fresh_page.eval_on_selector("#demo-produced", "e => e.textContent.trim()")
     expected = (
         r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, "
-        r"\d+ of \d+ safety checks? passed, in (under a second|\d+\.\d+ (seconds|minutes))\."
+        r"in (under a second|\d+\.\d+ (seconds|minutes))\. "
+        r"\d+ of the 6 safety checks applied to this answer; (all \d+|\d+ of the \d+) passed\."
     )
     assert re.fullmatch(expected, produced), produced
 

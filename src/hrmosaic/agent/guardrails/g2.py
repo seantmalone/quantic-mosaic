@@ -254,11 +254,19 @@ def check(
     outcome = apply(blocks, evidence=evidence, quarantined=quarantined)
     total = sum(len(block.get("citations") or []) for block in blocks)
     resolved = sum(len(block["citations"]) for block in outcome.blocks)
+    # The unit is the citation *link* — one block citing one chunk — and the sources are the
+    # distinct documents behind them: "8/8 citations resolved" sat over a source list of six and a
+    # chat strip reading "Sources (6)", three counts of one thing (UX W7, npo3-06 = plan
+    # numbers-precision-overflow-15). One sentence, both units named.
+    sources = len({citation.doc_id for citation in outcome.citations})
     emit(
         turn,
         "G2",
         verdict="repair" if outcome.repaired else "allow",
-        reason=f"{resolved}/{total} citations resolved",
+        reason=(
+            f"{resolved} of {total} citation {'link' if total == 1 else 'links'} resolved "
+            f"({sources} {'source' if sources == 1 else 'sources'})"
+        ),
         evidence_span_ids=list(evidence_span_ids),
         details={
             "citations_seen": total,

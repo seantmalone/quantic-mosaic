@@ -106,3 +106,32 @@ async def test_no_page_prints_a_confirmation_code_where_a_word_belongs(web):
     # (P15) — but the row a reader scans says it in words.
     row = waterfall.split('<span class="span-summary">')[0]
     assert "CONFIRMATION_REQUIRED" not in row
+
+
+async def test_the_panel_sentence_and_the_session_tile_count_the_same_safety_checks(web):
+    """npo3-04 = dgc-r2-2 (UX W7). For one turn the panel said "5 of 5 safety checks passed", the
+    session card it links to said "GUARDRAIL CHECKS 7" and the Guardrails page "The six safety
+    checks" — three numbers for one idea, one click apart. Both surfaces now say the rules that
+    applied out of the six, computed by `api.safety_checks` from the turn's spans, and the tile adds
+    the spans that ran as a third, separately named figure."""
+    async with web("demo_task_1.json") as client:
+        turn = await client.post(
+            "/chat",
+            json={"message": "I want to work from Berlin from 3 November to 14 December 2026 — can I?"},
+            headers=HTMX,
+        )
+        assert turn.status_code == 200, turn.text
+        session_id = re.search(r'data-session-id="([0-9a-f]+)"', turn.text).group(1)
+        waterfall = (await client.get(f"/dashboard/sessions/{session_id}")).text
+        guardrails = (await client.get("/dashboard/safety")).text
+
+    produced = re.search(r'data-produced="([^"]+)"', turn.text).group(1)
+    panel = re.search(
+        r"(\d+) of the (\d+) safety checks applied to this answer; (?:all (\d+)|(\d+) of the \d+) passed", produced
+    )
+    assert panel, produced
+    tile = re.search(r"Safety checks</dt><dd>\s*(\d+) of (\d+) applied ·\s*(\d+) checks? run", waterfall)
+    assert tile, "the session tile states the same two figures"
+    assert (panel.group(1), panel.group(2)) == (tile.group(1), tile.group(2)) == (tile.group(1), "6")
+    assert int(tile.group(3)) >= int(tile.group(1)), "spans run are at least the rules that applied"
+    assert "The six safety checks" in guardrails, "…and the Guardrails page names the same six"

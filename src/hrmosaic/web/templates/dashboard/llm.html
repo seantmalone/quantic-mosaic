@@ -20,10 +20,13 @@
 {% endblock %}
 
 {% block content %}
+{#- The same sentence the Overview and the demo panel print (UX W7, M20 = DR2-14): this is the
+    page where twenty rows of `stub`, `<1 ms` and `$0.00` accumulate, and nothing on it said why. -#}
+<p class="note">Answers come from <strong>{{ provider_label }}</strong>.</p>
 <section class="panel">
   <h3>By model</h3>
   {{ t.table('by-model-table', [
-      {'label': 'Model', 'key': 'model'},
+      {'label': 'Model', 'key': 'model', 'kind': 'enum'},
       {'label': 'Calls', 'key': 'calls', 'kind': 'num'},
       {'label': 'Tokens in', 'key': 'tokens_in', 'kind': 'num'},
       {'label': 'Tokens out', 'key': 'tokens_out', 'kind': 'num'},
@@ -37,22 +40,22 @@
 <section class="panel">
   <h3>Calls <span class="muted">(newest {{ row_limit }})</span></h3>
   {{ t.table('llm-table', [
-      {'label': 'Model', 'key': 'model'},
-      {'label': 'Purpose', 'key': 'purpose', 'kind': 'badge'},
+      {'label': 'Model', 'key': 'model', 'kind': 'enum', 'mobile': 'detail'},
+      {'label': 'Purpose', 'key': 'purpose', 'kind': 'badge', 'mobile': 'lead'},
       {'label': 'Tokens in', 'key': 'prompt_tokens', 'kind': 'num'},
       {'label': 'Tokens out', 'key': 'completion_tokens', 'kind': 'num'},
-      {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms'},
+      {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms', 'mobile': 'lead'},
       {'label': 'First token', 'key': 'ttfb_ms', 'kind': 'ms',
        'help': 'On a streamed call, when the first token arrived; on one that did not stream, the whole call.'},
       {'label': 'Streamed', 'key': 'streamed', 'kind': 'bool'},
-      {'label': 'Finish', 'key': 'finish_reason'},
+      {'label': 'Finish', 'key': 'finish_reason', 'kind': 'enum'},
       {'label': 'Retries', 'key': 'retry_count', 'kind': 'num', 'zero_dash': true},
       {'label': 'Cached', 'key': 'cache_hit', 'kind': 'bool',
        'help': 'The provider served this call from its prompt cache.'},
       {'label': 'Rate-limit wait', 'key': 'limiter_wait_ms', 'kind': 'ms', 'zero_dash': true,
        'help': 'How long the client held the call back to stay inside the daily call cap.'},
       {'label': 'Failover', 'key': 'provider_failover', 'kind': 'bool'},
-      {'label': 'Provider', 'key': 'provider'},
+      {'label': 'Provider', 'key': 'provider', 'kind': 'enum'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
       view.rows, 'No model call matches these filters.',

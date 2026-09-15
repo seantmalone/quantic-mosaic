@@ -562,3 +562,59 @@ async def test_the_smoke_eval_inputs_are_disabled_with_their_button(seeded):
     form = re.search(r'<form id="smoke-eval-form".*?</form>', page.text, re.S)
     assert form, "no smoke-eval form on /dashboard/evals"
     assert form.group(0).count(" disabled") == 3, form.group(0)
+
+
+# --------------------------------------------------------------------------------------
+# UX W7 — no enum reaches a reader spelled as code
+# --------------------------------------------------------------------------------------
+
+#: Every table column whose values are a stored enum, by the `data-col` the macro stamps on the cell.
+#: Found by grep over the templates (JX2-01 = DR2-09); a new enum column is added here on the day it
+#: is added there.
+ENUM_COLUMNS = (
+    "intent",
+    "workflow",
+    "outcome",
+    "finish_reason",
+    "provider",
+    "model",
+    "purpose",
+    "strategy",
+    "k_source",
+    "category",
+    "variant",
+    "target",
+    "kind",
+    "user_response",
+    "source_format",
+    "topics",
+    "run_phase",
+    "outcome_label",
+    "error_code",
+    "verdict",
+    "auth_mode",
+    "actor_role",
+    "client_label",
+)
+SNAKE_CASE = re.compile(r"\b[a-z]+_[a-z_]+\b")
+ENUM_CELL = re.compile(r'<td data-col="(?P<col>[a-z_]+)"[^>]*>(?P<cell>.*?)</td>', re.S)
+
+
+def _painted(cell: str) -> str:
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", cell)).split())
+
+
+async def test_no_known_enum_column_paints_a_snake_case_value(seeded):
+    """W6 routed the filter dropdowns through `enum_label` and left the cells raw: the same enum
+    humanised in the filter and printed as code two lines below it — `pto_request`, `end_turn`,
+    `remote_work` — and one field humanised on one page and raw on the next (JX2-01 = DR2-09)."""
+    offenders: dict[str, list[str]] = {}
+    for _number, url in seeded.pages():
+        body = (await seeded.client.get(url, headers=ADMIN)).text
+        for match in ENUM_CELL.finditer(body):
+            if match.group("col") not in ENUM_COLUMNS:
+                continue
+            text = _painted(match.group("cell"))
+            if SNAKE_CASE.search(text):
+                offenders.setdefault(url, []).append(f"{match.group('col')}: {text[:60]}")
+    assert not offenders, f"enum cells still spelled as code: {offenders}"

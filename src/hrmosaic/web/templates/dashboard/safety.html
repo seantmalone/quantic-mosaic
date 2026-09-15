@@ -95,7 +95,7 @@
         hx-confirm="Delete every simulated write listed above? This cannot be undone."
         hx-on::after-request="window.location.reload()">
     <button id="reset-sandbox" class="button is-locked" type="submit"{% if not is_admin or not view.mock_writes %} disabled aria-disabled="true"{% endif %}>Clear these simulated writes</button>
-    <span class="note">{% if not view.mock_writes %}There is nothing to clear.{% else %}Deletes the {{ view.mock_writes|length|counted('row') }} above. Nothing outside this demo is affected.{% endif %}{% if not is_admin %} <strong>Needs the HR admin persona</strong> — switch personas in <em>Demo &amp; grader controls</em> on the chat page.{% endif %}</span>
+    <span class="note">{% if not view.mock_writes %}There is nothing to clear.{% else %}Deletes the {{ view.mock_writes|length|counted('row') }} above. Nothing outside this demo is affected.{% endif %}{% if not is_admin %} {{ admin_hint }}{% endif %}</span>
   </form>
 </section>
 
