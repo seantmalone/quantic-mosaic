@@ -429,6 +429,18 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
 }
 .filter-checkbox { flex-direction: row; align-items: center; gap: 0.4rem; }
 .filter-actions { display: flex; gap: 0.5rem; margin-left: auto; }
+/* The applied-filter chips (`dashboard-readability-28`). Each one is a link that drops its own
+   filter, so "remove" is one click and not a hunt through fourteen controls. */
+.active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
+  margin: 0 0 1.25rem; font: var(--text-meta); color: var(--ink-soft); }
+.filter-bar + .active-filters { margin-top: -0.9rem; }
+.active-filters-label { text-transform: uppercase; letter-spacing: 0.06em; }
+.active-filter { display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.15rem 0.5rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+.active-filter:hover, .active-filter:focus-visible { border-color: var(--accent); }
+.active-filter strong { font-weight: 600; color: var(--ink); }
+.active-filter-remove { font-size: 1rem; line-height: 1; }
 
 /* -- tables (UX W4, plan §3.10 — the rules applied once and inherited by ~20 tables) ---- */
 /* A wide table scrolls inside its own box, and says so: a permanent thin scrollbar *and* an edge
@@ -631,6 +643,13 @@ a .id-chip { color: var(--accent); }
    `dashboard/_base.html` and applied as `scroll-margin-top` (UX W1, navigation-and-ia-17). */
 .anchor { display: block; visibility: hidden; }
 .anchor, .turn-card, .chunk, [id^="turn-"] { scroll-margin-top: calc(var(--dash-nav-h, 6rem) + 0.75rem); }
+/* …and the other half of `dashboard-readability-29`: scrolling a turn into view is not the same as
+   saying *which* turn. Both link shapes are covered — `#turn-<seq>` is the card itself (the chat
+   deep link) and `#turn-<turn_id>` is the hidden `.anchor` inside it (the turns listing), and a
+   hidden element cannot carry a highlight of its own. */
+.turn-card:target, .turn-card:has(> .anchor:target) {
+  background: var(--accent-soft); border-left-width: 8px;
+}
 
 /* A bar chart with no axis and no total is a picture of nothing: the waterfall now carries a
    quarter-tick axis and says what the whole turn took (`dashboard-readability-9`). */
@@ -639,8 +658,13 @@ a .id-chip { color: var(--accent); }
   grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem;
   font: var(--text-meta); color: var(--ink-soft);
 }
-.span-axis-track { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 0.2rem; }
-.span-axis-total { text-align: right; }
+/* Columns 5 and 6 are the track and the duration of `.span-row` below. Explicit, never
+   auto-placed: an axis one column left of the bars it measures labels the summary text
+   (UX W4 review, fix round 1), and `tests/ux` now measures the two boxes against each other. */
+.span-axis-label { grid-column: 1 / 5; text-align: right; }
+.span-axis-track { grid-column: 5; display: flex; justify-content: space-between;
+  border-top: 1px solid var(--line); padding-top: 0.2rem; }
+.span-axis-total { grid-column: 6; text-align: right; }
 .waterfall { list-style: none; margin: 0.25rem 0 0; padding: 0; }
 .span-row {
   display: grid; align-items: center; gap: 0.5rem;

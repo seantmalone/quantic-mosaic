@@ -289,3 +289,55 @@ def test_p14_the_overview_percentiles_say_what_they_were_computed_over(dashboard
     tab = dashboard.visit("/dashboard")
     p95 = tab.eval_on_selector('[data-kpi="p95_ms"]', "e => e.textContent")
     assert re.search(r"over \d+ turns?", p95), f"the percentile tile names its sample: {p95!r}"
+
+
+# -- the waterfall's geometry ------------------------------------------------------------
+
+
+def test_the_waterfall_axis_measures_the_column_the_bars_are_drawn_in(dashboard):
+    """`dashboard-readability-9`, held to its own arithmetic (UX W4 review, fix round 1).
+
+    The axis and the rows are two separate six-column grids. The axis emitted five children and
+    leaned on auto-placement, so its ticks landed in column 4 — the summary text — and the total
+    landed where the bars are: `0 · 175 ms · 350 ms · 526 ms · 701 ms` painted across the prose and
+    stopping before the first grey track began. An axis that does not line up with the bars it
+    measures reads worse than no axis, and no assertion in the suite looked at geometry.
+    """
+    tab = dashboard.visit(dashboard.session_route)
+    boxes = tab.evaluate(
+        "() => {"
+        " const axis = document.querySelector('.span-axis-track');"
+        " const track = document.querySelector('.span-row .span-track');"
+        " const total = document.querySelector('.span-axis-total');"
+        " const duration = document.querySelector('.span-row .span-duration');"
+        " if (!axis || !track || !total || !duration) return null;"
+        " const box = el => { const r = el.getBoundingClientRect(); return [r.left, r.right]; };"
+        " return {axis: box(axis), track: box(track), total: box(total), duration: box(duration)};"
+        "}"
+    )
+    assert boxes, "the session waterfall draws an axis and at least one span track"
+    for name, edge in (("left", 0), ("right", 1)):
+        assert abs(boxes["axis"][edge] - boxes["track"][edge]) <= 1, (
+            f"the tick scale's {name} edge is {boxes['axis'][edge]} and the bars' is "
+            f"{boxes['track'][edge]}: the axis is labelling another column"
+        )
+        assert abs(boxes["total"][edge] - boxes["duration"][edge]) <= 1, (
+            f"the turn total's {name} edge is {boxes['total'][edge]} and the per-span durations' is "
+            f"{boxes['duration'][edge]}"
+        )
+
+
+def test_a_deep_linked_turn_is_highlighted_and_not_merely_scrolled_to(dashboard):
+    """`dashboard-readability-29`: scrolling a turn into view never said *which* turn.
+
+    W1 landed the `scroll-margin-top` half. This is the other one — `:target` was styled for
+    `.reader-section` alone, so the chat's `#turn-N` link put the right card under the reader's eye
+    and then left them to count.
+    """
+    tab = dashboard.visit(dashboard.session_route)
+    plain = tab.eval_on_selector(".turn-card", "e => getComputedStyle(e).backgroundColor")
+    tab.goto(f"{dashboard.base_url}{dashboard.session_route}#turn-1", wait_until="networkidle")
+    tab.wait_for_timeout(120)
+    targeted = tab.eval_on_selector("#turn-1", "e => getComputedStyle(e).backgroundColor")
+
+    assert targeted != plain, f"the deep-linked turn is painted like every other one: {targeted}"

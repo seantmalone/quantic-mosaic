@@ -37,9 +37,16 @@
     {# Both rates in full rather than one subtraction: the difference of two percentages is
        percentage *points*, and a page that prints "up 17.3%" of a rate is inviting the reader to
        read it as a relative change. The comparison is against the previous run of the **same**
-       variant, because a baseline and an ablation arm are not comparable numbers. #}
+       variant, because a baseline and an ablation arm are not comparable numbers.
+
+       Both operands are guarded. `pass_rate` is `None` for a run with no `scored` row — an
+       all-cold-probe run — while `previous_pass_rate` comes from a different run entirely, so
+       guarding only the second one let Jinja evaluate `None > 0.577` and 500 the page (UX W4
+       review, fix round 1). Every failure path answers 200 with a useful body. #}
     <p class="verdict-delta">
-      {%- if view.verdict.previous_pass_rate is not none %}The previous
+      {%- if view.verdict.pass_rate is none %}This run scored no items, so there is no pass rate to
+      compare against an earlier run.
+      {%- elif view.verdict.previous_pass_rate is not none %}The previous
       <code>{{ view.run.variant }}</code> run ({{ view.verdict.previous_created_at|ts }}) passed
       {{ view.verdict.previous_pass_rate|pct }}; this one passes {{ view.verdict.pass_rate|pct }} —
       {% if view.verdict.pass_rate > view.verdict.previous_pass_rate %}better{%

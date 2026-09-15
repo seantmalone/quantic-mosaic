@@ -33,4 +33,27 @@
     <a class="button" href="{{ reset_url }}">Reset</a>
   </div>
 </form>
+{# `dashboard-readability-28`: an `e.g. ` placeholder says a control is *empty*, but nothing said
+   which controls are *set* — a filtered table and an unfiltered one looked alike, and on a select
+   the applied value sits inside the control a reader has to go looking for. This row states the
+   applied filters in a sentence, and each chip is the link that removes that one filter (the
+   others survive, `page` does not — removing a filter re-pages from the first page). #}
+{% set active = [] %}
+{% for field in fields if filters.get(field.name) %}{% set _ = active.append(field) %}{% endfor %}
+{% if active %}
+<p class="active-filters" id="active-filters">
+  <span class="active-filters-label">Active filters:</span>
+  {%- for field in active %}
+  {%- set rest = {} %}
+  {%- for other in active if other.name != field.name %}
+    {%- set value = filters.get(other.name) %}
+    {%- set _ = rest.update({other.name: ('true' if value is sameas true else value)}) %}
+  {%- endfor %}
+  <a class="active-filter" href="{{ reset_url }}{{ '?' ~ rest|urlencode if rest else '' }}"
+     title="Remove this filter">{{ field.label }}:
+    <strong>{{ 'yes' if filters.get(field.name) is sameas true else filters.get(field.name) }}</strong>
+    <span class="active-filter-remove" aria-hidden="true">×</span><span class="visually-hidden"> — remove</span></a>
+  {%- endfor %}
+</p>
+{% endif %}
 {% endmacro %}

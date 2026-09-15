@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -43,6 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.requests import Request
 
 from hrmosaic.agent.client import McpUnavailable
+from hrmosaic.agent.guardrails import RULE_NAMES
 from hrmosaic.agent.orchestrator import preview_value, summarise_span
 from hrmosaic.core import corpusread
 from hrmosaic.core import trace as trace_module
@@ -181,16 +182,19 @@ RATE_METRICS: frozenset[str] = frozenset(
     }
 )
 
+#: The rules whose reader-facing name is *not* their `rule_name` with the underscores taken out.
+#: Every other rule is derived, so a seventh rule added to `RULE_NAMES` renders as "G7 Something"
+#: rather than as a bare letter and a number.
+RULE_LABEL_OVERRIDES: dict[str, str] = {
+    "G6": "Redaction sweep",  # `pii_secret_redaction` — "Redaction sweep" is the reader's noun
+}
+
 #: `G1`–`G6` with what each one does. `agent/guardrails/__init__.py` owns the identifier→name
-#: pairing that the span carries; this is the *display* half, and the chart's category labels come
-#: from it so the axis is not six bare letters (`dashboard-readability-17`).
+#: pairing that the span carries and this is the *display* half — **derived** from it, because a
+#: second hand-maintained copy is a copy that drifts (UX W4 review, fix round 1). The chart's
+#: category labels come from here, so the axis is not six bare letters (`dashboard-readability-17`).
 RULE_LABELS: dict[str, str] = {
-    "G1": "Evidence gate",
-    "G2": "Citation resolvability",
-    "G3": "Fact vs recommendation",
-    "G4": "Injection shield",
-    "G5": "Sensitive escalation",
-    "G6": "Redaction sweep",
+    rule: RULE_LABEL_OVERRIDES.get(rule, name.replace("_", " ").capitalize()) for rule, name in RULE_NAMES.items()
 }
 
 #: A span kind as the page says it. The toggle row on page 3 used to be raw kinds
@@ -2540,6 +2544,26 @@ async def api_session_detail(request: Request, session_id: str) -> JSONResponse:
 #: used to be `Session fd7a7cb56895…`, which names the record and not the conversation.
 SESSION_TITLE_CHARS = 80
 
+#: The chat surface's own path — the page the `#turn-N` deep link is clicked on.
+CHAT_PATH = "/"
+
+
+def _opened_from_chat(request: Request) -> bool:
+    """Did this page's request come from the conversation it is the record of?
+
+    `dashboard-readability-29` asks the deep-linked session page to offer a way *back to the chat*,
+    not only up to the listing. The fragment never reaches the server, so the signal is the
+    same-origin `Referer`: a click from `/` is the deep link, a click from `/dashboard/sessions` is
+    the listing, and a pasted URL carries no referrer at all and gets the plain trail.
+    """
+    referer = request.headers.get("referer")
+    if not referer:
+        return False
+    parsed = urlsplit(referer)
+    if parsed.netloc and parsed.netloc != request.url.netloc:
+        return False
+    return (parsed.path or "/") == CHAT_PATH
+
 
 @router.get("/dashboard/sessions/{session_id}", response_class=HTMLResponse)
 async def page_session_detail(request: Request, session_id: str) -> Response:
@@ -2547,6 +2571,9 @@ async def page_session_detail(request: Request, session_id: str) -> Response:
     longest = max((turn.duration_ms or 0) for turn in view.turns) if view.turns else 0
     opening = view.turns[0].user_message if view.turns else ""
     title = opening if len(opening) <= SESSION_TITLE_CHARS else opening[:SESSION_TITLE_CHARS].rstrip() + "…"
+    trail = [("Sessions", "/dashboard/sessions")]
+    if _opened_from_chat(request):
+        trail.insert(0, ("Opened from chat", CHAT_PATH))
     return _page(
         request,
         "session_detail.html",
@@ -2554,7 +2581,7 @@ async def page_session_detail(request: Request, session_id: str) -> Response:
         page_number=3,
         title=title or f"Session {session_id[:12]}…",
         lede="Every turn of this conversation, and every step behind each answer.",
-        breadcrumbs=[("Sessions", "/dashboard/sessions")],
+        breadcrumbs=trail,
         api_url=f"/api/traces/sessions/{session_id}",
         kinds=sorted({span.kind for turn in view.turns for span in turn.spans}),
         longest_ms=longest,

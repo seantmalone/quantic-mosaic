@@ -37,7 +37,9 @@
   {{ t.table('by-rule-table', [
       {'label': 'Rule', 'key': 'rule_id', 'kind': 'rule'},
       {'label': 'Verdict', 'key': 'verdict', 'kind': 'badge'},
-      {'label': 'Count', 'key': 'count', 'kind': 'num'}],
+      {'label': 'Count', 'key': 'count', 'kind': 'num'},
+      {'label': 'Name', 'key': 'rule_name', 'kind': 'code',
+       'help': 'The rule_name the guardrail span carries in the trace — the value the display name above is derived from.'}],
       view.by_rule, 'No guardrail has run yet.') }}
 </section>
 

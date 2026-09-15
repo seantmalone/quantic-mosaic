@@ -213,6 +213,108 @@ async def test_pages_one_and_two_show_and_filter_on_auth_mode_and_actor_role(see
     assert seeded.ids["session_id"] not in unmatched.text
 
 
+async def test_a_run_with_no_scored_row_compares_nothing_and_still_answers_200(seeded, store):
+    """The run verdict's two operands come from **two different runs** (UX W4 review, fix round 1).
+
+    `_verdict()` returns `pass_rate=None` for a run whose every row is a `cold_probe`, while
+    `previous_pass_rate` is read off the previous run of the same variant. Guarding only the second
+    left Jinja evaluating `None > 0.577` — a `TypeError` and a 500 on a dashboard whose contract is
+    that every failure path answers 200 with a useful body.
+    """
+    earlier = store.execute(
+        "SELECT created_at, git_sha, label, target, target_base_url, dataset_sha, config_json, metrics_json, "
+        "n_items, status FROM eval_runs WHERE id = ?",
+        ("r_p9fixture_baseline",),
+    ).one()
+    assert earlier is not None, "the fixture run this one is compared against"
+    store.execute(
+        "INSERT INTO eval_runs (id, created_at, git_sha, label, variant, target, target_base_url, dataset_sha, "
+        "config_json, n_items, metrics_json, judge_model, judge_calls, duration_s, status, notes) "
+        "VALUES (?, ?, ?, ?, 'baseline', ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL)",
+        (
+            "r_all_cold",
+            earlier["created_at"] + 1,
+            earlier["git_sha"],
+            "cold probe only",
+            earlier["target"],
+            earlier["target_base_url"],
+            earlier["dataset_sha"],
+            earlier["config_json"],
+            1,
+            earlier["metrics_json"],
+            earlier["status"],
+        ),
+    )
+    store.execute(
+        "INSERT INTO eval_results (id, run_id, item_id, category, session_id, turn_id, run_phase, answer, "
+        "latency_ms, cold, scores_json, verdicts_json, passed) "
+        "VALUES ('x_all_cold', 'r_all_cold', 'q001', 'policy_qa', NULL, NULL, 'cold_probe', 'a', 10, 1, '{}', NULL, 1)"
+    )
+
+    response = await seeded.client.get("/dashboard/evals/r_all_cold", headers=ADMIN)
+    assert response.status_code == 200, response.text[:300]
+    assert "This run scored no items" in response.text
+    assert "passes" not in response.text.split('class="verdict-delta"')[1].split("</p>")[0]
+
+
+async def test_an_applied_filter_is_named_in_a_chip_row_that_can_remove_it(seeded):
+    """`dashboard-readability-28`, the half the placeholders did not cover.
+
+    An `e.g. ` placeholder says a control is *empty*. Nothing said which controls were **set** — on
+    a `<select>` the applied value is inside the control, and a filtered table and an unfiltered one
+    looked alike. The chip row names every applied filter, and each chip is the link that drops that
+    one filter while the others survive.
+    """
+    unfiltered = await seeded.client.get("/dashboard/turns", headers=ADMIN)
+    assert 'id="active-filters"' not in unfiltered.text, "no filters applied, no chip row"
+
+    filtered = await seeded.client.get(
+        "/dashboard/turns?client_label=demo&outcome=answered&has_error=true", headers=ADMIN
+    )
+    assert filtered.status_code == 200, filtered.text[:300]
+    assert 'id="active-filters"' in filtered.text
+    chips = re.findall(r'<a class="active-filter" href="([^"]+)"[^>]*>(.*?)</a>', filtered.text, re.S)
+    assert len(chips) == 3, chips
+
+    named = {html.unescape(re.sub(r"<[^>]+>", " ", body)).split(":")[0].strip() for _, body in chips}
+    assert named == {"Client", "Outcome", "Errors only"}, named
+
+    # The chip for `outcome` removes `outcome` and keeps the other two — a checkbox included.
+    removal = {
+        html.unescape(re.sub(r"<[^>]+>", " ", body)).split(":")[0].strip(): parse_qs(
+            urlparse(html.unescape(href)).query
+        )
+        for href, body in chips
+    }
+    assert removal["Outcome"] == {"client_label": ["demo"], "has_error": ["true"]}, removal["Outcome"]
+    assert removal["Errors only"] == {"client_label": ["demo"], "outcome": ["answered"]}, removal["Errors only"]
+
+    # …and following it really does answer the narrower filter set.
+    dropped = await seeded.client.get(html.unescape(chips[0][0]), headers=ADMIN)
+    assert dropped.status_code == 200, dropped.text[:300]
+
+
+async def test_a_session_page_opened_from_the_chat_offers_the_way_back_to_it(seeded):
+    """`dashboard-readability-29`: the deep link's other end.
+
+    The `#turn-N` fragment never reaches the server, so the signal is the same-origin referrer. A
+    click from `/` is the chat deep link and gets a crumb back to the conversation; a click from the
+    listing, or a pasted URL with no referrer at all, gets the plain trail.
+    """
+    url = f"/dashboard/sessions/{seeded.ids['session_id']}"
+    origin = str(seeded.client.base_url).rstrip("/")
+    from_chat = await seeded.client.get(url, headers={**ADMIN, "Referer": f"{origin}/"})
+    from_listing = await seeded.client.get(url, headers={**ADMIN, "Referer": f"{origin}/dashboard/sessions"})
+    pasted = await seeded.client.get(url, headers=ADMIN)
+
+    assert "Opened from chat" in from_chat.text
+    assert "Opened from chat" not in from_listing.text
+    assert "Opened from chat" not in pasted.text
+    for response in (from_chat, from_listing, pasted):
+        assert response.status_code == 200
+        assert 'class="crumbs"' in response.text
+
+
 async def test_the_pager_keeps_the_filters_and_never_repeats_the_page_parameter(seeded):
     """A pager link that carried two `page=` values would silently ignore the second one."""
     page_two = await seeded.client.get("/dashboard/sessions?client_label=demo&page=2", headers=ADMIN)

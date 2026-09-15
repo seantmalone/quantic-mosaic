@@ -27,3 +27,17 @@ What to look for, page by page:
 | `mcp` | a `CATALOG SHA [REDACTED]` column and `0 ms` on all six history rows → the column dropped and the card labelled **Last live handshake** |
 | `corpus`, `corpus-doc` | `PAGES 3.8` for a markdown file → **Words**; 32-character chunk ids as section headings over a 4,887px dump → the heading path first, the id a chip, offsets labelled, bodies collapsed behind a contents list |
 | `evals`, `eval-run` | `GROUNDEDNESS_MEAN 0.9839181286549706` → **Groundedness 98.4%**; "Headline metrics" that could not be joined to "Runs" → the run's label and date as its link text; no verdict and no methodology → *"21 of 28 items passed (75.0%)"*, the previous run of the same variant beside it, and the dataset legend |
+
+## Re-captured at the fix commit (UX W4 review, fix round 1)
+
+Five `after-*` screens were re-captured after the review, because the pages they show changed:
+
+| Screen | Why it was re-captured |
+|---|---|
+| `after-session-demo1-1440.png`, `after-session-demo1-1440-full.png`, `after-session-demo2-1440.png` | the quarter-tick axis was one grid column left of the bars it measured — the ticks painted across the summary text and stopped where the grey tracks began. The axis is now placed in the bars' own column explicitly, with `Turn total` to its left and the turn's duration above the per-span durations |
+| `after-deeplink-session-turn1-1440.png` | the same axis fix, plus `dashboard-readability-29`'s other half: the `#turn-N` target is painted (`.turn-card:target`) rather than only scrolled to |
+| `after-safety-1440.png` | the `Name` column is back — the authoritative `rule_name` the guardrail span carries, which the display name beside it is now derived from |
+
+`dashboard-readability-28`'s chip row does not appear in any capture: the harness visits every route
+**unfiltered**, and the row only exists when a filter is applied. It is asserted instead by
+`tests/contract/test_dashboard_pages.py::test_an_applied_filter_is_named_in_a_chip_row_that_can_remove_it`.

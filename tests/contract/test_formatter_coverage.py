@@ -27,6 +27,7 @@ import typing
 
 from pydantic import BaseModel
 
+from hrmosaic.agent.guardrails import RULE_NAMES
 from hrmosaic.web import dashboard
 from hrmosaic.web.api import PACKAGE_DIR
 
@@ -171,3 +172,24 @@ def test_a_noun_agrees_with_the_count_beside_it():
     assert dashboard._f_counted(0, "row") == "0 rows"
     for template in sorted(TEMPLATES.glob("*.html")):
         assert "(s)" not in template.read_text(encoding="utf-8"), template.name
+
+
+def test_every_guardrail_the_agent_runs_has_a_display_name_on_page_eight():
+    """One pairing, one place (UX W4 review, fix round 1).
+
+    `agent/guardrails/__init__.py` calls `RULE_NAMES` "the only place the pairing is written down",
+    and the span carries that value into `ByRuleRow.rule_name`. A second hand-maintained `G<n>` →
+    display-name table beside it is a table that drifts: a seventh rule would have rendered on page
+    8 as a bare `G7` with no name at all, and `G6` was already `pii_secret_redaction` on the record
+    and "Redaction sweep" on the page with nothing binding the two. The display half is derived now,
+    and the overrides may only reword a rule that exists.
+    """
+    assert set(dashboard.RULE_LABELS) == set(RULE_NAMES), "every rule the agent runs is named on the page"
+    assert set(dashboard.RULE_LABEL_OVERRIDES) <= set(RULE_NAMES), "an override for a rule that does not exist"
+    for rule, name in RULE_NAMES.items():
+        expected = dashboard.RULE_LABEL_OVERRIDES.get(rule, name.replace("_", " ").capitalize())
+        assert dashboard.RULE_LABELS[rule] == expected, rule
+        assert dashboard._f_rule_label(rule) == f"{rule} {expected}"
+
+    # An id the agent does not know still renders, and still says which id it is.
+    assert dashboard._f_rule_label("G9") == "G9"

@@ -90,13 +90,16 @@
   </dl>
 
   {% set span_total = turn.duration_ms or 1 %}
+  {# The axis measures the bars, so it is placed in the bars' own columns explicitly. It used to
+     lean on auto-placement with three empty spans, which put the ticks in column 4 — the summary
+     text — and "total …" where the bars are (UX W4 review, fix round 1). #}
   <div class="span-axis" aria-hidden="true">
-    <span></span><span></span><span></span>
+    <span class="span-axis-label">Turn total</span>
     <span class="span-axis-track">
       <span>0</span><span>{{ (span_total / 4)|round|int|ms }}</span><span>{{ (span_total / 2)|round|int|ms }}</span>
       <span>{{ (span_total * 3 / 4)|round|int|ms }}</span><span>{{ span_total|ms }}</span>
     </span>
-    <span class="span-axis-total">total {{ turn.duration_ms|ms }}</span>
+    <span class="span-axis-total">{{ turn.duration_ms|ms }}</span>
   </div>
   <ol class="waterfall">
     {% for span in turn.spans %}
