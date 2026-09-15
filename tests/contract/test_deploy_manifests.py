@@ -195,8 +195,26 @@ def test_the_blueprint_carries_the_keep_alive_so_a_redeploy_cannot_drop_it():
 # --- ci.yml: the docker job ---------------------------------------------------------------
 
 
-def test_ci_has_the_four_jobs_of_15_1():
-    assert list(CI["jobs"]) == ["lint", "test", "docker", "deploy"]
+def test_ci_has_the_four_jobs_of_15_1_plus_the_ux_suite():
+    """§15.1's four, and the browser suite UX W1 added between `test` and `docker`.
+
+    `ux` carries no `needs:` and nothing needs it, which is the point: the screenshot-and-geometry
+    suite is the only thing in the repo that wants a browser binary, and it must never stand
+    between a green suite and a deploy.
+    """
+    assert list(CI["jobs"]) == ["lint", "test", "ux", "docker", "deploy"]
+    assert "needs" not in CI["jobs"]["ux"]
+    assert CI["jobs"]["deploy"]["needs"] == ["test", "docker"]
+
+
+def test_the_ux_job_installs_the_browser_from_the_committed_manifest_and_caches_it():
+    """R1.2: every CI install comes from a committed manifest, this one included."""
+    steps = CI["jobs"]["ux"]["steps"]
+    runs = [step["run"] for step in steps if "run" in step]
+    assert any("requirements-ux.txt" in line for line in runs)
+    assert "pytest -q -m ux" in runs
+    caches = [step for step in steps if str(step.get("uses", "")).startswith("actions/cache")]
+    assert any("ms-playwright" in str(step["with"]["path"]) for step in caches), "the browser is cached"
 
 
 def test_the_docker_job_builds_the_image_stamped_with_the_commit():

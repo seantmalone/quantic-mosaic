@@ -25,15 +25,12 @@ Before you start, tick [`pre-submission-checklist.md`](pre-submission-checklist.
   live span rail (right-hand column). Move the PiP to the top-left if it does.
 - **Verify audio on a 20-second test clip** before the real take. Re-recording nine minutes
   because of a dead microphone is the single most common way this goes wrong.
-- **Screen setup:** browser at 1440-wide or more, zoom at 100 %. **Two browser profiles** (or one
-  normal window and one private window), because `mosaic_actor` is a *single cookie shared by the
-  chat and the dashboard*: **profile A pinned to persona `E1042`** — the deployed app, used for
-  both tasks — and **profile B with the act-as selector set to HR admin** — `/dashboard` and
-  `/dashboard/evals`. Everything under `/dashboard/*` and `/api/*` answers
-  `403 {"code":"ADMIN_REQUIRED"}` for the employee persona, so a dashboard tab left on `E1042` will
-  show that JSON on camera instead of a page. Tabs, in this order: the deployed app (profile A),
-  `/dashboard` (profile B), `docs/architecture.html`, the GitHub Actions run list, `render.yaml` on
-  GitHub.
+- **Screen setup:** browser at 1440-wide or more, zoom at 100 %. **One profile is enough** since
+  UX W1: `/dashboard/*` and every `/api/*` read are open to any persona holding the access token, so
+  the whole demo runs as `E1042` and the `Chat | Dashboard` switch in the masthead is the only
+  navigation needed. (The three write controls still want **HR admin**, selectable in the demo
+  panel at the foot of the chat page.) Tabs, in this order: the deployed app, `/dashboard`,
+  `docs/architecture.html`, the GitHub Actions run list, `render.yaml` on GitHub.
 
 ### Wake the instance first
 
@@ -57,7 +54,7 @@ of task 1.
 | **0:45–1:30** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Name the seven components as you point at them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. Make the one point that matters: *"the MCP server is mounted inside the app that consumes it, and the client speaks real JSON-RPC over a real loopback socket — these are not function calls dressed up as tools."* Mention the single trace model: one writer, five readers |
 | **1:30–3:30** | **Task 1 live** — international remote-work eligibility | The chat UI, then the span rail, then the corpus browser | Click the **Demo 1** button. Narrate the five DEMO.6 elements from the live span rail as they appear (sub-checklist below). Finish by clicking a citation chip through to the highlighted 30-day sentence in the corpus browser |
 | **3:30–5:30** | **Task 2 live** — PTO request through the confirmation gate | The chat UI, the Confirm card, then dashboard page 8 (**admin profile**) | Click **Demo 2**. Narrate the five elements again, then land the safety beat (below). **Cancel once** to show `declined` recorded, re-ask, then confirm, and watch the new row appear in the mock-action log. Beat ⑦ of the optimization story goes here, while the answer is streaming in and the rail is narrating each step as it starts |
-| **5:30–6:15** | Dashboard tour | `/dashboard/sessions/{id}` → `/dashboard/mcp` → `/dashboard/safety` | **Switch to the admin profile first** (or set the act-as selector to **HR admin**) — every route here is admin-only. The span waterfall for the turn just run — *"every LLM call with its verbatim messages, every retrieval with its scored chunks, every tool call with its arguments and result."* Then the MCP page: nine tools, their JSON Schemas, the transport and the handshake. Then the safety page: guardrail verdicts by rule, the confirmation ledger, the mock-action log |
+| **5:30–6:15** | Dashboard tour | `/dashboard/sessions/{id}` → `/dashboard/mcp` → `/dashboard/safety` | Use the `Chat \| Dashboard` switch — no persona change is needed. The span waterfall for the turn just run — *"every LLM call with its verbatim messages, every retrieval with its scored chunks, every tool call with its arguments and result."* Then the MCP page: nine tools, their JSON Schemas, the transport and the handshake. Then the safety page: guardrail verdicts by rule, the confirmation ledger, the mock-action log |
 | **6:15–7:00** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count`, `rss_mb`. Then the measured numbers: about **300 MB** against a hard 512 MB cap — 293.6 MB when we measured it on 2026-09-10, 294.9 MB under the local gate, and `rss_mb` is right there on the payload, so read the number on screen, and the cold-start segments with their dates and their `n`: a median **71.0 s** cold to first answer over three probes (67.5–77.6 s), **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it three times with nothing pinging it, published the spread, and only then turned on a ten-minute keep-alive, which has been running on the service since the eleventh — it costs 744 of our 750 free hours, so it is the last step, not the way we made the number look good."* Beat ⑥ of the optimization story belongs here |
 | **7:00–7:40** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. Four jobs: `lint` (ruff + gitleaks over full history), `test` (the full suite — over 1,800 tests; read the count off the run on screen — offline, with no API keys), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. Then the gate: **`deploy` declares `needs: [test, docker]`**, and Render's own auto-deploy is off, so CI is the only path to production. Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
 | **7:40–8:45** | Evaluation | `/dashboard/evals` → a run detail → the compare tab | **Admin profile again.** 28 items across all seven categories. Walk the metric chips: groundedness, citation accuracy, DocRecall, tool selection, workflow completion, action safety, over-refusal, latency split cold/warm. Open one item to show the **judge rationale**, then "view trace" to jump to the turn that produced it. Then the compare tab: the three-variant ablation chart. Beats ①–③ of the optimization story land here, on screen |
@@ -141,10 +138,10 @@ Tick all five on camera:
       `policy_fact` versus `recommendation`, the latter labelled *"Recommendation — not company
       policy"* in the interface.
 
-The *Full span waterfall* link renders for every persona, but the page behind it is admin-only:
-clicking it in the take under `E1042` produces `403 {"code":"ADMIN_REQUIRED"}`. Either paste the
-turn's `dashboard_url` into the admin profile, or skip the click here and fold this turn's
-waterfall into the 5:30 dashboard tour, which is already on the admin profile.
+The *Full span waterfall* link renders for every persona, and since UX W1 it **resolves** for every
+persona too: clicking it under `E1042` lands on the session page, and that page's
+*"Continue this conversation in chat"* brings the transcript back. Click it here, or fold this
+turn's waterfall into the 5:30 dashboard tour.
 
 ---
 
@@ -226,7 +223,7 @@ Then, in order:
 | `/health` reports `degraded` | Read the `degradations[]` array on camera; it names the reason in one machine-readable string. If it is `llm_api_key_missing`, stop and fix the environment variable before recording |
 | A tool call returns `isError` | Keep going. Graceful degradation is a graded behaviour: the turn still answers at HTTP 200 with a caveat block, and the `error` span is right there on the rail |
 | The model takes a path different from this script | Expected, and fine. The expectation records assert the **outcome** — the profile, the corpus, the deterministic verdict, the cited documents — not one exact path. Narrate what it actually did |
-| A dashboard page shows `{"code": "ADMIN_REQUIRED"}` | You are on the employee persona. Set the act-as selector to **HR admin** and reload. If you switched in the profile you are running chat in, switch back to `E1042` before the next task — `mosaic_actor` is one cookie shared by the chat and the dashboard |
+| A **write control** answers `{"code": "ADMIN_REQUIRED"}` (Reset sandbox, Re-discover now, Run smoke eval) | Those three still need the admin persona. Choose **HR admin** in the demo panel at the foot of the chat page, then reload. Reading the dashboard needs no persona change |
 | Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. `evaluation/REPORT.md` already reports `remote-004` — the dataset twin of this prompt — failing its three-document end state on the published run; say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
 | More citation chips than an earlier run showed | Also expected: the published run added a bounded breadth-repair step, so a multi-document answer that cites fewer documents than its evidence spans gets one repair attempt. Narrate the chips on screen, not the number in this script |
 | You run past 10:00 | Cut the dashboard tour (5:30–6:15) to 20 seconds; it is the only segment whose content appears elsewhere in the recording |

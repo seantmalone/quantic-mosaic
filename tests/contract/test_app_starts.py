@@ -41,6 +41,8 @@ EXPECTED_ROUTES = {
     ("GET", "/dashboard/corpus/{doc_id}"),
     ("GET", "/dashboard/evals"),
     ("GET", "/dashboard/evals/{run_id}"),
+    # the policy reader a citation links to (§11.8, added at UX W1)
+    ("GET", "/policy/{doc_id}"),
     # the `/api/*` layer each page renders from (§11.8)
     ("GET", "/api/traces/overview"),
     ("GET", "/api/traces/sessions"),

@@ -822,8 +822,11 @@ def _collected_test_count() -> int:
     suite, and the session it is running in may be one file. Collection only — nothing is executed,
     and it costs about two seconds.
     """
+    # `-m ""` clears the `-m "not ux"` in `addopts`, so the child counts the WHOLE suite. Without
+    # it the browser suite is deselected, pytest prints `N/M tests collected (K deselected)` and
+    # the number a document should state would drift with whether a browser is installed.
     completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "-m", ""],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

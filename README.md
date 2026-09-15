@@ -47,9 +47,11 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 2,003 tests as of
-2026-09-11, unit, contract, integration, architecture and e2e-with-stub, every one of them against
-the scripted stub provider, so no credential is involved. `make coverage` runs that same suite
+**Tests and coverage.** `make test` runs the whole suite in one command — 2,040 tests as of
+2026-09-14, unit, contract, integration, architecture and e2e-with-stub, every one of them against
+the scripted stub provider, so no credential is involved. Eleven of those are the browser-based UX
+principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
+and CI runs them in a job of their own that never blocks `test` or `deploy`. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-11: **95% of statements and 87% of branches
 over 7,362 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
@@ -120,8 +122,9 @@ section of [`design-and-evaluation.md`](design-and-evaluation.md).
 HttpOnly cookie and stripped from the URL; API clients and MCP Inspector send
 `Authorization: Bearer <token>` instead. An external MCP client also needs its `Host` on
 `MCP_ALLOWED_HOSTS` — see [`mcp/README.md`](mcp/README.md), which documents the MCP server, its
-three transports and the host allowlist in full. Choose **HR admin** in the act-as selector to reach the
-observability dashboard. Full details, every environment variable and the measured numbers are in
+three transports and the host allowlist in full. The observability dashboard is reachable from the
+`Chat | Dashboard` switch in the masthead, in any persona; only the three write controls need
+**HR admin**. Full details, every environment variable and the measured numbers are in
 `deployed.md`.
 
 **Cold start.** The free instance spins down after 15 minutes idle. Measured on the live service

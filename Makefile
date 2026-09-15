@@ -10,7 +10,7 @@ GIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo dev)
 IMAGE ?= mosaic-hr
 BASE_URL ?= http://$(HOST):$(PORT)
 
-.PHONY: setup run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512
+.PHONY: setup run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
 
 setup:
 	$(PYTHON) -m venv $(VENV)
@@ -41,6 +41,23 @@ coverage:
 	$(BIN)/coverage run --branch --source=src/hrmosaic -m pytest -q
 	$(BIN)/coverage xml
 	$(BIN)/coverage report --fail-under=$(COVERAGE_MIN)
+
+# The screenshot-and-geometry suite and its harness (UX W1). Both need `requirements-ux.txt` and a
+# chromium build — neither is in `make setup`, because the whole point of the separate manifest is
+# that the default test path never pays for a browser:
+#
+#   .venv/bin/pip install -r requirements-ux.txt && .venv/bin/python -m playwright install chromium
+#
+# `ux` runs the principle tests (P3–P7) against a real browser; `ux-capture` re-captures the audit's
+# screen ids into a git-ignored directory so a wave can be diffed against the evidence that
+# justified it. Both run four stub servers on loopback: LLM_PROVIDER=stub, no live model call.
+UX_OUT ?= .ux-capture
+
+ux:
+	$(BIN)/pytest -q -m ux
+
+ux-capture:
+	$(BIN)/python scripts/ux_capture.py --out $(UX_OUT)
 
 ingest:
 	$(BIN)/python -m hrmosaic.rag.ingest

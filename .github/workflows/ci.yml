@@ -82,6 +82,33 @@ jobs:
         if: always()
         with: { name: coverage-xml, path: coverage.xml }
 
+  # The UX principle suite (P3–P7): the rendered page, in a real browser, at the three viewports
+  # the audit measured. Its own job because it is the only thing in the repo that needs a browser
+  # binary, and `needs:` is deliberately absent — it must never block `test` or `deploy`. The
+  # chromium build is cached on the pinned playwright version, so a cache hit makes it a no-op.
+  ux:
+    runs-on: ubuntu-latest
+    env:
+      LLM_PROVIDER: stub
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version-file: '.python-version' }
+      - run: pip install -r requirements.txt -r requirements-dev.txt -r requirements-ux.txt
+      - run: pip install -e .
+      - uses: actions/cache@v4
+        with: { path: .cache/fastembed, key: fastembed-bge-small-en-v1.5-v1 }
+      - run: python -m hrmosaic.rag.download_model     # a no-op on a cache hit
+      - run: python -m hrmosaic.rag.ingest --verify-manifest   # the suite drives a real retrieval
+      - uses: actions/cache@v4                          # the browser, keyed on the pinned version
+        id: chromium
+        with: { path: ~/.cache/ms-playwright, key: playwright-chromium-1.55.0 }
+      - if: steps.chromium.outputs.cache-hit != 'true'
+        run: python -m playwright install chromium
+      - run: python -m playwright install-deps chromium
+      - run: pytest -q -m ux
+
   docker:
     runs-on: ubuntu-latest
     steps:

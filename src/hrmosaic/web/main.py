@@ -42,10 +42,11 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from hrmosaic.agent.client import McpClient
@@ -248,9 +249,15 @@ def _install_error_handlers(app: FastAPI) -> None:
     and leaving the turn row open until the next boot sweep (§12.3).
     """
 
+    #: The `{"code": …}` shape §11.1 uses, for the refusals Starlette raises on its own behalf —
+    #: an unmatched path and a wrong method. Without these two, a mistyped URL answered
+    #: `{"detail":"Not Found"}` to a browser: a dead end with no page and no way back (**P6**).
+    STATUS_CODES = {404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED"}
+
     async def http_exception(request: Request, exc: Exception) -> Response:
-        assert isinstance(exc, HTTPException)
-        body = exc.detail if isinstance(exc.detail, dict) else {"code": "ERROR", "detail": exc.detail}
+        assert isinstance(exc, StarletteHTTPException)
+        fallback = {"code": STATUS_CODES.get(exc.status_code, "ERROR"), "detail": exc.detail}
+        body = exc.detail if isinstance(exc.detail, dict) else fallback
         # **P6, no dead ends (UX W1).** A browser following a stale deep link used to be shown the
         # raw `{"code": "UNKNOWN_SESSION", …}` body: no page, no nav, no way back. The JSON is
         # unchanged for everyone who did not ask for HTML — §11.8's codes are the contract.
@@ -266,7 +273,12 @@ def _install_error_handlers(app: FastAPI) -> None:
             status_code=422,
         )
 
-    app.add_exception_handler(HTTPException, http_exception)
+    # Registered against **Starlette's** `HTTPException`, not FastAPI's subclass: the router raises
+    # the parent class for an unmatched path or a wrong method, and handler lookup walks the raised
+    # class's MRO — so a registration on the subclass alone never sees them, and those two refusals
+    # fell through to Starlette's own `{"detail": "Not Found"}`. FastAPI's `HTTPException` is a
+    # subclass, so this one registration covers both.
+    app.add_exception_handler(StarletteHTTPException, http_exception)
     app.add_exception_handler(RequestValidationError, validation_error)
     # Added first, so the access gate (added last, and therefore outermost) still refuses before
     # any work happens, and this sits directly outside Starlette's own `ExceptionMiddleware`.

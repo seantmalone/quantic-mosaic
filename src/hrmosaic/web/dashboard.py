@@ -15,10 +15,12 @@ the `eval_runs` / `eval_results` rows `core/archive.py` imported. That is the US
 it is why `guardrail_blocks` on page 1 comes from `turns.guardrail_hits` rather than being recounted
 from spans.
 
-**Access.** The whole prefix is gated *and* admin-only: `web/api.py`'s pure-ASGI
-`AccessGateMiddleware` refuses `/dashboard/*` and `/api/*` with **403** `{"code": "ADMIN_REQUIRED"}`
-outside the admin persona before any handler runs. So the three write controls are never rendered
-dead — reaching their host page already proves the persona.
+**Access (amended, UX W1).** The whole prefix is gated by the access token of §11 and by nothing
+else: every page and every `/api/*` read answers any persona holding it. The role gates **writes**
+only — `POST /api/dev/reset-sandbox`, `POST /api/mcp/rediscover` and `POST /api/eval/runs` — which
+`web/api.py`'s pure-ASGI `AccessGateMiddleware` refuses with **403** `{"code": "ADMIN_REQUIRED"}`
+outside the admin persona. Each of those three controls is therefore rendered on a page anyone can
+reach, with its own server-side check behind it.
 """
 
 from __future__ import annotations

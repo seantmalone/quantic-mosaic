@@ -49,6 +49,15 @@ dev = [
     "coverage==7.10.7",
 ]
 
+# The screenshot-and-geometry suite (`tests/ux/`, `make ux-capture`). A **separate** group, not part
+# of `dev`: it is the only dependency in the project that needs a browser binary on top of a wheel,
+# so the CI `test` job stays lean and installs nothing it does not run, and the `ux` job is the one
+# place a chromium download is paid for. Compiled to `requirements-ux.txt`, like every other
+# manifest here, with `uv pip compile --group pyproject.toml:ux -o requirements-ux.txt`.
+ux = [
+    "playwright==1.55.0",
+]
+
 # src layout: the importable packages live under `src/`, nothing at the repo root.
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -92,4 +101,12 @@ pythonpath = ["src", "."]
 filterwarnings = ["error"]
 # `--strict-markers`: a typo'd mark (`@pytest.mark.anyoi`) is an error, not a silently inert test.
 # `--strict-config`: an unknown key in this very table is an error too — the same class of typo.
-addopts = "--strict-markers --strict-config"
+# `-m "not ux"`: `tests/ux/` drives a real browser against a real server, so it is deselected from
+# the default run and from `make coverage`, and CI runs it in a job of its own (`pytest -m ux`)
+# that installs chromium. A command-line `-m` overrides this one, which is how `pytest -m ux`
+# selects exactly the suite this excludes.
+addopts = "--strict-markers --strict-config -m \"not ux\""
+
+markers = [
+    "ux: the screenshot-and-geometry suite — needs `requirements-ux.txt` and a chromium build (`make ux`)",
+]

@@ -66,6 +66,25 @@ async def test_a_404_navigation_is_a_page_for_a_browser_and_json_for_a_client(we
     assert body.json() == {"code": "UNKNOWN_SESSION", "session_id": "0" * 32}
 
 
+async def test_an_unmatched_path_is_a_page_for_a_browser_and_a_typed_body_for_a_client(web):
+    """The refusal Starlette raises on its own behalf, not one a handler chose (UX W1).
+
+    The exception handler is registered against **Starlette's** `HTTPException`, not FastAPI's
+    subclass: the router raises the parent for an unmatched path, and handler lookup walks the
+    raised class's MRO, so a registration on the subclass alone never saw it. A mistyped URL used
+    to answer `{"detail":"Not Found"}` to a browser.
+    """
+    async with web() as client:
+        page = await client.get("/dashboard/nope", headers=HTML)
+        body = await client.get("/dashboard/nope", headers=JSON)
+
+    assert page.status_code == 404
+    _assert_is_a_page(page)
+
+    assert body.status_code == 404
+    assert body.json() == {"code": "NOT_FOUND", "detail": "Not Found"}
+
+
 async def test_the_missing_token_403_is_a_page_for_a_browser_and_json_for_a_client(web):
     """`APP_ENV=render` with no `APP_ACCESS_TOKEN`: every gated route is refused (§11.4)."""
     async with web(app_env="render", app_access_token=None) as client:
