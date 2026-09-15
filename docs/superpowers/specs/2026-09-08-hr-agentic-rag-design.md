@@ -1903,18 +1903,43 @@ A single Jinja page at `/`, with: an **"act as" selector** over the 24 mock empl
 the masthead and no longer changes what is *reachable*. The shared masthead's `Chat | Dashboard` switch is rendered unconditionally, in every persona,
 and there are no admin-only read surfaces left — the role gates the three write endpoints of §11.6 and the privileged `/chat` options, nothing else. The
 selector moved into a `section.demo-panel` at the foot of the page (a stub until W3 builds the rest of the panel around it), keeping its `id` and
-`name`. The page also carries: a **message list** rendering typed blocks — `policy_fact` plain, `recommendation` with a
-**"Recommendation — not company policy"** badge, `escalation` with a contact chip; **citation chips** under every block, opening a drawer that
-highlights the snippet inside the full chunk and links into the corpus browser; a **snapshot note** (*"Employee data as of 1 September 2026"*) under
-any answer whose tool results carry an `as_of`; the **live agent-activity rail** (the SSE span stream, colour-coded by kind, collapsing into a
-persistent trace panel under the finished answer); a **Confirm / Cancel card** for `awaiting_confirmation` showing the exact `human_summary` and
-`arguments_preview` before anything is written; a **cold-start banner** driven by a `/health` preflight with an elapsed counter; and **two one-click
-demo buttons** wired to the exact prompts of §18.
+`name`.
+
+**Amended, UX W2 — the chat surface is a production one.** The page is a single centred conversation column at `--measure` (40 rem ≈ 80 characters),
+in a shell of definite height: the transcript scrolls inside its own box, the composer is **sticky** and always reachable, the newest message stays in
+view, and a `Jump to latest` control appears when the reader has scrolled away from it. **Enter sends** and Shift+Enter writes a new line, the textarea
+grows to fit, and while a turn is in flight the composer, the demo prompts and the persona select are all locked and a **Stop** control replaces Send
+(client-side: it aborts the request and closes the stream, and says so). An empty conversation greets the persona by name, states in one line what the
+assistant answers from, and offers **four starter questions** that prefill the composer. What the page renders of a turn:
+
+* the question, echoed the moment it is sent, as a right-aligned user message;
+* **one** progress line — `<p id="turn-status" role="status">`, throttled, taken verbatim from `web/narration.py::label_for()` and nothing else. The
+  22 rem *"Live agent activity"* rail, its closed-span detail lines, its elapsed ticker and the per-turn *"Agent activity — N steps"* trace panel are
+  **deleted**: the dashboard is the single home for the technical record, every value of which is still there, unrounded (P15);
+* a cited `policy_fact` as **prose** with a friendly reference under it (document title · section) — no badge, because the source carries the
+  authority; `recommendation` blocks and `next_steps` grouped **once** under *"What I suggest you do"* with the one footnote *"Suggestions are
+  guidance, not company policy."*; `escalation` blocks under *"Who to contact"*. Headings appear only on `answered`, `escalated` and `partial`: a
+  refusal, a clarifying question, a confirmation card and a failed turn wear no label at all;
+* an always-visible **Sources (n)** strip, one `<details>` per citation, expanding the quoted passage and offering *"Open the full policy"* at the
+  W1 reader route `/policy/{doc_id}#{chunk_id}`;
+* a **snapshot note** (*"Based on employee data from 1 September 2026"*), once per turn, through `human_date()`;
+* a **Confirm / Cancel card** for `awaiting_confirmation` — a `<dl>` of the fields a person needs (`Request`, `Goes to` as the queue's human name from
+  `QUEUE_LABELS`, `Priority` only when it is not `normal`), the line *"Nothing is written until you choose."* and the buttons *"Open the request"* /
+  *"Don't open it"*. Resolving it re-renders the **question** with the turn and adds one resolved line (*"You approved this — it went ahead."*);
+* a **Try again** button on a failed turn, carrying the question that failed;
+* a **cold-start notice**: one calm line behind a `/health` preflight and a grace period, with no elapsed counter.
+
+`#turn-status` is the page's **only** live region, and it carries one plain-language announcement per finished turn (*"Answer ready."*). The brand of
+`docs/brand.md` is applied from here: `static/app.css` imports `static/brand/brand.css` (the two self-hosted OFL faces and the whole token block, light
+and dark), the masthead's `h1` is `wordmark.svg`, and `favicon.svg` is on every page.
 
 **Named UI smoke test (R6.2).** `tests/contract/test_chat_page_renders.py`, with `LLM_PROVIDER=stub`: `GET /` returns 200 and the HTML contains the
-act-as `<select>`, both demo buttons and the span-rail container; then it posts a tool-using message and asserts the rendered turn contains a
-`policy_fact` badge, a `recommendation` badge with the literal text *"Recommendation — not company policy"*, and **≥ 1 citation chip whose `href` is
-the chunk's `source_url`** deep link.
+act-as `<select>`, both demo buttons and the `#turn-status` line; then it posts a tool-using message and asserts the rendered turn contains an
+`answer-block-policy_fact` section, an `answer-block-recommendation` group carrying the literal footnote *"Suggestions are guidance, not company
+policy."*, and **≥ 1 source link whose `href` is the chunk's `source_url`** deep link. The labelling guarantee the rubric asks for is unchanged where
+it is measured: `orchestrator.render_answer()` still prefixes *"Recommendation — not company policy: "* in the plain-text `answer` the JSON contract
+and the eval harness read. `tests/contract/test_chat_has_no_jargon.py` (**P2/P13**) and `tests/contract/test_number_precision.py` (**P1**) are the
+permanent guards over every turn state.
 
 **Demo reproducibility (R6.5):** the two buttons **and** `scripts/demo_task_1.sh` / `demo_task_2.sh` — plain `curl`, parameterised by `BASE_URL`,
 pretty-printing answer + citations + trace + `dashboard_url` — both documented in README. Every call they make sends
