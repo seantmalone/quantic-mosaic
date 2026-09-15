@@ -814,12 +814,15 @@ test rather than a reported number.
 **Outcome consistency is not a guardrail either — it is `agent/outcome.py` (P22).** One deterministic step runs after synthesis, on the blocks G2 and
 G3 have already repaired, and it has a name rather than a number: `outcome_consistency`. When the turn holds a write-tool envelope with a success
 status — `create_mock_hr_ticket` → `status: created`, `draft_hr_email` → `status: drafted`, neither of which the server can return without consuming a
-human's one-time token (§8.6) — the answer **opens with the outcome, built from the tool result and not from model output**: a `recommendation` block,
-because it is tool data and not company policy, carrying the id verbatim ("Done: HR ticket MOCK-HR-000002 was opened in queue hr-timeoff (priority
-normal) — this is a mock ticket, nothing was sent outside this app."). It is skipped when the model's own answer already states that id. The second
-half is the inverse check: an `escalation` block that claims an inability to perform the very action the result shows was performed is replaced by a
-line pointing at what was created. Only that kind — the check is a denial phrase *plus* a word for what the performed tool does — so G5's
-sensitive-topic escalation and its People Operations contact are never collateral. It emits no `guardrail` span, it changes none of the six rules, and
+human's one-time token (§8.6) — the answer **opens with the outcome, built from the tool result and not from model output**: a `performed` block (UX
+W6), because a completed irreversible write is neither company policy nor a suggestion, carrying the id verbatim and the queue's human name ("Done —
+your request is with the HR Time Off team. Reference MOCK-HR-000002."). **That statement is the turn's one account of the write**, so a model block of
+any type whose text names the id is removed as the model's account of something only the tool result can attest — the guard did the reverse until P29,
+and on 2026-09-15 a created ticket reached the live page inside a `recommendation`, printed under *"What I suggest you do"* beneath *"Suggestions are
+guidance, not company policy"*. The second half is the inverse check: an `escalation` block that claims an inability to perform the very action the
+result shows was performed goes the same way, because the statement above it has already said what the denial was in the way of. Only that kind — the
+check is a denial phrase *plus* a word for what the performed tool does — so G5's sensitive-topic escalation and its People Operations contact are
+never collateral. It emits no `guardrail` span, it changes none of the six rules, and
 it exists because of a measured failure: on 2026-09-11 demo 2's confirmation was consumed, `create_mock_hr_ticket` returned
 `{"status": "created", "ticket_id": "MOCK-HR-000002", …}`, the synthesis prompt carried that result verbatim — and the answer ended *"I cannot open PTO
 requests on your behalf. You must submit the request directly in MosaicOne…"* and never named the ticket. `synthesize.j2` rule 10 tells the model the
@@ -831,6 +834,12 @@ next step that tells the reader to go and perform the action the result shows wa
 check and just as narrow — an imperative verb for the performed tool at the head of a clause, *plus* one of that tool's own objects (`ticket`,
 `request`, `case`) in the same clause. "Watch for your manager's approval in MosaicOne" and "Your manager will receive the request" are not directives
 at the reader and survive; so does any step naming the id, which is talking about the thing that exists. The rest of the model's advice is untouched.
+
+**Snapshot consistency is a third such step — `agent/snapshot.py` (P29), named `snapshot_consistency`** — running last over the same blocks and next
+steps: it removes an `as of <date>` the answer restates when that date is an `as_of` one of the turn's own tool envelopes carried (the page's footer
+already says *"Based on employee data from 1 September 2026"* once, and the live 2026-09-15 answers said it again in their first sentence), and
+rewrites `N months` of tenure as the words `lookup_employee_profile` returned for it — *"3 years 9 months"* — except where the sentence is quoting a
+policy threshold such as *"at least 12 months"*. A date the envelopes did not carry, such as a computed deadline, is never touched.
 
 **Citation breadth is not a guardrail either — it is `agent/breadth.py` (P24).** A second deterministic step, named `citation_breadth` and
 carrying no number, runs after `outcome_consistency`'s sibling position in §9.1 step 5, on the blocks G2 and G3 have already repaired. It exists for

@@ -271,11 +271,21 @@ chunks and tool results are fenced in `<document trust="data">` / `<tool_result 
 envelopes under a standing system rule that envelope content is data, never instruction.
 
 Answers are constrained JSON: typed `answer_blocks[]` (`policy_fact` | `recommendation` |
-`escalation` | `next_steps`) each carrying its own citations, plus a top-level `citations[]` where
-each entry is `{chunk_id, doc_id, doc_title, heading_path, section, snippet, score, quarantined,
-source_url}`. The UI renders citation chips that deep-link into the policy reader at the exact
-chunk, and a `recommendation` block is labelled *"Recommendation — not company policy"* in the
-interface itself.
+`escalation` | `performed` | `next_steps`) each carrying its own citations, plus a top-level
+`citations[]` where each entry is `{chunk_id, doc_id, doc_title, heading_path, section, snippet,
+score, quarantined, source_url}`. The UI renders citation chips that deep-link into the policy
+reader at the exact chunk, and a `recommendation` block is labelled *"Recommendation — not company
+policy"* in the interface itself.
+
+Two deterministic steps then run over those blocks and their `next_steps`, before anyone reads
+them. **Outcome consistency** (`agent/outcome.py`) makes the `performed` block the turn's *one*
+account of a confirmed write: it is built from the tool result, it leads the answer, and a model
+block of any type whose text names the write's id is removed — the model's account of something
+only the tool result can attest — along with an escalation denying the action and a next step
+telling the reader to go and perform it themselves. **Snapshot consistency** (`agent/snapshot.py`)
+deletes a restatement of the employee-data snapshot date the page already prints once in its own
+footer, and puts the profile tool's words — *"3 years 9 months"* — where the answer had left the
+reader dividing 45 months by twelve.
 
 ---
 
@@ -746,14 +756,14 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,417 tests as of 2026-09-15) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,435 tests as of 2026-09-15) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
 **The coverage gate is the same command locally and in CI.** `make coverage` and the `test` job
 both run `coverage run --branch --source=src/hrmosaic -m pytest -q`, write `coverage.xml` and then
 enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 87% of
-branches over 7,965 statements** on 2026-09-15 (94% combined, which is the number the gate reads),
+branches over 8,112 statements** on 2026-09-15 (94% combined, which is the number the gate reads),
 so the 90 floor is a regression guard rather than a target to grow into. No third-party coverage
 service and no badge token is involved — §15.2's claim that nothing CI holds is a credential stands
 unchanged.

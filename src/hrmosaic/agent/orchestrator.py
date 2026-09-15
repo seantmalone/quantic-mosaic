@@ -53,6 +53,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from hrmosaic.agent import breadth, prompts
 from hrmosaic.agent import dates as date_consistency
 from hrmosaic.agent import outcome as outcome_consistency
+from hrmosaic.agent import snapshot as snapshot_consistency
 from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
 from hrmosaic.agent.guardrails import g1, g2, g3, g4, g5, g6
@@ -812,13 +813,16 @@ class Orchestrator:
 
         # -- 5c. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
         # A write the user confirmed and the server performed is reported from the tool result,
-        # not from model output: the outcome goes first with its id, an escalation denying the
-        # very action the result shows was performed is replaced by a pointer to it, and a next
-        # step telling the reader to go and perform it themselves is dropped. The measured
-        # failure was a `created` ticket answered with "I cannot open PTO requests on your
-        # behalf" and "Log into MosaicOne and submit your PTO request" in the same answer
-        # (§7.4's outcome-consistency paragraph). `next_steps` goes through the step for the
-        # same reason the blocks do: `render_answer` puts both in front of the same reader.
+        # not from model output: the `performed` statement goes first with its id and is the
+        # turn's one account of the write, so a model block of any type that names that id goes
+        # (P29 — the live 2026-09-15 answer filed "HR ticket MOCK-HR-000007 has been created"
+        # under "What I suggest you do"), an escalation denying the very action the result shows
+        # was performed goes with it, and a next step telling the reader to go and perform it
+        # themselves is dropped. The measured failure was a `created` ticket answered with "I
+        # cannot open PTO requests on your behalf" and "Log into MosaicOne and submit your PTO
+        # request" in the same answer (§7.4's outcome-consistency paragraph). `next_steps` goes
+        # through the step for the same reason the blocks do: `render_answer` puts both in front
+        # of the same reader.
         consistent = outcome_consistency.apply(
             relabelled.blocks,
             turn.envelopes,
@@ -832,9 +836,19 @@ class Orchestrator:
         # had computed itself. Nothing else about the sentence is touched.
         dated = date_consistency.apply(consistent.blocks, next_steps=consistent.next_steps)
 
+        # -- 5e. snapshot consistency (P29, npo2-08/-13) — NOT a guardrail, and no G-number ----
+        # The employee-data snapshot is stated once, by the page's own footer ("Based on employee
+        # data from 1 September 2026"), so an answer that restates it — "your PTO balance as of
+        # 1 September 2026 is 13.5 days", live on 2026-09-15 — prints the same fact twice on one
+        # screen, and in the earlier capture printed it in ISO as well. The restatement is removed
+        # with whatever punctuation introduced it, and a tenure the profile tool reported in words
+        # ("3 years 9 months") replaces the months the same answer made the reader divide. Only
+        # dates the turn's own envelopes carry are touched: a deadline is somebody else's fact.
+        snapshotted = snapshot_consistency.apply(dated.blocks, turn.envelopes, next_steps=dated.next_steps)
+
         answer = AnswerSchema(
-            blocks=[AnswerBlock.model_validate(block) for block in dated.blocks],
-            next_steps=dated.next_steps,
+            blocks=[AnswerBlock.model_validate(block) for block in snapshotted.blocks],
+            next_steps=snapshotted.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
         if turn.write_failed:
