@@ -392,7 +392,7 @@ async def test_a_confirmation_gated_turn_streams_its_resumed_half_to_a_second_su
 
 
 async def test_a_declined_confirmation_also_streams_a_second_turn_started_and_completed(web, store):
-    """Cancel republishes `turn_started`, its own `confirmation` span and `turn_completed` (§11.2)."""
+    """Cancel republishes `turn_started`, the resolved `confirmation` span and `turn_completed` (§11.2)."""
     async with web("demo_task_2.json") as client:
         listening, _gated = await _collect(client, TURN_ID)
         proposal = await client.post("/chat", json={"message": PTO_QUESTION, "turn_id": TURN_ID})
@@ -410,7 +410,9 @@ async def test_a_declined_confirmation_also_streams_a_second_turn_started_and_co
     events = [event for event, _ in frames]
 
     assert events[0] == "turn_started" and events[-1] == "turn_completed"
-    assert frames[-1][1]["outcome"] == "refused"
+    # Since W8 (C11) a decline answers the question it was asked, with the write removed, so the
+    # turn closes `answered` and the receipt is the `notice` that opens it. Nothing was written.
+    assert frames[-1][1]["outcome"] == "answered"
     assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
 
 

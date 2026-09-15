@@ -115,9 +115,12 @@ async def test_the_confirmation_span_precedes_the_write_it_authorised(gated_then
     assert len(confirmed) == 1 and len(written) == 1
     assert confirmed[0]["seq"] < written[0]["seq"]
 
-    pending = confirmations("pending")
-    assert len(pending) == 1, "the pending span is never updated in place (§11.2)"
-    assert pending[0]["seq"] < confirmed[0]["seq"]
+    # **One span, resolved in place** (W8, C11). It is the proposal's own: the card that was shown
+    # and the answer the human gave it are one fact, and the span that carried the card is where
+    # the answer belongs. Leaving it `pending` for ever and writing a second span beside it is what
+    # let the same card be confirmed twice — `POST /chat/confirm` mints from a pending span.
+    assert confirmations("pending") == [], "the proposal's own span carries the answer"
+    assert confirmed[0]["payload_json"] and json.loads(confirmed[0]["payload_json"])["resolved_at"]
 
 
 async def test_the_resumed_turn_answers_from_the_pre_confirmation_evidence(gated_then_confirmed, store):
@@ -229,7 +232,11 @@ async def test_a_write_that_fails_after_confirmation_does_not_close_the_turn_ans
             "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'error' ORDER BY seq", (parked.turn_id,)
         ).dicts()
     ]
-    assert [error["error_kind"] for error in errors] == ["tool_failed"]
+    # `distinct_docs_shortfall` rides along on this turn because the repair round was bought and
+    # the recorded answer still cites fewer documents than the workflow expects (W8, C26). It is a
+    # record of the served answer's breadth, not of the write; `tool_failed` is the one this test
+    # is about and it is still there.
+    assert "tool_failed" in [error["error_kind"] for error in errors]
     assert errors[0]["component"] == "mcp" and "create_mock_hr_ticket" in errors[0]["message"]
 
 

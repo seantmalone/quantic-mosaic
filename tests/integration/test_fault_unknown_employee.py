@@ -36,7 +36,8 @@ async def test_the_turn_ends_clarify_at_http_200(clarified):
 async def test_the_question_names_the_id_format(clarified):
     answer = clarified["answer"]
     assert "E1042" in answer, "the clarification shows what a real id looks like"
-    assert clarified["answer_blocks"][0]["type"] == "recommendation"
+    # A clarifying question is the product speaking, not advice (W8, C17).
+    assert clarified["answer_blocks"][0]["type"] == "notice"
 
 
 async def test_the_tool_result_is_a_successful_not_found_not_an_error(clarified, store):

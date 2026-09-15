@@ -35,7 +35,8 @@ async def test_the_turn_answers_200_with_a_caveat_and_an_escalation(web, dead_mc
     body = response.json()
     assert body["outcome"] == "partial"
     types = [block["type"] for block in body["answer_blocks"]]
-    assert types == ["recommendation", "escalation"]
+    # The caveat is the product's own account of itself, not advice (W8, C17).
+    assert types == ["notice", "escalation"]
     assert "unreachable" in body["answer_blocks"][0]["text"]
     assert "Nothing below is a statement of Mosaic Robotics policy" in body["answer_blocks"][0]["text"]
     assert "People Operations" in body["answer_blocks"][1]["text"]

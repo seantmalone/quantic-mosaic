@@ -96,22 +96,53 @@ async def test_nothing_is_written_while_a_turn_is_awaiting_confirmation(web, sto
     assert store.execute("SELECT COUNT(*) AS n FROM confirmations").scalar() == 0
 
 
-async def test_a_decline_records_a_second_confirmation_span_and_closes_the_turn(lifecycle, store):
+async def test_a_decline_resolves_the_proposal_in_place_and_keeps_the_answer(lifecycle, store):
+    """W8, C11. Two things changed here and both were defects.
+
+    The pending span was never rewritten — three turns on the deployed build sat `pending` for
+    ever, and because `POST /chat/confirm` looks for a pending span to mint from, the same card
+    could be confirmed twice. It is now resolved in place: one card, one record of what the human
+    said to it.
+
+    And the answer the turn had already earned is kept. A decline used to mint a one-sentence
+    receipt and discard four cited policy blocks, the balance and every citation — the reader had
+    asked a question and answered a card, and cancelling the card is not cancelling the question.
+    """
     turn_id = lifecycle["declined_turn"]["turn_id"]
     confirmations = _spans(store, turn_id, "confirmation")
 
-    assert [span["payload"]["user_response"] for span in confirmations] == ["pending", "declined"]
-    assert confirmations[0]["seq"] < confirmations[1]["seq"], "a second span, never an in-place update"
-    assert confirmations[1]["payload"]["resolved_at"] is not None
-    assert lifecycle["declined"]["outcome"] == "refused"
-    assert "Cancelled" in lifecycle["declined"]["answer"]
+    assert [span["payload"]["user_response"] for span in confirmations] == ["declined"]
+    assert confirmations[0]["payload"]["resolved_at"] is not None
+    assert lifecycle["declined"]["outcome"] == "answered"
+
+    blocks = lifecycle["declined"]["answer_blocks"]
+    assert blocks[0]["type"] == "notice" and "Cancelled" in blocks[0]["text"]
+    assert [block["type"] for block in blocks].count("policy_fact") >= 1, "the earned answer is kept"
+    assert lifecycle["declined"]["citations"], "and so are its citations"
 
     row = store.execute("SELECT outcome, stop_reason, resumed_count FROM turns WHERE id = ?", (turn_id,)).one()
-    assert (row["outcome"], row["stop_reason"]) == ("refused", "declined")
-    # §11.2: a decline "closes the turn without reopening". The buffer is reopened only so the
-    # second `confirmation` span goes through `core/trace.py`, and that must not be counted as a
-    # resume — the dashboard's resumed-turn figures read this column.
-    assert row["resumed_count"] == 0, "the declined turn was never resumed"
+    assert (row["outcome"], row["stop_reason"]) == ("answered", "declined")
+    # A decline reopens the buffer to finish the answer and **never re-issues the write**, so it
+    # must not be counted as a resume — the dashboard's resumed-turn figures read this column.
+    assert row["resumed_count"] == 0, "the declined turn re-issued nothing"
+
+
+async def test_a_replayed_confirmation_mints_nothing(lifecycle, web, store):
+    """W8, C11: the proposal is answered once. Before, the second POST minted a second ticket."""
+    before = store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar()
+    async with web("confirm_lifecycle.json") as client:
+        again = await client.post(
+            "/chat/confirm",
+            json={
+                "session_id": lifecycle["reasked"]["session_id"],
+                "turn_id": lifecycle["reasked"]["turn_id"],
+                "decision": "confirmed",
+            },
+        )
+
+    assert again.status_code == 409, again.text
+    assert again.json()["code"] == "CONFIRMATION_ALREADY_RESOLVED"
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == before
 
 
 async def test_a_decline_mints_a_declined_row_that_is_never_returned_to_a_client(lifecycle, store):
@@ -148,15 +179,18 @@ async def test_a_confirm_reopens_that_turn_and_the_write_lands_in_it(lifecycle, 
     assert row["outcome"] == "answered"
     assert row["awaiting_ms"] >= 0
 
+    # One span, resolved in place (W8, C11): the proposal and the answer to it are one fact, and a
+    # second "Confirmed: create_mock_hr_ticket" span over the same card left the first reading
+    # `pending` for ever.
     confirmations = _spans(store, turn_id, "confirmation")
-    assert [span["payload"]["user_response"] for span in confirmations] == ["pending", "confirmed"]
+    assert [span["payload"]["user_response"] for span in confirmations] == ["confirmed"]
 
     writes = _spans(store, turn_id, "tool_call")
     gated = [span for span in writes if span["name"] == "create_mock_hr_ticket"]
     assert len(gated) == 2, "the refused attempt, then the authorised one"
     assert gated[0]["payload"]["error_code"] == "CONFIRMATION_REQUIRED"
     assert gated[1]["payload"]["is_error"] is False
-    assert confirmations[1]["seq"] < gated[1]["seq"], "§13.4 clause 1: the confirmation comes first"
+    assert confirmations[0]["seq"] < gated[1]["seq"], "§13.4 clause 1: the confirmation comes first"
 
 
 async def test_the_token_was_minted_from_the_exact_gated_arguments(lifecycle, store):

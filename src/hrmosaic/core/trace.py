@@ -944,6 +944,31 @@ class TraceWriter:
                 logger.warning("could not flush turn %s", buffer.turn_id, exc_info=True)
         return closed
 
+    def resolve_confirmation(self, span_id: str, *, user_response: str, resolved_at: int | None = None) -> bool:
+        """Mark a **pending** `confirmation` span answered, in place. Did it resolve one? (W8, C11)
+
+        The proposal and its answer are one fact — this card was shown, and this is what the human
+        said — and the pending span was the record of it. Nothing ever rewrote it: three turns sat
+        `pending` forever on the deployed build, and because `POST /chat/confirm` looks for a
+        pending span to mint a token from, the **same card could be confirmed twice** and mint a
+        second ticket. Resolving it in place is what makes the replay a 409 instead of a write.
+
+        The only UPDATE to `spans` in the codebase, and it lives here because `core/trace.py` is
+        the one writer (§4.2, `tests/architecture/test_conventions.py`). It touches exactly the two
+        fields a resolution sets, and only while the span still says `pending`, so a second call
+        with a different answer cannot overwrite the first.
+        """
+        resolved_at = resolved_at if resolved_at is not None else now_micros()
+        return (
+            self.store.execute(
+                "UPDATE spans SET payload_json = json_set(payload_json, '$.user_response', ?, "
+                "'$.resolved_at', ?) WHERE id = ? AND kind = 'confirmation' "
+                "AND json_extract(payload_json, '$.user_response') = 'pending'",
+                (user_response, resolved_at, span_id),
+            ).rows_affected
+            > 0
+        )
+
     def sweep_stale_turns(self, older_than_s: int = STALE_TURN_SECONDS) -> int:
         """Close anything a hard kill left open. Runs at boot (§10.3)."""
         now = now_micros()
@@ -995,6 +1020,10 @@ def start_turn(session: SessionSpec, *, user_message: str, turn_id: str | None =
 
 def reopen_turn(turn_id: str, awaiting_ms: int, *, resumed: bool = True) -> TurnBuffer:
     return get_writer().reopen_turn(turn_id, awaiting_ms, resumed=resumed)
+
+
+def resolve_confirmation(span_id: str, *, user_response: str, resolved_at: int | None = None) -> bool:
+    return get_writer().resolve_confirmation(span_id, user_response=user_response, resolved_at=resolved_at)
 
 
 def open_turns() -> list[TurnBuffer]:

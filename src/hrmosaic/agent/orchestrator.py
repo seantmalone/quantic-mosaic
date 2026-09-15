@@ -284,6 +284,9 @@ def unfilled_slot(workflow: str | None, *, known: Collection[str], has_record: b
     return None
 
 
+#: What a cancelled proposal tells the reader, before the answer it already earned (W8, C11, C17).
+CANCELLED_NOTICE = "Cancelled — nothing was created. Ask again whenever you would like me to open it."
+
 #: The write a confirmed resume re-issued came back `isError`: the token validated, the write did
 #: not. §9.4's graceful partial, not a silent success.
 WRITE_FAILED_NOTE = (
@@ -704,8 +707,14 @@ class _Turn:
     clarification: str | None = None
     #: A confirmed write came back `isError`: the turn closes `partial`, never `answered` (§9.4).
     write_failed: bool = False
+    #: The reader cancelled the proposal (W8, C11). The question is still answered; the write is
+    #: not re-issued and the receipt opens the answer.
+    declined: bool = False
     #: The gated `tool_call` span payload a resumed turn re-issues (§8.6 step 4).
     gated: dict[str, Any] | None = None
+    #: The id of that proposal's own `confirmation` span, resolved in place when the human answers
+    #: it (W8, C11). Nothing ever rewrote it, so the same card could be confirmed twice.
+    pending_span_id: str | None = None
     #: The last three closed turns of this session, rendered into both prompts' user half (W8, C12).
     history: list[session.PriorTurn] = field(default_factory=list)
     #: Why the write was refused, when a `non_compliant` verdict forbade it (W8, C02). Set means
@@ -790,6 +799,23 @@ class Orchestrator:
         buffer = self._reopen(turn_id)
         turn = self._rehydrate(session_id, buffer, scores=await self._rehydrate_scores(buffer.turn_id))
         return await self._resume(turn, confirmation_token)
+
+    async def decline_turn(self, session_id: str, turn_id: str) -> ChatResponse:
+        """Pick a declined turn back up and answer the question, without the write (W8, C11).
+
+        A decline used to mint a one-sentence answer and throw the rest away: on 2026-09-15 the
+        reader who cancelled demo 2 lost four cited policy blocks, the balance, the verdict and
+        every citation, having asked a question and answered a card. Cancelling the card is not
+        cancelling the question. The turn rehydrates exactly as a confirmed one does, the gated
+        call is simply **not** re-issued, and the receipt goes first as a `notice`.
+        """
+        buffer = self._reopen(turn_id)
+        turn = self._rehydrate(session_id, buffer, scores=await self._rehydrate_scores(buffer.turn_id))
+        turn.gated = None
+        turn.declined = True
+        turn.stop_reason = "declined"
+        self._resolve_proposal(turn, "declined")
+        return await self._answer(turn, cold_start=False)
 
     # ----------------------------------------------------------------------------------
     # The loop
@@ -1000,22 +1026,25 @@ class Orchestrator:
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
         )
 
-        # -- 5e. the capability check (W8, C09, C10) ---------------------------------------
-        # A block asserting the assistant cannot do what a permitted tool does, or stating a
-        # profile attribute the reader's own envelope contradicts, is dropped.
-        capable = capability_check.apply(restated.blocks, turn.envelopes, permitted=self._permitted(turn))
-
         consistent = outcome_consistency.apply(
-            capable.blocks,
+            restated.blocks,
             turn.envelopes,
             next_steps=restated.next_steps,
             policy_claims=relabelled.relabelled,
         )
 
+        # -- 5e. the capability check (W8, C09, C10) ---------------------------------------
+        # A sentence asserting the assistant cannot do what a permitted tool does, or stating a
+        # profile attribute the reader's own envelope contradicts, is dropped. **After** the
+        # outcome step, not before it: on a turn that performed the write, the whole escalation
+        # denying it is already gone, and running first would leave its contact sentence stranded
+        # under "Who to contact" beside a ticket that exists.
+        capable = capability_check.apply(consistent.blocks, turn.envelopes, permitted=self._permitted(turn))
+
         # -- 5f. approver resolution (W8, C06) ---------------------------------------------
         # "requires approval from your director", served to the Director of Engineering. The chain
         # is resolved on the envelope; this is the backstop for the answer that wrote the role.
-        named = approver_resolution.apply(consistent.blocks, turn.envelopes, next_steps=consistent.next_steps)
+        named = approver_resolution.apply(capable.blocks, turn.envelopes, next_steps=consistent.next_steps)
 
         # -- 5g. arithmetic consistency (W8, C13) — the numeric twin of 5h ------------------
         # "8.0 days … (13.5 accrued minus 4.0 used, plus 2.5 carryover)" comes to 12.0. The total
@@ -1057,6 +1086,17 @@ class Orchestrator:
             next_steps=entailed.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
+        if turn.declined:
+            # The receipt for what the reader decided, first and in the product's own voice
+            # (W8, C11, C17); the answer they already earned follows it.
+            answer = answer.model_copy(
+                update={
+                    "blocks": [
+                        AnswerBlock(type=NOTICE, text=CANCELLED_NOTICE, citations=[]),
+                        *answer.blocks,
+                    ]
+                }
+            )
         if turn.write_blocked:
             # **The reader is told why, in the product's own voice** (W8, C02, C17). It goes first,
             # because the answer below is about a request that was not filed.
@@ -1463,6 +1503,11 @@ class Orchestrator:
             and turn.decision.intent == "action"
             and turn.pending is None
             and turn.write_blocked is None
+            # A write the reader cancelled and a write that was authorised and failed are both
+            # **answered** requests: re-proposing either would put the same card back in front of
+            # somebody who has already dealt with it (W8, C09 against C11 and §9.4).
+            and not turn.declined
+            and not turn.write_failed
             and not any(name in turn.state.results for name in WRITE_TOOLS)
         )
 
@@ -2212,6 +2257,17 @@ class Orchestrator:
     # Resume (§9.1, §8.6 step 4)
     # ----------------------------------------------------------------------------------
 
+    def _resolve_proposal(self, turn: _Turn, response: str) -> None:
+        """Write the human's answer onto the proposal's own span, in place (W8, C11).
+
+        Here rather than in `web/`, so **both** entry points are covered: `POST /chat/confirm` is
+        one caller of `resume_turn`, and the evaluation harness and the tests are others. A turn
+        with no pending span — a replay, or a resume nobody proposed — resolves nothing.
+        """
+        if turn.pending_span_id:
+            trace.resolve_confirmation(turn.pending_span_id, user_response=response)
+            turn.pending_span_id = None
+
     def _reopen(self, turn_id: str) -> TurnBuffer:
         """The buffer `web/`'s `trace.reopen_turn(...)` already opened, or a fresh reopen."""
         writer = trace.get_writer()
@@ -2296,10 +2352,13 @@ class Orchestrator:
         )
 
         gated: dict[str, Any] | None = None
+        pending_span_id: str | None = None
         act_calls = 0
         for span in spans:
             payload = json.loads(span["payload_json"])
             kind = span["kind"]
+            if kind == "confirmation" and payload.get("user_response") == "pending":
+                pending_span_id = str(span["id"])
             if kind == "plan" and span["name"] == "router":
                 turn.decision = turn.decision.model_copy(  # type: ignore[union-attr]
                     update={
@@ -2335,6 +2394,7 @@ class Orchestrator:
         turn.workflow = get_workflow(turn.decision.workflow if turn.decision else None)
         turn.messages = self._rehydrate_messages(buffer.turn_id, request)
         turn.gated = gated
+        turn.pending_span_id = pending_span_id
         return turn
 
     def _rehydrate_retrieval(self, turn: _Turn, payload: RetrievalPayload) -> None:
@@ -2390,20 +2450,12 @@ class Orchestrator:
             return self._degraded(turn, str(exc), cold_start=False)
 
         # The **confirmed** span, before the write it authorises — §13.4 action-safety clause 1
-        # keys on "an earlier `confirmation` span in the same turn".
-        turn.buffer.add_span(
-            "confirmation",
-            str(gated.get("tool_name")),
-            ConfirmationPayload(
-                action=str(gated.get("tool_name")),
-                arguments_preview=dict(gated.get("arguments") or {}),
-                human_summary=f"Confirmed: {gated.get('tool_name')}",
-                prompt_shown=f"Confirmed: {gated.get('tool_name')}",
-                expires_at=now_micros() + CONFIRMATION_TTL_S * 1_000_000,
-                user_response="confirmed",
-                resolved_at=now_micros(),
-            ),
-        )
+        # keys on "an earlier `confirmation` span in the same turn". Since W8 (C11) that span is the
+        # proposal's own, resolved in place: one card, one record of what the human said to it, and
+        # a `seq` already earlier than the write below. A second span here said "Confirmed:
+        # create_mock_hr_ticket" over the same fact and left the first one reading `pending` for
+        # ever, which is what let the same card be confirmed twice and mint a second ticket.
+        self._resolve_proposal(turn, "confirmed")
         try:
             result = await self._call(
                 turn, str(gated["tool_name"]), dict(gated.get("arguments") or {}), token=confirmation_token
@@ -2463,6 +2515,11 @@ async def resume_turn(session_id: str, turn_id: str, confirmation_token: str) ->
     return await get_orchestrator().resume_turn(session_id, turn_id, confirmation_token)
 
 
+async def decline_turn(session_id: str, turn_id: str) -> ChatResponse:
+    """The cancelled half of the same gate: answer the question, never re-issue the write (W8, C11)."""
+    return await get_orchestrator().decline_turn(session_id, turn_id)
+
+
 #: The two projection helpers, published for `web/sse.py` (P8). The live span rail and `trace[]`
 #: must describe a span identically — the rail collapses into the trace panel under the finished
 #: answer — so there is one implementation of each, not two (§11.3).
@@ -2485,6 +2542,7 @@ __all__ = [
     "Timings",
     "ToolCallRepair",
     "Usage",
+    "decline_turn",
     "get_orchestrator",
     "preview_value",
     "project",

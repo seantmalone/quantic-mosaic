@@ -64,8 +64,15 @@ async def test_a_refused_turn_offers_the_library_instead_of_listing_it(web):
     assert len(named) == g1.EXAMPLE_TOPIC_COUNT, f"the turn names {len(named)} topics"
 
 
-async def test_a_declined_confirmation_is_refused_but_is_not_a_coverage_question(web):
-    """`_record_decline()` closes the turn as `refused` with no steps; it gets no library link."""
+async def test_a_declined_confirmation_is_not_a_coverage_question(web):
+    """A decline answers the question it was asked and gets no library link (W8, C11).
+
+    The link belongs to a **refusal for want of coverage** — "I could not find anything in Mosaic's
+    policy library" — where naming a few of the things the library does cover is the useful half of
+    the answer. A reader who cancelled a confirmation card has not been refused anything; since W8
+    they keep the cited answer the turn already earned, and a library link under it would be an
+    invitation to go and look for what they were just told.
+    """
     demo_2 = (
         "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
         "— and can you open the request for me?"
@@ -81,7 +88,8 @@ async def test_a_declined_confirmation_is_refused_but_is_not_a_coverage_question
         )
 
     assert declined.status_code == 200, declined.text
-    assert 'data-outcome="refused"' in declined.text
+    assert 'data-outcome="answered"' in declined.text
+    assert "Cancelled — nothing was created." in declined.text
     assert "policy-library" not in declined.text
 
 

@@ -79,7 +79,7 @@ from hrmosaic.core.corpusread import IndexModelMismatch
 from hrmosaic.core.db import Store, TursoHTTPStore, get_store, now_micros
 from hrmosaic.core.ids import new_session_id, new_turn_id, user_agent_hash
 from hrmosaic.core.llm import count_calls_today
-from hrmosaic.core.models import NOTICE, AnswerBlock, Citation, ConfirmationPayload, ErrorPayload
+from hrmosaic.core.models import NOTICE, AnswerBlock, Citation, ErrorPayload
 from hrmosaic.core.redact import redact_text
 from hrmosaic.mcpserver import confirm as confirm_gate
 from hrmosaic.mcpserver.tools.create_mock_hr_ticket import queue_label
@@ -1721,18 +1721,32 @@ async def chat_confirm(request: Request) -> Response:
         raise HTTPException(status_code=404, detail={"code": "UNKNOWN_TURN", "turn_id": body.turn_id})
 
     spans = _spans_of(store, body.turn_id)
+    confirmations = [span for span in spans if span["kind"] == "confirmation"]
     pending = next(
-        (
-            span
-            for span in reversed(spans)
-            if span["kind"] == "confirmation" and span["payload"].get("user_response") == "pending"
-        ),
+        (span for span in reversed(confirmations) if span["payload"].get("user_response") == "pending"),
         None,
     )
     if pending is None:
+        # **A proposal is answered once** (W8, C11). Until the pending span was resolved in place,
+        # nothing here could tell an unanswered card from one that had already been confirmed, so a
+        # replayed `POST /chat/confirm` minted a second token and a second ticket. A resolved
+        # proposal is a conflict, not a missing one.
+        resolved = next((span for span in reversed(confirmations) if span["payload"].get("resolved_at")), None)
+        if resolved is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "CONFIRMATION_ALREADY_RESOLVED",
+                    "turn_id": body.turn_id,
+                    "user_response": resolved["payload"].get("user_response"),
+                },
+            )
         raise HTTPException(status_code=404, detail={"code": "NO_PENDING_CONFIRMATION", "turn_id": body.turn_id})
     if int(pending["payload"].get("expires_at") or 0) <= now_micros():
-        raise HTTPException(status_code=409, detail={"code": "CONFIRMATION_EXPIRED", "turn_id": body.turn_id})
+        # §8.6 step 3: the proposal was good for ten minutes and nobody answered it. It is written
+        # `expired` and the turn is **closed with a stated outcome** rather than left parked
+        # forever, which is what three turns on the deployed build were (W8, C11).
+        return _record_expiry(request, store, turn, pending)
 
     gated = next(
         (span for span in spans if span["id"] == pending["parent_span_id"] and span["kind"] == "tool_call"),
@@ -1752,66 +1766,48 @@ async def chat_confirm(request: Request) -> Response:
         user_response=body.decision,
     )
 
+    # The pending span is resolved in place by the orchestrator, on both the confirmed and the
+    # declined path, so a resume that did not come through this endpoint is recorded the same way
+    # (W8, C11). What this endpoint owns is the replay: a proposal already answered is a conflict.
     awaiting_ms = max(0, (now_micros() - int(pending["ended_at"] or pending["started_at"])) // 1000)
-    # A decline reopens the buffer **uncounted**: the reopen exists only so `_record_decline` can
-    # write the second `confirmation` span through `core/trace.py`, and §11.2 closes that turn
-    # without ever resuming it. Counting it would report `resumed_count = 1` on a turn nobody
-    # resumed — the number the dashboard's resumed-turn figures read.
+    # A decline reopens the buffer **uncounted**: the turn is answered without re-issuing the
+    # write, so `resumed_count` must not report a resume nobody asked for — the number the
+    # dashboard's resumed-turn figures read.
     confirmed = body.decision == "confirmed"
-    buffer = trace_module.reopen_turn(body.turn_id, awaiting_ms, resumed=confirmed)
+    trace_module.reopen_turn(body.turn_id, awaiting_ms, resumed=confirmed)
     request.scope.setdefault("state", {})["turn_id"] = body.turn_id
     _publish_turn_started(store, body.session_id, body.turn_id, seq=int(turn["seq"]))
 
     if confirmed:
         response = await agent.resume_turn(body.session_id, body.turn_id, token)
     else:
-        response = _record_decline(store, buffer, pending)
+        # **The answer the turn already earned is kept** (W8, C11). A decline used to discard every
+        # policy block and every citation and ship one sentence; the reader had asked a question
+        # and answered a card, and cancelling the card is not cancelling the question.
+        response = await agent.decline_turn(body.session_id, body.turn_id)
     _publish_turn_completed(response)
     # The question the card belonged to is re-rendered with the resolved turn: the fragment replaces
     # the whole `article.turn`, so without it the transcript loses the half the reader wrote.
     return _render_turn(request, response, question=turn["user_message"], decision=body.decision)
 
 
-def _record_decline(store: Store, buffer: trace_module.TurnBuffer, pending: dict[str, Any]) -> ChatResponse:
-    """The **second** `confirmation` span, `declined`, and the turn closes without resuming (§11.2)."""
-    payload = pending["payload"]
-    action = str(payload.get("action") or "")
-    buffer.add_span(
-        "confirmation",
-        action,
-        ConfirmationPayload(
-            action=action,
-            arguments_preview=dict(payload.get("arguments_preview") or {}),
-            human_summary=str(payload.get("human_summary") or ""),
-            prompt_shown=str(payload.get("prompt_shown") or payload.get("human_summary") or ""),
-            expires_at=int(payload.get("expires_at") or 0),
-            user_response="declined",
-            resolved_at=now_micros(),
-        ),
-    )
-    blocks = [
-        # The product's own receipt for a decision the reader made, not advice (W8, C17). It had
-        # been printing under *"Recommendation — not company policy"*, which reads as though
-        # cancelling were a suggestion the reader might ignore.
-        AnswerBlock(
-            type=NOTICE,
-            text="Cancelled — nothing was created. Ask again whenever you would like me to open it.",
-            citations=[],
-        )
-    ]
+#: …and what an unanswered one does. §8.6 step 3 gives a proposal ten minutes; the turns that were
+#: never answered sat `awaiting_confirmation` forever, and the reader was told nothing (W8, C11).
+EXPIRED_NOTICE = (
+    "This proposal expired before it was confirmed, so nothing was created. Ask again and I will "
+    "put it back in front of you."
+)
+
+
+def _record_expiry(request: Request, store: Store, turn: Mapping[str, Any], pending: dict[str, Any]) -> Response:
+    """A lapsed TTL: the span says `expired`, the turn closes, and the reader is told (W8, C11)."""
+    trace_module.resolve_confirmation(pending["id"], user_response="expired")
+    buffer = trace_module.reopen_turn(str(turn["id"]), 0, resumed=False)
+    blocks = [AnswerBlock(type=NOTICE, text=EXPIRED_NOTICE, citations=[])]
     answer = render_answer(blocks, [])
-    buffer.close(
-        outcome="refused",
-        stop_reason="declined",
-        final_answer=answer,
-        answer_blocks=blocks,
-        citations=[],
-        # A decline has no next step — the sentence above is the whole of it — and the column says
-        # so rather than reading as a pre-migration row (UX W3 review).
-        next_steps=[],
-    )
+    buffer.close(outcome="refused", stop_reason="expired", final_answer=answer, answer_blocks=blocks, next_steps=[])
     usage, timings = _turn_rollups(store, buffer.turn_id)
-    return ChatResponse(
+    response = ChatResponse(
         session_id=buffer.session_id,
         turn_id=buffer.turn_id,
         trace_id=buffer.session_id,
@@ -1826,6 +1822,8 @@ def _record_decline(store: Store, buffer: trace_module.TurnBuffer, pending: dict
         stream_url=f"/chat/stream?turn_id={buffer.turn_id}",
         dashboard_url=f"/dashboard/sessions/{buffer.session_id}#turn-{buffer.seq}",
     )
+    _publish_turn_completed(response)
+    return _render_turn(request, response, question=str(turn["user_message"] or ""), decision="expired")
 
 
 @router.get("/chat/stream")
