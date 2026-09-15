@@ -3,7 +3,9 @@
 Authentication is the shared access token — **no user accounts, by design**. Authorization is the
 persona: cookie `mosaic_actor` or header `X-Actor`, an `E1xxx` id or the literal `admin`,
 defaulting to `E1042`. Admin-only, enforced server-side with **403** `{"code": "ADMIN_REQUIRED"}`:
-`/dashboard/*`, `/api/*` and the privileged `POST /chat` options.
+the three write endpoints (`POST /api/dev/reset-sandbox`, `POST /api/mcp/rediscover`,
+`POST /api/eval/runs`) and the privileged `POST /chat` options. Reads — every `/dashboard/*` page
+and every `/api/*` GET — are open to any persona holding the access token (W1's *one gate*).
 
 Inside the MCP tools the acting id stays audit-only: it is recorded on every `tool_call` span for
 *who asked*, and grants and denies nothing, because the data is entirely synthetic (§8.7). What the
@@ -33,27 +35,53 @@ def _session(store, session_id: str) -> dict:
     ).one()
 
 
-async def test_the_dashboard_prefix_is_403_admin_required_without_the_admin_persona(web):
+async def test_the_dashboard_prefix_is_open_to_every_persona_holding_the_token(web):
+    """**P4** — the role gates writes, never reads and never navigation (W1).
+
+    `/dashboard/sessions/abc` is an unknown id, so it is a 404 rather than a 200 — but a 404 from
+    the *page*, not a 403 from the gate, which is the whole point: the employee persona now
+    reaches the handler.
+    """
     async with web() as client:
         employee = await client.get("/dashboard")
         deeper = await client.get("/dashboard/sessions/abc")
 
-    assert employee.status_code == 403
-    assert employee.json() == {"code": "ADMIN_REQUIRED"}
-    assert deeper.status_code == 403
-    assert deeper.json() == {"code": "ADMIN_REQUIRED"}
+    assert employee.status_code == 200
+    assert deeper.status_code == 404
+    assert deeper.json() == {"code": "UNKNOWN_SESSION", "session_id": "abc"}
 
 
-async def test_the_single_turn_view_model_is_403_without_admin_and_200_as_admin(web):
-    """The one admin-only route P8 itself builds — what the 202 fallback and the demo scripts poll."""
+async def test_only_the_three_write_endpoints_still_require_the_admin_persona(web):
+    """The exact `(method, path)` set `needs_admin()` matches, and nothing wider (W1).
+
+    `GET /api/eval/runs` and `POST /api/eval/runs` share a path, so the pair is what the gate keys
+    on: the read is open and the write is not.
+    """
+    async with web() as client:
+        writes = {
+            url: await client.post(url, json={})
+            for url in ("/api/dev/reset-sandbox", "/api/mcp/rediscover", "/api/eval/runs")
+        }
+        read_on_a_write_path = await client.get("/api/eval/runs")
+
+    for url, response in writes.items():
+        assert response.status_code == 403, url
+        assert response.json() == {"code": "ADMIN_REQUIRED"}, url
+    assert read_on_a_write_path.status_code == 200
+
+
+async def test_the_single_turn_view_model_reads_200_in_either_persona(web):
+    """The route the 202 fallback and the demo scripts poll (§11.8)."""
     async with web("rag_only.json") as client:
         turn = await _turn(client)
-        refused = await client.get(f"/api/traces/turns/{turn['turn_id']}")
+        as_employee = await client.get(f"/api/traces/turns/{turn['turn_id']}")
         allowed = await client.get(f"/api/traces/turns/{turn['turn_id']}", headers=ADMIN)
         missing = await client.get(f"/api/traces/turns/{'0' * 32}", headers=ADMIN)
 
-    assert refused.status_code == 403
-    assert refused.json() == {"code": "ADMIN_REQUIRED"}
+    # W1: a read is a read. The single-turn view-model is what the 202 fallback polls, and the
+    # demo scripts reach it in the default persona.
+    assert as_employee.status_code == 200
+    assert as_employee.json()["turn_id"] == turn["turn_id"]
     assert allowed.status_code == 200
     body = allowed.json()
     assert body["turn_id"] == turn["turn_id"]

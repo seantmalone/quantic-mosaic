@@ -1696,11 +1696,17 @@ to `/`); `POST /access/logout` clears both cookies. The per-IP rate limit on the
 
 **Personas — roles inside a trusted session.** Cookie `mosaic_actor` holds an employee id matching `^E1[0-9]{3}$` or the literal `admin`; absent, the
 actor is `E1042`. The chat UI's "act as" selector lists the 24 employees plus **HR admin** and sets it through `POST /session/actor {actor}`; API
-clients send header `X-Actor` instead, which wins over the cookie when present. **Admin only**, enforced server-side with **403**
-`{"code": "ADMIN_REQUIRED"}`: `/dashboard/*` (every page, reads included), `/api/traces/*`, `/api/eval/*`, `/api/corpus/*`, `/api/mcp/*`, the three
-dashboard write controls, and the privileged `POST /chat` options — which refuse a non-admin caller with that same `ADMIN_REQUIRED`, and an admin
-caller whose `client_label != "eval"` with **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}` (§11.1). The employee persona has chat only. The dashboard nav link is rendered only in the
-admin persona, but the server check is the control. The actor id still travels in `_meta.mosaic/actor` and remains **audit-only** inside the MCP tools
+clients send header `X-Actor` instead, which wins over the cookie when present.
+
+**One gate, not two (amended, UX W1).** The access token is the gate; the persona gates **writes only**, never reads and never navigation. **Admin
+only**, enforced server-side with **403** `{"code": "ADMIN_REQUIRED"}`, is the exact `(method, path)` set `ADMIN_ROUTES` holds — `POST
+/api/dev/reset-sandbox`, `POST /api/mcp/rediscover`, `POST /api/eval/runs` — plus the privileged `POST /chat` options, which refuse a non-admin caller
+with that same `ADMIN_REQUIRED` and an admin caller whose `client_label != "eval"` with **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}`
+(§11.1). The match is on the pair and never on a prefix, because `GET /api/eval/runs` and `POST /api/eval/runs` share a path. **Every `/dashboard/*`
+page and every `/api/*` read answers 200 for any persona holding the token**, and the `Chat | Dashboard` switch is rendered unconditionally on every
+authenticated page (§11.5). The prefix rule this replaces (`/dashboard`, `/api`) protected nothing — `POST /session/actor` sets the persona cookie with
+no check — while leaving 24 of the 25 personas, the default `E1042` included, with no route to the dashboard and every citation chip dead-ending in a
+raw JSON body. The actor id still travels in `_meta.mosaic/actor` and remains **audit-only** inside the MCP tools
 (§8.7): the admin persona chats as actor `admin`, and the people-data tools take `employee_id` from their arguments exactly as before. Every session
 records `auth_mode` and `actor_role` (§10.1), both shown and filterable on dashboard pages 1–2.
 
@@ -1950,16 +1956,16 @@ non-null on every run — the contract test asserts exactly that split.
 
 **Write controls.** Three, each on a stated page, each **admin-only** and enforced server-side: **Reset sandbox** (clears `mock_writes`) on page
 8 → `POST /api/dev/reset-sandbox`; **Re-discover now** on page 9 → `POST /api/mcp/rediscover`; **Run smoke eval** on page 11 → `POST /api/eval/runs`.
-They are never rendered dead: a caller without the admin persona is already **403** `{"code": "ADMIN_REQUIRED"}` on the host page itself, so reaching
-the page means the controls work.
+Since UX W1 the host pages are open to every persona, so each control is rendered with its own server-side check behind it: a non-admin caller
+reaching the button gets **403** `{"code": "ADMIN_REQUIRED"}` from the endpoint — a themed page for a browser, the JSON body for a client (§11.9).
 
 **Out-of-turn re-discovery has a home:** `spans.turn_id` is `NOT NULL`, so `POST /api/mcp/rediscover` first opens a synthetic
 `client_label='maintenance'` session and a turn with `outcome='maintenance'` and writes the `mcp_discovery` span into it. That outcome is excluded
 from the eval escalation matrix (§13.4) and is never an eval item.
 
-**Access.** The whole dashboard — reads included — is **admin-only** (`X-Actor: admin`, or `mosaic_actor` set by the act-as selector), on top of the
-access gate of §11; a non-admin session gets **403** `{"code": "ADMIN_REQUIRED"}` and never sees the nav link. The data is entirely synthetic, so the
-grader browses freely by following the tokenized link and choosing **HR admin** in the selector. Both facts are stated in `deployed.md`.
+**Access (amended, UX W1).** The whole dashboard — every page and every `/api/*` read — is reachable by **anyone holding the access token of §11**;
+the persona gates only the three write controls below. The data is entirely synthetic, so the grader browses freely by following the tokenized link:
+the `Chat | Dashboard` switch in the shared masthead is on every page, in every persona. Stated in `deployed.md`.
 
 ### 11.7 Bounded eval launch from the dashboard
 
@@ -1970,8 +1976,9 @@ The endpoint hard-refuses any request exceeding the smoke bounds.
 
 ### 11.8 Complete endpoint list
 
-Every row marked **gated** requires the access token of §11 (`?access=` once, then the `mosaic_access` cookie, or `Authorization: Bearer`); every row
-marked **admin** additionally requires the admin persona (`X-Actor: admin` or `mosaic_actor`), returning **403** `{"code": "ADMIN_REQUIRED"}` otherwise.
+Every row marked **gated** requires the access token of §11 (`?access=` once, then the `mosaic_access` cookie, or `Authorization: Bearer`); the three
+rows marked **admin** additionally require the admin persona (`X-Actor: admin` or `mosaic_actor`), returning **403** `{"code": "ADMIN_REQUIRED"}`
+otherwise. Amended at UX W1: reads carry no **admin** mark any more.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -1983,12 +1990,15 @@ marked **admin** additionally requires the admin persona (`X-Actor: admin` or `m
 | GET · POST | `/access` | The key page and its form: validates the token, sets `mosaic_access`, redirects to `/` — **never gated** |
 | POST | `/access/logout` | Clears `mosaic_access` and `mosaic_actor` |
 | POST | `/session/actor` | `{actor}` — an `^E1[0-9]{3}$` id or `admin`; sets the `mosaic_actor` cookie from the act-as selector (gated) |
-| GET | `/dashboard/*` | The 11 pages above — gated + **admin** |
-| GET | `/api/traces/{overview,sessions,sessions/{id},turns,turns/{turn_id},tools,retrieval,llm,safety}` | Dashboard JSON — gated + **admin**. `turns/{turn_id}` returns the single-turn view-model page 3 renders, and is what the 202 fallback and `demo_task_*.sh` poll |
-| GET | `/api/eval/{runs,runs/{id},compare}` · POST `/api/eval/runs` | Eval JSON; the bounded smoke run — gated + **admin** |
-| GET | `/api/corpus/{documents,documents/{doc_id},chunks/{chunk_id}}` | Corpus browser JSON — gated + **admin** |
-| GET · POST | `/api/mcp/discovery` · `/api/mcp/rediscover` | Live MCP catalog — gated + **admin** |
+| GET | `/dashboard/*` | The 11 pages above — gated |
+| GET | `/api/traces/{overview,sessions,sessions/{id},turns,turns/{turn_id},tools,retrieval,llm,safety}` | Dashboard JSON — gated. `turns/{turn_id}` returns the single-turn view-model page 3 renders, and is what the 202 fallback and `demo_task_*.sh` poll |
+| GET | `/api/eval/{runs,runs/{id},compare}` | Eval JSON — gated |
+| POST | `/api/eval/runs` | The bounded smoke run — gated + **admin** |
+| GET | `/api/corpus/{documents,documents/{doc_id},chunks/{chunk_id}}` | Corpus browser JSON — gated |
+| GET | `/api/mcp/discovery` | Live MCP catalog — gated |
+| POST | `/api/mcp/rediscover` | Re-run discovery — gated + **admin** |
 | POST | `/api/dev/reset-sandbox` | Clear `mock_writes` — gated + **admin** |
+| GET | `/policy/{doc_id}#{chunk_id}` | The policy **reader** a citation links to: one document, an anchor per chunk — gated (UX W1) |
 | ALL | `/mcp-server/mcp` | The mounted MCP Streamable HTTP endpoint — gated (bearer header) and per-IP limited |
 | GET | `/static/*` | Vendored htmx / Alpine / Chart.js / CSS — **never gated** |
 
@@ -2834,9 +2844,9 @@ principle 14).
 | **PII** | The entire corpus and every dataset are synthetic. No SSN field in any schema; no dates of birth; no street addresses; emails at `.example`; phones in the 555 reserved block. `scripts/pii_check.py` fails the build on any real-PII-shaped string. Raw IPs and User-Agents are never stored — only `sha256[:16]`. Embedding vectors are never persisted to the trace store. |
 | **Irreversible actions (R4.5)** | Both write tools are **mock** (they append to `mock_writes`; nothing external is contacted) **and** gated by a one-time `confirmation_token` bound to the exact tool name and arguments, minted only in `web/` after a human clicks Confirm, single-use, 10-minute TTL, validated **inside the MCP server** (§8.6). The `CONFIRMATION_REQUIRED` rejection contains no token of any kind. A `mock_writes` row cannot exist without a `confirmation_token` resolving to a confirmed row. Three unit tests (missing / mismatched / reused) plus `test_action_safety.py`. |
 | **Access** | The requirements are silent on authentication; the deployment carries one shared secret anyway. `APP_ACCESS_TOKEN` is presented as `?access=` (exchanged once for the HttpOnly `mosaic_access` cookie and stripped from the URL), as that cookie, or as `Authorization: Bearer`, compared with `secrets.compare_digest`. It gates `/`, `/chat*`, `/dashboard/*`, `/api/*` and `/mcp-server/mcp`; `/health`, `/ready`, `/static/*` and the key page `/access` stay open. A per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) covers `POST /chat` and the MCP mount. All data is synthetic, so this is a speed bump against scanners and drive-by quota burn on a public repo — not secrecy: the grader's link carries the token, and the token is rotated after grading with one env change. |
-| **Identity** | Two deliberate levels. *Authentication* is the shared access token above — **no user accounts, by design**. *Authorization* is the persona: cookie `mosaic_actor` (or header `X-Actor`) holds an employee id or `admin`, and the admin persona is required, server-side, for `/dashboard/*`, `/api/traces\|eval\|corpus\|mcp/*`, the three write controls and the privileged `/chat` options — **403** `{"code": "ADMIN_REQUIRED"}` otherwise; the privileged options additionally refuse an *admin* caller whose `client_label != "eval"` with **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}` (§11.1). Inside the MCP tools the acting employee id stays **audit-only**: it travels in `_meta.mosaic/actor`, is recorded on every `tool_call` span for *who asked*, and grants and denies nothing, because the data is entirely synthetic. A wrong or missing id yields a structured `not_found` and a clarification (§7.4). `sessions.auth_mode` and `sessions.actor_role` record both levels on every session. |
+| **Identity** | Two deliberate levels. *Authentication* is the shared access token above — **no user accounts, by design**. *Authorization* is the persona: cookie `mosaic_actor` (or header `X-Actor`) holds an employee id or `admin`, and the admin persona is required, server-side, for the three write endpoints (`POST /api/dev/reset-sandbox`, `POST /api/mcp/rediscover`, `POST /api/eval/runs`) and the privileged `/chat` options — **403** `{"code": "ADMIN_REQUIRED"}` otherwise; every `/dashboard/*` page and every `/api/*` read is open to any persona holding the token (amended, UX W1); the privileged options additionally refuse an *admin* caller whose `client_label != "eval"` with **403** `{"code": "PRIVILEGED_OPTION_REFUSED", "field": …}` (§11.1). Inside the MCP tools the acting employee id stays **audit-only**: it travels in `_meta.mosaic/actor`, is recorded on every `tool_call` span for *who asked*, and grants and denies nothing, because the data is entirely synthetic. A wrong or missing id yields a structured `not_found` and a clarification (§7.4). `sessions.auth_mode` and `sessions.actor_role` record both levels on every session. |
 | **Sensitive topics** | Guardrail **G5**: harassment, discrimination, legal threat, medical and compensation-dispute topics are never answered directly; the agent escalates to the named People Ops contact with the cited process and offers, behind confirmation, a mock HR case. |
-| **Dashboard exposure** | Entirely synthetic, and **admin-only** — every page, reads included, plus `/api/traces\|eval\|corpus\|mcp/*` and the three write actions, enforced server-side behind the access gate. A grader reaches it by choosing *HR admin* in the act-as selector. Stated in `deployed.md`. |
+| **Dashboard exposure** | Entirely synthetic, and open to **anyone holding the access token** — every page and every `/api/*` read (amended, UX W1); the three write actions alone still require the admin persona, enforced server-side. A grader reaches the dashboard from the `Chat \| Dashboard` switch in the shared masthead. Stated in `deployed.md`. |
 | **MCP endpoint exposure** | `/mcp-server/mcp` remains reachable, deliberately, so a grader can attach MCP Inspector — now **with the bearer header** (Inspector supports custom headers). Protections in order of certainty: every read tool exposes only synthetic data; the write tools need a token an external caller cannot obtain and the rejection leaks nothing; a per-IP rate limit is FastAPI middleware on the mount. Whether `mcp` 2.2.0 exposes a native `Host`/`Origin` allowlist is checked by grepping the installed SDK before P5 and recorded in `mcp/README.md` with what was found — a control claimed in a design doc but absent from the SDK is worse than none. |
 | **Supply chain** | Every dependency pinned to an exact version in `requirements.txt`, `mcp==2.2.0` with a CI shape test. No runtime CDN: frontend assets are vendored at pinned versions with their upstream URLs in `static/vendor/LICENSES.md` alongside the full licence texts. No `curl \| sh` in the Dockerfile. |
 | **Denial of service** | Hard per-turn budgets (6 steps, 8 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 24 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and admin-only; a per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) on `POST /chat` and the MCP mount, with the access gate keeping anonymous traffic off both. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |

@@ -159,7 +159,7 @@ async def test_render_with_no_token_fails_closed_and_health_says_so(web):
     assert "access_token_missing" in health.json()["degradations"]
 
 
-async def test_the_dashboard_prefix_is_gated_before_it_is_admin_checked(web):
+async def test_the_dashboard_prefix_is_gated_and_then_open_to_every_persona(web):
     """The gate runs before the persona check, and both run before the page (§11, §11.8)."""
     async with web(**_gated()) as client:
         anonymous = await client.get("/dashboard")
@@ -168,10 +168,9 @@ async def test_the_dashboard_prefix_is_gated_before_it_is_admin_checked(web):
 
     # No token at all is a 401 from the gate — the persona is never even consulted.
     assert anonymous.status_code == 401
-    # Past the gate, the employee persona is refused by the admin check with §11's code.
-    assert employee.status_code == 403
-    assert employee.json() == {"code": "ADMIN_REQUIRED"}
-    # Past both, page 1 renders.
+    # Past the gate, every persona holding the token reaches the page: W1 narrowed the role check
+    # to the three write endpoints, so the dashboard is a read like any other.
+    assert employee.status_code == 200
     assert as_admin.status_code == 200
 
 

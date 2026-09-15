@@ -9,7 +9,7 @@ GET  /health · /ready        always-200 status · 503 until warm       open
 GET  · POST /access          the key page and its form                open
 POST /access/logout          clears both cookies                      open
 POST /session/actor          the act-as selector                      gated
-GET  /api/traces/turns/{id}  the single-turn view-model               gated · admin (P9: web/dashboard.py)
+GET  /api/traces/turns/{id}  the single-turn view-model               gated (P9: web/dashboard.py)
 ```
 
 **Two levels of identity, and they are not the same thing (§17).** *Authentication* is one shared
@@ -17,8 +17,10 @@ secret, `APP_ACCESS_TOKEN`, presented as `?access=` (exchanged once for the Http
 cookie and stripped from the URL), as that cookie, or as `Authorization: Bearer`, each compared with
 `secrets.compare_digest`. *Authorization* is the persona: cookie `mosaic_actor` or header `X-Actor`,
 an `E1xxx` id or the literal `admin`, defaulting to `E1042`. The admin persona is required —
-server-side, **403** `{"code": "ADMIN_REQUIRED"}` — for `/dashboard/*`, `/api/*` and the privileged
-`POST /chat` options. Inside the MCP tools the acting id stays audit-only (§8.7).
+server-side, **403** `{"code": "ADMIN_REQUIRED"}` — for the three write endpoints of `ADMIN_ROUTES`
+and the privileged `POST /chat` options, and for nothing else: every `/dashboard/*` page and every
+`/api/*` read answers any persona that holds the token. Inside the MCP tools the acting id stays
+audit-only (§8.7).
 
 **The gate is ASGI middleware, not `BaseHTTPMiddleware`.** It has to cover the mounted MCP endpoint
 and `/chat/stream`, both of which stream; a middleware that wraps the response body would be a new
@@ -99,9 +101,25 @@ ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 #: Never gated (§11). `/access` covers the key page, its form and `/access/logout`.
 OPEN_PREFIXES = ("/health", "/ready", "/static", "/access")
 
-#: Gated **and** admin-only (§11.8). The dashboard pages themselves arrive at P9; the prefix is
-#: refused from here, so a page can never be added that is readable without the persona.
-ADMIN_PREFIXES = ("/dashboard", "/api")
+#: **One gate, not two** (§11.8, UX W1). Everything the shared access token opens is reachable in
+#: one click: the role gates *writes* only, never reads and never navigation.
+#:
+#: This used to be `ADMIN_PREFIXES = ("/dashboard", "/api")`, which refused both whole prefixes to
+#: anyone but the `admin` persona. It protected nothing — `POST /session/actor` sets the persona
+#: cookie with no check at all, so the "gate" was one dropdown away — while costing 24 of the 25
+#: personas, the default `E1042` included, any route to the dashboard: every citation chip, every
+#: `Export JSON` button and every `hx-get` drawer dead-ended in a raw `{"code":"ADMIN_REQUIRED"}`
+#: body.
+#:
+#: The match is on the **exact `(method, path)` pair**, never a prefix: `GET /api/eval/runs` and
+#: `POST /api/eval/runs` share a path, and a prefix rule would take the read down with the write.
+ADMIN_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("POST", "/api/dev/reset-sandbox"),
+        ("POST", "/api/mcp/rediscover"),
+        ("POST", "/api/eval/runs"),
+    }
+)
 
 #: The per-IP limit of §17 covers `POST /chat` and the MCP mount, and nothing else: a rate limit on
 #: `/chat/stream` would throttle the rail rather than the work behind it.
@@ -171,8 +189,9 @@ def is_open_path(path: str) -> bool:
     return any(path == prefix or path.startswith(prefix + "/") for prefix in OPEN_PREFIXES)
 
 
-def needs_admin(path: str) -> bool:
-    return any(path == prefix or path.startswith(prefix + "/") for prefix in ADMIN_PREFIXES)
+def needs_admin(method: str, path: str) -> bool:
+    """Exact-match the three write endpoints of `ADMIN_ROUTES`; everything else is a read."""
+    return (method.upper(), path.rstrip("/") or "/") in ADMIN_ROUTES
 
 
 def resolve_actor(request: Request) -> tuple[str, str]:
@@ -373,7 +392,7 @@ class AccessGateMiddleware:
             auth_mode=auth_mode, actor=actor, actor_role=role, actor_source=actor_source
         )
 
-        if needs_admin(path) and role != "admin":
+        if needs_admin(request.method, path) and role != "admin":
             return JSONResponse({"code": "ADMIN_REQUIRED"}, status_code=403)
 
         if self._rate_limited(request, path):
@@ -1313,6 +1332,7 @@ __all__ = [
     "DEGRADATIONS",
     "BADGE_TEXT",
     "DEMO_PROMPTS",
+    "ADMIN_ROUTES",
     "AccessGateMiddleware",
     "ChatBody",
     "ConfirmBody",

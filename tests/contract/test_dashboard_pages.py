@@ -1,4 +1,4 @@
-"""The eleven dashboard pages render, and only in the admin persona (spec §11.6, §11.7, §11.8).
+"""The eleven dashboard pages render, for every persona holding the token (spec §11.6, §11.7, §11.8).
 
 Nothing here is seeded by hand. The fixture drives a **real** tool-using turn through the shipped
 app with the stub model, confirms the proposed write, and imports the three committed per-variant
@@ -9,7 +9,9 @@ dashboard exists to demonstrate.
 What this file pins down:
 
 * every page answers **200** with its key selectors in the admin persona;
-* every page **and** every `/api/*` read answers **403** `{"code": "ADMIN_REQUIRED"}` without it;
+* every page **and** every `/api/*` read answers **200** for any persona holding the token (W1's
+  one gate), while the three write endpoints stay **403** `{"code": "ADMIN_REQUIRED"}` without the
+  admin persona;
 * pages 1 and 2 show and filter on `auth_mode` and `actor_role`;
 * the three write controls of §11.6 are present and wired, never rendered dead;
 * the bounded smoke-eval endpoint refuses an over-large request and lazily resolves the harness
@@ -127,16 +129,23 @@ async def seeded(web, store):
 # --------------------------------------------------------------------------------------
 
 
-async def test_every_page_and_every_api_read_is_403_admin_required_without_the_admin_persona(seeded):
-    refusals = {}
-    for _, url in seeded.pages():
-        refusals[url] = await seeded.client.get(url)
-    for url in seeded.apis():
-        refusals[url] = await seeded.client.get(url)
+async def test_every_page_and_every_api_read_is_200_for_the_default_persona(seeded):
+    """**P4** — one gate, not two: the token opens every read; the role gates writes only (W1).
 
-    for url, response in refusals.items():
-        assert response.status_code == 403, f"{url} answered {response.status_code}"
-        assert response.json() == {"code": "ADMIN_REQUIRED"}, url
+    This assertion is the inverse of the one it replaces. Until W1 the whole `/dashboard` and
+    `/api` prefixes were admin-only, which left 24 of the 25 personas — the default `E1042`
+    included — with no route to the dashboard at all, every citation chip dead-ending in raw JSON
+    and every `Export JSON` button 403-ing. The three write endpoints below are the only surfaces
+    the role still gates.
+    """
+    answers = {}
+    for _, url in seeded.pages():
+        answers[url] = await seeded.client.get(url)
+    for url in seeded.apis():
+        answers[url] = await seeded.client.get(url)
+
+    for url, response in answers.items():
+        assert response.status_code == 200, f"{url} answered {response.status_code}: {response.text[:200]}"
 
 
 async def test_the_three_write_controls_are_403_without_the_admin_persona(seeded):
