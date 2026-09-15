@@ -15,8 +15,8 @@ defects were found:
 * **P12** (UX W2) keyboard and screen-reader parity — Enter sends, focus returns, one live region,
   one plain-language announcement per turn, distinct names on every disclosure, type in `rem`;
 * **P2 / P13** (UX W2) nothing technical survives onto the painted page;
-* **P8** (UX W3) the demo controls are quarantined and labelled — one panel, and the conversation
-  keeps its room on a phone.
+* **P8** (UX W3) the demo controls are quarantined and labelled — one panel, collapsed at every
+  viewport, so the conversation keeps its room.
 
 Every test is marked `ux` and deselected from `pytest -q` (see `pyproject.toml`); CI runs them in a
 job of its own that installs chromium.
@@ -319,34 +319,97 @@ def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page
     assert re.fullmatch(expected, produced), produced
 
 
-def test_p8_the_panel_is_collapsed_on_a_phone_so_the_conversation_keeps_its_room(browser, ux_server):
-    """W2's review: `body.chat` has a definite height, so the panel spends the transcript's budget."""
+#: Everything the at-rest panel spends of the transcript's budget, measured in the browser. The
+#: starter questions are the plan's §3.1 wireframe: a starter counts only while its whole box is
+#: inside the transcript's *visible* box, because a starter the reader has to scroll to find is a
+#: starter the wireframe does not have.
+PANEL_BUDGET_JS = r"""
+() => {
+  const panel = document.querySelector("section.demo-panel");
+  const details = document.getElementById("demo-details");
+  const transcript = document.getElementById("transcript");
+  const box = transcript.getBoundingClientRect();
+  const starters = Array.from(document.querySelectorAll(".starter"));
+  return {
+    open: details.open,
+    heading: panel.querySelector("h2").textContent,
+    panel: panel.getBoundingClientRect().height,
+    panel_scroll: panel.scrollHeight,
+    panel_client: panel.clientHeight,
+    transcript: box.height,
+    starters: starters.length,
+    starters_in_view: starters.filter((el) => {
+      const s = el.getBoundingClientRect();
+      return s.top >= box.top - 1 && s.bottom <= box.bottom + 1;
+    }).length,
+    send: document.getElementById("send-button").getBoundingClientRect().toJSON(),
+  };
+}
+"""
+
+
+def test_p8_the_panel_ships_collapsed_so_the_conversation_keeps_its_room(browser, ux_server):
+    """W2's review: `body.chat` has a definite height, so the panel spends the transcript's budget.
+
+    W3 first shipped the panel expanded above 40rem, and that regressed the at-rest chat screen on
+    every desktop viewport: at 1440x900 one of the four starter questions was wholly in view, and at
+    1280x800 — one of the three viewports the harness measures — the panel hit its own `max-height`,
+    scrolled inside itself, and left the transcript 174px with no starter in it at all. Hence this
+    test at all three viewports rather than the phone alone, and hence the second half: an opened
+    panel must show all of itself, because an `overflow-y: auto` box hides its last rows silently.
+    """
     measurements = {}
-    for label, width, height in (("desktop", 1440, 900), ("phone", 390, 844)):
+    for label, width, height in (("desktop", 1440, 900), ("laptop", 1280, 800), ("phone", 390, 844)):
         context = browser.new_context(viewport={"width": width, "height": height})
         tab = context.new_page()
         try:
             tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
             tab.wait_for_timeout(250)
-            measurements[label] = {
-                "open": tab.eval_on_selector("#demo-details", "e => e.open"),
-                "panel": tab.eval_on_selector("section.demo-panel", "e => e.getBoundingClientRect().height"),
-                "transcript": tab.eval_on_selector("#transcript", "e => e.getBoundingClientRect().height"),
-                "sideways": _document_scrolls_sideways(tab),
-                "heading": tab.eval_on_selector("section.demo-panel h2", "e => e.textContent"),
-            }
+            at_rest = tab.evaluate(PANEL_BUDGET_JS)
+            at_rest["sideways"] = _document_scrolls_sideways(tab)
+            tab.click(".demo-summary")
+            tab.wait_for_timeout(250)
+            opened = tab.evaluate(PANEL_BUDGET_JS)
+            opened["sideways"] = _document_scrolls_sideways(tab)
+            measurements[label] = {"at_rest": at_rest, "opened": opened, "viewport": (width, height)}
         finally:
             context.close()
 
-    phone, desktop = measurements["phone"], measurements["desktop"]
-    assert desktop["open"] is True, "there is room for it on a desktop, so it is open"
-    assert phone["open"] is False, "and it is collapsed on a phone"
-    assert "Demo" in phone["heading"], "with the same heading, which is the summary"
-    assert phone["panel"] < desktop["panel"], f"the collapsed panel is not smaller: {measurements}"
-    # Measured 434 of 844 at the head of W3, against a 53px collapsed panel. The floor is 45% of
-    # the viewport rather than the measurement itself: this guards the budget, not the pixel.
-    assert phone["transcript"] > 844 * 0.45, f"the conversation keeps its room: {measurements}"
-    assert not phone["sideways"] and not desktop["sideways"]
+    for label, measured in measurements.items():
+        at_rest, (width, height) = measured["at_rest"], measured["viewport"]
+        assert at_rest["open"] is False, f"the panel is open at rest at {label}: {measured}"
+        assert "Demo" in at_rest["heading"], f"the collapsed panel says what it is at {label}"
+        assert at_rest["panel_scroll"] <= at_rest["panel_client"] + 1, (
+            f"the panel at rest hides part of itself at {label}: {at_rest}"
+        )
+        assert at_rest["starters"] == 4, "the plan's §3.1 wireframe is four starter questions"
+        assert at_rest["starters_in_view"] == 4, (
+            f"the panel pushed {4 - at_rest['starters_in_view']} starter(s) out of the transcript at {label}: {at_rest}"
+        )
+        assert not at_rest["sideways"], f"the document scrolls sideways at {label}"
+        assert at_rest["send"]["bottom"] <= height + 1, f"the composer is off screen at {label}: {at_rest}"
+
+    # The phone budget W2's review asked for, kept as a budget rather than a pixel: measured 434 of
+    # 844 against a 53px collapsed panel.
+    assert measurements["phone"]["at_rest"]["transcript"] > 844 * 0.45, f"the phone loses its room: {measurements}"
+
+    # Opened, the panel is the grader's, and it must show all of itself where it can. Two columns
+    # bring the content to ~390px, which fits inside 60vh at 800px of viewport height; a phone is
+    # single-column (~642px) and nothing that size fits beside a conversation, so there it scrolls
+    # inside its own box and keeps the transcript a sliver.
+    for label in ("desktop", "laptop"):
+        opened = measurements[label]["opened"]
+        assert opened["open"] is True, f"the summary did not open the panel at {label}"
+        assert opened["panel_scroll"] <= opened["panel_client"] + 1, (
+            f"the opened panel scrolls inside itself at {label}: {opened}"
+        )
+    phone_open = measurements["phone"]["opened"]
+    assert phone_open["transcript"] > 0, f"the conversation vanished behind the open panel: {phone_open}"
+    for label, measured in measurements.items():
+        opened = measured["opened"]
+        height = measured["viewport"][1]
+        assert opened["send"]["bottom"] <= height + 1, f"the opened panel pushed the composer off {label}: {opened}"
+        assert not opened["sideways"], f"the opened panel scrolls the document sideways at {label}"
 
 
 def test_p8_a_demo_prompt_fills_the_composer_and_sends_nothing(page, ux_server):
@@ -355,6 +418,7 @@ def test_p8_a_demo_prompt_fills_the_composer_and_sends_nothing(page, ux_server):
     page.goto(f"{ux_server}/", wait_until="networkidle")
     before = page.eval_on_selector_all("#messages .turn", "els => els.length")
 
+    page.click(".demo-summary")  # the panel ships collapsed at every viewport
     page.click(".demo-button")
     page.wait_for_timeout(400)
 

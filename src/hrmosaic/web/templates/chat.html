@@ -356,15 +356,12 @@
       demoNoTurn.hidden = true;
     }
 
-    // The panel is load-bearing for layout: `body.chat` has a definite height, so an expanded
-    // panel takes its room out of the transcript (UX W2 report §7.1). On a phone it starts
-    // collapsed; the markup ships `open`, so a page with no JavaScript keeps what W2 shipped.
-    var demoDetails = document.getElementById("demo-details");
-    var narrow = window.matchMedia("(max-width: 40rem)");
-
-    function fitDemoPanel(query) { demoDetails.open = !query.matches; }
-    fitDemoPanel(narrow);
-    narrow.addEventListener("change", fitDemoPanel);
+    // The panel is load-bearing for layout: `body.chat` has a definite height, so an expanded panel
+    // takes its room out of the transcript (UX W2 report §7.1). It therefore ships collapsed at
+    // every viewport and the reader opens it — which is the `<details>` element's own behaviour, so
+    // there is no script here at all any more. A media query used to force it open above 40rem;
+    // that regressed the at-rest chat screen on every desktop viewport (UX W3 review, finding 2)
+    // and made the collapse depend on JavaScript for no gain.
 
     document.body.addEventListener("htmx:afterSwap", function (event) {
       var turns = document.querySelectorAll("#messages .turn");

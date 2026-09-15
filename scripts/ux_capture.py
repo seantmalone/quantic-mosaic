@@ -111,13 +111,21 @@ PROBE_JS = r"""
     const sw = el.scrollWidth, cw = el.clientWidth, sh = el.scrollHeight, ch = el.clientHeight;
     const wide = cw > 0 && sw > cw + 1;
     const ellipsis = cs.textOverflow === "ellipsis" && sw > cw + 1;
-    const clippedY = ch > 0 && sh > ch + 1 && cs.overflowY === "hidden";
-    if (wide || ellipsis || clippedY) {
+    const tallerThanItsBox = ch > 0 && sh > ch + 1;
+    const clippedY = tallerThanItsBox && cs.overflowY === "hidden";
+    // A box that scrolls *vertically* inside itself was invisible here until UX W3's review: only
+    // `overflow-y: hidden` was recorded, so the demo panel could cap itself at 45vh, hide its own
+    // last rows behind an overlay scrollbar nobody sees until they scroll, and pass the harness.
+    // P7 permits a scroll container — "with a visible affordance" — so this is reported, not failed:
+    // the transcript and the wide-table wrappers are legitimately in this list on most screens.
+    const scrollsY = tallerThanItsBox && (cs.overflowY === "auto" || cs.overflowY === "scroll");
+    if (wide || ellipsis || clippedY || scrollsY) {
       overflow.push({
         path: pathOf(el), tag: el.tagName.toLowerCase(),
         scrollWidth: sw, clientWidth: cw, scrollHeight: sh, clientHeight: ch,
         overflowX: cs.overflowX, overflowY: cs.overflowY, textOverflow: cs.textOverflow,
         horizontal_overflow: wide, ellipsis_clipped: ellipsis, vertical_clipped: clippedY,
+        vertical_scrollable: scrollsY,
         text: (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 180),
       });
     }
@@ -346,8 +354,30 @@ TURN_FACTS_JS = "e => ({session: e.dataset.sessionId, turn: e.dataset.turnId, ou
 
 
 def expand_all(page: Any) -> None:
-    page.eval_on_selector_all("details", "els => els.forEach(d => { d.open = true; })")
+    """Every disclosure on the *turn*, open — and not the demo panel.
+
+    The panel is a `<details>` too, so a blanket `details { open = true }` used to open it and leave
+    it open for every screen captured after it on the same page. That is how a chat screen ends up
+    photographed with chrome it does not ship (UX W3 review, finding 1: an after-screen has to be
+    the build it claims to be). Screens that want the panel open ask for it by name.
+    """
+    others = "els => els.forEach(d => { if (d.id !== 'demo-details') { d.open = true; } })"
+    page.eval_on_selector_all("details", others)
     page.wait_for_timeout(200)
+
+
+def set_demo_panel(page: Any, *, open_: bool) -> None:
+    """The panel ships collapsed at every viewport (UX W3 review, finding 2), so a screen that is
+    *of* the panel has to open it first — a 49px strip is not evidence of what the panel holds."""
+    page.evaluate(
+        "wanted => { const d = document.getElementById('demo-details'); if (d) { d.open = wanted; } }",
+        open_,
+    )
+    page.wait_for_timeout(200)
+
+
+def open_demo_panel(page: Any) -> None:
+    set_demo_panel(page, open_=True)
 
 
 def sign_in(context: Any, base_url: str, actor: str) -> Any:
@@ -452,10 +482,13 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             page,
             "demo-panel",
             route="/",
-            state="persona E1042",
-            notes="NEW at W1: the persona control, out of the masthead and labelled.",
+            state="persona E1042, panel opened",
+            notes="NEW at W1, rebuilt at W3: every demo affordance, in one labelled panel. It ships "
+            "collapsed, so this screen opens it.",
             selector="section.demo-panel",
+            before=open_demo_panel,
         )
+        set_demo_panel(page, open_=False)
 
         ask(page, urls["demo_1"], PROMPTS["demo_1"], delay_ms=6000)
         shot.screen(
@@ -480,6 +513,17 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             notes="One finished turn.",
             selector="#messages .turn",
         )
+        shot.screen(
+            page,
+            "demo-panel-after-answer",
+            route="/",
+            state="one answered turn, panel opened",
+            notes="NEW at W3: the grader's summary of the last turn and the deep link into its "
+            "record, both written by the page after the turn landed.",
+            selector="section.demo-panel",
+            before=open_demo_panel,
+        )
+        set_demo_panel(page, open_=False)
         shot.screen(
             page,
             "chat-answer-expanded",

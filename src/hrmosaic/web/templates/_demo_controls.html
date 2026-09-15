@@ -14,11 +14,17 @@
   `tests/contract/test_demo_controls_are_quarantined.py` is **P8**: `#actor-select`, `.demo-button`
   and any `/dashboard/…#turn-` link exist inside `section.demo-panel` and inside nothing else.
 
-  **Why a `<details>`, and why two columns.** `body.chat` has a definite height (P11: the transcript
-  scrolls, the document does not grow), so this panel and the composer take their room out of the
-  transcript's. The groups flow into two balanced columns on a wide screen, and the page script
-  collapses the whole thing below 40rem and opens it above. The markup ships `open`, so a reader
-  with no JavaScript keeps exactly what W2 shipped.
+  **Why a collapsed `<details>`, and why two columns.** `body.chat` has a definite height (P11: the
+  transcript scrolls, the document does not grow), so this panel and the composer take their room
+  out of the transcript's. Expanded it needs ~390px, which is more than the whole empty state
+  (~388px) — so at 1280x800, one of the three viewports the harness measures, an expanded panel
+  left the transcript 174px, hid three of the four starter questions and clipped itself against its
+  own `max-height` (UX W3 review, finding 2). It therefore ships **collapsed at every viewport**:
+  the at-rest chat screen is the conversation the plan's §3.1 wireframe specifies plus a one-line
+  disclosure, and a grader opens the panel with one click. The collapse is the `<details>` element's
+  own, so it needs no JavaScript and survives a reader who has none. Expanded, the groups flow into
+  two balanced columns on a wide screen, which is what keeps the open panel inside 800px of viewport
+  height without scrolling inside itself.
 
   **No nested `<section>`.** The P2/P13 denylists cut this panel out of the rendered page with
   `<section class="demo-panel">.*?</section>` before judging the product's own words — a grader
@@ -28,7 +34,7 @@
   Context: `employees`, `actor`, `demo_prompts`, `demo_environment`, `transcript`, `gate_on`.
 #}
 <section class="demo-panel">
-  <details id="demo-details" open>
+  <details id="demo-details">
     <summary class="demo-summary"><h2>Demo &amp; grader controls</h2></summary>
 
     <p class="demo-note">These controls exist for evaluation. A real user of this assistant never
