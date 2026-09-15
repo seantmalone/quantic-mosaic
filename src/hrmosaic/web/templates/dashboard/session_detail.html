@@ -20,18 +20,25 @@
   <!-- The way back (UX W1, navigation-and-ia-16). It was not there at all: the masthead's Chat
        link landed on an empty composer and the transcript was gone, so a grader who followed a
        deep link out of chat could never get back to the conversation. `/?session=` rehydrates. -->
+  {#- Offered only to the persona `/?session=` will actually rehydrate for — its own, or an admin.
+      It was unconditional on every session record, and it resolves 2xx either way, so the
+      mechanical crawl passed while the promise broke (UX W6, nav-reaudit-4 / **P5**). -#}
+  {% if is_admin or view.session.employee_id == actor %}
   <p class="continue-in-chat">
     <a class="button" id="continue-in-chat" href="/?session={{ view.session.session_id }}">Continue this conversation in chat</a>
   </p>
+  {% endif %}
   <dl class="facts">
     <div><dt>Started</dt><dd>{{ view.session.created_at|ts }}</dd></div>
     <div><dt>Persona</dt><dd>{{ view.session.employee_id or 'admin' }}</dd></div>
     <div><dt>Turns</dt><dd>{{ view.session.n_turns|num }}</dd></div>
-    <div><dt>Sign-in</dt><dd><span class="pill">{{ view.session.auth_mode }}</span></dd></div>
-    <div><dt>Role</dt><dd><span class="pill">{{ view.session.actor_role }}</span></dd></div>
-    <div><dt>Client</dt><dd><span class="pill">{{ view.session.client_label }}</span></dd></div>
-    <div><dt>Tool server</dt><dd>{{ view.session.mcp_transport }}</dd></div>
-    <div><dt>Build</dt><dd class="mono">{{ view.session.app_version[:12] }}</dd></div>
+    <div><dt>Sign-in</dt><dd><span class="pill">{{ view.session.auth_mode|enum_label }}</span></dd></div>
+    <div><dt>Role</dt><dd><span class="pill">{{ view.session.actor_role|enum_label }}</span></dd></div>
+    <div><dt>Client</dt><dd><span class="pill">{{ view.session.client_label|enum_label }}</span></dd></div>
+    <div><dt>Tool server</dt><dd>{{ view.session.mcp_transport|enum_label }}</dd></div>
+    {#- One build identity, one length. The list showed eight characters and the detail twelve
+        (UX W6, npo2-12); both go through `id_chip` now. -#}
+    <div><dt>Build</dt><dd><code class="id-chip" title="{{ view.session.app_version }}">{{ view.session.app_version|id_chip }}</code></dd></div>
     <div><dt>Eval run</dt><dd class="mono">{{ view.session.eval_run_id or '—' }}</dd></div>
     <div><dt>Session</dt><dd><code class="id-chip" title="{{ view.session.session_id }}">{{ view.session.session_id }}</code></dd></div>
   </dl>
@@ -54,10 +61,10 @@
   <a class="anchor" id="turn-{{ turn.turn_id }}"></a>
   <header class="turn-head">
     <h3>Turn {{ turn.seq|num }}</h3>
-    <span class="pill pill-{{ turn.outcome }}">{{ turn.outcome or 'open' }}</span>
-    {% if turn.stop_reason %}<span class="pill">stop: {{ turn.stop_reason }}</span>{% endif %}
-    {% if turn.intent %}<span class="pill">intent: {{ turn.intent }}</span>{% endif %}
-    {% if turn.workflow %}<span class="pill">workflow: {{ turn.workflow }}</span>{% endif %}
+    <span class="pill pill-{{ turn.outcome }}">{{ (turn.outcome or 'open')|enum_label }}</span>
+    {% if turn.stop_reason %}<span class="pill">stop: {{ turn.stop_reason|enum_label }}</span>{% endif %}
+    {% if turn.intent %}<span class="pill">intent: {{ turn.intent|enum_label }}</span>{% endif %}
+    {% if turn.workflow %}<span class="pill">workflow: {{ turn.workflow|enum_label }}</span>{% endif %}
     {% if turn.resumed_count %}<span class="pill">resumed ×{{ turn.resumed_count|num }}</span>{% endif %}
     <span class="turn-duration">{{ turn.duration_ms|ms }}</span>
   </header>
@@ -103,13 +110,19 @@
   </div>
   <ol class="waterfall">
     {% for span in turn.spans %}
-    <li class="span-row" data-kind="{{ span.kind }}" data-status="{{ span.status }}">
+    {#- The designed confirmation pause is not a failure, and this is the page the chat deep link
+        lands on. `/dashboard/tools` has said *"paused for confirmation / paused"* since W4; the
+        waterfall said **"create_mock_hr_ticket failed"** in a red `flag-error` chip for the same
+        span (UX W6, dr-new-3). One fact, one word, on both pages. -#}
+    {% set paused = span.payload.get('error_code') == 'CONFIRMATION_REQUIRED' %}
+    <li class="span-row" data-kind="{{ span.kind }}" data-status="{{ 'paused' if paused else span.status }}">
       <span class="span-seq mono">{{ span.seq|num }}</span>
       <span class="pill pill-{{ span.kind }}">{{ span.kind|kind_label }}</span>
       {#- A failed step was red and bold and nothing else: colour was the only thing saying it went
           wrong, which is exactly what a reader who cannot see the red is not told (UX W5). The word
           is now in the row. -#}
-      <span class="span-name">{{ span.name }}{% if span.status == 'error' %}
+      <span class="span-name">{{ span.name }}{% if paused %}
+        <span class="pill pill-paused">paused for confirmation</span>{% elif span.status == 'error' %}
         <span class="flag flag-error">failed</span>{% endif %}</span>
       <span class="span-summary">{{ span|span_summary }}</span>
       {#- Decorative: the proportional bar is a picture of the duration printed beside it, and it is

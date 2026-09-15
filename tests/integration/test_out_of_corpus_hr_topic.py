@@ -49,9 +49,16 @@ async def test_the_turn_refuses_rather_than_answering_from_parametric_knowledge(
 
 
 async def test_the_refusal_redirects_to_what_the_corpus_does_cover(refused):
-    """§7.4 G1: refuse **and** redirect, naming the library rather than leaving the reader nowhere."""
+    """§7.4 G1: refuse **and** redirect, naming the library rather than leaving the reader nowhere.
+
+    Five plain topic nouns since UX W6 (cpux-re-8 = JX-R8). The five *titles* they replaced came
+    off a query ordered `BY doc_id`, so the sample was alphabetical and structurally excluded PTO,
+    remote work, travel and tax — every topic this product is demonstrated on. A reader who had
+    just been refused was redirected to equipment and expenses.
+    """
     assert "I can help with things like" in refused.answer
-    assert "Expenses & Reimbursement Policy" in refused.answer, "the library is sampled, read from the index"
+    assert "PTO and holidays" in refused.answer, "the topics a person would ask about, not a slice of filenames"
+    assert "remote and hybrid work" in refused.answer
     assert "people-ops@mosaicrobotics.example" in refused.answer, "and a human to ask instead"
 
 

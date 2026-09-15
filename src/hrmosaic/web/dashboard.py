@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import statistics
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -394,6 +395,71 @@ def _f_rule_label(rule_id: Any) -> str:
     return f"{name} {RULE_LABELS[name]}" if name in RULE_LABELS else name
 
 
+#: An **opaque** identifier: a run of lower-case hex with no structure a reader can use. Those are
+#: the ones an 8-character chip abbreviates without losing anything — 32-hex turn, span and session
+#: ids, and a git sha. Everything else keeps every character it has (UX W6, npo2-04 = dr-new-4 =
+#: JX-R13): eval run ids are `r_<unix-epoch>_<variant>`, so chipping them at 9 collapsed fifteen
+#: rows to six indistinguishable `r_178916…` chips, and document slugs became `benefits…`,
+#: `equipmen…`, `pto-and-…` — except `travel-policy`, which Jinja's `truncate` leeway spared, so the
+#: column looked broken rather than abbreviated.
+OPAQUE_ID = re.compile(r"[0-9a-f]{16,}")
+
+#: Where a structured id is long enough to need a cap, the **tail** is what survives: the variant
+#: and the low digits of the epoch are what tell two run ids apart, and the prefix is what they
+#: share.
+ID_CHIP_CHARS = 8
+STRUCTURED_ID_CHARS = 32
+
+
+def _f_id_chip(value: Any) -> str:
+    """The id as a chip: eight characters of an opaque hex id, and every character of anything else."""
+    text = str(value)
+    if OPAQUE_ID.fullmatch(text):
+        return f"{text[:ID_CHIP_CHARS]}…"
+    if len(text) > STRUCTURED_ID_CHARS:
+        return f"…{text[-(STRUCTURED_ID_CHARS - 1) :]}"
+    return text
+
+
+#: A stored enum as a person reads it. **P13, P10**: every *header* was renamed at W4 and every
+#: *value* was left raw, so the page said `SIGN-IN: cookie`, `hybrid_rrf`, `awaiting_confirmation`
+#: and offered a `simple_policy, multi_doc, unsafe_action` filter three inches above a legend
+#: reading "5 multi doc, 7 simple policy" (UX W6, JX-R4). One filter, applied wherever a value
+#: reaches a reader, so the filter bar and the legend under it cannot disagree.
+ENUM_LABELS: dict[str, str] = {
+    "cookie": "shared key",
+    "bearer": "bearer header",
+    "open": "open local run",
+    "awaiting_confirmation": "awaiting confirmation",
+    "hybrid_rrf": "hybrid — dense and keyword",
+    "multi_doc": "multi-document",
+    "simple_policy": "simple policy",
+    "tool_task": "tool task",
+    "out_of_scope": "out of scope",
+    "unsafe_action": "unsafe action",
+    "conditional": "conditional",
+}
+
+
+def _f_enum_label(value: Any) -> str:
+    """One vocabulary for stored values, exactly as `_f_metric_label` is one for stored metric names.
+
+    An unmapped value loses its underscores and keeps its words: a token this map has not been
+    taught is still not a field name on the page, and a new enum arriving unnoticed reads as
+    English rather than as code.
+    """
+    text = str(value)
+    return ENUM_LABELS.get(text, text.replace("_", " "))
+
+
+def _f_server_location(url: Any) -> str:
+    """Where the tool server runs, without publishing its address (UX W6, JX-R5)."""
+    if not url:
+        return "in this process"
+    host = urlsplit(str(url)).hostname or ""
+    return "on this machine" if host in {"127.0.0.1", "localhost", "::1"} else host
+
+
 def _f_payload_pretty(value: Any) -> str:
     """A span payload, pretty-printed, minus the field that is a copy of another field.
 
@@ -456,6 +522,9 @@ DASHBOARD_FILTERS = (
     ("metric_label", _f_metric_label),
     ("kind_label", _f_kind_label),
     ("rule_label", _f_rule_label),
+    ("enum_label", _f_enum_label),
+    ("id_chip", _f_id_chip),
+    ("server_location", _f_server_location),
     ("compact", _f_compact),
     ("pretty", _f_pretty),
     ("payload_pretty", _f_payload_pretty),
@@ -682,6 +751,12 @@ class OverviewKpis(_View):
     #: "11.1% (1 of 9 turns)" while the sample is small (**P14**) and so the figure and the count
     #: beside it provably come from one query (**P9**). Additive: no field was removed (P15).
     error_turns: int
+    #: How many of those turns ended `answered`. The Traffic tile read **"5 / QUESTIONS ANSWERED"**
+    #: over a figure that counts *turns* — the same 5 the error-rate tile three places right uses as
+    #: the denominator of "1 of 5 turns", while `/dashboard/turns` listed two of the five as
+    #: answered (UX W6, npo2-03 = dr-new-2). The tile names the count it holds and carries the
+    #: answered figure as its sub-line, so the three surfaces agree by construction (**P9**).
+    answered_turns: int
     #: How many turns had a recorded duration — the sample behind `p50_ms` / `p95_ms`. A percentile
     #: over fewer than five of them prints `n=` and not a number (**P14**).
     duration_n: int
@@ -706,6 +781,9 @@ class OverviewHealth(_View):
     #: looks like a broken meter rather than a recorded-script run (`dashboard-readability-14`).
     llm_provider: str
     llm_model: str
+    #: The same sentence the demo panel prints, from `api.provider_label()` (UX W6, JX-R2). The raw
+    #: `llm_provider` stays beside it: the label is for the page, the enum is for `/api/*` (P15).
+    provider_label: str
     mcp_up: bool
     tool_count: int
     doc_count: int
@@ -973,6 +1051,11 @@ class MockWriteRow(_View):
     created_at: int
     turn_id: str | None
     payload: dict[str, Any]
+    #: The payload as one scannable line, through the same `summarise_arguments()` the Tools page
+    #: uses. The sandbox printed the raw body clipped mid-token — `{"employee_id": "E1042",
+    #: "queue": "hr-timeoff", "summary": …` — on the page whose whole job is to show a grader what
+    #: was written (UX W6, JX-R5). The dict itself is one disclosure below and in `/api/*` (P15).
+    payload_summary: str
 
 
 class SafetyView(_View):
@@ -1138,6 +1221,12 @@ class EvalItemRow(_View):
     session_id: str | None
     turn_id: str | None
     trace_url: str | None
+    #: Whether this run's turn is in **this** store. Eval runs are imported from committed fixtures
+    #: (`core/archive.py`), so their `session_id` and `turn_id` name rows that were never written
+    #: here: one run page offered 26 `/api/traces/turns/<32-hex>` chips and 26 session pills, 52
+    #: links, every one of them a 404 (UX W6, nav-reaudit-3 / **P5**). The ids stay on the page and
+    #: in Export JSON — they are the record (P15) — they simply stop being offered as links.
+    trace_present: bool
 
 
 class LatencyBlock(_View):
@@ -1348,6 +1437,7 @@ async def build_overview(request: Request) -> OverviewView:
         pending_confirmations=_scalar(store, "SELECT COUNT(*) AS n FROM turns WHERE outcome = 'awaiting_confirmation'"),
         error_rate=round(errors / turns, 4) if turns else 0.0,
         error_turns=errors,
+        answered_turns=_scalar(store, "SELECT COUNT(*) AS n FROM turns WHERE outcome = 'answered'"),
         duration_n=sum(1 for duration in durations if duration is not None),
         p50_ms=percentile(durations, 0.50),
         p95_ms=percentile(durations, 0.95),
@@ -1368,6 +1458,7 @@ async def build_overview(request: Request) -> OverviewView:
         health=OverviewHealth(
             llm_provider=str(health["llm"]["agent"]["provider"]),
             llm_model=str(health["llm"]["agent"]["model"]),
+            provider_label=api.provider_label(str(health["llm"]["agent"]["provider"])),
             mcp_up=bool(health["mcp"]["connected"]),
             tool_count=int(health["mcp"]["tool_count"]),
             doc_count=int(index.get("doc_count") or 0),
@@ -1734,8 +1825,22 @@ def summarise_arguments(arguments: Mapping[str, Any]) -> str:
     """
     if not arguments:
         return "no arguments"
-    parts = []
+    return _f_compact(" · ".join(_argument_parts(arguments)), SUMMARY_CHARS)
+
+
+def _argument_parts(arguments: Mapping[str, Any]) -> list[str]:
+    """`key=value` for each argument, flattening one level of nesting.
+
+    `check_policy_compliance` takes a `parameters` object, and dumping it whole printed
+    `parameters={"start_date": …` — the raw JSON clipped mid-token that the summariser exists to
+    replace, in the summariser's own output (UX W6, JX-R5). Its fields are arguments like any
+    other, so they are rendered like any other.
+    """
+    parts: list[str] = []
     for key, value in arguments.items():
+        if isinstance(value, Mapping):
+            parts.extend(_argument_parts(value))
+            continue
         if isinstance(value, str):
             rendered = f'"{value}"' if len(value) <= 40 else f'"{value[:39]}…"'
         elif isinstance(value, bool):
@@ -1747,7 +1852,16 @@ def summarise_arguments(arguments: Mapping[str, Any]) -> str:
         else:
             rendered = _f_compact(value, 30)
         parts.append(f"{key}={rendered}")
-    return _f_compact(" · ".join(parts), SUMMARY_CHARS)
+    return parts
+
+
+def _scalar_value(value: str | int | float | bool) -> str:
+    """One field of a tool result, as a reader reads it: a formatted number or a named enum."""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (int, float)):
+        return _f_num(value)
+    return _f_enum_label(value)
 
 
 def summarise_result(structured: Any, result_json: Any, *, error_code: str | None = None) -> str:
@@ -1773,8 +1887,10 @@ def summarise_result(structured: Any, result_json: Any, *, error_code: str | Non
             documents = sorted({str(hit.get("doc_id")) for hit in hits if isinstance(hit, dict) and hit.get("doc_id")})
             found = _f_counted(len(hits), "hit")
             return _f_compact(f"{found} · {', '.join(documents)}" if documents else found, SUMMARY_CHARS)
+        # `verdict=conditional` is a field name, an equals sign and a raw enum on a page that has
+        # spent two waves removing all three (UX W6, JX-R5 / JX-R4). The same facts, said.
         scalars = [
-            f"{key}={_f_num(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else value}"
+            f"{_f_enum_label(key)}: {_scalar_value(value)}"
             for key, value in payload.items()
             if isinstance(value, (str, int, float, bool))
         ]
@@ -1983,6 +2099,7 @@ def build_safety(request: Request, filters: Filters) -> SafetyView:
                 created_at=int(row["created_at"]),
                 turn_id=row["turn_id"],
                 payload=json.loads(row["payload_json"] or "{}"),
+                payload_summary=summarise_arguments(json.loads(row["payload_json"] or "{}")),
             )
             for row in writes
         ],
@@ -2259,6 +2376,15 @@ def build_eval_run_detail(request: Request, run_id: str, filters: Filters) -> Ev
         (run_id,),
     ).dicts()
     labels = _dataset_labels()
+    # One query for the whole page rather than one per row: which of this run's turns this
+    # deployment actually holds a trace for (**P5**).
+    resident = {
+        str(found["id"])
+        for found in store.execute(
+            "SELECT t.id AS id FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.eval_run_id = ?",
+            (run_id,),
+        ).dicts()
+    }
     items = []
     for row in rows:
         if filters.category and row["category"] != filters.category:
@@ -2284,6 +2410,7 @@ def build_eval_run_detail(request: Request, run_id: str, filters: Filters) -> Ev
                 trace_url=(
                     f"/dashboard/sessions/{row['session_id']}#turn-{row['turn_id']}" if row["session_id"] else None
                 ),
+                trace_present=str(row["turn_id"] or "") in resident,
             )
         )
     if filters.failures_first:
@@ -2834,7 +2961,14 @@ async def page_policy_reader(request: Request, doc_id: str) -> Response:
     return TEMPLATES.TemplateResponse(
         request=request,
         name="policy.html",
-        context={"view": view.model_dump(mode="json"), **api.shell_context(request, surface="chat")},
+        context={
+            "view": view.model_dump(mode="json"),
+            # Where "Back to your conversation" goes. Built server-side from the persona's own most
+            # recent conversation, because the reader is reached by a plain `href` from an answer
+            # and carries nothing of the turn that sent it (UX W6, nav-reaudit-1).
+            "conversation_url": api.conversation_url(request),
+            **api.shell_context(request, surface="chat"),
+        },
     )
 
 

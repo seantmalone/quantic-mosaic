@@ -281,9 +281,15 @@ async def test_demo_task_2_pto_request_through_confirm_to_write(web, store):
     # Outcome consistency (P22). The recorded synthesis for this turn ends with an `escalation`
     # block — "I cannot open PTO requests in MosaicOne on your behalf" — written while the ticket
     # it denies was already in `mock_writes`. The deterministic step states the outcome first and
-    # replaces that denial with a line pointing at the ticket, so neither survives into the answer.
+    # drops that denial, so neither survives into the answer.
+    #
+    # Since UX W6 the outcome block has its own type. A completed, irreversible write rendered as a
+    # `recommendation` was filed by the chat surface under "What I suggest you do" and footnoted
+    # "Suggestions are guidance, not company policy" (JX-R1 = cpux-re-1); and the sentence names the
+    # queue the confirmation card named, through the same lookup (cpux-re-2).
     blocks = body["answer_blocks"]
-    assert blocks[0]["type"] == "recommendation" and blocks[0]["text"].startswith("Done — your request is with HR.")
+    assert blocks[0]["type"] == "performed", "a write that happened is neither policy nor advice"
+    assert blocks[0]["text"].startswith("Done — your request is with the HR Time Off team.")
     assert "escalation" not in {block["type"] for block in blocks}
     assert "cannot open PTO requests" not in body["answer"]
 

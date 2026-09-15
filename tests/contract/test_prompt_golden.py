@@ -319,11 +319,23 @@ def test_a_tool_result_value_is_stated_without_a_citation():
     """R2: `pto-002` lost its balance to G2 — the number was cited, the citation stripped, the
     block dropped. Rule 6b says where a tool value belongs, immediately after the as_of rule."""
     system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
-    rule = system[system.index("6b.") : system.index("7. `rationale_summary`")]
+    rule = system[system.index("6b.") : system.index("6c.")]
 
     assert "employee data, not company policy" in rule
     assert "attach NO citation" in rule
-    assert system.index("6. When a tool result carries an `as_of` date") < system.index("6b.")
+    assert system.index("6. NEVER restate a tool result's `as_of` date") < system.index("6b.")
+
+
+def test_the_answer_never_restates_the_as_of_and_never_writes_an_employee_id():
+    """UX W6 (npo2-08 = JX-R6, cpux-re-4). Chat carried the snapshot date twice in two formats on
+    one screen — *"as of 2026-09-01"* in the answer body and *"Based on employee data from 1
+    September 2026"* six lines below — because rule 6 asked for it; and `E1007` reached the reader
+    inside *"your director (Dana, E1007)"*. The footer owns the date and no id is ever prose."""
+    system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
+
+    assert "NEVER restate a tool result's `as_of` date in the answer" in system
+    assert "NEVER write an employee id" in system
+    assert "Never emit a `performed` block" in system
 
 
 def test_the_router_is_told_to_name_every_missing_detail():

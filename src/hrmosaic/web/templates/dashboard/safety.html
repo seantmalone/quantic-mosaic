@@ -32,21 +32,24 @@
   {# Decorative: every bar in it is a row of the table immediately below, which is on the page for
      everyone (UX W5, accessibility-and-responsive-19). #}
   <figure class="chart-figure">
-    <canvas id="chart-verdicts" height="130" aria-hidden="true"></canvas>
+    <canvas id="chart-verdicts" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">Guardrail verdict counts by rule. The same counts are in
       the table below, one row per rule and verdict.</figcaption>
   </figure>
   <script id="chart-verdicts-data" type="application/json">{{ view.by_rule|tojson }}</script>
   <script id="chart-verdicts-rules" type="application/json">{{ rule_labels|tojson }}</script>
-  <p class="note">All six checks are plotted. A rule with a zero bar ran and allowed everything, or
-    had nothing to judge — it is never missing from the axis.</p>
+  <p class="note">All six checks are plotted, and every one of them is named on the axis. A rule
+    with a zero bar ran and allowed everything, or had nothing to judge — it is never missing from
+    the chart. The table below lists one row per rule <em>and verdict</em>, so a rule that has
+    nothing to report has no row there.</p>
   {{ t.table('by-rule-table', [
       {'label': 'Rule', 'key': 'rule_id', 'kind': 'rule'},
       {'label': 'Verdict', 'key': 'verdict', 'kind': 'badge'},
       {'label': 'Count', 'key': 'count', 'kind': 'num'},
       {'label': 'Name', 'key': 'rule_name', 'kind': 'code',
        'help': 'The rule_name the guardrail span carries in the trace — the value the display name above is derived from.'}],
-      view.by_rule, 'No guardrail has run yet.') }}
+      view.by_rule, 'No guardrail has run yet.',
+      label='Guardrail verdicts by rule') }}
 </section>
 
 <section class="panel">
@@ -56,7 +59,8 @@
       {'label': 'Matched pattern', 'key': 'matched_pattern', 'kind': 'code'},
       {'label': 'Passage', 'key': 'chunk_id', 'kind': 'id'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
-      view.injection_hits, 'No retrieved passage has been quarantined.') }}
+      view.injection_hits, 'No retrieved passage has been quarantined.',
+      label='Prompt-injection quarantines') }}
 </section>
 
 <section class="panel">
@@ -68,7 +72,8 @@
       {'label': 'Action', 'key': 'action'},
       {'label': 'Answered', 'key': 'used_at', 'kind': 'time'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'}],
-      view.confirmations, 'No write has been proposed yet.') }}
+      view.confirmations, 'No write has been proposed yet.',
+      label='Confirmations') }}
 </section>
 
 <section class="panel" id="sandbox">
@@ -79,11 +84,12 @@
       {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
       {'label': 'Kind', 'key': 'kind', 'kind': 'badge'},
       {'label': 'Employee', 'key': 'employee_id'},
-      {'label': 'What was written', 'key': 'payload', 'kind': 'code', 'detail_key': 'payload',
+      {'label': 'What was written', 'key': 'payload_summary', 'detail_key': 'payload',
        'detail_label': 'What was written'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
       {'label': 'Id', 'key': 'id', 'kind': 'id'}],
-      view.mock_writes, 'The sandbox is empty.') }}
+      view.mock_writes, 'The sandbox is empty.',
+      label='Simulated writes') }}
   {# Below the evidence it destroys, not above it, and it asks first (`dashboard-readability-23`). #}
   <form id="reset-sandbox-form" class="sandbox-reset" hx-post="/api/dev/reset-sandbox" hx-swap="none"
         hx-confirm="Delete every simulated write listed above? This cannot be undone."
@@ -108,6 +114,13 @@
         if (verdicts.indexOf(row.verdict) < 0) { verdicts.push(row.verdict); }
       });
       var palette = ["#1f6f6b", "#8a5a00", "#9b2c2c", "#3b6fb0", "#7a5bb5", "#4a5b6b", "#2f7d32"];
+      // "G3 Recommendation labelling" is wider than a sixth of the panel, so the label is two
+      // lines rather than a rotated one: Chart.js renders an array tick as stacked lines.
+      function wrap(label) {
+        var words = String(label).split(" ");
+        if (words.length < 3) { return label; }
+        return [words.slice(0, 2).join(" "), words.slice(2).join(" ")];
+      }
       new Chart(document.getElementById("chart-verdicts"), {
         type: "bar",
         data: {
@@ -124,8 +137,15 @@
           })
         },
         options: {
+          responsive: true,
+          maintainAspectRatio: false,
           scales: {
-            x: { stacked: true, title: { display: true, text: "Safety check" } },
+            // Every rule name is drawn, horizontally, on two lines where it is long. Chart.js
+            // drops ticks it cannot fit and then rotates the survivor, which is how five of the
+            // six names disappeared and the sixth overlapped the y-axis title (UX W6, npo2-01).
+            x: { stacked: true, title: { display: true, text: "Safety check" },
+                 ticks: { autoSkip: false, maxRotation: 0, minRotation: 0,
+                          callback: function (value) { return wrap(this.getLabelForValue(value)); } } },
             y: { stacked: true, beginAtZero: true, ticks: { precision: 0 },
                  title: { display: true, text: "Verdicts recorded" } }
           }

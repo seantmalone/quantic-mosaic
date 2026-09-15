@@ -396,22 +396,52 @@ def sign_in(context: Any, base_url: str, actor: str) -> Any:
     return page
 
 
-def ask(page: Any, base_url: str, prompt: str, *, delay_ms: int = 0) -> None:
+#: The `POST /chat` requests `ask(..., hold=True)` has parked. They are resumed by `release()`.
+_HELD: list[Any] = []
+
+#: Proof that the screen about to be taken really is the in-flight one: Stop has replaced Send.
+IN_FLIGHT_JS = "() => { const b = document.getElementById('stop-button'); return b && !b.hidden; }"
+
+
+def ask(page: Any, base_url: str, prompt: str, *, hold: bool = False) -> None:
     """Ask one question and wait for the turn to land in `#messages`.
 
-    `delay_ms` holds the `POST /chat` response open for that long, which is the only way to
-    photograph the in-flight state of a stubbed turn without racing it.
+    `hold=True` **parks** the `POST /chat` request instead of answering it, and returns as soon as
+    the page is provably in flight. `release()` lets it through.
+
+    It used to sleep inside the route handler — `lambda route: (time.sleep(6), route.continue_())`
+    — and a sync Playwright route handler runs on the dispatcher thread, so the sleep blocked the
+    very loop that would have delivered the response. Both "in-flight" screens came out
+    byte-identical to the finished turn beside them, at all three viewports, and §3.2 therefore had
+    no screen evidence and no regression guard at all (UX W6, cpux-re-10). Parking the route holds
+    the server's answer without blocking anything, and the wait below is an assertion: a
+    mis-capture now fails the run instead of producing a duplicate.
     """
     before = page.eval_on_selector_all("#messages .turn", "els => els.length")
-    if delay_ms:
-        page.route("**/chat", lambda route: (time.sleep(delay_ms / 1000), route.continue_())[-1])
+    if hold:
+        _HELD.clear()
+        # A plain `def`, not `_HELD.append`: Playwright stamps an attribute onto the handler it is
+        # given, and a builtin method object cannot carry one.
+        def park(route: Any) -> None:
+            _HELD.append(route)
+
+        page.route("**/chat", park)
     page.fill("#message", prompt)
     page.click("#send-button")
-    if delay_ms:
-        page.wait_for_timeout(min(delay_ms // 2, 4000))
+    if hold:
+        page.wait_for_function(IN_FLIGHT_JS, timeout=30_000)
+        page.wait_for_timeout(400)
         return
     page.wait_for_function("n => document.querySelectorAll('#messages .turn').length > n", arg=before, timeout=180_000)
     page.wait_for_timeout(1200)
+
+
+def release(page: Any) -> None:
+    """Let the parked `POST /chat` through, so the turn it was carrying finishes."""
+    for route in _HELD:
+        route.continue_()
+    _HELD.clear()
+    page.unroute("**/chat")
 
 
 def capture(out: Path, urls: dict[str, str]) -> Capture:
@@ -497,15 +527,15 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         )
         set_demo_panel(page, open_=False)
 
-        ask(page, urls["demo_1"], PROMPTS["demo_1"], delay_ms=6000)
+        ask(page, urls["demo_1"], PROMPTS["demo_1"], hold=True)
         shot.screen(
             page,
             "chat-inflight",
             route="/",
-            state="turn in flight (response held open)",
+            state="turn in flight (POST parked, Stop on screen)",
             notes="What a question looks like while it is being answered.",
         )
-        page.unroute("**/chat")
+        release(page)
         page.wait_for_selector("#messages .turn", timeout=180_000)
         page.wait_for_timeout(1500)
         facts["demo_1"] = page.eval_on_selector("#messages .turn", TURN_FACTS_JS)
@@ -575,15 +605,15 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         # -- server 2: the confirmation card, and the confirmed resume --------------------
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         page = sign_in(context, urls["demo_2"], "E1042")
-        ask(page, urls["demo_2"], PROMPTS["demo_2"], delay_ms=6000)
+        ask(page, urls["demo_2"], PROMPTS["demo_2"], hold=True)
         shot.screen(
             page,
             "chat-confirm-inflight",
             route="/",
-            state="gated turn in flight",
+            state="gated turn in flight (POST parked, Stop on screen)",
             notes="The turn that is about to ask for a confirmation.",
         )
-        page.unroute("**/chat")
+        release(page)
         page.wait_for_selector(".confirm-card", timeout=180_000)
         page.wait_for_timeout(1000)
         facts["demo_2"] = page.eval_on_selector("#messages .turn", TURN_FACTS_JS)

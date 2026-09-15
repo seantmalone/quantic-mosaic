@@ -47,25 +47,25 @@
       {%- if view.verdict.pass_rate is none %}This run scored no items, so there is no pass rate to
       compare against an earlier run.
       {%- elif view.verdict.previous_pass_rate is not none %}The previous
-      <code>{{ view.run.variant }}</code> run ({{ view.verdict.previous_created_at|ts }}) passed
+      <code>{{ view.run.variant|enum_label }}</code> run ({{ view.verdict.previous_created_at|ts }}) passed
       {{ view.verdict.previous_pass_rate|pct }}; this one passes {{ view.verdict.pass_rate|pct }} —
       {% if view.verdict.pass_rate > view.verdict.previous_pass_rate %}better{%
         elif view.verdict.pass_rate < view.verdict.previous_pass_rate %}worse{% else %}unchanged{% endif %}.
       {%- else %}No earlier run of this variant to compare against.{% endif %}</p>
   </div>
   <dl class="facts">
-    <div><dt>Variant</dt><dd><span class="pill">{{ view.run.variant }}</span></dd></div>
-    <div><dt>Target</dt><dd><span class="pill">{{ view.run.target }}</span></dd></div>
+    <div><dt>Variant</dt><dd><span class="pill">{{ view.run.variant|enum_label }}</span></dd></div>
+    <div><dt>Target</dt><dd><span class="pill">{{ view.run.target|enum_label }}</span></dd></div>
     <div><dt>Items</dt><dd>{{ view.run.n_items|num }}</dd></div>
     <div><dt>Judged</dt><dd>{{ 'yes' if view.metrics.judged else 'no' }}</dd></div>
     <div><dt>Judge model</dt><dd>{{ view.run.judge_model or '—' }}</dd></div>
     <div><dt>Duration</dt><dd>{{ view.run.duration_s|secs }}</dd></div>
     <div><dt>Estimated cost</dt><dd>{{ view.metrics.est_cost_usd|usd }}</dd></div>
-    <div><dt>Build</dt><dd class="mono">{{ view.run.git_sha[:12] }}</dd></div>
+    <div><dt>Build</dt><dd><code class="id-chip" title="{{ view.run.git_sha }}">{{ view.run.git_sha|id_chip }}</code></dd></div>
   </dl>
   <p class="note" id="dataset-legend">The dataset is one fixed set of questions, the same for every
     variant: {% for category, count in view.verdict.by_category.items() %}{{ count|num }}
-    {{ category.replace('_', ' ') }}{% if not loop.last %}, {% endif %}{% else %}no scored item{% endfor %}.</p>
+    {{ category|enum_label }}{% if not loop.last %}, {% endif %}{% else %}no scored item{% endfor %}.</p>
 
   <div id="metric-block" class="metric-strip">
     {% for metric in headline_metrics + ('clarification_accuracy',) %}
@@ -112,9 +112,16 @@
       <dd>{{ view.metrics.over_refusal_rate|rate(view.metrics.over_refusal_n, 'item') }}</dd></div>
     <div><dt>{{ 'missed_refusal_rate'|metric_label }}</dt>
       <dd>{{ view.metrics.missed_refusal_rate|rate(view.metrics.missed_refusal_n, 'item') }}</dd></div>
-    <div><dt>{{ 'action_safety_pass_rate'|metric_label }}</dt><dd>{{ view.metrics.action_safety_pass_rate|pct }}</dd></div>
-    <div><dt>{{ 'recommendation_labeled_rate'|metric_label }}</dt><dd>{{ view.metrics.recommendation_labeled_rate|pct }}</dd></div>
-    <div><dt>{{ 'catalog_reopened_rate'|metric_label }}</dt><dd>{{ view.metrics.catalog_reopened_rate|pct }}</dd></div>
+    {#- Every rate on this row carries its denominator while the sample is small, or it does not
+        belong beside two that do: `ACTION-SAFETY PASS RATE 100.0%` over a single item sat next to
+        `OVER-REFUSAL RATE 0.0% (0 of 18 items)` (UX W6, npo2-05 / **P14**). The denominators are
+        the run's own `n_scored`. -#}
+    <div><dt>{{ 'action_safety_pass_rate'|metric_label }}</dt>
+      <dd>{{ view.metrics.action_safety_pass_rate|rate(view.metrics.n_scored.get('action_safety_pass_rate'), 'item') }}</dd></div>
+    <div><dt>{{ 'recommendation_labeled_rate'|metric_label }}</dt>
+      <dd>{{ view.metrics.recommendation_labeled_rate|rate(view.metrics.n_scored.get('recommendation_labeled_rate'), 'item') }}</dd></div>
+    <div><dt>{{ 'catalog_reopened_rate'|metric_label }}</dt>
+      <dd>{{ view.metrics.catalog_reopened_rate|rate(view.metrics.n_scored.get('catalog_reopened_rate'), 'item') }}</dd></div>
     <div><dt>{{ 'judge_agreement_rate'|metric_label }}</dt>
       <dd>{{ view.metrics.judge_agreement_rate|rate(view.metrics.judge_agreement_n, 'item') }}</dd></div>
   </dl>
@@ -123,7 +130,9 @@
   <p class="note">How often a workflow reached its end state, per workflow.</p>
   <ul id="workflow-completion" class="pill-list">
     {% for workflow, value in view.metrics.workflow_completion_by_workflow.items() %}
-    <li><span class="pill">{{ workflow.replace('_', ' ') }}</span> {{ value|pct }}</li>
+    {#- `pto request 0.0%` with no `n` at all is the bare rate P14 forbids (UX W6, dr-new-8). -#}
+    <li><span class="pill">{{ workflow|enum_label }}</span>
+      {{ value|rate(view.metrics.n_scored.get('workflow_completion'), 'item') }}</li>
     {% else %}<li class="muted">No item defines a workflow end state.</li>{% endfor %}
   </ul>
 
@@ -134,8 +143,8 @@
       <thead><tr><th scope="col">Expected route</th><th scope="col">Routes chosen</th></tr></thead>
       <tbody>
       {% for gold, row in view.metrics.router_matrix.items() %}
-        <tr><th scope="row">{{ gold }}</th>
-          <td>{% for predicted, count in row.items() %}<span class="pill">{{ predicted }} ×
+        <tr><th scope="row">{{ gold|enum_label }}</th>
+          <td>{% for predicted, count in row.items() %}<span class="pill">{{ predicted|enum_label }} ×
             {{ count|num }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor %}</td></tr>
       {% else %}<tr class="empty-row"><td class="muted" colspan="2">No routing decision recorded.</td></tr>{% endfor %}
       </tbody>
@@ -153,6 +162,10 @@
 </section>
 
 <section class="panel tab-panel" id="tab-items" hidden>
+  {#- `link_when: trace_present` on the Trace column: linked only where the turn resolves in this
+      store. A run imported from a committed fixture names turns that were never written here, so
+      the page offered 26 chips and 26 session pills — 52 links, all 404 (UX W6, nav-reaudit-3 /
+      P5). The ids still print; they simply stop being offered as links. -#}
   <h3>Items</h3>
   {{ t.table('eval-items-table', [
       {'label': 'Question', 'key': 'question'},
@@ -166,13 +179,19 @@
       {'label': 'Cold', 'key': 'cold', 'kind': 'bool',
        'help': 'The first item after a start, when nothing is warmed up yet.'},
       {'label': 'Phase', 'key': 'run_phase', 'kind': 'badge'},
-      {'label': 'Item', 'key': 'item_id', 'kind': 'id'},
-      {'label': 'Trace', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'}],
-      view['items'], 'This run recorded no items.') }}
+      {'label': 'Item', 'key': 'item_id', 'kind': 'id', 'mobile': 'lead'},
+      {'label': 'Trace', 'key': 'turn_id', 'kind': 'id',
+       'href_prefix': '/api/traces/turns/', 'link_when': 'trace_present'}],
+      view['items'], 'This run recorded no items.',
+      label='Scored items') }}
   <ul id="trace-links" class="pill-list">
-    {% for item in view['items'] %}{% if item.trace_url %}
+    {% for item in view['items'] %}{% if item.trace_url and item.trace_present %}
     <li><a class="trace-link" href="{{ item.trace_url }}">{{ item.item_id }} → full audit trace</a></li>
     {% endif %}{% endfor %}
+    {% if not view['items']|selectattr('trace_present')|list %}
+    <li class="muted">This run was imported from a committed result file, so its turns are not in
+      this deployment's record. The scores and verdicts above are the run's own.</li>
+    {% endif %}
   </ul>
 </section>
 
@@ -190,7 +209,7 @@
   </dl>
   {% if view.run.target == 'local' %}
   <p class="note local-note">Local runner — <strong>not representative</strong> of the 0.1-CPU
-    deployed instance (§13.2).</p>
+    deployed instance.</p>
   {% endif %}
 
   {# Three decorative canvases (UX W5, accessibility-and-responsive-19). The first two plot figures
@@ -199,17 +218,17 @@
      where, rather than printing the same numbers a second time. The third has no other home, so it
      carries its own table. #}
   <figure class="chart-figure">
-    <canvas id="chart-latency" height="110" aria-hidden="true"></canvas>
+    <canvas id="chart-latency" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">Latency histogram of the scored items. Each item's own
       latency is the Latency column of the items table on the Items tab.</figcaption>
   </figure>
   <figure class="chart-figure">
-    <canvas id="chart-cold-warm" height="110" aria-hidden="true"></canvas>
+    <canvas id="chart-cold-warm" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">Cold versus warm latency. The four figures plotted are the
       Median, p95, Cold median and Cold p95 entries listed above.</figcaption>
   </figure>
   <figure class="chart-figure">
-    <canvas id="chart-rss" height="110" aria-hidden="true"></canvas>
+    <canvas id="chart-rss" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">
       <table>
         <caption>Memory in use at the end of each turn</caption>
@@ -260,7 +279,8 @@
         type: "bar",
         data: { labels: ["<1 s", "1–2 s", "2–4 s", "4–8 s", "8–16 s", "≥16 s"],
                 datasets: [{ label: "items", data: buckets, backgroundColor: "#1f6f6b" }] },
-        options: { plugins: { title: { display: true, text: "Latency histogram" } },
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { title: { display: true, text: "Latency histogram" } },
                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
       });
       new Chart(document.getElementById("chart-cold-warm"), {
@@ -269,7 +289,8 @@
                 datasets: [{ label: "ms", backgroundColor: ["#1f6f6b", "#1f6f6b", "#8a5a00", "#8a5a00"],
                              data: [data.latency.p50, data.latency.p95,
                                     data.latency.cold_p50, data.latency.cold_p95] }] },
-        options: { plugins: { title: { display: true, text: "Cold versus warm" } },
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { title: { display: true, text: "Cold versus warm" } },
                    scales: { y: { beginAtZero: true } } }
       });
       new Chart(document.getElementById("chart-rss"), {
@@ -277,7 +298,8 @@
         data: { labels: data.rss_series.map(function (point) { return point.turn_id.slice(0, 8); }),
                 datasets: [{ label: "RSS MB", borderColor: "#3b6fb0", tension: 0.25,
                              data: data.rss_series.map(function (point) { return point.rss_mb; }) }] },
-        options: { plugins: { title: { display: true, text: "RSS at the end of each turn" } } }
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { title: { display: true, text: "RSS at the end of each turn" } } }
       });
     });
   })();

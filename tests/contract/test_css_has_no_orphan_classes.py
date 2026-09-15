@@ -33,7 +33,7 @@ UNSTYLED_BY_DESIGN = {
     "answer-block-escalation",
     # Structural hooks with no appearance of their own.
     "source",  # the `<li>` around a `.source-details`
-    "source-link",  # "Open the full policy" — an ordinary link, deliberately
+    "source-link",  # "Open <the policy>" — an ordinary link, deliberately
     "wordmark",  # the masthead lockup is sized by the `<img>` rules on `.masthead h1 img`
     "tab-panel",  # the eval pages' panels; the tabs beside them are painted
     # JavaScript hooks.

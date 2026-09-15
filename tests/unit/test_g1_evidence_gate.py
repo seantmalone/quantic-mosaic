@@ -48,7 +48,7 @@ def test_everything_below_the_evidence_threshold_refuses():
     verdict = g1.evaluate([Candidate(0.58), Candidate(0.57), Candidate(0.54)])
     assert not verdict.passed
     # Two decimal places since UX W4: the span's arithmetic at the precision the 0-1 scale carries.
-    assert "best evidence score 0.58 < 0.60" in verdict.reason
+    assert "evidence-gate score 0.58 < 0.60" in verdict.reason
 
 
 def test_one_strong_chunk_alone_is_not_enough_support():
@@ -97,19 +97,20 @@ def test_the_span_records_the_observed_scores(writer, spans):
     assert payload["evidence_span_ids"] == ["a" * 16]
 
 
-def test_the_refusal_names_what_the_corpus_covers_from_the_real_index():
+def test_the_refusal_names_what_the_corpus_covers_in_plain_topics():
     answer = g1.refusal(g1.OUT_OF_SCOPE)
     titles = [document.doc_title for document in corpusread.list_documents()]
 
     assert [block.type for block in answer.blocks] == ["recommendation"], "a refusal cites nothing"
     assert answer.blocks[0].citations == []
     covered = " ".join(answer.next_steps)
-    # Five example titles, read from the index rather than hard-coded, and *not* all fourteen:
-    # the sentence that listed the whole library moved to `/policy`, which the turn links to
-    # (UX W3, jargon-and-exposure-3).
-    named = [title for title in titles if title in covered]
-    assert named == titles[: g1.EXAMPLE_TOPIC_COUNT]
-    assert len(titles) > len(named), "the library is bigger than the sample it is introduced by"
+    # Five topics, not five titles, and not all fourteen. The title slice this replaced came off a
+    # query ordered `BY doc_id`, so it was alphabetical and structurally excluded PTO, remote work,
+    # travel and tax — every topic the product is demonstrated on (UX W6, cpux-re-8 = JX-R8). The
+    # inventory moved to `/policy`, which the turn links to (UX W3, jargon-and-exposure-3).
+    assert [topic for topic in g1.EXAMPLE_TOPICS if topic in covered] == list(g1.EXAMPLE_TOPICS)
+    assert not [title for title in titles if title in covered], "topics a person would say, not filenames"
+    assert len(titles) > g1.EXAMPLE_TOPIC_COUNT, "the library is bigger than the sample it is introduced by"
     # The reader is told the boundary; the clause that measured it stays on the span (UX W2,
     # numbers-precision-overflow-3, jargon-and-exposure-3).
     assert answer.blocks[0].text == g1.USER_REFUSAL

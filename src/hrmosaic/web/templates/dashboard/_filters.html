@@ -11,7 +11,11 @@
       <select name="{{ field.name }}">
         <option value="">any</option>
         {% for option in field.options %}
-        <option value="{{ option }}" {% if filters.get(field.name) == option %}selected{% endif %}>{{ option }}</option>
+        {#- The `value` is the stored enum, which is what the query string carries; the text is
+            what the page says everywhere else. The Category filter offered `simple_policy,
+            multi_doc, unsafe_action` three inches above a legend reading "5 multi doc, 7 simple
+            policy" (UX W6, JX-R4). -#}
+        <option value="{{ option }}" {% if filters.get(field.name) == option %}selected{% endif %}>{{ option|enum_label }}</option>
         {% endfor %}
       </select>
     {% elif field.get('type') == 'checkbox' %}
@@ -51,7 +55,7 @@
   {%- endfor %}
   <a class="active-filter" href="{{ reset_url }}{{ '?' ~ rest|urlencode if rest else '' }}"
      title="Remove this filter">{{ field.label }}:
-    <strong>{{ 'yes' if filters.get(field.name) is sameas true else filters.get(field.name) }}</strong>
+    <strong>{{ 'yes' if filters.get(field.name) is sameas true else filters.get(field.name)|enum_label }}</strong>
     <span class="active-filter-remove" aria-hidden="true">×</span><span class="visually-hidden"> — remove</span></a>
   {%- endfor %}
 </p>

@@ -33,7 +33,8 @@
       {'label': 'p50', 'key': 'p50_ms', 'kind': 'ms_n', 'n_key': 'duration_n'},
       {'label': 'p95', 'key': 'p95_ms', 'kind': 'ms_n', 'n_key': 'duration_n'},
       {'label': 'Last called', 'key': 'last_called_at', 'kind': 'time'}],
-      view.by_tool, 'No tool has been called yet.') }}
+      view.by_tool, 'No tool has been called yet.',
+      label='Calls by tool') }}
 </section>
 
 <section class="panel">
@@ -44,11 +45,13 @@
        'detail_label': 'Arguments'},
       {'label': 'Result', 'key': 'result_summary'},
       {'label': 'Outcome', 'key': 'outcome_label', 'kind': 'badge'},
-      {'label': 'Error code', 'key': 'error_code'},
+      {'label': 'Why it stopped', 'key': 'error_code', 'kind': 'enum',
+       'help': 'Why the call did not return a result. A write held at the confirmation gate is a pause, not an error.'},
       {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms'},
       {'label': 'Actor', 'key': 'actor_employee_id'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
-      view.recent, 'No tool call matches these filters.') }}
+      view.recent, 'No tool call matches these filters.',
+      label='Recent tool calls') }}
 </section>
 {% endblock %}

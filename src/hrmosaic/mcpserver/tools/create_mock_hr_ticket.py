@@ -22,6 +22,7 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hrmosaic.core.db import now_micros
+from hrmosaic.core.queues import QUEUE_FALLBACK, QUEUE_LABELS, queue_label
 from hrmosaic.mcpserver import confirm
 from hrmosaic.mcpserver.server import WRITE, CallMeta, ServerDeps, envelope, read_meta, result
 from hrmosaic.mcpserver.tools.lookup_employee_profile import EMPLOYEE_ID
@@ -32,25 +33,10 @@ ID_PREFIX = "MOCK-HR-"
 Queue = Literal["hr-general", "hr-timeoff", "hr-benefits", "hr-mobility", "hr-relations", "it-equipment"]
 Priority = Literal["low", "normal", "high"]
 
-#: The name each queue goes by in front of a person (UX W2, jargon-and-exposure-6). The slug is a
-#: routing key: it is stored on the mock write, it is what the dashboard and `/api/*` show, and it
-#: is never what the confirmation card or an answer says. `queue_label()` is the one translation.
-QUEUE_LABELS: dict[str, str] = {
-    "hr-general": "HR",
-    "hr-timeoff": "HR Time Off team",
-    "hr-benefits": "HR Benefits team",
-    "hr-mobility": "HR Mobility team",
-    "hr-relations": "Employee Relations team",
-    "it-equipment": "IT Equipment team",
-}
-
-#: What an unmapped queue is called. A slug never reaches a reader, not even an unknown one.
-QUEUE_FALLBACK = "HR"
-
-
-def queue_label(queue: str) -> str:
-    """`hr-timeoff` → `HR Time Off team`. Never returns the slug."""
-    return QUEUE_LABELS.get(queue, QUEUE_FALLBACK)
+#: `QUEUE_LABELS`, `QUEUE_FALLBACK` and `queue_label()` are re-exported from `core/queues.py`, where
+#: the map moved at UX W6: `agent/outcome.py` writes the completed write's sentence and may not
+#: import `hrmosaic.mcpserver`, so the one lookup this card uses had to be reachable from `core/`
+#: (cpux-re-2). Every import site of this module is unchanged.
 
 
 class TicketOutput(BaseModel):

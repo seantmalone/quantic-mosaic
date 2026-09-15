@@ -28,8 +28,9 @@
       {'label': 'Tokens in', 'key': 'tokens_in', 'kind': 'num'},
       {'label': 'Tokens out', 'key': 'tokens_out', 'kind': 'num'},
       {'label': 'Estimated cost', 'key': 'est_cost_usd', 'kind': 'usd',
-       'help': 'Token counts times the committed price table (§9.8) — never a billed amount.'}],
-      view.by_model, 'No model call recorded yet.') }}
+       'help': 'Token counts times the committed price table — never a billed amount.'}],
+      view.by_model, 'No model call recorded yet.',
+      label='Model calls by model') }}
   <p class="note">Cost is an estimate from the recorded token counts and the committed price table.</p>
 </section>
 
@@ -54,6 +55,7 @@
       {'label': 'Provider', 'key': 'provider'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
-      view.rows, 'No model call matches these filters.') }}
+      view.rows, 'No model call matches these filters.',
+      label='Recent model calls') }}
 </section>
 {% endblock %}

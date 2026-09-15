@@ -43,6 +43,7 @@
      'help': 'Safety checks that did not simply allow the turn. Every check that ran is on the session page.'},
     {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
     {'label': 'Session', 'key': 'session_id', 'kind': 'id', 'href_prefix': '/dashboard/sessions/'}],
-    view.rows, 'No turn matches these filters.') }}
+    view.rows, 'No turn matches these filters.',
+      label='Questions and answers') }}
 {{ t.pager(view.page, view.total, page_size, filter_query) }}
 {% endblock %}

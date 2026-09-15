@@ -52,7 +52,8 @@
         {% with turn = item.turn, question = item.question, as_of = item.as_of, as_of_human = item.as_of_human,
                 produced = item.produced,
                 sent_at = item.sent_at, sent_at_human = item.sent_at_human, sent_at_full = item.sent_at_full,
-                decision_line = item.decision_line, labelled = item.labelled, quick_replies = item.quick_replies,
+                decision_line = item.decision_line, labelled = item.labelled, next_steps = item.next_steps,
+                quick_replies = item.quick_replies,
                 block_headings = item.block_headings, suggestion_footnote = item.suggestion_footnote,
                 citations_by_id = item.citations_by_id, confirm_fields = item.confirm_fields %}
         {% include "_turn.html" %}
@@ -190,6 +191,11 @@
       messageBox.style.height = Math.min(messageBox.scrollHeight, 200) + "px";
     }
     messageBox.addEventListener("input", autogrow);
+    // …and once on load. The box is one row of `min-height: 2.75rem`, and at 390px the placeholder
+    // wraps to two lines inside it, so the composer opened clipped on every phone (UX W6,
+    // cpux-re-7). `autogrow` was bound to `input` and called in `htmx:afterSwap` and never on the
+    // state the reader actually arrives in.
+    autogrow();
 
     // Enter sends, Shift+Enter (and Alt+Enter) writes a new line. Without this the only way to
     // send was the button, and Enter silently grew the box (chat-production-ux-3).
@@ -373,10 +379,30 @@
     // that regressed the at-rest chat screen on every desktop viewport (UX W3 review, finding 2)
     // and made the collapse depend on JavaScript for no gain.
 
+    // -- the conversation's own address (UX W6, nav-reaudit-1 / navigation-and-ia-16) ------
+    //
+    // Chat used to live at `/` for the whole session, so following a citation — the most inviting
+    // link in an answer, six of them per answer — and pressing Back landed on an un-rehydrated `/`
+    // with 0 turns. The transcript was never lost (`/?session=<id>` replays it, and the dashboard
+    // half of the round trip has linked that way since W1); chat simply never told the browser
+    // which conversation it was showing. `replaceState` adds no history entry: Back still goes
+    // where the reader came from, and now finds the conversation there.
+    function rememberSession(sessionId) {
+      if (!sessionId || !window.history || !window.history.replaceState) { return; }
+      var url = "/?session=" + encodeURIComponent(sessionId);
+      if (window.location.pathname + window.location.search === url) { return; }
+      try {
+        window.history.replaceState(window.history.state, "", url);
+      } catch (error) { /* a sandboxed frame — the page is still correct, Back is not */ }
+    }
+
     document.body.addEventListener("htmx:afterSwap", function (event) {
       var turns = document.querySelectorAll("#messages .turn");
       var lastTurn = turns[turns.length - 1];
-      if (lastTurn) { sessionField.value = lastTurn.dataset.sessionId || ""; }
+      if (lastTurn) {
+        sessionField.value = lastTurn.dataset.sessionId || "";
+        rememberSession(lastTurn.dataset.sessionId);
+      }
       describeLastTurn(lastTurn);
       // The announcement is painted from the turn that just landed, not only from the SSE frame
       // that preceded it: a short turn (a clarification, a refusal, a failure) can finish before

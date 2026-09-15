@@ -22,6 +22,8 @@ from html import escape
 
 import pytest
 
+from hrmosaic.web.dashboard import RULE_LABELS
+
 pytestmark = pytest.mark.anyio
 
 HTMX = {"HX-Request": "true"}
@@ -120,8 +122,14 @@ async def test_the_deep_link_appears_once_a_turn_exists_and_only_in_the_panel(we
     assert not DEEP_LINK.search(_outside_the_panel(reloaded)), "and it is offered nowhere else"
 
 
-async def test_a_demo_prompt_is_the_question_it_asks_and_only_fills_the_box(web):
-    """navigation-and-ia-19 / jargon-and-exposure-11: `Demo 1 — …`, and a click that submitted it."""
+async def test_a_demo_prompt_is_named_for_its_question_and_only_fills_the_box(web):
+    """navigation-and-ia-19 / jargon-and-exposure-11: `Demo 1 — …`, and a click that submitted it.
+
+    The label is short since UX W6 (dgc-re-3): the buttons printed both prompts verbatim, two
+    three-line sentences, which is most of what filled the panel at 390px where §3.7 draws a short
+    label. The prompt itself is unchanged and still goes into the composer, where the reader reads
+    and edits it before sending — which is the half this test has always been about.
+    """
     from hrmosaic.web import api
 
     async with web() as client:
@@ -129,12 +137,12 @@ async def test_a_demo_prompt_is_the_question_it_asks_and_only_fills_the_box(web)
 
     panel = _panel(html)
     labels = [label.strip() for label in re.findall(r'class="button demo-button"[^>]*>(.*?)</button>', panel, re.S)]
-    assert labels == [escape(prompt) for prompt in api.DEMO_PROMPTS.values()], (
-        "each button is labelled with the question it asks, in §18's own words"
+    assert labels == [escape(label) for label in api.DEMO_PROMPT_LABELS.values()], (
+        "each button carries §3.7's short label"
     )
     for prompt in api.DEMO_PROMPTS.values():
-        assert f'data-prompt="{escape(prompt)}"' in panel
-    assert "Demo 1" not in panel and "Demo 2" not in panel, "the button is the question, not its ordinal"
+        assert f'data-prompt="{escape(prompt)}"' in panel, "and §18's own words are what it fills the box with"
+    assert "Demo 1" not in panel and "Demo 2" not in panel, "the button is named for the question, not by its ordinal"
     # One delegated handler fills the composer for starters, quick replies and demo prompts alike;
     # none of them submits.
     handler = html.split('event.target.closest(".starter, .quick-reply, .demo-button")')[1].split("document.body")[0]
@@ -168,7 +176,14 @@ async def test_the_environment_block_says_so_when_a_live_model_is_answering(web)
 
 
 async def test_the_panel_summarises_how_the_last_turn_was_produced(web):
-    """Plan §3.7 item 4: three counts, in plain language, with no identifier in them."""
+    """Plan §3.7 item 4: four counts, in plain language, with no identifier in them.
+
+    The safety-check clause names its unit and carries its denominator since UX W6 (JX-R7). It
+    counted guardrail **spans** and said *"7 safety checks passed"* while the Guardrails page one
+    click away said *"The six safety checks…"* and counted **rules** — two surfaces the plan built
+    to agree, contradicting, because G2 runs twice on a repaired turn. The turn's own duration is
+    the fourth count: §3.7 draws it and the line did not have it.
+    """
     async with web("demo_task_1.json") as client:
         turn = await client.post("/chat", json={"message": BERLIN}, headers=HTMX)
         session_id = re.search(r'data-session-id="([0-9a-f]+)"', turn.text).group(1)
@@ -177,7 +192,14 @@ async def test_the_panel_summarises_how_the_last_turn_was_produced(web):
     produced = re.search(r'data-produced="([^"]+)"', turn.text)
     assert produced, "the rendered turn carries the summary the panel shows"
     summary = produced.group(1)
-    expected = r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, \d+ safety checks? passed\."
-    assert re.fullmatch(expected, summary), summary
+    expected = (
+        r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, "
+        r"(?P<passed>\d+) of (?P<ran>\d+) safety checks? passed, "
+        r"in (under a second|\d+\.\d+ (seconds|minutes))\."
+    )
+    match = re.fullmatch(expected, summary)
+    assert match, summary
     assert "(s)" not in summary, "the plural follows the count (P9)"
+    assert int(match.group("ran")) <= len(RULE_LABELS), "a check is one of the six rules, not one span"
+    assert int(match.group("passed")) <= int(match.group("ran")), summary
     assert summary in _panel(reloaded), "and a replayed conversation shows the same sentence"

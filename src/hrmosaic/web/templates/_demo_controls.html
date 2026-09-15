@@ -14,6 +14,11 @@
   `tests/contract/test_demo_controls_are_quarantined.py` is **P8**: `#actor-select`, `.demo-button`
   and any `/dashboard/…#turn-` link exist inside `section.demo-panel` and inside nothing else.
 
+  **What is outside the collapse.** The "Act as" persona group (UX W6, dgc-re-2): the owner decided
+  the picker stays always visible, and everything else in here is something a grader opens the panel
+  to reach. Everything else — the two scripted prompts, this conversation's deep link, the
+  environment disclosure and the demo sign-out — is inside it.
+
   **Why a collapsed `<details>`, and why two columns.** `body.chat` has a definite height (P11: the
   transcript scrolls, the document does not grow), so this panel and the composer take their room
   out of the transcript's. Expanded it needs ~390px, which is more than the whole empty state
@@ -31,7 +36,8 @@
   control may say grader things. A nested `</section>` would end that cut early and expose the rest
   of the panel to the guard, so the groups below are `<div>`s.
 
-  Context: `employees`, `actor`, `demo_prompts`, `demo_environment`, `transcript`, `gate_on`.
+  Context: `employees`, `actor`, `demo_prompts`, `demo_prompt_labels`, `demo_environment`,
+  `transcript`, `gate_on`.
 #}
 <section class="demo-panel">
   <details id="demo-details">
@@ -43,34 +49,14 @@
     </summary>
 
     <div class="demo-body">
-      {#- Moved out of the masthead at W1 and given its real home here. The id and the name are
-          unchanged: `POST /session/actor` and the contract tests both key on them. -#}
-      <div class="demo-group">
-        <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select"
-              hx-on::after-request="window.location.reload()">
-          <label for="actor-select">Act as</label>
-          <select id="actor-select" name="actor" aria-label="Act as">
-            {% for employee in employees %}
-            {#- Id and name only. With the job title too, the native control cut the label mid-word
-                inside the two-column panel body — "E1042 — Priya Raghavan, Senio" (UX W3 review). #}
-            <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
-              {{ employee.employee_id }} — {{ employee.name }}
-            </option>
-            {% endfor %}
-            <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
-          </select>
-        </form>
-      </div>
-
       <div class="demo-group">
         <h3>Try a demo prompt — each one fills the question box above</h3>
         <div class="demo-actions">
-          <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
-            {{ demo_prompts.demo_1 }}
-          </button>
-          <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
-            {{ demo_prompts.demo_2 }}
-          </button>
+          {#- The label is short; the prompt is what lands in the composer (UX W6, dgc-re-3). -#}
+          <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}"
+                  title="{{ demo_prompts.demo_1 }}">{{ demo_prompt_labels.demo_1 }}</button>
+          <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}"
+                  title="{{ demo_prompts.demo_2 }}">{{ demo_prompt_labels.demo_2 }}</button>
         </div>
       </div>
 
@@ -99,6 +85,32 @@
       {% endif %}
     </div>
   </details>
+
+  {#- **Always visible**, outside the collapsible part (UX W6, dgc-re-2). The owner's decision is
+      that "the persona picker stays always visible inside the demo panel", and §3.6 scoped the
+      collapse to 390px; the panel shipped closed at every viewport, so a grader's first move —
+      choosing who they are — was behind a click on every screen. It sits below the summary so that
+      the sentence saying who these controls are not for is read before the control.
+
+      Moved out of the masthead at W1. The id and the `name` are unchanged: `POST /session/actor`
+      and the contract tests both key on them. -#}
+  <div class="demo-group demo-persona">
+    <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select"
+          hx-on::after-request="window.location.reload()">
+      <label for="actor-select">Act as</label>
+      <select id="actor-select" name="actor" aria-label="Act as">
+        {% for employee in employees %}
+        {#- The person's name. It led with the employee id, which is the one token P2 keeps off
+            this surface everywhere else (UX W6, JX-R9); the id is still the option's `value`,
+            which is what the form posts and what every test selects on. #}
+        <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
+          {{ employee.name }}
+        </option>
+        {% endfor %}
+        <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
+      </select>
+    </form>
+  </div>
 
   {# The panel ships collapsed on every page load, but a grader who opened it should not have to
      open it again on the next question. The *default* stays closed — only an explicit open is

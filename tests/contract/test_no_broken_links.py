@@ -57,8 +57,33 @@ async def test_every_href_on_an_answered_turn_resolves_for_the_default_persona(w
     assert all(200 <= status < 300 for status in results.values()), results
 
 
+#: Every dashboard page §11.6 defines, plus the two detail routes that are only reachable with data
+#: behind them. `/dashboard/evals/{run}` is the one that mattered: the crawl visited five routes and
+#: never an eval-run detail, which is how 52 dead links per run page shipped green (UX W6,
+#: nav-reaudit-3 / **P5**).
+DASHBOARD_PAGES = (
+    "/dashboard",
+    "/dashboard/sessions",
+    "/dashboard/turns",
+    "/dashboard/llm",
+    "/dashboard/retrieval",
+    "/dashboard/tools",
+    "/dashboard/safety",
+    "/dashboard/mcp",
+    "/dashboard/corpus",
+    "/dashboard/evals",
+)
+
+
 async def test_every_href_the_dashboard_offers_resolves_for_the_default_persona(web, store):
-    """Including `Export JSON` and the `Continue this conversation in chat` action."""
+    """Every `/dashboard/*` page, the session detail, **and an eval-run detail**.
+
+    Including `Export JSON` and the `Continue this conversation in chat` action. The eval-run page
+    is the reason this list is a list: its runs are imported from committed fixtures whose turns
+    were never written into this store, so every `Trace` chip and every session pill it offered was
+    a 404 — 52 of them on one page — and the crawl that was supposed to catch exactly this class of
+    defect had never visited the route.
+    """
     from pathlib import Path
 
     from hrmosaic.core import archive
@@ -70,7 +95,11 @@ async def test_every_href_the_dashboard_offers_resolves_for_the_default_persona(
         archive.import_results(store=store, results_dir=eval_runs)
         session_id = turn.json()["session_id"]
 
-        pages = ("/dashboard", "/dashboard/sessions", f"/dashboard/sessions/{session_id}")
+        runs = _links((await client.get("/dashboard/evals")).text)
+        run_pages = [href for href in runs if href.startswith("/dashboard/evals/")]
+        assert run_pages, "the imported runs give the crawl an eval-run detail to visit"
+
+        pages = (*DASHBOARD_PAGES, f"/dashboard/sessions/{session_id}", run_pages[0])
         results: dict[str, int] = {}
         for url in pages:
             body = (await client.get(url)).text
@@ -78,7 +107,37 @@ async def test_every_href_the_dashboard_offers_resolves_for_the_default_persona(
                 results[href] = (await client.get(href)).status_code
 
     assert f"/?session={session_id}" in results, "the session page offers the way back to chat"
-    assert all(200 <= status < 300 for status in results.values()), results
+    assert all(200 <= status < 300 for status in results.values()), {
+        href: status for href, status in results.items() if not 200 <= status < 300
+    }
+
+
+async def test_following_a_citation_and_coming_back_keeps_the_conversation(web):
+    """**P5 / nav-reaudit-1**, the round trip the re-audit called the most-travelled path there is.
+
+    Six citations per answer, each one an ordinary `href`. Chat now writes `?session=<id>` into its
+    own URL after the first turn, the reader offers an explicit way back to that URL, and the URL
+    replays the transcript — so Back, reload and the reader's own link all land on the conversation
+    rather than on an empty composer.
+    """
+    async with web("demo_task_1.json") as client:
+        turn = await client.post("/chat", json={"message": TOOL_USING_QUESTION}, headers=HTMX)
+        assert turn.status_code == 200, turn.text
+        session_id = re.search(r'data-session-id="([0-9a-f]+)"', turn.text).group(1)
+
+        citation = next(href for href in _links(turn.text) if href.startswith("/policy/"))
+        reader = await client.get(citation.partition("#")[0])
+        assert reader.status_code == 200
+
+        back = re.search(r'class="back-to-chat" href="([^"]+)"', reader.text)
+        assert back, "the reader offers an explicit way back to the conversation"
+        assert back.group(1) == f"/?session={session_id}", back.group(1)
+
+        conversation = await client.get(back.group(1))
+
+    assert conversation.status_code == 200
+    assert f'data-session-id="{session_id}"' in conversation.text, "the transcript is still rendered"
+    assert conversation.text.count('class="turn"') == 1, "one turn, replayed once"
 
 
 async def test_the_policy_reader_anchors_every_chunk_a_citation_can_name(web):

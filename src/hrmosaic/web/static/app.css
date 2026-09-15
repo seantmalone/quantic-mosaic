@@ -37,6 +37,16 @@ a { color: var(--accent); }
   outline: 2px solid transparent; outline-offset: 2px;
   box-shadow: var(--focus-ring); border-radius: var(--radius-tile);
 }
+/* `<input type="date">` delegates focus into its own shadow fields, so `:focus-visible` never
+   matches the host element and the ring above is never painted on it. Measured on
+   `/dashboard/sessions`, where the two date filters were the only stops on the keyboard walk with
+   no indicator at all — and the only reason nobody had seen it is that the suite had never walked
+   a page with a filter bar (UX W6). `:focus-within` is the same ring on the control the reader is
+   actually standing in. */
+input:focus-within {
+  outline: 2px solid transparent; outline-offset: 2px;
+  box-shadow: var(--focus-ring); border-radius: var(--radius-tile);
+}
 
 .visually-hidden {
   position: absolute;
@@ -145,6 +155,13 @@ a { color: var(--accent); }
      at 800px of viewport height — see the `min-width: 48rem` block. */
   max-height: 45vh; overflow-y: auto;
 }
+/* ...but not on a phone. At 390px the groups are one column, the panel is exactly 380px, and the
+   deep link, the environment disclosure and the demo sign-out sat behind an inner scroll with no
+   affordance at all — the rule the comment above states, broken by the block that states it
+   (UX W6, dgc-re-1). The cap exists so an open panel cannot push the composer off a short
+   viewport; on a phone the answer is to let the page scroll instead. */
+/* The cap does not apply on a phone: see the `max-width: 30rem` block further down, where the
+   whole chat column stops being a fixed-height box (UX W6, dgc-re-1). */
 .demo-panel h2 { margin: 0; font: var(--text-h3); display: inline; }
 .demo-summary { cursor: pointer; list-style-position: outside; }
 .demo-summary::marker { color: var(--ink-soft); }
@@ -153,6 +170,8 @@ a { color: var(--accent); }
 .demo-note { margin: var(--space-1) 0 0; font: var(--text-meta); color: var(--ink-soft); }
 .demo-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
 .demo-group { margin-top: var(--space-4); }
+/* Outside the collapse and therefore outside `.demo-body`'s two columns (UX W6, dgc-re-2). */
+.demo-persona { margin-top: var(--space-3); }
 /* Two balanced columns once there is width for them. Expanded, this panel spends the transcript's
    height budget, and the conversation is what the page is for (P11) — which is why it ships
    collapsed. Two columns are what make the opened panel 390px instead of 642px, and 390px is what
@@ -212,7 +231,25 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   width: 100%; max-width: var(--measure); margin-inline: auto;
 }
 
-.transcript { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: var(--space-1); }
+/* The transcript is the page's scroll container, and it says so. It had no affordance at all —
+   no scrollbar, no fade, no hint — so an answer taller than the box was clipped mid-glyph at the
+   top edge with nothing to suggest there was more (UX W6, cpux-re-6). The dashboard's tables got
+   exactly this treatment one wave earlier (`.table-scroll`); the primary surface was skipped. The
+   shades are self-cancelling: `background-attachment: local` scrolls the paper-coloured half away
+   at each end, so the shadow only shows on the side there is more to see. */
+.transcript {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding-right: var(--space-2);
+  scrollbar-width: thin;
+  background:
+    linear-gradient(var(--paper) 30%, transparent) top / 100% 2.5rem no-repeat,
+    linear-gradient(to top, var(--paper) 30%, transparent) bottom / 100% 2.5rem no-repeat,
+    radial-gradient(farthest-side at 50% 0, var(--edge-shade), transparent) top / 100% 0.7rem no-repeat,
+    radial-gradient(farthest-side at 50% 100%, var(--edge-shade), transparent) bottom / 100% 0.7rem no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+.transcript::-webkit-scrollbar { width: 0.55rem; }
+.transcript::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 .messages { display: flex; flex-direction: column; gap: var(--space-5); }
 
 /* -- the empty state (chat-production-ux-1) ------------------------------------------ */
@@ -251,7 +288,9 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 .speaker-mark {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.25rem; height: 1.25rem;
-  font: var(--text-eyebrow); letter-spacing: 0;
+  /* The type floor, not the eyebrow ramp: `--text-eyebrow` is 0.75rem, and this is the one place
+     it is painted as visible text rather than as a visually-hidden label (UX W6). */
+  font: var(--text-meta); letter-spacing: 0;
   color: var(--on-accent); background: var(--accent); border-radius: var(--radius-tile);
 }
 /* When the turn was said, and one control over what it said. Both sit at the quiet end of the
@@ -342,6 +381,18 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 .turn-status:empty { display: none; }
 .turn-status::before { content: "●"; color: var(--accent); }
 
+/* A write that has happened, in the turn's own voice — above the facts, outside the suggestions
+   group and outside its "guidance, not company policy" footnote (UX W6, JX-R1 = cpux-re-1). It is
+   the one sentence on the page that reports an irreversible thing, so it is the one sentence with
+   a rule beside it. */
+.answer-performed {
+  margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+  border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-tile);
+}
+/* The reader's way back to the conversation that sent it there (UX W6, nav-reaudit-1). */
+.back-to-chat { color: var(--accent); }
+
 .turn-pending { margin-top: var(--space-5); }
 .turn-provisional { border-style: dashed; background: var(--sunk); }
 
@@ -390,21 +441,22 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
    was a 29px `Chat | Dashboard` switch, a 30.6px page nav, 21px links inside table cells and a
    21px `Export this page as JSON`.
 
-   `inline-flex` is on the anchors because `min-height` does nothing to an inline box; the links
-   inside prose (`.crumbs`, `.source-link`, a note's `<a>`) are deliberately NOT in this list —
-   those are inline targets, which the success criterion exempts, and boxing them would break the
-   sentences they sit in. */
+   **UX W6 (a11y-reaudit-1).** The list used to be hand-written class names, and it named every
+   control the plan had thought of and none of the ones the plan added: 14 of 24 hittable controls
+   on chat with an answer on screen were under 44px, 14 of 17 on `/policy`, 32 of 56 on a session
+   page — six source `<summary>` at 302x21, six `Open the full policy` at 127x16, `Copy answer` at
+   96x21. The rule is now written against what an element **is**. A control the next wave adds is
+   covered on the day it is added, which an allow-list can never be.
+
+   `inline-flex` is on the anchors and buttons because `min-height` does nothing to an inline box.
+   `<summary>` is `display: list-item`, which is already a block box — and giving it a flex display
+   would take its disclosure marker away — so it takes the height and keeps its display. */
 @media (max-width: 40rem) {
-  .nav-switch-link, .nav-link, .dash-nav-link, .tab, .export-json, .active-filter,
-  .button, .data-table td a, .pager a,
-  .actor-form select, .filter-field input, .filter-field select,
-  .control-form input, .control-form select {
+  a[href], button, summary, select, textarea,
+  input:not([type="hidden"]), [role="button"], [tabindex="0"] {
     min-height: 44px;
   }
-  .nav-switch-link, .dash-nav-link, .export-json, .active-filter, .data-table td a, .pager a,
-  a.button {
-    display: inline-flex; align-items: center;
-  }
+  a[href], button, [role="button"] { display: inline-flex; align-items: center; }
   /* A checkbox is 13px of painted control and no text, but the whole `<label>` around it is its
      click target — so the label is what has to be 44px, not the box. Blowing the box up instead
      gave the span-kind toggles four enormous blue squares. */
@@ -413,12 +465,37 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 
 /* -- chat on a phone (§3.6): one column, composer on the bottom edge ------------------ */
 @media (max-width: 30rem) {
-  .layout { padding: var(--space-3) var(--space-3) var(--space-4); gap: var(--space-3); }
+  /* **The page scrolls, not the transcript.** With the 45vh cap the open demo panel hid the deep
+     link, the environment disclosure and the demo sign-out behind an inner scroll with no
+     affordance at all (UX W6, dgc-re-1); without a cap, inside a definite-height column, it simply
+     took the whole of the transcript's height instead. A phone is a document: the column stops
+     being fixed-height, the transcript stops being a scroll box, and the composer stays reachable
+     because it is `position: sticky` on the page rather than on a box inside it. */
+  body.chat { height: auto; min-height: 100dvh; }
+  .layout, .conversation { flex: none; }
+  .transcript { flex: none; overflow-y: visible; background: none; padding-right: 0; }
+  /* The always-visible persona picker (dgc-re-2) costs the collapsed panel about fifty pixels, and
+     a phone's first screen does not have fifty pixels spare: at 390x844 the fourth starter question
+     went off the bottom. Every one of these is padding, and together they are the fifty pixels
+     back — `test_p8_the_panel_ships_collapsed_…` measures all four starters in view. */
+  .demo-panel { max-height: none; overflow-y: visible; padding: var(--space-1) var(--space-3); }
+  .demo-note { margin-top: 0; }
+  .demo-persona { margin-top: var(--space-2); }
+  /* The masthead wrapped to three stacked rows inside the sticky container, so total pinned
+     chrome reached 224px — 27% of a 390x844 viewport, larger than the 163px the plan had measured
+     as the defect (UX W6, a11y-reaudit-4). One wrapping row of controls beside a smaller lockup,
+     with the padding a phone can afford. */
+  .masthead { padding: var(--space-2) var(--space-3); gap: var(--space-2); }
+  .wordmark-lockup { height: 20px; }
+  .masthead-nav { flex: 1 1 auto; justify-content: flex-end; gap: var(--space-1); }
+  .identity-chip { max-width: 9rem; }
+  .layout { padding: var(--space-3) var(--space-3) var(--space-4); gap: var(--space-2); }
   /* Holding the masthead's controls to 44px (UX W5) costs the transcript about twenty pixels, and
      the greeting's generous top padding is where they come back from: at 390x844 all four starter
      questions stay inside the transcript, which `test_p8_the_panel_ships_collapsed_…` measures. */
-  .empty-state { padding: var(--space-4) 0 var(--space-3); }
-  .empty-lede { margin-bottom: var(--space-4); }
+  .empty-state { padding: var(--space-2) 0 var(--space-2); }
+  .empty-lede { margin-bottom: var(--space-3); }
+  .starters { gap: var(--space-1); }
   .message-user { max-width: 92%; }
   .composer { margin-inline: calc(var(--space-3) * -1); border-radius: var(--radius-bar); border-left: 0; border-right: 0; }
   .composer-hint { flex-basis: 100%; }
@@ -594,6 +671,9 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
   white-space: nowrap;
 }
 .data-table td.cell-text, .data-table td.cell-code { max-width: 24rem; overflow-wrap: anywhere; }
+/* The headline-metrics table's run column: one line, so the label and the timestamp beside it stop
+   setting the height of every row (UX W6). The timestamp is the cell's `title`. */
+.data-table td.cell-run { white-space: nowrap; }
 .empty-row td { padding: 1rem; text-align: center; }
 
 /* An id is a chip at the end of the row, not the widest column at the front of it. The full value
@@ -638,7 +718,21 @@ a .id-chip { color: var(--accent); }
   }
   .data-table td.cell-text { text-align: left; }
   .detail-row td::before, .empty-row td::before { content: none; }
+
+  /* Column priority (UX W6, dr-new-5). Thirteen columns is thirteen lines per card: Model calls
+     ran 1,871→9,766px on a phone and Evaluations 2,339→10,707px, which is a page nobody scrolls
+     to the end of. The `lead` columns are the card; the `detail` ones are behind the card's own
+     `<details>`; `hide` is on the page and in Export JSON but not on a thumb. */
+  .data-table td[data-mobile="hide"] { display: none; }
+  .data-table td[data-mobile="detail"] { display: none; }
+  .data-table tbody tr:has(.card-detail[open]) td[data-mobile="detail"] { display: flex; }
+  /* `.data-table td` (0,1,1) already beats `.card-toggle` (0,1,0) inside this block, so the cell
+     is painted here and hidden everywhere else by the rule below. */
+  .card-detail > summary { font: var(--text-meta); color: var(--ink-soft); cursor: pointer; }
+  .data-table td.card-toggle::before { content: none; }
 }
+/* The card's disclosure exists only on a phone: a table that is a table needs no "more". */
+.card-toggle { display: none; }
 
 .pager { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.75rem; font: var(--text-small); }
 .pager-state { color: var(--ink-soft); margin-right: auto; }
@@ -726,7 +820,15 @@ a .id-chip { color: var(--accent); }
 .reader-contents { margin: 0 0 1.5rem; padding: 0.75rem 1rem; background: var(--paper); border-radius: var(--radius); }
 .reader-contents h3 { margin: 0 0 0.4rem; font-size: var(--text-floor); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
 .reader-contents ol { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; }
-.reader-section { scroll-margin-top: 5.5rem; }
+/* The measured chrome, not a guess: 5.5rem was right at 1440 and 100px short of the three-row
+   masthead at 390px, so every citation landed behind it (UX W6, nav-reaudit-2). */
+.reader-section { scroll-margin-top: calc(var(--dash-nav-h, 6rem) + 0.75rem); }
+.reader-back { margin: 0 0 0.75rem; font: var(--text-small); }
+.reader-passage p { margin: 0 0 0.6rem; }
+.reader-passage p:last-child, .reader-passage ul:last-child, .reader-passage ol:last-child { margin-bottom: 0; }
+.reader-passage ul, .reader-passage ol { margin: 0 0 0.6rem; padding-left: 1.2rem; }
+.reader-passage li { margin: 0 0 0.2rem; }
+.reader-passage code { font-family: var(--mono); font-size: var(--text-floor); }
 .reader-section h3 { margin: 1.4rem 0 0.35rem; font-size: 1rem; color: var(--accent); }
 .reader-section p { margin: 0; }
 .reader-section:target { background: var(--accent-soft); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
@@ -877,11 +979,17 @@ a .id-chip { color: var(--accent); }
 .sandbox-reset button { color: var(--danger); border-color: var(--danger); background: var(--card); }
 .sandbox-reset button[disabled] { color: var(--ink-soft); border-color: var(--line); cursor: not-allowed; }
 .trace-link { color: var(--accent); }
-canvas { max-width: 100%; margin: 0.5rem 0 1rem; }
 /* Every canvas on the dashboard sits in one of these, with the numbers it plots in a
-   visually-hidden `<figcaption>` beside it (UX W5, accessibility-and-responsive-19). The
-   figure itself is a wrapper and carries no margin of its own — the canvas already has one. */
-.chart-figure { margin: 0; }
+   visually-hidden `<figcaption>` beside it (UX W5, accessibility-and-responsive-19).
+
+   The figure is the chart's **sizing box** (UX W6, npo2-01 / dr-new-1). Chart.js sizes a
+   responsive canvas from its parent, and the parent was a bare `<figure>` with no dimensions of
+   its own — so every plot fell back to the canvas's own `height=` attribute and its 2:1 default
+   aspect ratio and painted ~300px wide inside a ~1380px panel, with five of the six guardrail
+   rule names simply not drawn. A definite height plus `width: 100%` here, `maintainAspectRatio:
+   false` on each chart, and the plot fills the panel it was relocated to. */
+.chart-figure { position: relative; width: 100%; height: 16rem; margin: 0 0 1rem; }
+.chart-figure canvas { width: 100% !important; height: 100% !important; }
 
 /* The session page renders the answer from `answer_blocks` — the typed sections the turn stored —
    rather than flattening them into one paragraph with `- ` markers inline

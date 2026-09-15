@@ -24,9 +24,14 @@
       <span class="kpi-label">Conversations (24 h)</span>
       <span class="kpi-sub" data-kpi="sessions_total">{{ view.kpis.sessions_total|num }} all time</span>
     </div>
+    {#- The tile counts turns, so it says turns. "Questions answered" over the same figure the
+        error-rate tile uses as its *turns* denominator disagreed with `/dashboard/turns`, which
+        listed two of the five as answered (UX W6, npo2-03 = dr-new-2). -#}
     <div class="kpi" data-kpi="turns">
       <span class="kpi-value">{{ view.kpis.turns|num }}</span>
-      <span class="kpi-label">Questions answered</span>
+      <span class="kpi-label">Questions asked</span>
+      <span class="kpi-sub" data-kpi="answered_turns">{{ view.kpis.answered_turns|num }} of
+        {{ view.kpis.turns|counted('turn') }} answered</span>
     </div>
     <div class="kpi" data-kpi="tool_calls">
       <span class="kpi-value">{{ view.kpis.tool_calls|num }}</span>
@@ -93,10 +98,10 @@
 {# Why every cost tile reads `$0.00`: the provider is a recorded script, so nothing was ever
    billed. Without this line the zeros read as a broken meter (`dashboard-readability-14`). The
    model is named only when it is not the provider's own name. #}
-<p class="note">Answers come from <strong>{{ view.health.llm_provider }}</strong>{% if
+<p class="note">Answers come from <strong>{{ view.health.provider_label }}</strong>{% if
   view.health.llm_model != view.health.llm_provider %} ({{ view.health.llm_model }}){% endif %}.
   Every cost figure is an <strong>estimate</strong> from the
-  per-call token counts and the committed price table (§9.8) — never a billed amount, and
+  per-call token counts and the committed price table — never a billed amount, and
   <strong>$0.00</strong> on a recorded-script run because no call was ever billed.</p>
 
 <section class="panel">
@@ -106,7 +111,7 @@
      plots are the table below it, visually hidden, through the same filters the rest of the page
      uses — so what is spoken and what is printed are one convention (P10). #}
   <figure class="chart-figure">
-    <canvas id="chart-turns-per-hour" height="90" aria-hidden="true"></canvas>
+    <canvas id="chart-turns-per-hour" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">
       <table>
         <caption>Turns per hour, the last 24 hours (UTC)</caption>
@@ -133,11 +138,13 @@
     <div><dt>Tools</dt><dd>{{ view.health.tool_count|num }}</dd></div>
     <div><dt>Documents</dt><dd>{{ view.health.doc_count|num }}</dd></div>
     <div><dt>Passages</dt><dd>{{ view.health.chunk_count|num }}</dd></div>
-    <div><dt>Trace store</dt><dd>{{ view.health.store_backend }}</dd></div>
-    <div><dt>Build</dt><dd class="mono">{{ view.health.git_sha[:12] }}</dd></div>
+    {#- `TRACE STORE / sqlite` was the last field on the dashboard naming its own implementation
+        (UX W6, JX-R11). What a reader wants to know is whether the record survives a restart. -#}
+    <div><dt>Conversation record</dt><dd>{{ view.health.store_backend|enum_label }}</dd></div>
+    <div><dt>Build</dt><dd><code class="id-chip" title="{{ view.health.git_sha }}">{{ view.health.git_sha|id_chip }}</code></dd></div>
     <div><dt>Uptime</dt><dd>{{ view.health.uptime_ms|ms }}</dd></div>
     <div><dt>Memory</dt><dd>{{ view.health.rss_mb|num }} MB</dd></div>
-    <div><dt>Employee data as of</dt><dd>{{ view.health.data_as_of }}</dd></div>
+    <div><dt>Employee data as of</dt><dd>{{ view.health.data_as_of|human_date }}</dd></div>
   </dl>
 </section>
 
@@ -157,7 +164,8 @@
     {'label': 'Client', 'key': 'client_label', 'kind': 'badge'},
     {'label': 'Error', 'key': 'has_error', 'kind': 'bool'},
     {'label': 'Session', 'key': 'session_id', 'kind': 'id', 'href_prefix': '/dashboard/sessions/'}],
-      view.latest_sessions, 'No conversation has been recorded yet.') }}
+      view.latest_sessions, 'No conversation has been recorded yet.',
+      label='Latest conversations') }}
 </section>
 
 <script>
@@ -179,6 +187,10 @@
                        fill: true, tension: 0.3, pointRadius: 2 }]
         },
         options: {
+          // The figure is the sizing box (app.css `.chart-figure`); without this the canvas keeps
+          // its own 2:1 aspect ratio and paints ~300px inside a ~1380px panel (UX W6, npo2-01).
+          responsive: true,
+          maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
             x: { title: { display: true, text: "Hour (UTC)" } },

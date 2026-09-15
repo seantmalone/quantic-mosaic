@@ -43,21 +43,34 @@
     <p class="speaker">
       <span class="speaker-mark" aria-hidden="true">M</span>Mosaic
       {% if sent_at %}<time class="speaker-time" datetime="{{ sent_at }}" title="{{ sent_at_full }}">{{ sent_at_human }}</time>{% endif %}
-      <button class="copy-answer" type="button">Copy answer</button>
+      {#- Only where there is an answer to copy. It was on every outcome, including a crash whose
+          whole body is "Something went wrong" and a clarifying question the reader has not
+          answered yet (UX W6, cpux-re-5). `labelled` is the same set the headings use. -#}
+      {% if labelled %}<button class="copy-answer" type="button">Copy answer</button>{% endif %}
     </p>
 
     {% if decision_line %}<p class="confirm-resolved">{{ decision_line }}</p>{% endif %}
 
     <div class="answer-body">
+    {% set performed = turn.answer_blocks | selectattr('type', 'equalto', 'performed') | list %}
     {% set facts = turn.answer_blocks | selectattr('type', 'equalto', 'policy_fact') | list %}
     {% set suggestions = turn.answer_blocks | selectattr('type', 'equalto', 'recommendation') | list %}
     {% set escalations = turn.answer_blocks | selectattr('type', 'equalto', 'escalation') | list %}
+
+    {#- A write that has happened is the first thing the reader is told, in its own voice: not a
+        policy statement, not a suggestion, and emphatically not under "What I suggest you do" with
+        "Suggestions are guidance, not company policy" under it, which is where a completed,
+        irreversible HR ticket was being filed (UX W6, JX-R1 = cpux-re-1). `agent/outcome.py` is the
+        only writer of this block type and it writes it from the tool result. -#}
+    {% for block in performed %}
+    <p class="answer-performed">{{ block.text|no_ids }}</p>
+    {% endfor %}
 
     {#- A cited fact is prose. The reference under it is the authority, and it is a friendly one:
         document title and section, never a chunk id. -#}
     {% for block in facts %}
     <div class="answer-block answer-block-policy_fact">
-      <p class="answer-text">{{ block.text }}</p>
+      <p class="answer-text">{{ block.text|no_ids }}</p>
       {% if block.citations %}
       <p class="answer-refs">
         {%- for chunk_id in block.citations %}{% set citation = citations_by_id.get(chunk_id) %}{% if citation -%}
@@ -70,34 +83,39 @@
 
     {#- `labelled` is `turn.outcome in (answered, escalated, partial)`. On every other outcome —
         refused, clarify, awaiting_confirmation, error — these blocks ARE the answer, and heading
-        them "What I suggest you do" is the badge defect in another font. -#}
-    {% if suggestions or turn.next_steps %}
+        them "What I suggest you do" is the badge defect in another font.
+
+        `next_steps` is NOT merged into this group. `api.rendered_next_steps()` returns them only
+        for a turn with no `recommendation` blocks — a refusal, a clarification, a crash — where the
+        steps are the recovery path and the whole of what there is to read; on an answered turn the
+        merge made a seven-bullet list where §3.3 wireframes two (UX W6, cpux-re-3 = JX-R15). -#}
+    {% if suggestions %}
       {% if labelled %}
       <section class="answer-block answer-block-recommendation">
         <h3 class="answer-block-heading">{{ block_headings.recommendation }}</h3>
         <ul class="answer-list">
-          {% for block in suggestions %}<li>{{ block.text }}</li>{% endfor %}
-          {% for step in turn.next_steps %}<li>{{ step }}</li>{% endfor %}
+          {% for block in suggestions %}<li>{{ block.text|no_ids }}</li>{% endfor %}
         </ul>
         <p class="answer-footnote">{{ suggestion_footnote }}</p>
       </section>
       {% else %}
       {% for block in suggestions %}
-      <div class="answer-block answer-block-recommendation"><p class="answer-text">{{ block.text }}</p></div>
+      <div class="answer-block answer-block-recommendation"><p class="answer-text">{{ block.text|no_ids }}</p></div>
       {% endfor %}
-      {% if turn.next_steps %}
-      <ul class="answer-list next-steps">
-        {% for step in turn.next_steps %}<li>{{ step }}</li>{% endfor %}
-      </ul>
       {% endif %}
-      {% endif %}
+    {% endif %}
+
+    {% if next_steps %}
+    <ul class="answer-list next-steps">
+      {% for step in next_steps %}<li>{{ step }}</li>{% endfor %}
+    </ul>
     {% endif %}
 
     {#- A refusal names five example policies and links the rest; before UX W3 it printed all
         fourteen titles in one sentence, which is an inventory at the moment a reader is least
         inclined to read one (jargon-and-exposure-3). A declined confirmation is also `refused`
         and carries no steps — it is not a coverage question and gets no library link. -#}
-    {% if turn.outcome == 'refused' and turn.next_steps %}
+    {% if turn.outcome == 'refused' and next_steps %}
     <p class="policy-library"><a href="/policy">See the full policy library</a></p>
     {% endif %}
 
@@ -105,11 +123,11 @@
       {% if labelled %}
       <section class="answer-block answer-block-escalation">
         <h3 class="answer-block-heading">{{ block_headings.escalation }}</h3>
-        {% for block in escalations %}<p class="answer-text">{{ block.text }}</p>{% endfor %}
+        {% for block in escalations %}<p class="answer-text">{{ block.text|no_ids }}</p>{% endfor %}
       </section>
       {% else %}
       {% for block in escalations %}
-      <div class="answer-block answer-block-escalation"><p class="answer-text">{{ block.text }}</p></div>
+      <div class="answer-block answer-block-escalation"><p class="answer-text">{{ block.text|no_ids }}</p></div>
       {% endfor %}
       {% endif %}
     {% endif %}
@@ -164,7 +182,10 @@
           <details class="source-details">
             <summary>{{ citation.doc_title }} · {{ citation.section }}</summary>
             <blockquote>{{ citation.snippet }}</blockquote>
-            <p class="source-more"><a class="source-link" href="{{ citation.source_url }}">Open the full policy</a></p>
+            {#- Named for the document it opens. Six links per answer whose entire accessible name
+                was "Open the full policy" is six controls a screen-reader user cannot tell apart
+                (UX W6, nav-reaudit-9). -#}
+            <p class="source-more"><a class="source-link" href="{{ citation.source_url }}">Open {{ citation.doc_title }}</a></p>
           </details>
         </li>
         {% endfor %}

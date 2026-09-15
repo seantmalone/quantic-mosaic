@@ -144,6 +144,84 @@ def scripted_server(tmp_path_factory, request) -> Iterator[str]:
         yield base_url
 
 
+#: The question every surface fixture asks, so that the dashboard has a real turn to render.
+DEMO_1 = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
+
+#: Every route the product paints, with three placeholders resolved by `surfaces` below. This is
+#: the whole surface: the two chat states, both reader routes, all thirteen dashboard pages and the
+#: themed 404. `tests/ux/test_accessibility.py` was parametrised over **three** of them
+#: (`"/"`, `"/dashboard"`, `"/dashboard/evals"`) — routes that return almost no small controls,
+#: which is why eight of the re-audit's ten regressions shipped green (UX W6).
+SURFACE_ROUTES = (
+    "/",
+    "{conversation}",
+    "/policy",
+    "{document}",
+    "/dashboard",
+    "/dashboard/sessions",
+    "{session}",
+    "/dashboard/turns",
+    "/dashboard/llm",
+    "/dashboard/retrieval",
+    "/dashboard/tools",
+    "/dashboard/safety",
+    "/dashboard/mcp",
+    "/dashboard/corpus",
+    "/dashboard/corpus/remote-and-hybrid-work",
+    "/dashboard/evals",
+    "{run}",
+    "{refused}",
+)
+
+
+@pytest.fixture(scope="session")
+def surface_server(tmp_path_factory) -> Iterator[str]:
+    """One server for the whole-surface suite, with one real answered turn behind it."""
+    with _serve(tmp_path_factory.mktemp("ux-surface"), "demo_task_1.json") as base_url:
+        yield base_url
+
+
+@pytest.fixture(scope="session")
+def surfaces(browser, surface_server) -> Iterator[dict[str, str]]:
+    """`{base_url, conversation, document, session, run, refused}` — the placeholders resolved.
+
+    One turn is asked here, once, so that `/dashboard/sessions/{id}` has a session, `/dashboard/*`
+    has rows to render and `/?session=` has a transcript. The eval-run route comes from the runs
+    `web/main.py` imports from `evaluation/results/` at boot.
+    """
+    context = browser.new_context(viewport={"width": 1440, "height": 900})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{surface_server}/?access={TOKEN}", wait_until="networkidle")
+        tab.fill("#message", DEMO_1)
+        tab.click("#send-button")
+        tab.wait_for_selector("#messages .turn", timeout=180_000)
+        tab.wait_for_timeout(1500)
+        session_id = tab.eval_on_selector("#messages .turn", "e => e.dataset.sessionId")
+        assert session_id, "the answered turn carries the session it belongs to"
+
+        tab.goto(f"{surface_server}/dashboard/evals", wait_until="networkidle")
+        run = tab.eval_on_selector("#eval-runs-table a[href^='/dashboard/evals/']", "e => e.getAttribute('href')")
+        assert run, "the committed evaluation runs are imported at boot"
+
+        yield {
+            "base_url": surface_server,
+            "conversation": f"/?session={session_id}",
+            "document": "/policy/remote-and-hybrid-work",
+            "session": f"/dashboard/sessions/{session_id}",
+            "run": run,
+            # The themed 404: a route shaped like a real one that names nothing (**P6**).
+            "refused": "/policy/no-such-policy",
+        }
+    finally:
+        context.close()
+
+
+def resolve(route: str, surfaces: dict[str, str]) -> str:
+    """`"{session}"` → `/dashboard/sessions/<id>`; a literal route is returned unchanged."""
+    return surfaces[route[1:-1]] if route.startswith("{") else route
+
+
 @pytest.fixture(scope="session")
 def browser() -> Iterator[object]:
     sync_api = pytest.importorskip(

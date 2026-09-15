@@ -16,8 +16,11 @@
       <dd><span class="flag flag-{{ 'yes' if view.connected else 'no' }}">{{ 'yes' if view.connected else 'no' }}</span></dd></div>
     <div><dt>Name</dt><dd>{{ view.server.name if view.server else '—' }}</dd></div>
     <div><dt>Version</dt><dd>{{ view.server.version if view.server else '—' }}</dd></div>
-    <div><dt>Transport</dt><dd><span class="pill">{{ view.transport }}</span></dd></div>
-    <div><dt>URL</dt><dd class="mono">{{ view.url or '—' }}</dd></div>
+    <div><dt>Transport</dt><dd><span class="pill">{{ view.transport|enum_label }}</span></dd></div>
+    {#- The internal address was published as a labelled field — `http://127.0.0.1:59074/…`, host,
+        random port and path (UX W6, JX-R5). What a reader needs is where the server runs; the URL
+        itself is in Export JSON, unchanged (P15). -#}
+    <div><dt>Where it runs</dt><dd>{{ view.url|server_location }}</dd></div>
     <div><dt>Protocol</dt><dd class="mono">{{ view.protocol_version or '—' }}</dd></div>
     <div><dt>Last live handshake</dt><dd>{{ view.handshake_ms|ms }}</dd></div>
     <div><dt>Discovered</dt><dd>{{ view.discovered_at|ts }}</dd></div>
@@ -63,6 +66,7 @@
       {'label': 'From cache', 'key': 'cached', 'kind': 'bool'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
-      view.handshake_history, 'No handshake has been recorded yet.') }}
+      view.handshake_history, 'No handshake has been recorded yet.',
+      label='Tool-server handshakes') }}
 </section>
 {% endblock %}

@@ -16,8 +16,8 @@ no "score unknown" branch, and `test_g1_evidence_gate.py` has a BM25-only case t
 The refusal is built **deterministically**, with no model call and, crucially, **no `tools/call`**:
 §13.4 scores `ToolPrecision = 1.0` when both the called and the expected tool sets are empty, so a
 refusal that issued a `list_policy_documents` call to find out what the corpus covers would score
-0.0 for exemplary behaviour. The redirect reads `core.corpusread.list_documents()` — the same
-read-only index the tool would have read — and the cached tool catalog the turn already discovered.
+0.0 for exemplary behaviour. Since UX W6 it reads nothing at all: the redirect names five fixed
+topic nouns and links `/policy`, which is where the inventory of documents lives.
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING, Protocol
 
 from hrmosaic.agent.guardrails import emit
 from hrmosaic.agent.guardrails.g5 import PEOPLE_OPS
-from hrmosaic.core import corpusread
 from hrmosaic.core.models import AnswerBlock, AnswerSchema
 from hrmosaic.settings import settings as default_settings
 
@@ -86,18 +85,22 @@ def evaluate(
     supporting = sum(1 for score in scores if score >= min_support_score)
     # Two decimal places, and a noun that agrees with its count (UX W4,
     # `numbers-precision-overflow-4`, `-15`): the score is a 0-1 cosine, three places said nothing
-    # a reader could use and `chunk(s)` is a plural nobody speaks. "best evidence score" names what
-    # the figure is — the best score of the evidence the gate accumulated, first-seen-wins — rather
-    # than describing the retriever that produced it.
+    # a reader could use and `chunk(s)` is a plural nobody speaks.
+    #
+    # "evidence-gate score" since UX W6 (npo2-06). The previous wording was a superlative over the
+    # same quantity the Retrieval table calls **Best match** — and it is routinely *lower*, because
+    # the gate scores the evidence accumulated at the moment it runs while the table shows each
+    # search's own maximum. Two names for one idea was the complaint; so is one name for two. This
+    # figure is the one the gate gates on, and it is now named that.
     passages = "passage" if supporting == 1 else "passages"
     if not scores:
         reason = NO_EVIDENCE
     elif top < min_evidence_score:
-        reason = f"{WEAK_EVIDENCE}: best evidence score {top:.2f} < {min_evidence_score:.2f}"
+        reason = f"{WEAK_EVIDENCE}: evidence-gate score {top:.2f} < {min_evidence_score:.2f}"
     elif supporting < 2:
         reason = f"{WEAK_EVIDENCE}: {supporting} {passages} at or above {min_support_score:.2f}, 2 required"
     else:
-        reason = f"best evidence score {top:.2f}, {supporting} supporting {passages}"
+        reason = f"evidence-gate score {top:.2f}, {supporting} supporting {passages}"
     return Verdict(
         passed=bool(scores) and top >= min_evidence_score and supporting >= 2,
         reason=reason,
@@ -136,23 +139,36 @@ def check(
     return verdict
 
 
-def coverage() -> list[str]:
-    """What the corpus covers, as `"Title"` strings, read from the real index — never a hard-coded list."""
-    return [document.doc_title for document in corpusread.list_documents()]
-
-
-#: How many of those titles the redirect actually names (UX W3, jargon-and-exposure-3).
+#: What the redirect offers a reader who has just been refused (UX W6, cpux-re-8 = JX-R8).
 #:
-#: It used to name all fourteen, in one semicolon-separated sentence that ran four lines at 1440px
-#: and eight on a phone — the longest single string on the chat surface, under a refusal, which is
-#: the moment a reader is least inclined to read a list. Five is an example, not an inventory: the
-#: reader route `/policy` lists the library in full and the refusal links to it.
-EXAMPLE_TOPIC_COUNT = 5
+#: Three shapes of this sentence have now been tried. All fourteen document titles, joined by
+#: semicolons, was the longest string on the chat surface at the moment a reader is least inclined
+#: to read a list (UX W3, jargon-and-exposure-3). Five of those titles, sliced from a query ordered
+#: `BY doc_id`, was worse in a way nobody noticed until the re-audit measured it: the slice is
+#: alphabetical, so it read *"Benefits and Open Enrollment Guide, Equipment & Asset Policy,
+#: Expenses & Reimbursement Policy, HR Escalation & Case Handling Policy and Leave of Absence
+#: Policy"* — structurally excluding PTO, remote work, travel and tax, which is every topic the
+#: product is demonstrated on and the four §3.5 names.
+#:
+#: These are **topics**, not titles: what a person would say they wanted to ask about, in five
+#: plain nouns. The inventory of documents is `/policy`, which the refusal links to beside them,
+#: and this list is deliberately fixed — a sample of a library ordered by its primary key is not a
+#: sample of what the library is about.
+EXAMPLE_TOPICS: tuple[str, ...] = (
+    "PTO and holidays",
+    "remote and hybrid work",
+    "travel and expenses",
+    "benefits",
+    "conduct",
+)
+
+#: How many topics the redirect names. Five is an example, not an inventory.
+EXAMPLE_TOPIC_COUNT = len(EXAMPLE_TOPICS)
 
 
-def example_topics(titles: Sequence[str] | None = None) -> list[str]:
-    """The first few covered titles, in the index's own order — a sample of the real library."""
-    return list(coverage() if titles is None else titles)[:EXAMPLE_TOPIC_COUNT]
+def example_topics() -> list[str]:
+    """The topics the refusal offers, in reading order."""
+    return list(EXAMPLE_TOPICS)
 
 
 def _sentence(titles: Sequence[str]) -> str:
@@ -170,7 +186,8 @@ def refusal(reason: str) -> AnswerSchema:
     block. The `next_steps` name a few of the documents that do exist, which is the redirect §7.4
     asks for, and since UX W2 they are **rendered**: the web layer used to build them and drop them,
     which is how the most useful half of a refusal never reached a reader (jargon-and-exposure-3).
-    Since UX W3 they name five example titles rather than all fourteen; the chat surface puts a
+    Since UX W3 they name five examples rather than all fourteen, and since UX W6 those five are
+    plain topic nouns rather than an alphabetical slice of document titles; the chat surface puts a
     *"See the full policy library"* link to `/policy` beside them, which is where an inventory
     belongs.
 
@@ -191,6 +208,7 @@ def refusal(reason: str) -> AnswerSchema:
 
 
 __all__ = [
+    "EXAMPLE_TOPICS",
     "EXAMPLE_TOPIC_COUNT",
     "NO_EVIDENCE",
     "OUT_OF_SCOPE",
@@ -199,7 +217,6 @@ __all__ = [
     "Scored",
     "Verdict",
     "check",
-    "coverage",
     "evaluate",
     "example_topics",
     "refusal",

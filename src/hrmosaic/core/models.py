@@ -354,7 +354,12 @@ class Citation(BaseModel):
 
 class AnswerBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    type: Literal["policy_fact", "recommendation", "escalation"]
+    #: `performed` is written by `agent/outcome.py` and by nothing else: it reports a write the
+    #: tool result shows actually happened, as the turn's lead sentence, outside the suggestions
+    #: group and outside its *"guidance, not company policy"* footnote (UX W6, JX-R1). A model that
+    #: emits one is claiming the outcome of a call it has not been shown, and `outcome.apply()`
+    #: demotes such a block to `recommendation` before it does anything else.
+    type: Literal["policy_fact", "recommendation", "escalation", "performed"]
     text: str
     citations: list[str]
 

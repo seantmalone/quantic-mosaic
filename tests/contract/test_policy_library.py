@@ -29,14 +29,19 @@ TUITION = (
 )
 
 
-def test_the_redirect_names_five_example_titles_from_the_real_index():
+def test_the_redirect_names_five_plain_topics_and_not_an_alphabetical_slice():
+    """UX W6, cpux-re-8 = JX-R8. The five titles this replaced came off a `BY doc_id` ordering, so
+    a reader who had just been refused was redirected to equipment and expenses — and never to PTO,
+    remote work, travel or tax, the four topics §3.5 names and the product is demonstrated on."""
     steps = g1.refusal(g1.OUT_OF_SCOPE).next_steps
-    covered = g1.coverage()
-    assert len(covered) > g1.EXAMPLE_TOPIC_COUNT, "the library is bigger than the sample, or this rule is moot"
+    titles = [document.doc_title for document in corpusread.list_documents()]
+    assert len(titles) > g1.EXAMPLE_TOPIC_COUNT, "the library is bigger than the sample, or this rule is moot"
 
-    named = [title for title in covered if title in steps[0]]
+    named = [topic for topic in g1.example_topics() if topic in steps[0]]
     assert len(named) == g1.EXAMPLE_TOPIC_COUNT, f"five examples, not {len(named)}: {steps[0]!r}"
-    assert named == g1.example_topics(), "and they are the index's own, never a hard-coded list"
+    assert not [title for title in titles if title in steps[0]], "topics, never document titles"
+    for topic in ("PTO", "remote", "travel", "benefits"):
+        assert topic in steps[0], f"the redirect never mentions {topic}: {steps[0]!r}"
     assert ";" not in steps[0], "a sentence, not a semicolon-separated dump"
     assert steps[0].endswith("."), steps[0]
 
@@ -55,8 +60,8 @@ async def test_a_refused_turn_offers_the_library_instead_of_listing_it(web):
     assert refused.status_code == 200, refused.text
     assert 'data-outcome="refused"' in refused.text
     assert '<p class="policy-library"><a href="/policy">See the full policy library</a></p>' in refused.text
-    titles = [title for title in g1.coverage() if html_module.escape(title) in refused.text]
-    assert len(titles) == g1.EXAMPLE_TOPIC_COUNT, f"the turn names {len(titles)} documents"
+    named = [topic for topic in g1.example_topics() if html_module.escape(topic) in refused.text]
+    assert len(named) == g1.EXAMPLE_TOPIC_COUNT, f"the turn names {len(named)} topics"
 
 
 async def test_a_declined_confirmation_is_refused_but_is_not_a_coverage_question(web):

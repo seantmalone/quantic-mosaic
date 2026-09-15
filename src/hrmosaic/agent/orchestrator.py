@@ -51,6 +51,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from hrmosaic.agent import breadth, prompts
+from hrmosaic.agent import dates as date_consistency
 from hrmosaic.agent import outcome as outcome_consistency
 from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
@@ -457,7 +458,11 @@ def _summary(kind: str, name: str, payload: dict[str, Any]) -> str:
         # precisions for one quantity (UX W4, `numbers-precision-overflow-4`). The unrounded score
         # is on the span payload, which is the record.
         shown = f"{float(top):.2f}" if top is not None else "n/a"
-        return f"{len(chunks)} chunks · top dense {shown} · {', '.join(docs)}"
+        # "passages" and "best match", the words the Retrieval table's own columns use: the same
+        # screen carried `5 chunks` / `PASSAGES` and `top dense` / `BEST MATCH`, two names each for
+        # one quantity (UX W6, npo2-06 / **P10**).
+        counted = "passage" if len(chunks) == 1 else "passages"
+        return f"{len(chunks)} {counted} · best match {shown} · {', '.join(docs)}"
     if kind == "guardrail":
         return f"verdict={payload.get('verdict')} · {payload.get('reason', '')}"
     if kind == "confirmation":
@@ -523,6 +528,8 @@ def render_answer(blocks: Sequence[AnswerBlock], next_steps: Sequence[str]) -> s
         elif block.type == "escalation":
             parts.append(f"Escalation: {block.text}")
         else:
+            # `policy_fact` and `performed` are both statements of what is so — one of company
+            # policy, one of what this turn's tools did — and neither wears a label (UX W6).
             parts.append(block.text)
     if next_steps:
         parts.append(NEXT_STEPS_LEAD + "\n".join(f"- {step}" for step in next_steps))
@@ -818,9 +825,16 @@ class Orchestrator:
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
         )
 
+        # -- 5d. date consistency (UX W6, npo2-02) — NOT a guardrail, and no G-number -------
+        # Where the answer shows its arithmetic — "(21 days before 3 November)" — the arithmetic is
+        # redone from the two operands in the sentence and the stated deadline is corrected. The
+        # recorded failure told the reader to file on 13 September against a 13 October deadline it
+        # had computed itself. Nothing else about the sentence is touched.
+        dated = date_consistency.apply(consistent.blocks, next_steps=consistent.next_steps)
+
         answer = AnswerSchema(
-            blocks=[AnswerBlock.model_validate(block) for block in consistent.blocks],
-            next_steps=consistent.next_steps,
+            blocks=[AnswerBlock.model_validate(block) for block in dated.blocks],
+            next_steps=dated.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
         if turn.write_failed:

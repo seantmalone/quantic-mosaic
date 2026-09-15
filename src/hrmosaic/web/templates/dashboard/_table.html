@@ -1,7 +1,8 @@
 {# The shared table partial (§11.6). Wide tables scroll inside their own container, never the page.
 
    `columns` is a list of dicts:
-     {label, key, kind, cls?, help?, href_prefix?, href_suffix?, link_key?, n_key?, unit?, detail_key?}
+     {label, key, kind, cls?, help?, href_prefix?, href_suffix?, link_key?, n_key?, unit?, detail_key?,
+      mobile?}
 
    `rows` are the plain dicts of the view-model — the very dict the matching `/api/*` route
    returns — so the table and the Export JSON link can never disagree.
@@ -24,19 +25,58 @@
    * `zero_dash` is for a column where zero means *did not happen* — a rate-limit wait, a retry
      count. `<1 ms` on every row of a column nothing ever used is noise, not a measurement.
 
-   Every numeric or temporal value below goes through a registered filter and none is interpolated
-   bare: that is **P10**, and `tests/contract/test_formatter_coverage.py` holds it. #}
+   **What UX W6 changed.**
+   * `table()` takes a `label` — a human name for the table — and announces *that* to a screen
+     reader. 19 of 21 tables announced themselves as their own kebab-case DOM slug (`latest-sessions`,
+     `by-model-table`, `mock-writes-table`), because the macro passed `{{ id }}` to `aria-label`
+     (a11y-reaudit-2). The `id` is unchanged: every contract test selects on it.
+   * A landmark and a tab stop are only offered over a box that can actually scroll, so the
+     fourteen tables with nothing to scroll stop being fourteen extra stops on the keyboard walk.
+   * Every disclosure is named for its **row** as well as its column. "Scores in full" ×28 and
+     "Verdicts in full" ×28 on one eval-run page is 56 controls sharing two accessible names, which
+     is P12's own detection rule failing 56 times (a11y-reaudit-3).
+   * **Column priority.** Under 40rem a row is a card, and a card that prints all thirteen columns
+     is thirteen lines: Model calls ran 1,871→9,766px and Evaluations 2,339→10,707px on a phone
+     (dr-new-5). Each column is `lead` (always on the card), `detail` (behind the card's own
+     disclosure) or `hide` (on the page, in Export JSON, not on a phone). The default is the first
+     `LEAD_COLUMNS` columns lead and the rest detail, so every table gets a short card without
+     being annotated and a table with a different idea of its own lead says so.
+#}
+
+{# How many columns a phone card shows before the disclosure. Three is the shape of every table
+   here: what it is, when, and the one number the page is about. #}
+{% set LEAD_COLUMNS = 3 %}
 
 {% macro href(row, column) %}{{ column.get('href_prefix', '') }}{{ row.get(column.get('link_key', column.key)) }}{{ column.get('href_suffix', '') }}{% endmacro %}
+
+{# The row in a few words, for the accessible name of anything that discloses part of it.
+
+   The ordinal is always there, not only when the lead value repeats: five `search_policy_documents`
+   calls on one Tools page are five rows whose lead column is the same word, and a name that is
+   unique on one page and shared on the next is not a rule anybody can rely on. #}
+{% macro row_name(row, columns, index) %}
+{#- The first column that holds words rather than a figure or an instant: "1789487770345981, row 1"
+    is not a name, and the leading column of a table ordered by time is an epoch (UX W6). The
+    reversed loop leaves `ns.lead` on the FIRST match in document order. -#}
+{%- set ns = namespace(lead=columns[0]) -%}
+{%- for column in columns|reverse if column.get('kind', 'text') in ['text', 'badge', 'code', 'enum', 'rule'] -%}
+{%- set ns.lead = column -%}
+{%- endfor -%}
+{{- row.get(ns.lead.key)|string|truncate(40, true, '…') if row.get(ns.lead.key) else 'row' }}, row {{ index }}
+{%- endmacro %}
 
 {% macro cell(row, column) %}
   {%- set value = row.get(column.key) -%}
   {%- set kind = column.get('kind', 'text') -%}
-  {%- set linked = column.get('href_prefix') is not none or column.get('link_key') is not none -%}
+  {#- `link_when` names a row field that says whether the target actually resolves here. A link
+      offered to a persona — or to a deployment — that cannot follow it is **P5**'s whole defect
+      (UX W6, nav-reaudit-3): the value still prints, as the plain id it is. -#}
+  {%- set resolvable = column.get('link_when') is none or row.get(column.link_when) -%}
+  {%- set linked = resolvable and (column.get('href_prefix') is not none or column.get('link_key') is not none) -%}
   {%- set target = row.get(column.get('link_key', column.key)) -%}
   {%- if kind == 'id' -%}
     {%- if value -%}
-      {%- set chip %}<code class="id-chip" title="{{ value }}">{{ value|string|truncate(9, true, '…') }}</code>{% endset -%}
+      {%- set chip %}<code class="id-chip" title="{{ value }}">{{ value|id_chip }}</code>{% endset -%}
       {%- if linked and target -%}<a href="{{ href(row, column) }}">{{ chip }}</a>
       {%- else -%}{{ chip }}{%- endif -%}
     {%- else -%}<span class="muted">—</span>{%- endif -%}
@@ -58,35 +98,49 @@
   {%- elif kind == 'bool' -%}
     <span class="flag flag-{{ 'yes' if value else 'no' }}">{{ 'yes' if value else 'no' }}</span>
   {%- elif kind == 'list' -%}
-    {%- for item in value %}<span class="pill">{{ item }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor -%}
+    {%- for item in value %}<span class="pill">{{ item|enum_label }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor -%}
     {%- if not value %}<span class="muted">—</span>{% endif -%}
-  {%- elif kind == 'badge' -%}<span class="pill pill-{{ value }}">{{ value }}</span>
+  {%- elif kind == 'badge' -%}<span class="pill pill-{{ value }}">{{ value|enum_label }}</span>
   {%- elif kind == 'rule' -%}<span class="pill pill-{{ value }}">{{ value|rule_label }}</span>
+  {%- elif kind == 'enum' -%}{{ value|enum_label }}
   {%- elif kind == 'code' -%}<code class="mono">{{ value|compact(60) }}</code>
   {%- else -%}{{ value|string|truncate(120) }}
   {%- endif -%}
 {% endmacro %}
 
-{% macro table(id, columns, rows, empty='Nothing recorded yet.') %}
-<div class="table-scroll" tabindex="0" role="region" aria-label="{{ id }}">
+{% macro table(id, columns, rows, empty='Nothing recorded yet.', label=none) %}
+{% set name = label or id.replace('-', ' ') %}
+{#- A landmark and a tab stop belong to a box a reader can actually scroll. Fourteen of the
+    twenty-one tables fit their page and were still announced as regions and still took a tab stop
+    (a11y-reaudit-2). `.table-scroll` keeps its paint either way; only the role travels. -#}
+<div class="table-scroll"{% if rows and columns|length > 4 %} tabindex="0" role="region" aria-label="{{ name }}"{% endif %}>
   <table id="{{ id }}" class="data-table">
     <thead>
       <tr>{% for column in columns %}<th data-col="{{ column.key }}" scope="col"
+          data-mobile="{{ column.get('mobile', 'lead' if loop.index0 < LEAD_COLUMNS else 'detail') }}"
           class="cell-{{ column.get('kind', 'text') }}">{% if column.get('help') %}<span
-          class="has-help" title="{{ column.help }}">{{ column.label }}</span>{% else %}{{ column.label }}{% endif %}</th>{% endfor %}</tr>
+          class="has-help" title="{{ column.help }}">{{ column.label }}</span>{% else %}{{ column.label }}{% endif %}</th>{% endfor %}
+        <th class="card-toggle" scope="col"><span class="visually-hidden">More</span></th></tr>
     </thead>
     <tbody>
       {% for row in rows %}
+      {% set outer = loop %}
       <tr>{% for column in columns %}<td data-col="{{ column.key }}" data-label="{{ column.label }}"
-          class="{{ column.get('cls', '') }} cell-{{ column.get('kind', 'text') }}">{{ cell(row, column) }}</td>{% endfor %}</tr>
+          data-mobile="{{ column.get('mobile', 'lead' if loop.index0 < LEAD_COLUMNS else 'detail') }}"
+          class="{{ column.get('cls', '') }} cell-{{ column.get('kind', 'text') }}">{{ cell(row, column) }}</td>{% endfor %}
+        {#- The card's own disclosure. Painted only under 40rem, where the `detail` columns above
+            are folded away behind it; named for the row, because twenty summaries all reading
+            "More" is the duplicate-name defect this wave is here to remove. -#}
+        <td class="card-toggle"><details class="card-detail"><summary>More about {{ row_name(row, columns, outer.index) }}</summary></details></td></tr>
       {% for column in columns if column.get('detail_key') and row.get(column.detail_key) is not none %}
-      <tr class="detail-row"><td colspan="{{ columns|length }}" data-label="{{ column.label }}">
-        <details class="row-detail"><summary>{{ column.get('detail_label', column.label) }} in full</summary>
+      <tr class="detail-row"><td colspan="{{ columns|length + 1 }}" data-label="{{ column.label }}">
+        <details class="row-detail"><summary>{{ column.get('detail_label', column.label) }} in full —
+          {{ row_name(row, columns, outer.index) }}</summary>
           <pre class="mono">{{ row.get(column.detail_key)|pretty }}</pre></details>
       </td></tr>
       {% endfor %}
       {% else %}
-      <tr class="empty-row"><td class="muted" colspan="{{ columns|length }}">{{ empty }}</td></tr>
+      <tr class="empty-row"><td class="muted" colspan="{{ columns|length + 1 }}">{{ empty }}</td></tr>
       {% endfor %}
     </tbody>
   </table>

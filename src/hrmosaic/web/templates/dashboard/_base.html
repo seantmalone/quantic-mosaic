@@ -36,8 +36,10 @@
 
 <nav id="dash-nav" class="dash-nav" aria-label="Dashboard pages">
   {% for group, items in nav %}
-  <span class="dash-nav-group">
-    <span class="dash-nav-group-label">{{ group }}</span>
+  {#- A `role="group"` with a name, so the grouping a sighted reader can see is announced too: the
+      three groups were sibling `<span>`s and invisible to AT (UX W6, a11y-reaudit-6). -#}
+  <span class="dash-nav-group" role="group" aria-label="{{ group }}">
+    <span class="dash-nav-group-label" aria-hidden="true">{{ group }}</span>
     {% for number, label, href in items %}
     <a class="dash-nav-link" data-nav="{{ number }}" href="{{ href }}"{% if number == nav_current %} aria-current="{{ 'page' if nav_exact else 'true' }}"{% endif %}>{{ label }}</a>
     {% endfor %}
@@ -72,21 +74,8 @@
   </footer>
 </main>
 
-<script>
-  // `scroll-margin-top` on every anchor target has to equal the real chrome height, and the chrome
-  // is one row on the desktop and three on a phone — so it is measured, not guessed (UX W1,
-  // navigation-and-ia-17). Without it a `#turn-N` deep link lands with its heading under the
-  // sticky rows.
-  (function () {
-    "use strict";
-    var chrome = document.getElementById("app-chrome");
-    function measure() {
-      document.documentElement.style.setProperty("--dash-nav-h", chrome.offsetHeight + "px");
-    }
-    measure();
-    window.addEventListener("resize", measure);
-  })();
-</script>
+{#- The chrome's measured height, from the one file the reader uses too (UX W6, nav-reaudit-2). -#}
+{% include "_chrome_height.html" %}
 {#- …and landing is more than scrolling: `_deep_link.html` moves focus to the target, on this
     surface and on the policy reader, from one file. -#}
 {% include "_deep_link.html" %}

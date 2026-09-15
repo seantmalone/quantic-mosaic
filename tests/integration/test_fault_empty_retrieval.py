@@ -46,9 +46,8 @@ async def test_the_turn_refuses_and_redirects_at_http_200(refused):
 async def test_the_redirect_names_what_the_corpus_does_cover(refused):
     from hrmosaic.agent.guardrails import g1
 
-    covered = g1.coverage()
-    assert covered
-    assert any(title in refused["answer"] for title in covered)
+    # Plain topic nouns since UX W6, not an alphabetical slice of document titles (cpux-re-8).
+    assert all(topic in refused["answer"] for topic in g1.example_topics())
 
 
 async def test_the_guardrail_span_carries_the_observed_scores(refused, store):

@@ -41,6 +41,7 @@
     {'label': 'Client', 'key': 'client_label', 'kind': 'badge'},
     {'label': 'Error', 'key': 'has_error', 'kind': 'bool'},
     {'label': 'Session', 'key': 'session_id', 'kind': 'id', 'href_prefix': '/dashboard/sessions/'}],
-    view.rows, 'No session matches these filters.') }}
+    view.rows, 'No session matches these filters.',
+      label='Conversations') }}
 {{ t.pager(view.page, view.total, page_size, filter_query) }}
 {% endblock %}

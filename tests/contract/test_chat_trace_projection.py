@@ -74,7 +74,7 @@ async def test_rows_2_and_3_every_tool_call_entry_carries_its_arguments_and_its_
 
 
 async def test_row_4_every_retrieval_entry_names_k_the_top_score_and_the_documents(tool_using_turn, store):
-    """The row is about the `summary`: how many chunks, the top dense score, and which documents.
+    """The row is about the `summary`: how many passages, the best match, and which documents.
 
     The entry's `name` is the tool that produced the retrieval (P5's span), not the strategy the
     §11.1 example happens to show; the strategy is a field of the `retrieval` payload and a column
@@ -84,8 +84,10 @@ async def test_row_4_every_retrieval_entry_names_k_the_top_score_and_the_documen
     assert entries
     documents = {citation["doc_id"] for citation in tool_using_turn["citations"]}
     for entry in entries:
-        assert "chunks" in entry["summary"]
-        assert "top dense" in entry["summary"]
+        # "passages", not "chunks": the Retrieval table's own column heading, and the one name the
+        # quantity goes by across the page and the trace (UX W6, npo2-06).
+        assert "passage" in entry["summary"]
+        assert "best match" in entry["summary"]
     assert any(doc_id in entry["summary"] for entry in entries for doc_id in documents)
     for payload in _payloads(store, tool_using_turn["turn_id"], "retrieval"):
         assert payload["strategy"] in {"hybrid_rrf", "dense_only"}

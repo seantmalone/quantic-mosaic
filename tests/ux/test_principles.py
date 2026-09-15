@@ -314,7 +314,10 @@ def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page
     )
     assert not link["hidden"] and re.match(r"^/dashboard/sessions/[0-9a-f]+#turn-\d+$", link["href"] or ""), link
     produced = fresh_page.eval_on_selector("#demo-produced", "e => e.textContent.trim()")
-    expected = r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, \d+ safety checks? passed\."
+    expected = (
+        r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, "
+        r"\d+ of \d+ safety checks? passed, in (under a second|\d+\.\d+ (seconds|minutes))\."
+    )
     assert re.fullmatch(expected, produced), produced
 
 
@@ -394,14 +397,18 @@ def test_p8_the_panel_ships_collapsed_so_the_conversation_keeps_its_room(browser
         assert not at_rest["sideways"], f"the document scrolls sideways at {label}"
         assert at_rest["send"]["bottom"] <= height + 1, f"the composer is off screen at {label}: {at_rest}"
 
-    # The phone budget W2's review asked for, kept as a budget rather than a pixel: measured 434 of
-    # 844 against a 53px collapsed panel.
-    assert measurements["phone"]["at_rest"]["transcript"] > 844 * 0.45, f"the phone loses its room: {measurements}"
+    # The phone budget W2's review asked for, kept as a budget rather than a pixel. It used to be
+    # measured as the transcript's own height, because the transcript was a viewport-sized scroll
+    # box; at 390px it no longer is (UX W6, dgc-re-1 — the page scrolls so that an open panel can
+    # show all of itself), so the budget is measured where it is actually spent: the collapsed
+    # panel and the composer together may not take more than half the phone's viewport.
+    phone = measurements["phone"]["at_rest"]
+    spent = phone["panel"] + (844 - phone["send"]["top"])
+    assert spent < 844 * 0.50, f"the phone loses its room: {spent}px of 844 spent on chrome: {phone}"
 
-    # Opened, the panel is the grader's, and it must show all of itself where it can. Two columns
-    # bring the content to ~390px, which fits inside 60vh at 800px of viewport height; a phone is
-    # single-column (~642px) and nothing that size fits beside a conversation, so there it scrolls
-    # inside its own box and keeps the transcript a sliver.
+    # Opened, the panel is the grader's, and it must show all of itself. Two columns bring the
+    # content to ~390px on a wide screen, which fits inside its 60vh cap; on a phone it is one
+    # column and there is no cap at all, because there the page scrolls.
     for label in ("desktop", "laptop"):
         opened = measurements[label]["opened"]
         assert opened["open"] is True, f"the summary did not open the panel at {label}"
@@ -410,6 +417,10 @@ def test_p8_the_panel_ships_collapsed_so_the_conversation_keeps_its_room(browser
         )
     phone_open = measurements["phone"]["opened"]
     assert phone_open["transcript"] > 0, f"the conversation vanished behind the open panel: {phone_open}"
+    assert phone_open["panel_scroll"] <= phone_open["panel_client"] + 1, (
+        f"the opened panel still scrolls inside itself on a phone: {phone_open}"
+    )
+    assert phone_open["starters_in_view"] == 4, f"the open panel took the conversation's room on a phone: {phone_open}"
     for label, measured in measurements.items():
         opened = measured["opened"]
         height = measured["viewport"][1]

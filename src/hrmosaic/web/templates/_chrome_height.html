@@ -1,0 +1,27 @@
+{#
+  The sticky chrome's real height, published as `--dash-nav-h` (UX W1, navigation-and-ia-17).
+
+  `scroll-margin-top` on every anchor target has to equal the height of the rows pinned above it,
+  and that height is one row on a desktop and three on a phone — so it is measured, not guessed.
+  Without it a `#turn-N` or `#{chunk_id}` deep link lands with its heading under the sticky rows.
+
+  One file, included by `dashboard/_base.html` and by `policy.html`. The reader carried a
+  hard-coded `scroll-margin-top: 5.5rem` instead and landed its citations behind a 165px masthead
+  at 390px, which is the same defect the dashboard had already measured its way out of
+  (UX W6, nav-reaudit-2).
+
+  The element measured is `#app-chrome`; a page without one simply publishes nothing and the CSS
+  fallback in `.anchor, .turn-card, .chunk, [id^="turn-"]` applies.
+#}
+<script>
+  (function () {
+    "use strict";
+    var chrome = document.getElementById("app-chrome");
+    if (!chrome) { return; }
+    function measure() {
+      document.documentElement.style.setProperty("--dash-nav-h", chrome.offsetHeight + "px");
+    }
+    measure();
+    window.addEventListener("resize", measure);
+  })();
+</script>

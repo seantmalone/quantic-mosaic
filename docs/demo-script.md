@@ -132,7 +132,7 @@ Tick all five on camera:
       (`blocks_dropped_by_g2` = 0), the answer was simply narrower than its three-document end
       state, which is why that item is one of the three the run reports as failing. **Read off the
       references that are actually on screen** — if two appear, say so and open both. Then follow
-      *"Open the full policy"* on one: since UX W1 a citation lands in the **policy reader** at
+      *"Open &lt;the document's title&gt;"* on one: since UX W1 a citation lands in the **policy reader** at
       `/policy/{doc_id}#{chunk_id}`, which highlights the 30-day section in the document a person
       would read, not in a chunk inspector.
 - [ ] **⑤ Final answer** — read the verdict aloud: **conditional** — 42 days exceeds the 30-day

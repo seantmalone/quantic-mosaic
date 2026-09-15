@@ -36,13 +36,14 @@
       {'label': 'Target', 'key': 'target', 'kind': 'badge'},
       {'label': 'Items', 'key': 'n_items', 'kind': 'num'},
       {'label': 'Judged', 'key': 'judged', 'kind': 'bool',
-       'help': 'Whether a judge model scored this run. Judging is run on baseline only (§13.9).'},
+       'help': 'Whether a judge model scored this run. Judging is run on the baseline variant only.'},
       {'label': 'Judge', 'key': 'judge_model'},
       {'label': 'Duration', 'key': 'duration_s', 'kind': 'secs'},
       {'label': 'Estimated cost', 'key': 'est_cost_usd', 'kind': 'usd'},
       {'label': 'Build', 'key': 'git_sha', 'kind': 'id'},
       {'label': 'Run id', 'key': 'run_id', 'kind': 'id', 'href_prefix': '/dashboard/evals/'}],
-      view.runs, 'No evaluation run has been imported yet.') }}
+      view.runs, 'No evaluation run has been imported yet.',
+      label='Evaluation runs') }}
 
   <h4>Headline metrics</h4>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Headline metrics by run">
@@ -52,8 +53,10 @@
       <tbody>
       {% for run in view.runs %}
         <tr>
-          <td data-label="Run"><a href="/dashboard/evals/{{ run.run_id }}">{{ run.label }}</a>
-            <span class="muted">· {{ run.created_at|ts }}</span></td>
+          {#- One line. The label and the timestamp wrapped into a two-line cell that set the
+              height of every row in the table (UX W6). The timestamp is the row's `title`. -#}
+          <td class="cell-run" data-label="Run" title="{{ run.created_at|ts }}"><a
+            href="/dashboard/evals/{{ run.run_id }}">{{ run.label }}</a></td>
           {% for metric in headline_metrics %}
           <td data-col="{{ metric }}" data-label="{{ metric|metric_label }}" class="cell-num">
             {% if run.headline[metric] is none %}
@@ -76,9 +79,9 @@
         hx-on::after-request="window.location.reload()">
     <label>Variant
       <select name="variant"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>
-        <option value="baseline">baseline</option>
-        <option value="dense_only_k2">dense_only_k2</option>
-        <option value="no_structured_tools">no_structured_tools</option>
+        <option value="baseline">{{ 'baseline'|enum_label }}</option>
+        <option value="dense_only_k2">{{ 'dense_only_k2'|enum_label }}</option>
+        <option value="no_structured_tools">{{ 'no_structured_tools'|enum_label }}</option>
       </select>
     </label>
     <label>Items
@@ -100,7 +103,7 @@
   {# Decorative: the six series are read out as a table below, one row per variant, so a reader
      who cannot tell six hues apart still gets the comparison (accessibility-and-responsive-19). #}
   <figure class="chart-figure">
-    <canvas id="chart-ablation" height="120" aria-hidden="true"></canvas>
+    <canvas id="chart-ablation" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">
       <table>
         <caption>Ablation — the same items under three variants</caption>
@@ -120,7 +123,7 @@
   <script id="chart-ablation-data" type="application/json">{{ compare.variants|tojson }}</script>
   <script id="chart-ablation-labels" type="application/json">{{ metric_labels|tojson }}</script>
   <script id="chart-ablation-series" type="application/json">{{ ablation_series|tojson }}</script>
-  <p class="note">Judged metrics are computed on <code>baseline</code> only (§13.9): the two
+  <p class="note">Judged metrics are computed on the <code>baseline</code> variant only: the two
     ablation arms report <span class="not-judged">not judged on this variant</span> rather than a
     zero, and the chart omits those series.</p>
 
@@ -130,14 +133,16 @@
       {'label': 'Variant', 'key': 'variant', 'kind': 'badge'},
       {'label': 'Baseline passed', 'key': 'baseline_passed', 'kind': 'bool'},
       {'label': 'Variant passed', 'key': 'variant_passed', 'kind': 'bool'}],
-      compare.flips, 'No item changed its pass state.') }}
+      compare.flips, 'No item changed its pass state.',
+      label='Pass flips against baseline') }}
 
   <h4>Chunk size — the zero-LLM sweep</h4>
   {{ t.table('chunk-size-table', [
       {'label': 'Chunk chars', 'key': 'chunk_chars', 'kind': 'num'},
       {'label': 'Documents recalled', 'key': 'doc_recall_mean', 'kind': 'pct',
        'help': 'How often the right document was among the passages retrieved, over the same items.'}],
-      compare.chunk_size, 'The chunk-size sweep has not been run yet.') }}
+      compare.chunk_size, 'The chunk-size sweep has not been run yet.',
+      label='Chunk size sweep') }}
 </section>
 
 <script>
@@ -172,6 +177,8 @@
         // The series are 0-1 proportions in the JSON and stay that way; only the axis is spoken as
         // a percentage, so the chart and the table above agree (numbers-precision-overflow-2).
         options: {
+          responsive: true,
+          maintainAspectRatio: false,
           scales: {
             x: { title: { display: true, text: "Variant" } },
             y: { beginAtZero: true, max: 1, title: { display: true, text: "Share of items" },

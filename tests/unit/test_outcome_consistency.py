@@ -84,9 +84,13 @@ def test_a_created_ticket_is_stated_first_with_its_reference():
 
     assert result.changed
     first = result.blocks[0]
-    assert first["type"] == "recommendation", "tool data, not company policy (§7.3)"
+    # Its own type since UX W6 (JX-R1 = cpux-re-1): a completed, irreversible write filed under
+    # "What I suggest you do" and footnoted "Suggestions are guidance, not company policy" is the
+    # badge W2 deleted, restored as a heading. It is neither policy nor a suggestion.
+    assert first["type"] == "performed", "a write that happened is not advice"
     assert first["citations"] == [], "a tool result has no chunk_id to cite"
-    assert first["text"] == "Done — your request is with HR. Reference MOCK-HR-000002."
+    # The queue's human name, through the same lookup the confirmation card uses (cpux-re-2).
+    assert first["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
     assert "hr-timeoff" not in first["text"] and "priority" not in first["text"]
     assert result.blocks[1:] == [POLICY_BLOCK], "the model's own blocks follow, untouched"
 
@@ -110,22 +114,44 @@ def test_an_id_the_answer_already_states_is_not_repeated():
     assert not result.changed
 
 
-def test_an_escalation_denying_the_performed_write_is_replaced_by_a_pointer_to_it():
-    """One account of the write, at the top; the denial becomes the one line it was in the way of.
+def test_an_escalation_denying_the_performed_write_is_dropped_under_the_statement():
+    """**One account of the write per turn** (UX W6, JX-R1 = cpux-re-1).
 
-    Both halves of chat-production-ux-11: the pointer no longer re-states the id under a statement
-    that has just stated it, and `apply()`'s de-dup guard reads the **repaired** blocks, so nothing
-    this step writes can ever be duplicated by the statement above it.
+    The denial is what the statement above it was in the way of, so where the statement runs the
+    denial simply goes. Replacing it with the `pointer` instead printed *"Done — your request is
+    with HR"* and *"That is already taken care of — there is nothing further for you to file"* two
+    bullets apart, which is the answer saying the same thing twice in two voices.
     """
     result = outcome.apply([POLICY_BLOCK, DENIAL_BLOCK], envelopes(TICKET))
 
-    assert [block["type"] for block in result.blocks] == ["recommendation", "policy_fact", "recommendation"]
-    assert result.blocks[0]["text"] == "Done — your request is with HR. Reference MOCK-HR-000002."
-    replaced = result.blocks[2]
-    assert replaced["text"] == "That is already taken care of — there is nothing further for you to file."
-    assert "cannot" not in replaced["text"].lower()
-    assert result.blocks.count(replaced) == 1, "the write is reported once, not twice in two voices"
+    assert [block["type"] for block in result.blocks] == ["performed", "policy_fact"]
+    assert result.blocks[0]["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert "cannot" not in " ".join(block["text"] for block in result.blocks).lower()
     assert result.replaced == [1], "the model's block index, before the outcome block is inserted"
+
+
+def test_a_denial_becomes_the_pointer_when_the_answer_already_stated_the_id():
+    """The other side of the same rule: the model's own sentence is the account, so this step adds
+    none of its own and the denial becomes the one line it was in the way of."""
+    stated = {"type": "recommendation", "text": "Ticket MOCK-HR-000002 is open.", "citations": []}
+
+    result = outcome.apply([stated, DENIAL_BLOCK], envelopes(TICKET))
+
+    assert [block["type"] for block in result.blocks] == ["recommendation", "recommendation"]
+    assert not result.stated, "the answer said it; this step does not say it again"
+    assert result.blocks[1]["text"] == "That is already taken care of — there is nothing further for you to file."
+    assert result.replaced == [1]
+
+
+def test_a_model_that_types_a_block_performed_is_demoted_to_advice():
+    """`performed` asserts the outcome of a call the model has not been shown the result of. Only
+    this step, reading the tool envelope, may make that claim (UX W6)."""
+    claimed = {"type": "performed", "text": "I have filed your request.", "citations": []}
+
+    result = outcome.apply([claimed], [])
+
+    assert result.blocks == [{**claimed, "type": "recommendation"}]
+    assert not result.changed
 
 
 def test_an_escalation_about_something_else_survives_the_write():
@@ -192,9 +218,9 @@ def test_an_escalation_denying_a_performed_draft_points_at_the_draft():
 
     result = outcome.apply([denial], envelopes(DRAFT))
 
-    assert [block["type"] for block in result.blocks] == ["recommendation", "recommendation"]
+    assert [block["type"] for block in result.blocks] == ["performed"]
     assert "MOCK-EMAIL-000001" in result.blocks[0]["text"]
-    assert result.blocks[1]["text"] == "That is already taken care of — the draft is ready for you to review."
+    assert "cannot" not in result.blocks[0]["text"].lower()
 
 
 def test_a_result_missing_its_queue_says_exactly_what_a_full_one_says():
@@ -203,6 +229,7 @@ def test_a_result_missing_its_queue_says_exactly_what_a_full_one_says():
 
     result = outcome.apply([POLICY_BLOCK], envelopes(thin))
 
+    # The unnamed fallback is a department and takes no article; a named team does.
     assert result.blocks[0]["text"] == "Done — your request is with HR. Reference MOCK-HR-000009."
 
 

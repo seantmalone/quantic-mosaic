@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import html
 import ipaddress
 import json
 import logging
@@ -54,6 +55,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from hrmosaic.agent import orchestrator as agent
@@ -266,6 +268,32 @@ def shell_context(request: Request, *, surface: Literal["chat", "dashboard"]) ->
         "is_admin": identity.is_admin,
         "gate_on": gate_enabled(settings) if settings is not None else False,
     }
+
+
+def conversation_url(request: Request) -> str:
+    """Where *"Back to your conversation"* goes from the policy reader (UX W6, nav-reaudit-1).
+
+    The reader is the destination of every citation and had no outbound route but the masthead's
+    `Chat`, which — before the chat page started writing `?session=` into its own URL — landed on an
+    empty composer. The link is built server-side from the persona's most recent conversation,
+    which is the same boundary `_owns()` draws on the way back in: a raw id is never guessed at,
+    and a persona with no conversation yet is offered the fresh one at `/`.
+    """
+    identity = identity_of(request)
+    where, params = ("", []) if identity.is_admin else ("WHERE s.employee_id = ?", [identity.actor])
+    try:
+        row = (
+            _store(request)
+            .execute(
+                "SELECT s.id FROM sessions s JOIN turns t ON t.session_id = s.id AND t.ended_at IS NOT NULL "
+                f"{where} ORDER BY s.last_activity_at DESC LIMIT 1",
+                params,
+            )
+            .one()
+        )
+    except Exception:  # noqa: BLE001 — a reader with no store still gets a way back
+        return "/"
+    return f"/?session={row['id']}" if row else "/"
 
 
 def _key_page(
@@ -862,6 +890,140 @@ def human_date(value: str) -> str:
         return value
 
 
+#: **P2 — no internal identifier in chat**, the fourteenth pattern. Twelve of the thirteen
+#: enumerated patterns were clean at the re-audit; `E1007` reached the reader fifteen times inside
+#: *"Obtain written approval from your director (Dana, E1007)"* the first time `next_steps` was
+#: rendered (UX W6, cpux-re-4). `synthesize.j2` rule 6c forbids writing one; this is the guard
+#: behind that rule, applied to every string the answer body prints, because a prompt rule is an
+#: instruction and a reader-facing invariant needs a mechanism.
+EMPLOYEE_ID = re.compile(r"\bE1\d{3}\b")
+
+#: The id as an aside beside a name — `(Dana, E1007)` → `(Dana)`, `(E1007)` → nothing at all.
+_ID_ASIDE = re.compile(r"\s*,\s*E1\d{3}\b")
+_ID_PARENTHESIS = re.compile(r"\s*[(\[]\s*E1\d{3}\s*[)\]]")
+
+
+def without_employee_ids(text: str) -> str:
+    """Chat prose with every `E1xxx` taken out of it, and the punctuation around it tidied.
+
+    The person is kept and the id is dropped: *"your director (Dana, E1007)"* reads *"your director
+    (Dana)"*. The id is not lost — it is on the `tool_call` span, in `mock_writes` and in
+    `/api/*` (P15); it is simply not something a person is shown in a sentence about their manager.
+    """
+    body = _ID_PARENTHESIS.sub("", text)
+    body = _ID_ASIDE.sub("", body)
+    body = EMPLOYEE_ID.sub("", body)
+    return re.sub(r"\s{2,}", " ", body).replace(" .", ".").replace(" ,", ",").strip()
+
+
+def rendered_next_steps(response: ChatResponse) -> list[str]:
+    """The steps the turn actually prints, which is not always the steps it carries (UX W6).
+
+    Two rules, both from the re-audit (cpux-re-3 = JX-R15, npo2-02):
+
+    * **Never on an outcome that groups its suggestions.** On `answered`, `escalated` and `partial`
+      the `recommendation` blocks are gathered under *"What I suggest you do"*, and `next_steps` —
+      the other half of the same model call, saying the same kind of thing — was merged into that
+      one list: seven bullets where §3.3 wireframes two, carrying a model-computed deadline and an
+      employee id onto the one outcome that already had five other things to read (cpux-re-3 =
+      JX-R15, npo2-02, cpux-re-4). On a refusal, a clarification or a crash nothing is grouped, the
+      steps *are* the recovery path, and they are the most useful half of those turns.
+    * **Never a duplicate of a block.** Belt and braces for the same reason: the two lists come out
+      of one model call and it repeats itself.
+
+    The record keeps every step either way: `turns.next_steps_json`, `/api/*` and the stored
+    `final_answer` all carry the full list (P15).
+    """
+    if response.outcome in LABELLED_OUTCOMES:
+        return []
+    said = {" ".join(block.text.split()).rstrip(".").lower() for block in response.answer_blocks}
+    steps: list[str] = []
+    for step in response.next_steps:
+        text = without_employee_ids(str(step))
+        key = " ".join(text.split()).rstrip(".").lower()
+        if key and key not in said:
+            said.add(key)
+            steps.append(text)
+    return steps
+
+
+#: The four things the corpus markdown uses that a reader notices when they are missing: bold,
+#: italic, inline code and a bulleted or numbered list. The reader published the source verbatim
+#: inside one `<p>` — literal `*people*` asterisks and the database field name `work_arrangement`
+#: in backticks, shown to employees (UX W6, JX-R3) — because the passage text is stored as the
+#: markdown it was ingested from. Everything is escaped first and only these four are given back,
+#: so a corpus document cannot inject markup into the page that quotes it.
+_MD_CODE = re.compile(r"`([^`]+)`")
+_MD_STRONG = re.compile(r"\*\*([^*]+)\*\*")
+_MD_EM = re.compile(r"(?<![*\w])\*([^*\n]+)\*(?!\*)")
+_MD_BULLET = re.compile(r"^\s*[-*+]\s+(.*)$")
+_MD_NUMBER = re.compile(r"^\s*\d+[.)]\s+(.*)$")
+
+
+def _inline_markup(line: str) -> str:
+    body = html.escape(line)
+    body = _MD_CODE.sub(r"<code>\1</code>", body)
+    body = _MD_STRONG.sub(r"<strong>\1</strong>", body)
+    return _MD_EM.sub(r"<em>\1</em>", body)
+
+
+def policy_markup(text: str) -> Markup:
+    """One stored passage as HTML: paragraphs, lists, emphasis and inline code, and nothing else.
+
+    Deliberately not a markdown library: the corpus is fourteen documents this repository ingested
+    itself, the four constructs below are what they use, and an unknown construct is left as the
+    characters it is rather than interpreted. Every line is HTML-escaped before anything is added
+    back, so the *only* markup on the page is the markup this function wrote.
+    """
+    blocks: list[str] = []
+    items: list[str] = []
+    ordered = False
+
+    def flush() -> None:
+        nonlocal items, ordered
+        if items:
+            tag = "ol" if ordered else "ul"
+            blocks.append(f"<{tag}>" + "".join(f"<li>{item}</li>" for item in items) + f"</{tag}>")
+            items = []
+
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            blocks.append("<p>" + "<br>".join(paragraph) + "</p>")
+            paragraph.clear()
+
+    for line in str(text).splitlines():
+        bullet = _MD_BULLET.match(line)
+        number = None if bullet else _MD_NUMBER.match(line)
+        if bullet or number:
+            flush_paragraph()
+            wanted = number is not None
+            if items and wanted != ordered:
+                flush()
+            ordered = wanted
+            items.append(_inline_markup((bullet or number).group(1)))
+            continue
+        flush()
+        if not line.strip():
+            flush_paragraph()
+            continue
+        paragraph.append(_inline_markup(line.strip()))
+    flush()
+    flush_paragraph()
+    return Markup("".join(blocks))  # noqa: S704 — every character above was escaped by `_inline_markup`
+
+
+#: The reader speaks the same vocabulary as chat: one heading join, one date form, one markup pass.
+TEMPLATES.env.filters["policy_markup"] = policy_markup
+TEMPLATES.env.filters["heading_path"] = lambda value: str(value).replace(" > ", " · ")
+TEMPLATES.env.filters["human_date"] = human_date
+
+#: The partial scrubs every string it prints through `no_ids`, so a block the model wrote and a
+#: step it wrote are held to one rule and neither can be forgotten (UX W6, cpux-re-4).
+TEMPLATES.env.filters["no_ids"] = without_employee_ids
+
+
 #: The one line that replaces a resolved confirmation card, by the decision that resolved it.
 #: Before UX W2 the card simply vanished — `hx-swap="outerHTML"` over the whole turn, with no
 #: `question` on the resume path — so approving a write erased the question that asked for it and
@@ -903,31 +1065,77 @@ def _count(number: int, noun: str) -> str:
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
 
 
+def human_duration(total_ms: int | None) -> str:
+    """A turn's length as a person would say it — never a millisecond count in a human sentence.
+
+    The panel's produced line is read beside `/dashboard/sessions/{id}`, which carries the
+    unrounded figure; this is the sentence, so it rounds (plan §3.7 item 4, UX W6).
+    """
+    milliseconds = float(total_ms or 0)
+    if milliseconds >= 60_000:
+        return f"{milliseconds / 60_000:.1f} minutes"
+    if milliseconds < 1_000:
+        return "under a second"
+    seconds = milliseconds / 1_000
+    return f"{seconds:.1f} seconds"
+
+
+def safety_checks(spans: list[dict[str, Any]]) -> tuple[int, int]:
+    """`(passed, ran)` — counted in **distinct §7.4 rules**, which is the unit the pages agree in.
+
+    The panel used to count guardrail *spans* and say *"7 safety checks passed"*, while the
+    Guardrails page one click away said *"The six safety checks…"* and counted rules: two surfaces
+    the plan built to agree, contradicting, because G2 runs twice on a repaired turn (UX W6, JX-R7).
+    A rule passes when it ran and never returned anything but `allow` on this turn.
+    """
+    ran: list[str] = []
+    blocked: set[str] = set()
+    for span in spans:
+        if span["kind"] != "guardrail":
+            continue
+        rule = str(span["payload"].get("rule_id") or "")
+        if rule and rule not in ran:
+            ran.append(rule)
+        if rule and span["payload"].get("verdict") != "allow":
+            blocked.add(rule)
+    return len(ran) - len(blocked), len(ran)
+
+
 def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str:
-    """*"How this answer was produced"*, in three counts and no identifiers (plan §3.7).
+    """*"How this answer was produced"*, in four counts and no identifiers (plan §3.7).
 
     The demo panel's one-line account of the last turn: what the assistant looked things up with,
-    what it read, and how many of the §7.4 rules passed over the result. Every one of those numbers
-    exists unrounded on `/dashboard/sessions/{id}` — this is the human summary beside the link to
-    it, not a second record (P15).
+    what it read, how many of the §7.4 rules passed over the result, and how long the turn took.
+    Every one of those numbers exists unrounded on `/dashboard/sessions/{id}` — this is the human
+    summary beside the link to it, not a second record (P15).
 
-    A *check* here is a guardrail span that returned `allow`. The ones that did not are the
-    interesting half and they are why the link beside this sentence exists; a panel line is not the
-    place to relitigate a refusal.
+    A *check* is one of the six rules, not one guardrail span: a rule that runs twice is still one
+    check, and the denominator is printed so the figure agrees with the Guardrails page (UX W6).
     """
-    checks = sum(1 for span in spans if span["kind"] == "guardrail" and span["payload"].get("verdict") == "allow")
+    passed, ran = safety_checks(spans)
     return (
         f"{PRODUCED_LEAD}: {_count(response.usage.tool_calls, 'tool')} used, "
         f"{_count(len(response.citations), 'policy section')} read, "
-        f"{_count(checks, 'safety check')} passed."
+        f"{passed} of {_count(ran, 'safety check')} passed, "
+        f"in {human_duration(response.timings.total_ms)}."
     )
 
 
 #: The demo panel's environment block (plan §3.7 item 5). Stated once, here, instead of inside the
 #: answers: a sentence about mock writes belongs to the demo, not to the policy an answer quotes.
-RECORDED_PROVIDER = "recorded script — no live model call"
+RECORDED_PROVIDER = "a recorded script — no live model call"
 LIVE_PROVIDER = "a live model — every answer is written for you as you wait"
 SIMULATED_WRITES = "Writes are simulated — nothing leaves this app."
+
+
+def provider_label(provider: str) -> str:
+    """What answered, in the one form both surfaces say it in (UX W6, JX-R2).
+
+    The dashboard's first screen printed the raw enum — *"Answers come from **stub**"* — which is
+    the token W2 spent a wave removing from chat, while chat named the same fact correctly two
+    clicks away. One map, two readers.
+    """
+    return RECORDED_PROVIDER if provider == "stub" else LIVE_PROVIDER
 
 
 def demo_environment(request: Request) -> dict[str, str]:
@@ -936,7 +1144,7 @@ def demo_environment(request: Request) -> dict[str, str]:
     provider = settings.llm_provider if settings is not None else "stub"
     as_of = getattr(request.app.state, "data_as_of", "")
     return {
-        "provider": RECORDED_PROVIDER if provider == "stub" else LIVE_PROVIDER,
+        "provider": provider_label(provider),
         "snapshot": human_date(as_of) if as_of else "not loaded on this instance",
         "writes": SIMULATED_WRITES,
     }
@@ -976,6 +1184,7 @@ TURN_CONTEXT_KEYS = (
     "sent_at_full",
     "decision_line",
     "labelled",
+    "next_steps",
     "quick_replies",
     "block_headings",
     "suggestion_footnote",
@@ -1012,6 +1221,7 @@ def _turn_context(
         "sent_at_full": sent_at_full,
         "decision_line": DECISION_LINES.get(decision or ""),
         "labelled": response.outcome in LABELLED_OUTCOMES,
+        "next_steps": rendered_next_steps(response),
         "quick_replies": list(response.quick_replies),
         "block_headings": BLOCK_HEADINGS,
         "suggestion_footnote": SUGGESTION_FOOTNOTE,
@@ -1362,6 +1572,7 @@ async def chat_page(request: Request) -> Response:
             "employees": request.app.state.employees,
             "greeting_name": _greeting_name(request, identity.actor),
             "demo_prompts": DEMO_PROMPTS,
+            "demo_prompt_labels": DEMO_PROMPT_LABELS,
             "demo_environment": demo_environment(request),
             "turn_announcements": TURN_ANNOUNCEMENTS,
             "turn_announcement_fallback": TURN_ANNOUNCEMENT_FALLBACK,
@@ -1824,6 +2035,15 @@ STARTER_PROMPTS = (
     "What does my benefits status cover?",
 )
 
+#: What each demo button is *called*. The buttons printed the whole verbatim prompt — two
+#: three-line sentences — which is most of what filled the panel at 390px (UX W6, dgc-re-3). §3.7
+#: draws a short label; the prompt itself still goes into the composer, unchanged, where the reader
+#: can read and edit it before sending.
+DEMO_PROMPT_LABELS = {
+    "demo_1": "Working from Berlin for six weeks",
+    "demo_2": "Three days of PTO, opened for me",
+}
+
 #: The two one-click demo prompts of §18, shared by the UI buttons and `scripts/demo_task_*.sh`.
 DEMO_PROMPTS = {
     "demo_1": "I want to work from Berlin from 3 November to 14 December 2026 — can I?",
@@ -1841,6 +2061,7 @@ __all__ = [
     "BLOCK_HEADINGS",
     "DEGRADATIONS",
     "DEMO_PROMPTS",
+    "DEMO_PROMPT_LABELS",
     "LABELLED_OUTCOMES",
     "LIVE_PROVIDER",
     "PRODUCED_LEAD",
@@ -1862,6 +2083,7 @@ __all__ = [
     "health_payload",
     "identity_of",
     "produced_summary",
+    "provider_label",
     "refusal_page",
     "router",
     "sent_at_human",

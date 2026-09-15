@@ -14,15 +14,18 @@ MosaicOne…"* — and never mentioned the ticket. The write had happened; the a
 
 Two moves, both read from the tool result rather than from model output:
 
-1. **The outcome block goes first.** A `recommendation`, because it is tool data and not a
-   statement of company policy (§7.3), carrying the id verbatim. It is skipped when the answer
-   already states that id — the point is that the reader is told once, not twice, and since UX W2
-   the check reads the **repaired** blocks so that nothing this step itself writes can be
-   duplicated by the statement above it.
-2. **An escalation that denies the performed action is replaced** by one line saying there is
-   nothing left to do. Only that kind of escalation: G5's sensitive-topic block names a People
-   Operations contact and would be collateral damage, so the check is denial *plus* a word for the
-   action the performed tool performs, and nothing else is touched.
+1. **The outcome block goes first, in its own type.** A `performed` block (UX W6), because a
+   completed irreversible write is neither company policy nor a suggestion: `_turn.html` renders it
+   as the turn's lead sentence above the facts, outside the suggestions group and outside its
+   *"guidance, not company policy"* footnote, which is where a `recommendation` had been putting it
+   (JX-R1 = cpux-re-1). It carries the id verbatim and the queue's human name.
+2. **There is exactly one account of the write per turn.** If the model's own answer already names
+   the id, this step states nothing and an escalation denying the action becomes the one-line
+   `pointer` instead. If it does not, the `performed` block is the account and a denying escalation
+   is dropped outright — the `pointer` under a statement that has just said the same thing is the
+   answer arguing with itself. Only that kind of escalation is touched: G5's sensitive-topic block
+   names a People Operations contact and would be collateral damage, so the check is denial *plus*
+   a word for the action the performed tool performs.
 3. **A next step that sends the reader off to do it themselves is dropped.** `next_steps` is
    rendered into the same answer as the blocks, so the same contradiction reads the same way: the
    demo-2 answer stated the ticket and then closed with *"Log into MosaicOne and submit your PTO
@@ -48,9 +51,22 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from hrmosaic.core.queues import QUEUE_FALLBACK, queue_label
+
 #: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
 STEP_NAME = "outcome_consistency"
+
+#: The block type a *completed* write is reported in — its own, never `recommendation` (UX W6,
+#: JX-R1 = cpux-re-1). `_turn.html` groups every `recommendation` under *"What I suggest you do"*
+#: and footnotes the group *"Suggestions are guidance, not company policy"*, so an irreversible
+#: write that had already happened was filed as non-binding advice and disclaimed. A `performed`
+#: block is the turn's lead sentence, above the facts, outside that group and outside its footnote.
+#:
+#: **Only this module may write one.** A model that emits `performed` is stating that a write it
+#: cannot see the result of took place; `apply()` downgrades such a block to `recommendation`
+#: before it does anything else, so the claim is only ever made from the tool result.
+PERFORMED = "performed"
 
 #: Write tool → the `status` its result carries when the write actually happened (§8.4 tools 8, 9).
 #: A `confirmation_required` body — the gated attempt — is not one of these and states nothing.
@@ -133,7 +149,13 @@ class PerformedWrite:
             recipient = self.body.get("to_name") or self.body.get("to_role")
             for_whom = f" for {recipient}" if recipient else ""
             return f"Done — the email draft is ready{for_whom}. Reference {self.write_id}."
-        return f"Done — your request is with HR. Reference {self.write_id}."
+        # The queue's human name, through the same `queue_label()` the confirmation card is built
+        # from (`web/api.py::_confirm_fields`). The card said *"Goes to: HR Time Off team"* and the
+        # answer that reported the very same ticket said *"with HR"* (UX W6, cpux-re-2). A named
+        # team takes the article; the unnamed fallback is a department and does not.
+        label = queue_label(str(self.body.get("queue") or ""))
+        team = label if label == QUEUE_FALLBACK else f"the {label}"
+        return f"Done — your request is with {team}. Reference {self.write_id}."
 
     @property
     def pointer(self) -> str:
@@ -233,18 +255,13 @@ def apply(
 ) -> Outcome:
     """The pure rule: state the write first, and drop what contradicts it. Mutates nothing."""
     write = performed_write(envelopes)
-    body = [dict(block) for block in blocks]
+    # Only this step may claim a write happened, and it claims it from the tool result. A model
+    # that typed a block `performed` is asserting the outcome of a call whose result it has not
+    # been shown, so the claim is demoted to what it actually is — advice (UX W6).
+    body = [{**block, "type": "recommendation"} if block.get("type") == PERFORMED else dict(block) for block in blocks]
     steps = [str(step) for step in next_steps]
     if write is None:
         return Outcome(blocks=body, next_steps=steps)
-
-    replaced: list[int] = []
-    for index, block in enumerate(body):
-        if block.get("type") == "escalation" and denies(str(block.get("text") or ""), write.tool_name):
-            block["type"] = "recommendation"
-            block["text"] = write.pointer
-            block["citations"] = []
-            replaced.append(index)
 
     kept: list[str] = []
     dropped: list[int] = []
@@ -255,14 +272,29 @@ def apply(
         else:
             dropped.append(index)
 
-    # The de-dup guard reads the **repaired** blocks, not the model's own. Reading `blocks` was the
-    # bug behind chat-production-ux-11: a `pointer` that had just replaced a denying escalation
-    # states the id, but the model's original text did not, so the statement was prepended anyway
-    # and the answer said the same thing twice in two voices.
-    if any(write.write_id in str(block.get("text") or "") for block in body):
-        return Outcome(blocks=body, next_steps=kept, replaced=replaced, dropped=dropped)
-    statement = {"type": "recommendation", "text": write.statement, "citations": []}
-    return Outcome(blocks=[statement, *body], next_steps=kept, stated=True, replaced=replaced, dropped=dropped)
+    # The de-dup guard reads the model's own blocks: **one account of the write per turn** (UX W6).
+    # If the answer already names the id, this step adds no statement of its own and the denying
+    # escalation below becomes the `pointer` — the single account. If it does not, the `performed`
+    # block is the single account and a denying escalation is *removed* rather than rewritten,
+    # because the `pointer` says in other words exactly what the statement above it has just said,
+    # which is how *"Done — your request is with HR"* and *"That is already taken care of"* came to
+    # print two bullets apart (JX-R1 = cpux-re-1).
+    already_stated = any(write.write_id in str(block.get("text") or "") for block in body)
+
+    replaced: list[int] = []
+    survivors: list[dict[str, Any]] = []
+    for index, block in enumerate(body):
+        if block.get("type") == "escalation" and denies(str(block.get("text") or ""), write.tool_name):
+            replaced.append(index)
+            if not already_stated:
+                continue
+            block = {**block, "type": "recommendation", "text": write.pointer, "citations": []}
+        survivors.append(block)
+
+    if already_stated:
+        return Outcome(blocks=survivors, next_steps=kept, replaced=replaced, dropped=dropped)
+    statement = {"type": PERFORMED, "text": write.statement, "citations": []}
+    return Outcome(blocks=[statement, *survivors], next_steps=kept, stated=True, replaced=replaced, dropped=dropped)
 
 
 __all__ = [
@@ -270,6 +302,7 @@ __all__ = [
     "ACTION_WORDS",
     "DENIALS",
     "IMPERATIVES",
+    "PERFORMED",
     "STEP_NAME",
     "WRITE_SUCCESS",
     "Outcome",

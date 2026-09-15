@@ -15,8 +15,12 @@ file is the rest of the wave's list, and every test here is one of `4.E`'s findi
 * **every form control has a name**;
 * **focus follows the decision** when a turn asks for one (accessibility-and-responsive-4).
 
-Everything runs against the session-scoped `ux_server` unless it needs an unspent stub script, so
-the file adds one server to the suite and not nine.
+* **no two disclosure controls share an accessible name** — P12's own detection rule, which had no
+  test at all until UX W6 (a11y-reaudit-3);
+* **every chart fills the panel it was relocated to** — the W6 Critical (npo2-01 / dr-new-1).
+
+Everything runs against the session-scoped `surfaces` server — one server, one answered turn, every
+route the product paints — unless it needs an unspent stub script of a particular shape.
 """
 
 from __future__ import annotations
@@ -26,11 +30,18 @@ import re
 import pytest
 
 from tests.support import contrast
-from tests.ux.conftest import TOKEN
+from tests.ux.conftest import SURFACE_ROUTES, TOKEN, resolve
 
 pytestmark = pytest.mark.ux
 
-CHAT_AND_DASHBOARD = ("/", "/dashboard", "/dashboard/evals")
+#: **Every route the product paints** (UX W6). Until this wave the file was parametrised over
+#: `("/", "/dashboard", "/dashboard/evals")` — three routes that return almost no small controls —
+#: and that is the single reason eight of the re-audit's ten regressions shipped green: 14 of 24
+#: hittable controls under 44px on chat with an answer, 14 of 17 on `/policy`, 32 of 56 on a
+#: session page, and nineteen tables announcing a kebab-case DOM slug, all invisible to a suite
+#: that never visited those pages. `SURFACE_ROUTES` lives in the conftest beside the fixture that
+#: resolves its three placeholders.
+CHAT_AND_DASHBOARD = SURFACE_ROUTES
 
 #: Everything a keyboard can land on, minus the things that are deliberately not on screen.
 INTERACTIVE = "a[href], button, input:not([type=hidden]), select, textarea, summary, [tabindex]:not([tabindex='-1'])"
@@ -126,14 +137,31 @@ def _signed_in(browser, base_url: str, **context_options):
     return context, tab
 
 
+@pytest.fixture
+def surface_page(browser, surfaces):
+    """A signed-in tab on the whole-surface server, in the default persona."""
+    context, tab = _signed_in(browser, surfaces["base_url"])
+    try:
+        yield tab
+    finally:
+        context.close()
+
+
+def _open(tab, surfaces, route: str):
+    """Go to one route of `SURFACE_ROUTES`. A themed 404 is a page like any other (**P6**)."""
+    tab.goto(surfaces["base_url"] + resolve(route, surfaces), wait_until="networkidle")
+    tab.wait_for_timeout(150)
+    return tab
+
+
 # -- accessibility-and-responsive-16: the skip link and the landmark ----------------------
 
 
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_the_skip_link_is_the_first_stop_and_lands_on_the_page(page, ux_server, route):
+def test_the_skip_link_is_the_first_stop_and_lands_on_the_page(surface_page, surfaces, route):
     """Before it, a keyboard reader walked the masthead — and, on the dashboard, eleven page links —
     on every navigation before reaching anything the page is about."""
-    page.goto(f"{ux_server}{route}", wait_until="networkidle")
+    page = _open(surface_page, surfaces, route)
     page.keyboard.press("Tab")
 
     first = page.evaluate("() => document.activeElement && document.activeElement.className")
@@ -152,11 +180,11 @@ def test_the_skip_link_is_the_first_stop_and_lands_on_the_page(page, ux_server, 
 
 
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_every_keyboard_stop_paints_a_visible_focus_indicator(page, ux_server, route):
+def test_every_keyboard_stop_paints_a_visible_focus_indicator(surface_page, surfaces, route):
     """`app.css` had no `:focus-visible` rule at all before the brand landed, and the ring it grew
     is a `box-shadow` — which forced-colours modes do not paint, hence the transparent outline
     beside it. This walks the page with Tab and checks every stop shows one of the two."""
-    page.goto(f"{ux_server}{route}", wait_until="networkidle")
+    page = _open(surface_page, surfaces, route)
     unringed, seen = [], 0
     for _ in range(40):
         page.keyboard.press("Tab")
@@ -168,7 +196,7 @@ def test_every_keyboard_stop_paints_a_visible_focus_indicator(page, ux_server, r
             focused["outlineStyle"] not in ("none", "") and focused["outlineWidth"] not in ("0px", "")
         )
         if not ringed:
-            unringed.append(focused["name"])
+            unringed.append(f"<{focused['tag']}> {focused['name']}".strip())
 
     assert seen >= 5, f"the keyboard walk found only {seen} stops on {route}"
     assert not unringed, f"these controls take focus and paint nothing: {unringed}"
@@ -178,11 +206,11 @@ def test_every_keyboard_stop_paints_a_visible_focus_indicator(page, ux_server, r
 
 
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_every_control_is_at_least_44px_on_a_phone(page, ux_server, route):
+def test_every_control_is_at_least_44px_on_a_phone(surface_page, surfaces, route):
     """A 29 px pill is a mouse target. 44 px is the figure WCAG 2.5.5 names and the one the plan
     carries, and below 40 rem the stylesheet holds every control to it."""
-    page.set_viewport_size({"width": 390, "height": 844})
-    page.goto(f"{ux_server}{route}", wait_until="networkidle")
+    surface_page.set_viewport_size({"width": 390, "height": 844})
+    page = _open(surface_page, surfaces, route)
     page.wait_for_timeout(200)
 
     small = [
@@ -195,11 +223,11 @@ def test_every_control_is_at_least_44px_on_a_phone(page, ux_server, route):
 
 
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_no_text_renders_below_the_type_floor(page, ux_server, route):
+def test_no_text_renders_below_the_type_floor(surface_page, surfaces, route):
     """`body { font: 16px }` and `body.dashboard { font-size: 17px }` pinned body copy to pixels; the
     ramp fixed that, but `0.85em` of an already-small parent kept drifting under it. 13 px is the
     floor `--text-floor` names, and it is the size `--text-meta` sets."""
-    page.goto(f"{ux_server}{route}", wait_until="networkidle")
+    page = _open(surface_page, surfaces, route)
     tiny = sorted({(item["size"], item["path"]) for item in page.evaluate(PAINTED_TEXT_JS) if item["size"] < 13})
     assert not tiny, f"text below the 13px floor: {tiny}"
 
@@ -210,10 +238,10 @@ PIXEL_TYPE = re.compile(r"font(?:-size)?\s*:[^;{}]*?\b\d+(?:\.\d+)?px")
 
 
 @pytest.mark.parametrize("sheet", ("/static/app.css", "/static/brand/brand.css"))
-def test_the_stylesheet_declares_no_pixel_type(page, ux_server, sheet):
+def test_the_stylesheet_declares_no_pixel_type(surface_page, surfaces, sheet):
     """A `px` font-size ignores the reader's own browser setting, whatever its value is. Both
     sheets: the ramp lives in `brand.css` and every size in `app.css` draws on it."""
-    css = page.evaluate("url => fetch(url).then(r => r.text())", f"{ux_server}{sheet}")
+    css = surface_page.evaluate("url => fetch(url).then(r => r.text())", surfaces["base_url"] + sheet)
     assert css.strip(), f"{sheet} did not load"
     pixels = PIXEL_TYPE.findall(css)
     assert not pixels, f"{sheet} sizes type in pixels: {pixels}"
@@ -222,12 +250,12 @@ def test_the_stylesheet_declares_no_pixel_type(page, ux_server, sheet):
 # -- accessibility-and-responsive-19: reduced motion ---------------------------------------
 
 
-def test_a_reader_who_asked_for_less_motion_gets_none(browser, ux_server):
+def test_a_reader_who_asked_for_less_motion_gets_none(browser, surfaces):
     """Both halves: the stylesheet's transitions, and Chart.js, which animates every one of the six
     canvases by default and offered no opt-out at all."""
-    context, tab = _signed_in(browser, ux_server, reduced_motion="reduce")
+    context, tab = _signed_in(browser, surfaces["base_url"], reduced_motion="reduce")
     try:
-        tab.goto(f"{ux_server}/dashboard", wait_until="networkidle")
+        tab.goto(f"{surfaces['base_url']}/dashboard", wait_until="networkidle")
         tab.wait_for_timeout(400)
 
         durations = tab.evaluate(
@@ -248,14 +276,13 @@ def test_a_reader_who_asked_for_less_motion_gets_none(browser, ux_server):
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_the_painted_page_clears_aa_in_both_colour_schemes(browser, ux_server, scheme, route):
+def test_the_painted_page_clears_aa_in_both_colour_schemes(browser, surfaces, scheme, route):
     """The tokens all pass on their own (`tests/contract/test_brand_contrast.py`). This is the other
     half: a *rule* that puts one of them on the wrong ground — a soft ink on an accent fill, a muted
     label on a sunk panel — passes the token check and fails here."""
-    context, tab = _signed_in(browser, ux_server, color_scheme=scheme)
+    context, tab = _signed_in(browser, surfaces["base_url"], color_scheme=scheme)
     try:
-        tab.goto(f"{ux_server}{route}", wait_until="networkidle")
-        tab.wait_for_timeout(200)
+        _open(tab, surfaces, route)
         failures = []
         for item in tab.evaluate(PAINTED_TEXT_JS):
             floor = contrast.floor_for(font_px=item["size"], font_weight=item["weight"])
@@ -270,10 +297,10 @@ def test_the_painted_page_clears_aa_in_both_colour_schemes(browser, ux_server, s
 # -- colour is never the only encoding ------------------------------------------------------
 
 
-def test_no_state_is_painted_in_colour_alone(page, ux_server):
+def test_no_state_is_painted_in_colour_alone(surface_page, surfaces):
     """Every pill, flag and status marker names its state in words as well as in hue — including the
     failed step on the waterfall, which used to be red, bold and nothing else."""
-    page.goto(f"{ux_server}/dashboard/safety", wait_until="networkidle")
+    page = _open(surface_page, surfaces, "/dashboard/safety")
     wordless = page.evaluate(
         "() => Array.from(document.querySelectorAll('.pill, .flag'))"
         ".filter(el => !el.textContent.trim())"
@@ -285,11 +312,11 @@ def test_no_state_is_painted_in_colour_alone(page, ux_server):
 # -- every control has a name ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("route", ("/", "/dashboard/turns"))
-def test_every_form_control_carries_a_label(page, ux_server, route):
+@pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
+def test_every_form_control_carries_a_label(surface_page, surfaces, route):
     """A `<select>` or a text field whose only name is its position is unusable by voice or by
     screen reader; the filter bars are eleven of them on one page."""
-    page.goto(f"{ux_server}{route}", wait_until="networkidle")
+    page = _open(surface_page, surfaces, route)
     unnamed = page.evaluate(
         "() => Array.from(document.querySelectorAll('input:not([type=hidden]), select, textarea'))"
         ".filter(el => {"
@@ -391,3 +418,77 @@ def test_stop_and_try_again_are_reachable_from_the_keyboard(scripted_page, scrip
         "         hidden: button.offsetParent === null}; }"
     )
     assert reachable["focused"] and not reachable["hidden"], f"Try again is not reachable: {reachable}"
+
+
+# -- P12's own detection rule: no two disclosure controls share a name ----------------------
+
+#: The accessible name of every disclosure control on the page, in DOM order. A `<summary>`'s name
+#: is its own text — there is no label to borrow — so this is the whole of it.
+SUMMARY_NAMES_JS = """
+() => Array.from(document.querySelectorAll("summary"))
+  .filter((el) => el.getBoundingClientRect().height > 0)
+  .map((el) => (el.getAttribute("aria-label") || el.innerText || "").replace(/\\s+/g, " ").trim())
+"""
+
+
+@pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
+def test_no_two_disclosure_controls_share_an_accessible_name(surface_page, surfaces, route):
+    """Plan §1's rule for **P12**, which had no test at all — and so shipped 56 violations on one
+    page: `Scores in full` x28 and `Verdicts in full` x28 on an eval run, `Arguments in full` x14
+    on Tools, all named after the *column* rather than the row (a11y-reaudit-3). A screen-reader
+    user listing the controls on such a page is given the same words twenty-eight times."""
+    page = _open(surface_page, surfaces, route)
+    names = page.evaluate(SUMMARY_NAMES_JS)
+    duplicated = sorted({name for name in names if name and names.count(name) > 1})
+
+    assert not duplicated, f"{route}: these disclosure names are shared by more than one control: {duplicated}"
+
+
+# -- npo2-01 / dr-new-1: a chart fills the panel it was relocated to -------------------------
+
+#: Every canvas on the page, with the width of the panel it sits in.
+CHART_BOXES_JS = """
+() => Array.from(document.querySelectorAll("canvas")).map((el) => {
+  const panel = el.closest(".panel, .tab-panel") || el.parentElement;
+  return {
+    id: el.id,
+    chart: Math.round(el.getBoundingClientRect().width),
+    panel: Math.round(panel.getBoundingClientRect().width),
+    height: Math.round(el.getBoundingClientRect().height),
+  };
+})
+"""
+
+#: The share of its panel a plot has to occupy to be a plot rather than a thumbnail. The regression
+#: this guards drew a ~300px box inside a ~1380px panel — 22% — and on Guardrails exactly one of
+#: the six rule names was drawn, rotated, clipped and overlapping the y-axis title.
+CHART_PANEL_SHARE = 0.60
+
+#: `(route, tab)` for all six canvases. Two of them live behind a tab, which is closed on arrival
+#: — and a canvas in a `hidden` panel measures zero, so the tab is opened before anything is
+#: measured rather than the chart being quietly skipped.
+CHART_ROUTES = (
+    ("/dashboard", None),
+    ("/dashboard/safety", None),
+    ("/dashboard/evals", "compare"),
+    ("{run}", "system"),
+)
+
+
+@pytest.mark.parametrize("width", (1280, 1440))
+@pytest.mark.parametrize(("route", "tab"), CHART_ROUTES, ids=[route for route, _ in CHART_ROUTES])
+def test_every_chart_fills_the_panel_it_was_relocated_to(surface_page, surfaces, route, tab, width):
+    """The W6 Critical, measured. Every canvas declared only `height=`, no chart set `responsive`
+    or `maintainAspectRatio`, and the only CSS was `canvas { max-width: 100% }` — so Chart.js sized
+    every plot from its own 2:1 default and the detail the whole plan relocated to the dashboard
+    became less readable there than it had been in chat."""
+    surface_page.set_viewport_size({"width": width, "height": 900})
+    page = _open(surface_page, surfaces, route)
+    if tab:
+        page.click(f'[data-tab="{tab}"]')
+    page.wait_for_timeout(600)
+
+    boxes = page.evaluate(CHART_BOXES_JS)
+    assert boxes, f"{route} paints no chart at {width}px"
+    narrow = [box for box in boxes if box["chart"] < box["panel"] * CHART_PANEL_SHARE or box["height"] < 100]
+    assert not narrow, f"{route} at {width}px: these charts do not fill their panel: {narrow}"
