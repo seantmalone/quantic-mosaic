@@ -97,7 +97,7 @@ TARGETS_JS = """
   .filter((el) => {
     const style = getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden") return false;
-    if (el.closest(".visually-hidden") || el.classList.contains("skip-link")) return false;
+    if (el.closest(".visually-hidden")) return false;
     const box = el.getBoundingClientRect();
     return box.width > 0 && box.height > 0;
   })
@@ -529,3 +529,18 @@ def test_every_chart_fills_the_panel_it_was_relocated_to(surface_page, surfaces,
     assert boxes, f"{route} paints no chart at {width}px"
     narrow = [box for box in boxes if box["chart"] < box["panel"] * CHART_PANEL_SHARE or box["height"] < 100]
     assert not narrow, f"{route} at {width}px: these charts do not fill their panel: {narrow}"
+
+
+# -- JX2-04 (UX W7): the reader shows prose, never its markup ------------------------------
+
+LITERAL_MARKUP = re.compile(r"\*\*|(?<![\w/])_[A-Za-z][^_\n]{0,60}[A-Za-z]_(?![\w/])")
+
+
+@pytest.mark.parametrize("route", ("/policy", "{document}"))
+def test_the_reader_paints_no_literal_markup(surface_page, surfaces, route):
+    """The corpus is hard-wrapped and its emphasis straddles the wraps; marked up a line at a time,
+    a span across a wrap printed its asterisks to employees."""
+    page = _open(surface_page, surfaces, route)
+    text = page.eval_on_selector("main", "e => e.innerText")
+    found = LITERAL_MARKUP.findall(text)
+    assert not found, f"{route}: literal markup on the painted page: {found[:3]}"

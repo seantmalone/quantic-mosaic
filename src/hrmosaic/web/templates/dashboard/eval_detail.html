@@ -12,24 +12,19 @@
 
 {% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
 
-{% block filters %}
-{{ f.bar([
-    {'name': 'category', 'label': 'Category', 'type': 'select',
-     'options': ['simple_policy', 'multi_doc', 'tool_task', 'ambiguous', 'out_of_scope',
-                 'unsafe_action', 'sensitive']},
-    {'name': 'failures_first', 'label': 'Failures first', 'type': 'checkbox'},
-    {'name': 'cold_only', 'label': 'Cold items only', 'type': 'checkbox'}],
-    filters, '/dashboard/evals/' ~ view.run.run_id) }}
-{% endblock %}
+{#- The filters live inside the Items panel — the only thing they filter (UX W7, nav-r2-2): they
+    rendered above the tab bar, applying one reloaded the page onto Metrics, and nothing on screen
+    changed. See the Items panel below. -#}
+{% block filters %}{% endblock %}
 
 {% block content %}
-<nav class="tabs" id="eval-tabs">
-  <button class="tab is-current" type="button" data-tab="metrics">Metrics</button>
-  <button class="tab" type="button" data-tab="items">Items</button>
-  <button class="tab" type="button" data-tab="system">System</button>
-</nav>
+<div class="tabs" id="eval-tabs" role="tablist" aria-label="Evaluation views">
+  <button class="tab" type="button" role="tab" id="tab-btn-metrics" data-tab="metrics" aria-controls="tab-metrics" aria-selected="{{ 'true' if tab == 'metrics' else 'false' }}">Metrics</button>
+  <button class="tab" type="button" role="tab" id="tab-btn-items" data-tab="items" aria-controls="tab-items" aria-selected="{{ 'true' if tab == 'items' else 'false' }}">Items</button>
+  <button class="tab" type="button" role="tab" id="tab-btn-system" data-tab="system" aria-controls="tab-system" aria-selected="{{ 'true' if tab == 'system' else 'false' }}">System</button>
+</div>
 
-<section class="panel tab-panel" id="tab-metrics">
+<section class="panel tab-panel" id="tab-metrics" role="tabpanel" aria-labelledby="tab-btn-metrics"{% if tab != 'metrics' %} hidden{% endif %}>
   <div class="verdict" id="run-verdict">
     <p class="verdict-line">{% if view.verdict.items_scored %}{{ view.verdict.items_passed|num }} of
       {{ view.verdict.items_scored|counted('item') }} passed ({{ view.verdict.pass_rate|pct }}){% else %}This run
@@ -161,7 +156,17 @@
   </ul>
 </section>
 
-<section class="panel tab-panel" id="tab-items" hidden>
+<section class="panel tab-panel" id="tab-items" role="tabpanel" aria-labelledby="tab-btn-items"{% if tab != 'items' %} hidden{% endif %}>
+  {{ f.bar([
+      {'name': 'category', 'label': 'Category', 'type': 'select',
+       'options': ['simple_policy', 'multi_doc', 'tool_task', 'ambiguous', 'out_of_scope',
+                   'unsafe_action', 'sensitive'],
+       'help': 'The kind of question the dataset filed this item under.'},
+      {'name': 'failures_first', 'label': 'Failures first', 'type': 'checkbox',
+       'help': 'Sort the items that did not pass to the top.'},
+      {'name': 'cold_only', 'label': 'Cold items only', 'type': 'checkbox',
+       'help': 'Only the first item after a start, when nothing is warmed up yet.'}],
+      filters, '/dashboard/evals/' ~ view.run.run_id ~ '?tab=items', hidden={'tab': 'items'}) }}
   {#- `link_when: trace_present` on the Trace column: linked only where the turn resolves in this
       store. A run imported from a committed fixture names turns that were never written here, so
       the page offered 26 chips and 26 session pills — 52 links, all 404 (UX W6, nav-reaudit-3 /
@@ -197,7 +202,7 @@
   </ul>
 </section>
 
-<section class="panel tab-panel" id="tab-system" hidden>
+<section class="panel tab-panel" id="tab-system" role="tabpanel" aria-labelledby="tab-btn-system"{% if tab != 'system' %} hidden{% endif %}>
   <h3>Latency</h3>
   <dl class="facts" id="latency-block">
     <div><dt>Median</dt><dd>{{ view.latency.p50|ms_n(view.latency.n_warm) }}</dd></div>
@@ -257,16 +262,42 @@
 <script>
   (function () {
     "use strict";
-    document.querySelectorAll("#eval-tabs .tab").forEach(function (button) {
-      button.addEventListener("click", function () {
-        document.querySelectorAll("#eval-tabs .tab").forEach(function (other) {
-          other.classList.toggle("is-current", other === button);
-        });
-        document.querySelectorAll(".tab-panel").forEach(function (panel) {
-          panel.hidden = panel.id !== "tab-" + button.dataset.tab;
-        });
+    // Real tabs (UX W7, nav-r2-2 = nav-r2-3): every panel ships rendered and the server chose the
+    // open one from `?tab=`, so this only toggles — and it opens the tab that owns a fragment,
+    // because a `#…` into a hidden panel used to do nothing at all.
+    var tabs = Array.prototype.slice.call(document.querySelectorAll("#eval-tabs [role=tab]"));
+    function open(name, remember) {
+      tabs.forEach(function (tab) {
+        var selected = tab.dataset.tab === name;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.classList.toggle("is-current", selected);
+        var panel = document.getElementById(tab.getAttribute("aria-controls"));
+        if (panel) { panel.hidden = !selected; }
       });
+      if (remember && window.history && window.history.replaceState) {
+        var url = new URL(window.location.href);
+        url.searchParams.set("tab", name);
+        window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      }
+    }
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () { open(tab.dataset.tab, true); });
     });
+    function fromFragment() {
+      var id = window.location.hash.slice(1);
+      var target = id && document.getElementById(id);
+      var panel = target && target.closest(".tab-panel");
+      if (!panel) { return; }
+      open(panel.id.replace(/^tab-/, ""), false);
+      target.scrollIntoView({ block: "start" });
+    }
+    window.addEventListener("hashchange", fromFragment);
+    fromFragment();
+  })();
+</script>
+<script>
+  (function () {
+    "use strict";
     window.addEventListener("load", function () {
       if (typeof Chart === "undefined") { return; }
       var data = JSON.parse(document.getElementById("chart-eval-data").textContent);

@@ -2,11 +2,16 @@
    string, so every filtered view is a URL a grader can paste, and the Export JSON button carries
    exactly the same filters through to the `/api/*` endpoint. #}
 
-{% macro bar(fields, filters, reset_url) %}
+{% macro bar(fields, filters, reset_url, hidden={}) %}
 <form id="filter-bar" class="filter-bar" method="get" action="">
+  {#- What the form carries besides its filters — the eval-run page's `tab=items`, so Apply lands
+      on the panel the filters change (UX W7, nav-r2-2). -#}
+  {% for name, value in hidden.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
   {% for field in fields %}
   <label class="filter-field filter-{{ field.get('type', 'text') }}">
-    <span>{{ field.label }}</span>
+    {#- A field's definition, rendered exactly as `_table.html` renders a column's (UX W7, DR2-04):
+        "Failures first", "Cold items only" and "Min duration" were controls with no help. -#}
+    <span>{% if field.get('help') %}<span class="has-help" title="{{ field.help }}">{{ field.label }}</span>{% else %}{{ field.label }}{% endif %}</span>
     {% if field.get('type') == 'select' %}
       <select name="{{ field.name }}">
         <option value="">any</option>

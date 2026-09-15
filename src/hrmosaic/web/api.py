@@ -1016,20 +1016,27 @@ def policy_markup(text: str) -> Markup:
             blocks.append(f"<{tag}>" + "".join(f"<li>{item}</li>" for item in items) + f"</{tag}>")
             items = []
 
-    #: One entry per source line of the paragraph being built: its markup, and whether the line
-    #: asked for a hard break. The corpus is hard-wrapped at ~150 characters, so a source newline is
-    #: a typographic accident and not an instruction: joining on `<br>` reprinted every one of them
-    #: as a forced break mid-sentence, at every viewport (UX W6, the fix round of the re-audit).
+    #: One entry per source line of the paragraph being built: the raw line, and whether it asked
+    #: for a hard break. The corpus is hard-wrapped at ~150 characters, so a source newline is a
+    #: typographic accident and not an instruction: joining on `<br>` reprinted every one of them as
+    #: a forced break mid-sentence, at every viewport (UX W6, the fix round of the re-audit).
     #: Markdown's own rule is the one applied here — a soft wrap is a space, and only a line ending
     #: in two spaces is a break the author asked for.
+    #:
+    #: The lines are joined BEFORE the inline markup runs (UX W7, JX2-04): W6 marked each line up
+    #: on its own, so an emphasis span that straddled a wrap — `**Tax & Legal` on one line,
+    #: `review**` on the next — matched nothing and printed its literal asterisks to employees.
     paragraph: list[tuple[str, bool]] = []
 
     def flush_paragraph() -> None:
         if paragraph:
-            body = paragraph[0][0]
-            for index, (line_markup, _) in enumerate(paragraph[1:], start=1):
-                body += "<br>" if paragraph[index - 1][1] else " "
-                body += line_markup
+            # Runs of soft-wrapped lines, split only where the author asked for a break.
+            runs: list[list[str]] = [[]]
+            for raw, hard_break in paragraph:
+                runs[-1].append(raw)
+                if hard_break:
+                    runs.append([])
+            body = "<br>".join(_inline_markup(" ".join(run)) for run in runs if run)
             blocks.append(f"<p>{body}</p>")
             paragraph.clear()
 
@@ -1048,7 +1055,7 @@ def policy_markup(text: str) -> Markup:
         if not line.strip():
             flush_paragraph()
             continue
-        paragraph.append((_inline_markup(line.strip()), line.endswith("  ")))
+        paragraph.append((line.strip(), line.endswith("  ")))
     flush()
     flush_paragraph()
     return Markup("".join(blocks))  # noqa: S704 — every character above was escaped by `_inline_markup`

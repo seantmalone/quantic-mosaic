@@ -47,14 +47,22 @@
 <section class="panel" id="kind-toggles">
   <h3>Show these steps</h3>
   <div class="toggle-row">
+    {#- Each step kind carries its definition (UX W7, DR2-04 = dashboard-readability-5): this page
+        is the densest jargon surface on the product and the chat deep link's destination, and it
+        declared no help at all. -#}
     {% for kind in kinds %}
     <label class="toggle"><input type="checkbox" class="kind-toggle" value="{{ kind }}" checked>
-      <span class="pill pill-{{ kind }}">{{ kind|kind_label }}</span></label>
+      <span class="pill pill-{{ kind }} has-help" title="{{ kind_help.get(kind, '') }}">{{ kind|kind_label }}</span></label>
     {% endfor %}
     {% if not kinds %}<span class="muted">This session recorded no steps.</span>{% endif %}
   </div>
 </section>
 
+{#- The vocabulary of the rows below, once, above them (UX W7, DR2-04). -#}
+<p class="note" id="waterfall-legend">Each row is one recorded step of the turn, in order; a
+  <span class="has-help" title="One of the six rules, G1–G6, run over the turn.">safety check</span> is one of the six rules,
+  <span class="has-help" title="The router asked for the tool catalogue a second time during the turn.">catalogue reopened</span>
+  means the router re-read the tool list mid-turn.</p>
 <div id="span-waterfall">
 {% for turn in view.turns %}
 <article class="panel turn-card" id="turn-{{ turn.seq }}">
@@ -122,6 +130,18 @@
         span (UX W6, dr-new-3). One fact, one word, on both pages. -#}
     {% set paused = span.payload.get('error_code') == 'CONFIRMATION_REQUIRED' %}
     <li class="span-row" data-kind="{{ span.kind }}" data-status="{{ 'paused' if paused else span.status }}">
+      {#- First in the row so it can float at the row's top-right on a phone, where the row is block
+          flow; on a grid every item is placed explicitly, so the order is invisible there.
+
+          The disclosure lives in a seventh grid track (UX W7, DR2-02 = plan
+          dashboard-readability-9): it was a full-width second row per span — 28 spans, 56 rows,
+          a 3,200px page — and a closed payload now costs no row at all. `display: contents` puts
+          the summary in the track and the open `<pre>` on a row of its own. The accessible name
+          is unchanged; the eye gets a chevron. -#}
+      <details class="span-payload">
+        <summary><span class="visually-hidden">Step {{ span.seq|num }} · {{ span.kind|kind_label }} · {{ span.name }}</span><span class="span-chevron" aria-hidden="true">▸</span></summary>
+        <pre class="mono">{{ span.payload|payload_pretty }}</pre>
+      </details>
       <span class="span-seq mono">{{ span.seq|num }}</span>
       <span class="pill pill-{{ span.kind }}">{{ span.kind|kind_label }}</span>
       {#- A failed step was red and bold and nothing else: colour was the only thing saying it went
@@ -130,19 +150,25 @@
       <span class="span-name">{{ span.name }}{% if paused %}
         <span class="pill pill-paused">paused for confirmation</span>{% elif span.status == 'error' %}
         <span class="flag flag-error">failed</span>{% endif %}</span>
-      <span class="span-summary">{{ span|span_summary }}</span>
+      {#- Before the summary in source order: on a phone the row is block flow and this must share
+          the first line with the name, not fall to a line of its own after the summary; every
+          grid width places it explicitly, so the order is invisible there. -#}
+      <span class="span-duration mono">{{ span.duration_ms|ms }}</span>
+      {#- On a phone the kind pill flows at the head of the summary instead of taking a line of
+          its own (UX W7, DR2-02): the standalone pill above is hidden there and this one shown. -#}
+      <span class="span-summary"><span class="pill pill-{{ span.kind }} span-kind-inline">{{ span.kind|kind_label }}</span>{{ span|span_summary }}</span>
       {#- Decorative: the proportional bar is a picture of the duration printed beside it, and it is
           dropped altogether below 70rem. -#}
+      {#- The bar's right edge is clamped to the track (UX W7, M34 = numbers-precision-overflow-18):
+          `margin-left + width` of a span that ends a turn came to 100–103% and painted past it. -#}
+      {% set bar_width = 100.0 * (span.duration_ms or 0) / span_total %}
+      {#- An instant is a 2px tick, so its left edge stops short of the track's end. -#}
+      {% set bar_left = [100.0 * span.offset_ms / span_total, (100.0 - bar_width) if span.duration_ms else 99.0]|min %}
       <span class="span-track" aria-hidden="true">
         <span class="span-bar{% if not span.duration_ms %} is-instant{% endif %}"
-              style="margin-left: {{ (100.0 * span.offset_ms / span_total)|clamp }}%;
-              width: {{ (100.0 * (span.duration_ms or 0) / span_total)|clamp }}%;"></span>
+              style="margin-left: {{ bar_left|clamp }}%;
+              width: {{ [bar_width, 100.0 - bar_left]|min|clamp }}%;"></span>
       </span>
-      <span class="span-duration mono">{{ span.duration_ms|ms }}</span>
-      <details class="span-payload">
-        <summary>Step {{ span.seq|num }} · {{ span.kind|kind_label }} · {{ span.name }}</summary>
-        <pre class="mono">{{ span.payload|payload_pretty }}</pre>
-      </details>
     </li>
     {% else %}
     <li class="muted">No steps on this turn.</li>

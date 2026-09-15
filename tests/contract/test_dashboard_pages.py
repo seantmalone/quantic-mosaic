@@ -618,3 +618,44 @@ async def test_no_known_enum_column_paints_a_snake_case_value(seeded):
             if SNAKE_CASE.search(text):
                 offenders.setdefault(url, []).append(f"{match.group('col')}: {text[:60]}")
     assert not offenders, f"enum cells still spelled as code: {offenders}"
+
+
+# --------------------------------------------------------------------------------------
+# UX W7 — the evaluation tabs are tabs, and the query string chooses the open one
+# --------------------------------------------------------------------------------------
+
+EVAL_TABS = (("/dashboard/evals", ("runs", "compare")), ("{run}", ("metrics", "items", "system")))
+
+
+async def test_the_eval_tabs_are_real_tabs_driven_by_the_query_string(seeded):
+    """nav-r2-2 = nav-r2-3 (+ M50). Two thirds of the run page and half of the list were `hidden`
+    in the served markup behind three bare `<button>`s with no roles, the tab was not in the URL,
+    and a fragment into a hidden panel did nothing. Every panel ships rendered; `?tab=` chooses."""
+    listing = (await seeded.client.get("/dashboard/evals", headers=ADMIN)).text
+    run = re.search(r'href="(/dashboard/evals/r_[^"?#]+)"', listing).group(1)
+    for url, tabs in EVAL_TABS:
+        url = run if url == "{run}" else url
+        for chosen in (None, *tabs):
+            page = (await seeded.client.get(url + (f"?tab={chosen}" if chosen else ""), headers=ADMIN)).text
+            want = chosen or tabs[0]
+            strip = re.search(r'<div class="tabs" id="eval-tabs"[^>]*>', page)
+            assert strip and 'role="tablist"' in strip.group(0) and 'aria-label="Evaluation views"' in strip.group(0)
+            for name in tabs:
+                button = re.search(rf'<button[^>]*role="tab"[^>]*data-tab="{name}"[^>]*>', page)
+                assert button, f"{url}: no tab {name!r}"
+                assert f'aria-controls="tab-{name}"' in button.group(0)
+                assert f'aria-selected="{"true" if name == want else "false"}"' in button.group(0), (url, chosen, name)
+                panel = re.search(rf'<section[^>]*id="tab-{name}"[^>]*>', page)
+                assert (
+                    panel
+                    and 'role="tabpanel"' in panel.group(0)
+                    and f'aria-labelledby="tab-btn-{name}"' in panel.group(0)
+                )
+                assert (" hidden" in panel.group(0)) == (name != want), (url, chosen, name, panel.group(0))
+    # …and the run page's filters live in the Items panel, so Apply lands on what they change.
+    page = (await seeded.client.get(run, headers=ADMIN)).text
+    items = re.search(r'<section[^>]*id="tab-items".*?</section>', page, re.S).group(0)
+    assert 'id="filter-bar"' in items, "the filters are inside the Items panel"
+    assert 'name="tab" value="items"' in items, "…and Apply carries the tab"
+    metrics = re.search(r'<section[^>]*id="tab-metrics".*?</section>', page, re.S).group(0)
+    assert 'id="filter-bar"' not in metrics

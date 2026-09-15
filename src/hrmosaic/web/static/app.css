@@ -914,7 +914,7 @@ a .id-chip { color: var(--accent); }
    quarter-tick axis and says what the whole turn took (`dashboard-readability-9`). */
 .span-axis {
   display: grid; align-items: center; gap: 0.5rem;
-  grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem;
+  grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem 1.6rem;
   font: var(--text-meta); color: var(--ink-soft);
 }
 /* Columns 5 and 6 are the track and the duration of `.span-row` below. Explicit, never
@@ -925,22 +925,46 @@ a .id-chip { color: var(--accent); }
   border-top: 1px solid var(--line); padding-top: 0.2rem; }
 .span-axis-total { grid-column: 6; text-align: right; }
 .waterfall { list-style: none; margin: 0.25rem 0 0; padding: 0; }
+/* Seven tracks: the seventh is the payload's disclosure (UX W7, DR2-02 = plan
+   dashboard-readability-9). It was a full-width second row per span, so 28 spans painted 56 rows
+   and the session page ran to 3,200px on a desktop and 7,600px on a phone; a closed payload now
+   costs no row. `.span-payload` is `display: contents`, so its `<summary>` is the grid item in
+   track 7 and its `<pre>`, which only exists while open, takes a full-width row of its own. */
 .span-row {
   display: grid; align-items: center; gap: 0.5rem;
-  grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem;
+  grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem 1.6rem;
   padding: 0.3rem 0; border-top: 1px solid var(--line); font: var(--text-small);
 }
+/* Every item placed by name, so the source order — the disclosure first, the duration before the
+   summary, both for the phone's block flow — changes nothing here. */
+.span-seq { grid-column: 1; }
+.span-row > .pill { grid-column: 2; }
+.span-name { grid-column: 3; }
+.span-summary { grid-column: 4; }
+.span-track { grid-column: 5; }
+.span-duration { grid-column: 6; }
 .span-row[data-status="error"] .span-name { color: var(--danger); font-weight: 600; }
 .span-seq { color: var(--ink-soft); }
 .span-name { font-weight: 600; overflow-wrap: anywhere; }
 .span-summary { color: var(--ink-soft); overflow-wrap: anywhere; }
+/* The kind pill that flows inside the summary on a phone; the standalone pill's twin. */
+.span-kind-inline { display: none; }
 .span-track { display: block; height: 0.6rem; background: var(--paper); border-radius: 999px; }
 .span-bar { display: block; height: 0.6rem; min-width: 2px; background: var(--accent); border-radius: 999px; }
 /* A span with no measurable duration is an instant, and an instant is a tick. A 2px minimum bar in
    a proportional track reads as a measurement (`numbers-precision-overflow-18`). */
 .span-bar.is-instant { width: 2px !important; min-width: 2px; background: var(--ink-soft); border-radius: 0; }
 .span-duration { text-align: right; color: var(--ink-soft); }
-.span-payload { grid-column: 1 / -1; }
+.span-payload { display: contents; }
+.span-payload > summary {
+  grid-column: 7; list-style: none; cursor: pointer; text-align: center;
+  color: var(--ink-soft); border-radius: var(--radius-tile);
+}
+.span-payload > summary::-webkit-details-marker { display: none; }
+.span-payload > summary:hover { color: var(--accent); background: var(--paper); }
+.span-chevron { display: inline-block; transition: transform 120ms ease; }
+.span-payload[open] > summary .span-chevron { transform: rotate(90deg); }
+.span-payload > pre { grid-column: 1 / -1; }
 /* One `result_json` line ran 59,780px wide (`dashboard-readability-8`). The payload filter drops
    that duplicate; this is what keeps every other long value inside its box. */
 .span-payload pre { max-height: 22rem; overflow: auto; margin: 0.4rem 0 0.6rem; padding: 0.6rem;
@@ -955,14 +979,15 @@ a .id-chip { color: var(--accent); }
    Every position is declared, because auto-placement across a changed column count is what put the
    axis over the wrong column once already (UX W4 review, fix round 1). */
 @media (max-width: 70rem) {
-  .span-row { grid-template-columns: 2.2rem 6rem minmax(0, 1fr) 4.5rem; }
+  .span-row { grid-template-columns: 2.2rem 6rem minmax(0, 1fr) 4.5rem 1.6rem; }
   .span-seq { grid-column: 1; grid-row: 1; }
   .span-name { grid-column: 3; grid-row: 1; }
   .span-duration { grid-column: 4; grid-row: 1; }
   .span-summary { grid-column: 2 / 5; grid-row: 2; }
-  .span-payload { grid-row: 3; }
+  .span-payload > summary { grid-column: 5; grid-row: 1; }
+  .span-payload > pre { grid-column: 1 / -1; grid-row: 3; }
   .span-track { display: none; }
-  .span-axis { grid-template-columns: 2.2rem 6rem minmax(0, 1fr) 4.5rem; }
+  .span-axis { grid-template-columns: 2.2rem 6rem minmax(0, 1fr) 4.5rem 1.6rem; }
   .span-axis-label { grid-column: 1 / 4; }
   .span-axis-track { display: none; }
   .span-axis-total { grid-column: 4; }
@@ -971,14 +996,36 @@ a .id-chip { color: var(--accent); }
    `lookup_employee_profile` broke across three lines mid-word. The pill drops under the name, which
    is what the reader is scanning for, and the duration keeps its column. */
 @media (max-width: 40rem) {
-  .span-row, .span-axis { grid-template-columns: 2.2rem minmax(0, 1fr) 4.5rem; }
-  .span-name { grid-column: 2; grid-row: 1; }
-  .span-duration { grid-column: 3; grid-row: 1; white-space: nowrap; }
-  .span-row > .pill { grid-column: 2; grid-row: 2; justify-self: start; }
-  .span-summary { grid-column: 2 / 4; grid-row: 3; }
-  .span-payload { grid-row: 4; }
+  /* Two lines per step, not three (UX W7, DR2-02: the page the chat deep link lands on ran to
+     7,600px on a phone). The row is block flow here, not a grid: the chevron — a `<summary>`, so
+     the 44px rule sizes it — floats at the row's top-right and the first line (step, name,
+     duration) sits beside it; the summary, with the kind pill flowing at its head, wraps around
+     it and has the whole width from its second line on. In a grid the chevron's square cost every
+     summary a third of its width and a third line. */
+  .span-row { display: block; padding: 0.2rem 0; }
+  .span-seq, .span-name, .span-duration { display: inline; }
+  .span-name { font: var(--text-meta); font-weight: 600; margin: 0 0.4rem; }
+  .span-duration { white-space: nowrap; }
+  .span-row > .pill, .span-track { display: none; }
+  .span-summary { display: block; margin-top: 0.15rem; font: var(--text-meta); line-height: 1.35; }
+  .span-kind-inline { display: inline-block; margin-right: 0.35rem; font-size: inherit; line-height: 1.35; padding: 0 0.4rem; }
+  .span-payload > summary {
+    float: right; width: 2.75rem; min-height: 2.75rem; margin: 0 0 0.25rem 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .span-payload > pre { clear: both; }
+  .span-axis { grid-template-columns: 2.2rem minmax(0, 1fr) 4.5rem; }
   .span-axis-label { grid-column: 1 / 3; }
   .span-axis-total { grid-column: 3; }
+  /* The answer's copy at the chat page's size rather than the projector's: the dashboard's type is
+     a step larger than chat on purpose, and a phone is not a projector. */
+  .turn-answer .answer-block { font: var(--text-small); }
+  /* The nine kind toggles wrapped to five rows of 44px controls above the record; one row that
+     scrolls sideways inside itself, as the page nav does. */
+  #kind-toggles .toggle-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 0.25rem; }
+  #kind-toggles .toggle { flex: none; }
+  /* The document's title carries the citation on a phone; its slug is one click away on the reader. */
+  .citation-chip .id-chip { display: none; }
 }
 
 /* -- pages 9 and 10 ------------------------------------------------------------------- */
@@ -1005,7 +1052,7 @@ a .id-chip { color: var(--accent); }
   padding: 0.4rem 0.9rem; font: var(--text-small); cursor: pointer;
   background: var(--card); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-soft);
 }
-.tab.is-current { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.tab.is-current, .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .metric-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; margin: 1rem 0; }
 /* `min-width: 0` is the whole of the 1280px overflow: a grid item's default `min-width: auto`
    refuses to shrink below its content, so `0.9839181286549706` pushed twelve tiles across their

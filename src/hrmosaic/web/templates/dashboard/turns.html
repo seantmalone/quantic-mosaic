@@ -21,8 +21,10 @@
                  'error', 'configuration_required', 'maintenance']},
     {'name': 'intent', 'label': 'Intent', 'placeholder': 'e.g. workflow'},
     {'name': 'workflow', 'label': 'Workflow', 'placeholder': 'e.g. PTO request'},
-    {'name': 'has_error', 'label': 'Errors only', 'type': 'checkbox'},
-    {'name': 'min_duration_ms', 'label': 'Min duration (ms)', 'type': 'number'},
+    {'name': 'has_error', 'label': 'Errors only', 'type': 'checkbox',
+     'help': 'Only turns that recorded an error step.'},
+    {'name': 'min_duration_ms', 'label': 'Min duration (ms)', 'type': 'number',
+     'help': 'Hide turns that finished faster than this many milliseconds.'},
     {'name': 'q', 'label': 'Message contains', 'placeholder': 'e.g. PTO'}],
     filters, '/dashboard/turns') }}
 {% endblock %}

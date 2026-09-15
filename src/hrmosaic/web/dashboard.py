@@ -118,6 +118,30 @@ ADMIN_HINT = Markup(
     '<a href="/#actor-select">Demo &amp; grader controls</a> on the chat page.'
 )
 
+#: What each step kind is, for the session page's own legend (UX W7, DR2-04 = dashboard-readability-5).
+SPAN_KIND_HELP: dict[str, str] = {
+    "mcp_discovery": "The assistant asked the tool server what tools it offers.",
+    "plan": "The router's decision: what the question is, and which tools may answer it.",
+    "llm_call": "One call to the language model — to route, to act, or to write the answer.",
+    "retrieval": "A search of the policy library for passages to answer from.",
+    "tool_call": "A call to one HR tool over the tool server.",
+    "guardrail": "One of the six safety checks (G1–G6) run over the turn.",
+    "confirmation": "The gate that held a write until a human decided.",
+    "judge": "A second model scoring an evaluation item.",
+    "error": "Something went wrong at this step.",
+}
+
+
+def _tab(request: Request, tabs: Sequence[str]) -> str:
+    """The tab a page opens on, from `?tab=` — the first one unless the query names another.
+
+    Server-side, so every panel ships rendered and a fragment can open the panel that owns it
+    without JavaScript (UX W7, nav-r2-2 = nav-r2-3).
+    """
+    wanted = (request.query_params.get("tab") or "").strip()
+    return wanted if wanted in tabs else tabs[0]
+
+
 #: Which nav entry a page highlights when it is not an entry itself: session detail is opened from
 #: Sessions, so Sessions is what stays lit.
 NAV_PARENT = {3: 2}
@@ -2743,6 +2767,7 @@ def _page(
         # the demo panel and the Overview print (M20 = DR2-14).
         "admin_hint": ADMIN_HINT,
         "safety_rules": api.SAFETY_RULES,
+        "kind_help": SPAN_KIND_HELP,
         "provider_label": api.provider_label(str(_settings(request).llm_provider)),
         **api.shell_context(request, surface="dashboard"),
         "filters": (filters or Filters()).as_dict(),
@@ -3226,6 +3251,7 @@ async def page_evals(request: Request) -> Response:
         lede="Scored test runs — how accurate the answers are, and how well they cite.",
         api_url=f"/api/eval/runs?{filters.query_string()}",
         filters=filters,
+        tab=_tab(request, ("runs", "compare")),
         compare=build_eval_compare(request).model_dump(mode="json"),
         headline_metrics=HEADLINE_METRICS,
         judged_metrics=JUDGED_METRICS,
@@ -3248,6 +3274,7 @@ async def page_eval_detail(request: Request, run_id: str) -> Response:
         title=view.run.label or f"Run {view.run.variant}",
         lede=f"{_f_counted(view.run.n_items, 'item')} from the committed dataset, scored end to end.",
         breadcrumbs=[("Evaluations", "/dashboard/evals")],
+        tab=_tab(request, ("metrics", "items", "system")),
         api_url=f"/api/eval/runs/{run_id}",
         filters=filters,
         headline_metrics=HEADLINE_METRICS,

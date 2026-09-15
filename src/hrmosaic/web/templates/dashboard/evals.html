@@ -22,12 +22,14 @@
 {% endblock %}
 
 {% block content %}
-<nav class="tabs" id="eval-tabs">
-  <button class="tab is-current" type="button" data-tab="runs">Runs</button>
-  <button class="tab" type="button" data-tab="compare">Compare</button>
-</nav>
+{#- A real tablist (UX W7, nav-r2-2 = nav-r2-3, M50 = a11y-re2-10): roles, `aria-selected`,
+    `aria-controls`, a name, and the open tab chosen server-side from `?tab=`. -#}
+<div class="tabs" id="eval-tabs" role="tablist" aria-label="Evaluation views">
+  <button class="tab" type="button" role="tab" id="tab-btn-runs" data-tab="runs" aria-controls="tab-runs" aria-selected="{{ 'true' if tab == 'runs' else 'false' }}">Runs</button>
+  <button class="tab" type="button" role="tab" id="tab-btn-compare" data-tab="compare" aria-controls="tab-compare" aria-selected="{{ 'true' if tab == 'compare' else 'false' }}">Compare</button>
+</div>
 
-<section class="panel tab-panel" id="tab-runs">
+<section class="panel tab-panel" id="tab-runs" role="tabpanel" aria-labelledby="tab-btn-runs"{% if tab != 'runs' %} hidden{% endif %}>
   <h3>Runs</h3>
   {{ t.table('eval-runs-table', [
       {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
@@ -96,7 +98,7 @@
   </form>
 </section>
 
-<section class="panel tab-panel" id="tab-compare" hidden>
+<section class="panel tab-panel" id="tab-compare" role="tabpanel" aria-labelledby="tab-btn-compare"{% if tab != 'compare' %} hidden{% endif %}>
   {# One list, read by the chart and by the table beside it: two copies of the series would be two
      pictures of different things under one heading (UX W5). #}
   {% set ablation_series = ['cit_resolve_mean', 'tool_selection_accuracy', 'arg_correctness_rate',
@@ -150,16 +152,42 @@
 <script>
   (function () {
     "use strict";
-    document.querySelectorAll("#eval-tabs .tab").forEach(function (button) {
-      button.addEventListener("click", function () {
-        document.querySelectorAll("#eval-tabs .tab").forEach(function (other) {
-          other.classList.toggle("is-current", other === button);
-        });
-        document.querySelectorAll(".tab-panel").forEach(function (panel) {
-          panel.hidden = panel.id !== "tab-" + button.dataset.tab;
-        });
+    // Real tabs (UX W7, nav-r2-2 = nav-r2-3): every panel ships rendered and the server chose the
+    // open one from `?tab=`, so this only toggles — and it opens the tab that owns a fragment,
+    // because a `#…` into a hidden panel used to do nothing at all.
+    var tabs = Array.prototype.slice.call(document.querySelectorAll("#eval-tabs [role=tab]"));
+    function open(name, remember) {
+      tabs.forEach(function (tab) {
+        var selected = tab.dataset.tab === name;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.classList.toggle("is-current", selected);
+        var panel = document.getElementById(tab.getAttribute("aria-controls"));
+        if (panel) { panel.hidden = !selected; }
       });
+      if (remember && window.history && window.history.replaceState) {
+        var url = new URL(window.location.href);
+        url.searchParams.set("tab", name);
+        window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      }
+    }
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () { open(tab.dataset.tab, true); });
     });
+    function fromFragment() {
+      var id = window.location.hash.slice(1);
+      var target = id && document.getElementById(id);
+      var panel = target && target.closest(".tab-panel");
+      if (!panel) { return; }
+      open(panel.id.replace(/^tab-/, ""), false);
+      target.scrollIntoView({ block: "start" });
+    }
+    window.addEventListener("hashchange", fromFragment);
+    fromFragment();
+  })();
+</script>
+<script>
+  (function () {
+    "use strict";
     window.addEventListener("load", function () {
       if (typeof Chart === "undefined") { return; }
       var variants = JSON.parse(document.getElementById("chart-ablation-data").textContent);

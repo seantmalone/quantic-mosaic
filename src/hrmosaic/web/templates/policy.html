@@ -62,11 +62,22 @@
       </ol>
     </nav>
 
+    {#- One `<section>` per heading, holding every passage the chunker cut it into, and an anchor
+        per passage inside it — the id a citation names (UX W7, nav-r2-6 = a11y-re2-8). W6
+        de-duplicated the contents list and left the body looping every chunk, so a section split
+        in two rendered two identical `<h3>`s two screens apart, the second opening mid-word, and
+        the contents offered one link for the pair. Now the list and the body agree one to one. -#}
     {% for chunk in view.chunks %}
-    <section class="reader-section" id="{{ chunk.chunk_id }}">
+    {% set opens = loop.first or chunk.heading_path != loop.previtem.heading_path %}
+    {% if opens %}
+    <section class="reader-section" id="section-{{ chunk.chunk_id }}">
       <h3>{{ chunk.heading_path|heading_path }}</h3>
+    {% endif %}
+      <a class="anchor" id="{{ chunk.chunk_id }}"></a>
       <div class="reader-passage">{{ chunk.text|policy_markup }}</div>
+    {% if loop.last or chunk.heading_path != loop.nextitem.heading_path %}
     </section>
+    {% endif %}
     {% else %}
     <p class="muted">This document has no sections yet.</p>
     {% endfor %}

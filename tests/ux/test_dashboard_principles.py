@@ -589,3 +589,78 @@ def test_no_link_inside_the_page_leads_into_the_raw_json_api(dashboard):
         if loose:
             offenders[route] = loose
     assert not offenders, f"links into the raw API from inside the page: {offenders}"
+
+
+# -- UX W7: tables keep their columns, the waterfall keeps its rows, the reader keeps its prose --
+
+#: Every element in `main` that is wider than its box without the scroll affordance, and every
+#: prose cell narrower than 6rem that holds a sentence.
+TABLE_BUDGET_JS = """
+() => {
+  const sideways = [];
+  for (const el of document.querySelectorAll("main *")) {
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || el.clientWidth === 0) continue;
+    // A visually-hidden element is a 1px clip box: it "overflows" by construction and paints nothing.
+    if (el.closest(".visually-hidden")) continue;
+    if (el.scrollWidth > el.clientWidth + 1) {
+      const allowed = el.closest(".table-scroll, pre, .chart-figure, .dash-nav");
+      const name = el.className ? "." + String(el.className).split(" ")[0] : "";
+      if (!allowed) sideways.push(el.tagName.toLowerCase() + name);
+    }
+  }
+  const narrowProse = Array.from(document.querySelectorAll(".data-table td.cell-text"))
+    .filter((td) => td.innerText.trim().length > 24)
+    .map((td) => ({ col: td.dataset.col, width: Math.round(td.getBoundingClientRect().width) }))
+    .filter((cell) => cell.width > 0 && cell.width < 96);
+  return { sideways: sideways.slice(0, 8), narrowProse: narrowProse.slice(0, 8) };
+}
+"""
+
+DESKTOPS = (("1440x900", 1440, 900), ("1280x800", 1280, 800))
+
+
+@pytest.mark.parametrize("label,width,height", DESKTOPS, ids=[label for label, _, _ in DESKTOPS])
+def test_no_table_overflows_without_the_affordance_and_no_narrow_column_holds_prose(
+    browser, dashboard, label, width, height
+):
+    """npo3-02 (UX W7). `/dashboard/retrieval` overflowed its container at 1280 and the QUERY
+    column was shredded into a 55px ribbon of word fragments once the humanised STRATEGY label
+    beside it grew. Measured on a fresh load at each desktop width, on every dashboard route."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        offenders: dict[str, dict] = {}
+        for route in dashboard.routes:
+            tab.goto(dashboard.base_url + route, wait_until="networkidle")
+            tab.wait_for_timeout(100)
+            measured = tab.evaluate(TABLE_BUDGET_JS)
+            if measured["sideways"] or measured["narrowProse"]:
+                offenders[route] = measured
+        assert not offenders, f"at {label}: {offenders}"
+    finally:
+        context.close()
+
+
+def test_the_waterfall_costs_one_row_per_step_and_the_session_page_fits_a_phone(browser, dashboard):
+    """DR2-02 (UX W7). Every span emitted a full-width second row for its payload — 28 spans, 56
+    rows — and the session page ran to 7,600px at 390x844. The disclosure is a seventh column
+    now, a closed payload costs no row, and the page the chat deep link lands on is under 5,000px."""
+    api = dashboard.visit("/api/traces/sessions/" + dashboard.session_route.rsplit("/", 1)[1])
+    spans = api.evaluate("() => JSON.parse(document.body.innerText).turns.reduce((n, t) => n + t.spans.length, 0)")
+    assert spans > 0, "the seeded session has steps"
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        tab.goto(dashboard.base_url + dashboard.session_route, wait_until="networkidle")
+        tab.wait_for_timeout(150)
+        rows = tab.eval_on_selector_all("ol.waterfall > li.span-row", "els => els.length")
+        assert rows == spans, f"{rows} waterfall rows for {spans} steps"
+        open_rows = tab.eval_on_selector_all(".span-payload[open]", "els => els.length")
+        assert open_rows == 0, "payloads ship closed"
+        height = tab.evaluate("() => document.documentElement.scrollHeight")
+        assert height < 5000, f"the session page is {height}px tall at 390x844"
+    finally:
+        context.close()

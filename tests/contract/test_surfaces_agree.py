@@ -89,7 +89,8 @@ async def test_a_write_held_at_the_gate_is_paused_on_both_pages_and_failed_on_ne
 
     assert "paused for confirmation" in tools, "the Tools page says what the gate did"
     assert "paused for confirmation" in waterfall, "and so does the waterfall"
-    assert "failed" not in " ".join(waterfall.split()).split('<span class="span-summary">')[0]
+    rows = re.sub(r"<pre\b.*?</pre>", "", waterfall, flags=re.S)
+    assert "failed" not in " ".join(rows.split()).split('<ol class="waterfall">', 1)[1]
     assert 'data-status="paused"' in waterfall, "the row is the designed pause, not an error"
 
 
@@ -103,9 +104,10 @@ async def test_no_page_prints_a_confirmation_code_where_a_word_belongs(web):
         waterfall = (await client.get(f"/dashboard/sessions/{session_id}")).text
 
     # The record keeps it — the span payload is a disclosure on the page and `/api/*` is unchanged
-    # (P15) — but the row a reader scans says it in words.
-    row = waterfall.split('<span class="span-summary">')[0]
-    assert "CONFIRMATION_REQUIRED" not in row
+    # (P15) — but the row a reader scans says it in words. The payloads are cut out first: since
+    # UX W7 the disclosure is the first thing in a row, so a slice at the summary would read them.
+    rows = re.sub(r"<pre\b.*?</pre>", "", waterfall, flags=re.S)
+    assert "CONFIRMATION_REQUIRED" not in rows.split('<ol class="waterfall">', 1)[1]
 
 
 async def test_the_panel_sentence_and_the_session_tile_count_the_same_safety_checks(web):
