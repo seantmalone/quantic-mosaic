@@ -21,10 +21,10 @@
   {% if view.last_error %}<p class="alert">{{ view.last_error }}</p>{% endif %}
   <form id="rediscover-form" hx-post="/api/mcp/rediscover" hx-swap="none"
         hx-on::after-request="window.location.reload()">
-    <button id="rediscover" class="button button-send" type="submit">Re-discover now</button>
+    <button id="rediscover" class="button button-send is-locked" type="submit"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>Re-discover now</button>
     <span class="note">Drops the cached handshake and runs <code>initialize</code> +
       <code>tools/list</code> again, recording the <code>mcp_discovery</code> span in a synthetic
-      <code>maintenance</code> session.</span>
+      <code>maintenance</code> session.{% if not is_admin %} <strong>Needs the HR admin persona</strong> — set it in <em>Demo &amp; grader controls</em> at the foot of the chat page.{% endif %}</span>
   </form>
 </section>
 

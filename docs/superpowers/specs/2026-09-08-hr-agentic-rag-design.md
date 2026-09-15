@@ -1899,8 +1899,11 @@ cannot latch `/ready` at 503 for the life of the process. `tests/integration/tes
 ### 11.5 Chat UI (R6.2, R6.5)
 
 A single Jinja page at `/`, with: an **"act as" selector** over the 24 mock employees **plus "HR admin"**, setting cookie `mosaic_actor` through
-`POST /session/actor` (the employee id becomes `_meta.mosaic/actor`, audit only, default `E1042`; the admin persona additionally reveals the dashboard
-nav link and unlocks the admin-only surfaces of §11); a **message list** rendering typed blocks — `policy_fact` plain, `recommendation` with a
+`POST /session/actor` (the employee id becomes `_meta.mosaic/actor`, audit only, default `E1042`). **Amended, UX W1:** the selector no longer lives in
+the masthead and no longer changes what is *reachable*. The shared masthead's `Chat | Dashboard` switch is rendered unconditionally, in every persona,
+and there are no admin-only read surfaces left — the role gates the three write endpoints of §11.6 and the privileged `/chat` options, nothing else. The
+selector moved into a `section.demo-panel` at the foot of the page (a stub until W3 builds the rest of the panel around it), keeping its `id` and
+`name`. The page also carries: a **message list** rendering typed blocks — `policy_fact` plain, `recommendation` with a
 **"Recommendation — not company policy"** badge, `escalation` with a contact chip; **citation chips** under every block, opening a drawer that
 highlights the snippet inside the full chunk and links into the corpus browser; a **snapshot note** (*"Employee data as of 1 September 2026"*) under
 any answer whose tool results carry an `as_of`; the **live agent-activity rail** (the SSE span stream, colour-coded by kind, collapsing into a
@@ -1916,7 +1919,15 @@ the chunk's `source_url`** deep link.
 **Demo reproducibility (R6.5):** the two buttons **and** `scripts/demo_task_1.sh` / `demo_task_2.sh` — plain `curl`, parameterised by `BASE_URL`,
 pretty-printing answer + citations + trace + `dashboard_url` — both documented in README. Every call they make sends
 `Authorization: Bearer $APP_ACCESS_TOKEN`; the chat calls stay in the **default employee persona**, and the `GET /api/traces/turns/{turn_id}` poll of
-the 202 fallback (§9.4) — the one admin-only route the scripts touch — additionally sends `X-Actor: admin`.
+the 202 fallback (§9.4) additionally sends `X-Actor: admin` — a historical belt-and-braces since UX W1 opened every `/api/*` read to any persona
+holding the token, kept because it is also what the poll looked like when the fallback was designed.
+
+**Conversation reload (UX W1).** `GET /?session=<id>` rehydrates a transcript instead of opening an empty one: the stored turns of that session are
+replayed through the same partial a live turn renders, and the page seeds the session id so the next question continues the conversation. It is
+readable by the persona that owns the session or by `admin`; any other id — foreign, unknown or malformed — renders an **empty** conversation and one
+plain sentence, naming no id and confirming nothing. A replay never rebuilds a **Confirm / Cancel card**: confirmation tokens are minted in exactly one
+place (`POST /chat/confirm`, §11.2), so a replayed card could not write and would be a lie. The dashboard's session page links here
+(*"Continue this conversation in chat"*), which is the return leg of the `/dashboard/sessions/{id}#turn-{seq}` deep link.
 
 ### 11.6 Observability dashboard — 11 pages
 
@@ -1956,8 +1967,11 @@ non-null on every run — the contract test asserts exactly that split.
 
 **Write controls.** Three, each on a stated page, each **admin-only** and enforced server-side: **Reset sandbox** (clears `mock_writes`) on page
 8 → `POST /api/dev/reset-sandbox`; **Re-discover now** on page 9 → `POST /api/mcp/rediscover`; **Run smoke eval** on page 11 → `POST /api/eval/runs`.
-Since UX W1 the host pages are open to every persona, so each control is rendered with its own server-side check behind it: a non-admin caller
-reaching the button gets **403** `{"code": "ADMIN_REQUIRED"}` from the endpoint — a themed page for a browser, the JSON body for a client (§11.9).
+Since UX W1 the host pages are open to every persona, so the persona is proved at the control rather than at the door. Outside the admin persona each
+control renders **visibly disabled**, with one sentence beside it naming the persona needed and where to set it (the demo panel at the foot of the chat
+page) — never live-and-silently-refused, which is the dead end §11.9 forbids. The server check is still the control: a caller that reaches the endpoint
+anyway gets **403** `{"code": "ADMIN_REQUIRED"}` — a themed page for a browser, the JSON body for a client (§11.9).
+`tests/contract/test_dashboard_pages.py` asserts both halves — disabled plus the sentence outside the persona, live and unexplained inside it.
 
 **Out-of-turn re-discovery has a home:** `spans.turn_id` is `NOT NULL`, so `POST /api/mcp/rediscover` first opens a synthetic
 `client_label='maintenance'` session and a turn with `outcome='maintenance'` and writes the `mcp_discovery` span into it. That outcome is excluded
@@ -1982,7 +1996,7 @@ otherwise. Amended at UX W1: reads carry no **admin** mark any more.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | Chat UI — gated |
+| GET | `/` | Chat UI — gated. `?session=<id>` (UX W1) rehydrates that session's transcript when the caller owns it or is `admin`; any other id gives an empty conversation and a plain notice |
 | POST | `/chat` | The contract endpoint (R6.3) — gated, per-IP limited; privileged `options` need `client_label="eval"` + **admin** |
 | POST | `/chat/confirm` | Resolve a pending mock write — gated; **the only place a confirmation token is minted** |
 | GET | `/chat/stream?turn_id=` | SSE span stream — gated; subscribe **before** POSTing |

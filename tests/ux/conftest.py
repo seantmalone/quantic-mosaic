@@ -23,9 +23,15 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("playwright.sync_api", reason="install requirements-ux.txt and `playwright install chromium`")
-
-from playwright.sync_api import sync_playwright  # noqa: E402
+#: Playwright is imported **inside** the `browser` fixture, never here. Two reasons, both
+#: observed rather than theoretical. (1) The published suite size must not depend on whether a
+#: browser package is installed: an `importorskip` at module scope skips this directory *at
+#: collection*, so `pytest --collect-only -m ""` reports 2,029 on a CI box and 2,040 on a
+#: developer's, and `test_docs_completeness` fails in whichever place the documents were not
+#: written on. (2) `playwright.sync_api` pulls in greenlet, and a default `pytest -q` — which
+#: deselects this suite *after* collection, so it never runs a browser — was seen to abort at
+#: interpreter shutdown with `recursive_mutex lock failed` (exit 134) after a green summary. A
+#: run that will not drive a browser now never loads one.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LLM_SCRIPTS = REPO_ROOT / "tests" / "fixtures" / "llm_scripts"
@@ -107,7 +113,10 @@ def ux_server(tmp_path_factory) -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def browser() -> Iterator[object]:
-    with sync_playwright() as playwright:
+    sync_api = pytest.importorskip(
+        "playwright.sync_api", reason="install requirements-ux.txt and `playwright install chromium`"
+    )
+    with sync_api.sync_playwright() as playwright:
         instance = playwright.chromium.launch()
         try:
             yield instance

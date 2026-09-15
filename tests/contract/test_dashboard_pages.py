@@ -13,7 +13,8 @@ What this file pins down:
   one gate), while the three write endpoints stay **403** `{"code": "ADMIN_REQUIRED"}` without the
   admin persona;
 * pages 1 and 2 show and filter on `auth_mode` and `actor_role`;
-* the three write controls of §11.6 are present and wired, never rendered dead;
+* the three write controls of §11.6 are present and wired in the admin persona, and rendered
+  disabled with the sentence that says why outside it — never live-and-silently-refused;
 * the bounded smoke-eval endpoint refuses an over-large request and lazily resolves the harness
   (its bounded success path is `tests/integration/test_smoke_eval_endpoint.py`);
 * the eval-row → trace deep link resolves.
@@ -407,3 +408,55 @@ async def test_run_smoke_eval_is_on_page_eleven_bounded_and_lazily_imports_the_r
     from evaluation import runner as eval_runner
 
     assert callable(eval_runner.smoke_run)
+
+
+#: The three write controls, each with its page and its DOM id (§11.6).
+WRITE_CONTROLS = (
+    ("/dashboard/safety", "reset-sandbox"),
+    ("/dashboard/mcp", "rediscover"),
+    ("/dashboard/evals", "run-smoke-eval"),
+)
+
+#: Half of the sentence that replaced *"Admin only — reaching this page already proved the
+#: persona"*, which stopped being true when W1 opened the host pages to every persona.
+NEEDS_ADMIN = "Needs the HR admin persona"
+
+
+def _control_tag(markup: str, element_id: str) -> str:
+    match = re.search(rf'<(?:button|input|select)\b[^>]*\bid="{element_id}"[^>]*>', markup)
+    assert match, f'no control with id="{element_id}" in the page'
+    return match.group(0)
+
+
+async def test_a_write_control_is_disabled_and_explained_outside_the_admin_persona(seeded):
+    """P6: a control a persona cannot use is never rendered live — it is disabled and says why.
+
+    The endpoint answers 403 either way (the test above), but a red button that silently does
+    nothing is a dead end with no message, which is exactly what §11.6's *"never rendered dead"*
+    forbids. So outside the admin persona each control carries `disabled`, and the note beside it
+    names the persona needed and where to set it.
+    """
+    for url, element_id in WRITE_CONTROLS:
+        page = await seeded.client.get(url)
+        assert page.status_code == 200, url
+        tag = _control_tag(page.text, element_id)
+        assert " disabled" in tag, f"{element_id} on {url} is live for a persona that cannot use it: {tag}"
+        assert NEEDS_ADMIN in page.text, url
+        assert "already proved the persona" not in page.text, url
+
+
+async def test_a_write_control_is_live_and_unexplained_in_the_admin_persona(seeded):
+    """The other half: the admin persona gets a working button and no needless sentence."""
+    for url, element_id in WRITE_CONTROLS:
+        page = await seeded.client.get(url, headers=ADMIN)
+        assert page.status_code == 200, url
+        assert " disabled" not in _control_tag(page.text, element_id), f"{element_id} on {url}"
+        assert NEEDS_ADMIN not in page.text, url
+
+
+async def test_the_smoke_eval_inputs_are_disabled_with_their_button(seeded):
+    """The evals control is a form, not a lone button: `Enter` in the number field must not post."""
+    page = await seeded.client.get("/dashboard/evals")
+    form = re.search(r'<form id="smoke-eval-form".*?</form>', page.text, re.S)
+    assert form, "no smoke-eval form on /dashboard/evals"
+    assert form.group(0).count(" disabled") == 3, form.group(0)

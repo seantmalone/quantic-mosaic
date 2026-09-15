@@ -66,19 +66,19 @@
   <form id="smoke-eval-form" class="control-form" hx-post="/api/eval/runs" hx-swap="none"
         hx-on::after-request="window.location.reload()">
     <label>Variant
-      <select name="variant">
+      <select name="variant"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>
         <option value="baseline">baseline</option>
         <option value="dense_only_k2">dense_only_k2</option>
         <option value="no_structured_tools">no_structured_tools</option>
       </select>
     </label>
     <label>Items
-      <input type="number" name="n_items" value="3" min="1" max="{{ smoke_max_items }}">
+      <input type="number" name="n_items" value="3" min="1" max="{{ smoke_max_items }}"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>
     </label>
-    <button id="run-smoke-eval" class="button button-send" type="submit">Run smoke eval</button>
+    <button id="run-smoke-eval" class="button button-send is-locked" type="submit"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>Run smoke eval</button>
     <span class="note">Bounded to at most <strong>{{ smoke_max_items }}</strong> items and one
       variant (<code>EVAL_SMOKE_MAX_ITEMS</code>); anything larger is refused, never trimmed. It
-      drives the same <code>POST /chat</code> path the offline runner drives.</span>
+      drives the same <code>POST /chat</code> path the offline runner drives.{% if not is_admin %} <strong>Needs the HR admin persona</strong> — set it in <em>Demo &amp; grader controls</em> at the foot of the chat page.{% endif %}</span>
   </form>
 </section>
 

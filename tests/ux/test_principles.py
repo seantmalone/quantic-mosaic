@@ -168,7 +168,7 @@ def test_p7_an_answered_turn_does_not_scroll_the_document_sideways_on_a_phone(pa
     assert not _document_scrolls_sideways(page)
 
 
-def test_the_access_token_opens_the_suite_at_all(ux_server, browser):
+def test_the_access_token_opens_the_suite_at_all(browser, ux_server):
     """A guard on the fixture itself: without the key every assertion above would be vacuous."""
     context = browser.new_context()
     tab = context.new_page()

@@ -743,7 +743,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,040 tests as of 2026-09-14) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,043 tests as of 2026-09-14) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
@@ -1266,8 +1266,11 @@ Stated plainly, because each one is a real gap:
 
 ### Where to see all of this running
 
-The dashboard is admin-only and entirely synthetic; a grader reaches it by following the tokenized
-link and choosing **HR admin** in the act-as selector.
+The dashboard is entirely synthetic, and since UX W1 it is open to anyone holding the access token:
+a grader follows the tokenized link and clicks **Dashboard** in the masthead switch, in whatever
+persona they happen to be in. Only the three write controls — *Reset sandbox*, *Re-discover now*,
+*Run smoke eval* — need the **HR admin** persona, which is set in the demo panel at the foot of the
+chat page; outside it they render disabled and say so.
 
 | Page | Shows |
 |---|---|

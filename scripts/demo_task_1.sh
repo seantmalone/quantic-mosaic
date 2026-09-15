@@ -6,7 +6,8 @@
 #
 # Every call sends `Authorization: Bearer $APP_ACCESS_TOKEN`; the chat call stays in the **default
 # employee persona** (E1042), and only the `GET /api/traces/turns/{turn_id}` poll of the 202
-# fallback — the one admin-only route this script touches — additionally sends `X-Actor: admin`.
+# fallback additionally sends `X-Actor: admin`. Since UX W1 every `/api/*` read is open to any persona
+# holding the token, so this is belt-and-braces, not a requirement.
 #
 #   BASE_URL=https://mosaic-hr.onrender.com APP_ACCESS_TOKEN=… sh scripts/demo_task_1.sh
 set -eu

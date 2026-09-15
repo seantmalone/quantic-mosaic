@@ -57,9 +57,8 @@
   <h3>Mock-write sandbox</h3>
   <form id="reset-sandbox-form" hx-post="/api/dev/reset-sandbox" hx-swap="none"
         hx-on::after-request="window.location.reload()">
-    <button id="reset-sandbox" class="button button-danger" type="submit">Reset sandbox</button>
-    <span class="note">Clears every <code>mock_writes</code> row. Admin only — reaching this page
-      already proved the persona.</span>
+    <button id="reset-sandbox" class="button button-danger is-locked" type="submit"{% if not is_admin %} disabled aria-disabled="true"{% endif %}>Reset sandbox</button>
+    <span class="note">Clears every <code>mock_writes</code> row.{% if not is_admin %} <strong>Needs the HR admin persona</strong> — set it in <em>Demo &amp; grader controls</em> at the foot of the chat page.{% endif %}</span>
   </form>
   {{ t.table('mock-writes-table', [
       {'label': 'Id', 'key': 'id', 'kind': 'code'},

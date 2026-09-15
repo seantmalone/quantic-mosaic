@@ -196,6 +196,10 @@ body {
 .button-send, .button-confirm { background: var(--accent); border-color: var(--accent); color: #fff; }
 .button-cancel { background: var(--card); }
 .button[disabled] { opacity: 0.55; cursor: progress; }
+/* A write control a non-admin persona cannot use (UX W1). `progress` is for an in-flight
+   htmx request; this one is not coming, so the cursor says so and a sentence beside it
+   says which persona is needed and where to set it. */
+.button.is-locked[disabled] { cursor: not-allowed; }
 
 /* -- the live rail ----------------------------------------------------------------- */
 .rail {
