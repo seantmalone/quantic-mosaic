@@ -253,17 +253,13 @@
       return block.type === "recommendation" || uncitedFact;
     }
 
-    function renderBlock(block) {
-      return block.text;
-    }
-
     // Blocks arrive complete and in order, so each one is appended rather than the preview being
     // re-rendered.
     function answerDelta(block) {
       provisional.hidden = false;
       var paragraph = document.createElement("p");
       paragraph.className = "answer-text";
-      paragraph.textContent = renderBlock(block);
+      paragraph.textContent = block.text;
       provisionalBlocks.appendChild(paragraph);
       if (isSuggestion(block) && !provisionalBlocks.querySelector(".answer-footnote")) {
         var note = document.createElement("p");

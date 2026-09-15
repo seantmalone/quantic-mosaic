@@ -133,7 +133,7 @@ async def test_one_status_line_narrates_the_turn_and_the_answer_streams_under_it
 async def test_the_provisional_render_mirrors_g3s_relabel_of_an_uncited_policy_fact(web):
     """`#provisional-blocks` must never show an unverified claim as company policy (§11.3).
 
-    `renderBlock()` mirrored `render_answer()`'s two prefixes but not G3's relabel rule: a streamed
+    The preview mirrored `render_answer()`'s two prefixes but not G3's relabel rule: a streamed
     `policy_fact` with an empty `citations[]` is exactly what G3 turns into a `recommendation` in
     the final answer, and what G2 drops when its citations do not resolve. `turn_completed` hard-
     replaces the preview — but §11.3 records 2 of 17 answered turns being revised after the last
