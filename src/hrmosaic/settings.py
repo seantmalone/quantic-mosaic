@@ -112,7 +112,7 @@ class Settings(BaseSettings):
 
     # --- agent loop budgets --------------------------------------------------------------
     agent_max_steps: int = Field(default=6, ge=1)
-    agent_max_tool_calls: int = Field(default=8, ge=1)
+    agent_max_tool_calls: int = Field(default=12, ge=1)
     agent_wall_clock_s: int = Field(default=90, ge=1)
 
     # --- MCP ------------------------------------------------------------------------------

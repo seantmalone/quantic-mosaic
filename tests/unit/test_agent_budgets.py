@@ -64,7 +64,7 @@ async def test_a_turn_inside_its_budgets_answers_and_records_no_error(run_agent,
     makes it a budget probe — so under the shipped budgets it would run until the script ran out,
     which proves nothing about a turn that finishes.
     """
-    assert settings.agent_max_steps == 6 and settings.agent_max_tool_calls == 8
+    assert settings.agent_max_steps == 6 and settings.agent_max_tool_calls == 12
     response = await run_agent(
         "injection_probe.json",
         ChatRequest(message="What should I do about a suspicious phishing email?", employee_id="E1042"),

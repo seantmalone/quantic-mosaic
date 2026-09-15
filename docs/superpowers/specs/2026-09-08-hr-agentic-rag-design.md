@@ -81,7 +81,7 @@ flowchart TB
     end
     subgraph render["Render free web service — ONE process, ONE container (~345 MB / 512 MB)"]
         WEB["<b>Web App</b> — FastAPI / uvicorn (1 worker)<br/>POST /chat · /chat/confirm · GET /chat/stream (SSE)<br/>GET /health · /ready · /api/traces|eval|corpus|mcp/*"]
-        ORCH["<b>Agent Orchestrator</b><br/>route → act loop → synthesize<br/>≤6 steps · ≤8 tool calls · ≤90 s"]
+        ORCH["<b>Agent Orchestrator</b><br/>route → act loop → synthesize<br/>≤6 steps · ≤12 tool calls · ≤90 s"]
         GUARD["<b>Guardrails G1–G6</b><br/>evidence gate · citation resolvability · fact-vs-recommendation<br/>injection shield · sensitive escalation · redaction"]
         MCPC["<b>MCP Client</b><br/>initialize → tools/list → tools/call<br/>_meta trace + actor + retrieval"]
         subgraph mcps["<b>MCP Server</b> — mcp 2.2.0 MCPServer, Streamable HTTP at /mcp-server/mcp"]
@@ -1249,7 +1249,7 @@ POST /chat  (or /chat/confirm)
  │     ├─ out_of_scope       → G1 refuse + redirect → SYNTHESIZE (zero tools/call, §9.2)
  │     └─ needs_clarification→ outcome="clarify", the question names the missing slot → END
  │
- ├─ 2. ACT LOOP   ≤ AGENT_MAX_STEPS=6 · ≤ AGENT_MAX_TOOL_CALLS=8 · ≤ AGENT_WALL_CLOCK_S=90
+ ├─ 2. ACT LOOP   ≤ AGENT_MAX_STEPS=6 · ≤ AGENT_MAX_TOOL_CALLS=12 · ≤ AGENT_WALL_CLOCK_S=90
  │     ├─ llm_call(purpose="act", tools = the MCP-discovered catalog, filtered by intent)
  │     ├─ for each requested tool call → client.call_tool(..., _meta=ctx) → tool_call span
  │     │     ├─ nested retrieval spans lifted from _trace and re-parented
@@ -2163,7 +2163,7 @@ returns **HTTP 200** with `outcome: "configuration_required"` and a single escal
 | `MIN_EVIDENCE_SCORE` | – | `0.32` | G1 threshold, calibrated at P10 |
 | `MIN_SUPPORT_SCORE` | – | `0.26` | G1 second-chunk floor; also `min_dense_score`'s default |
 | `CHUNK_MAX_CHARS` / `_WINDOW_CHARS` / `_OVERLAP_CHARS` / `_MIN_CHARS` | – | `1400` / `1100` / `150` / `120` | Chunker |
-| `AGENT_MAX_STEPS` / `_MAX_TOOL_CALLS` / `_WALL_CLOCK_S` | – | `6` / `8` / `90` | Loop budgets (§9.4) |
+| `AGENT_MAX_STEPS` / `_MAX_TOOL_CALLS` / `_WALL_CLOCK_S` | – | `6` / `12` / `90` | Loop budgets (§9.4) |
 | `MCP_TRANSPORT` | – | `http` | `http` \| `stdio`. The value written to `sessions.mcp_transport` is `mcp_transport_effective`: `remote` iff `mcp_server_url` was explicitly set to something other than the computed loopback default, else `stdio` when `MCP_TRANSPORT=stdio`, else `http` |
 | `MCP_SERVER_URL` | – | **computed** — `f"http://127.0.0.1:{self.port}/mcp-server/mcp"` in a validator from the resolved `port` | R7.3 — point at any remote MCP endpoint. A literal `"${PORT}"` default would not be interpolated by anything, and the client would dial a closed port whenever Render injects a different port |
 | `MCP_TOOLS_DISABLED` | – | *(empty)* | Process default only; the per-turn filter is applied in the MCP client's schema conversion, never as a global `remove_tool` on the shared server |
@@ -2951,7 +2951,7 @@ principle 14).
 | **Dashboard exposure** | Entirely synthetic, and open to **anyone holding the access token** — every page and every `/api/*` read (amended, UX W1); the three write actions alone still require the admin persona, enforced server-side. A grader reaches the dashboard from the `Chat \| Dashboard` switch in the shared masthead. Stated in `deployed.md`. |
 | **MCP endpoint exposure** | `/mcp-server/mcp` remains reachable, deliberately, so a grader can attach MCP Inspector — now **with the bearer header** (Inspector supports custom headers). Protections in order of certainty: every read tool exposes only synthetic data; the write tools need a token an external caller cannot obtain and the rejection leaks nothing; a per-IP rate limit is FastAPI middleware on the mount. Whether `mcp` 2.2.0 exposes a native `Host`/`Origin` allowlist is checked by grepping the installed SDK before P5 and recorded in `mcp/README.md` with what was found — a control claimed in a design doc but absent from the SDK is worse than none. |
 | **Supply chain** | Every dependency pinned to an exact version in `requirements.txt`, `mcp==2.2.0` with a CI shape test. No runtime CDN: frontend assets are vendored at pinned versions with their upstream URLs in `static/vendor/LICENSES.md` alongside the full licence texts. No `curl \| sh` in the Dockerfile. |
-| **Denial of service** | Hard per-turn budgets (6 steps, 8 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 24 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and admin-only; a per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) on `POST /chat` and the MCP mount, with the access gate keeping anonymous traffic off both. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |
+| **Denial of service** | Hard per-turn budgets (6 steps, 12 tool calls, 90 s wall clock); a token-bucket limiter on provider calls; payload truncation at 24 KB / 32 KB (128 KB for `llm_call`); retention capped at 300 sessions; the smoke-eval endpoint capped at 6 items and admin-only; a per-IP limit (`ACCESS_RATE_LIMIT_PER_MIN`) on `POST /chat` and the MCP mount, with the access gate keeping anonymous traffic off both. `options.k` — the one unprivileged option — is bounded `ge=1, le=10` in the request model and clamped again inside the tool, so an anonymous caller cannot request `k=10000` against a 0.1-CPU instance. |
 
 ## 18. The two demo agentic tasks
 

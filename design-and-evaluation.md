@@ -41,7 +41,7 @@ flowchart TB
     end
     subgraph render["Render free web service — ONE process, ONE container (293.6 MB live / 512 MB)"]
         WEB["<b>Web App</b> — FastAPI / uvicorn (1 worker)<br/>POST /chat · /chat/confirm · GET /chat/stream (SSE)<br/>GET /health · /ready · /api/traces|eval|corpus|mcp/*"]
-        ORCH["<b>Agent Orchestrator</b><br/>route → act loop → synthesize<br/>≤6 steps · ≤8 tool calls · ≤90 s"]
+        ORCH["<b>Agent Orchestrator</b><br/>route → act loop → synthesize<br/>≤6 steps · ≤12 tool calls · ≤90 s"]
         GUARD["<b>Guardrails G1–G6</b><br/>evidence gate · citation resolvability · fact-vs-recommendation<br/>injection shield · sensitive escalation · redaction"]
         MCPC["<b>MCP Client</b><br/>initialize → tools/list → tools/call<br/>_meta trace + actor + retrieval"]
         subgraph mcps["<b>MCP Server</b> — mcp 2.2.0 MCPServer, Streamable HTTP at /mcp-server/mcp"]
@@ -91,7 +91,7 @@ POST /chat
  │      ├─ sensitive           → G5 escalation → SYNTHESIZE (no tools burned)
  │      ├─ out_of_scope        → G1 refuse + redirect → SYNTHESIZE (zero tools/call)
  │      └─ needs_clarification → outcome="clarify" naming the missing slot → END
- ├─ 2. ACT LOOP   ≤ 6 steps · ≤ 8 tool calls · ≤ 90 s wall clock
+ ├─ 2. ACT LOOP   ≤ 6 steps · ≤ 12 tool calls · ≤ 90 s wall clock
  │      ├─ llm_call(purpose="act", tools = the tools/list catalog, filtered by intent)
  │      ├─ client.call_tool(...) → tool_call span (retrieval spans lifted and re-parented)
  │      │     ├─ CONFIRMATION_REQUIRED → confirmation span, outcome="awaiting_confirmation", END
@@ -451,8 +451,11 @@ makes the `no_structured_tools` ablation move workflow completion rather than on
 
 Every turn records `stop_reason ∈ {answered, clarify, refused, escalated, awaiting_confirmation,
 max_steps, max_tool_calls, timeout, guardrail, error, configuration_required}`. Budgets are
-**6 steps · 8 tool calls · 90 s wall clock**. Exceeding one produces a graceful partial answer
-plus an `error` span carrying the reason — never a hang, never a 5xx.
+**6 steps · 12 tool calls · 90 s wall clock**. The tool-call budget is 12 rather than 8 because a
+four-document question spends one targeted breadth search per relevant document on top of the
+profile lookup, the compliance check and the section reads, and at 8 that arithmetic ran out
+mid-turn; the 90 s wall clock, not the call count, remains the hard bound. Exceeding one produces a
+graceful partial answer plus an `error` span carrying the reason — never a hang, never a 5xx.
 
 The limiter is a **token bucket** (capacity `LLM_BURST` = `LLM_RPM` = 10, refilling continuously)
 rather than strict pacing, because strict pacing at 10 RPM would spend ~30 s of sleep on a
