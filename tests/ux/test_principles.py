@@ -266,11 +266,10 @@ def test_p12_the_finished_answer_is_announced_once_in_plain_language(fresh_page,
     assert fresh_page.eval_on_selector("#turn-status", "e => e.textContent") == "Answer ready."
 
 
-def test_p12_body_type_scales_with_the_browser_default(page, ux_server):
-    """A `px` body size ignores the reader's own font setting."""
-    css = page.evaluate("url => fetch(url).then(r => r.text())", f"{ux_server}/static/app.css")
-    assert "font: 16px/" not in css, "body copy is declared in rem, through the brand type tokens"
-    assert "var(--text-body)" in css
+# `test_p12_body_type_scales_with_the_browser_default` lived here from W2 until W5, when
+# `tests/ux/test_accessibility.py::test_the_stylesheet_declares_no_pixel_type` replaced it with the
+# stronger statement it was a special case of: *no* declaration sizes type in pixels, not merely the
+# one `body { font: 16px/… }` rule the brand sweep removed.
 
 
 def test_p12_no_two_disclosures_on_a_turn_share_an_accessible_name(fresh_page, fresh_server):

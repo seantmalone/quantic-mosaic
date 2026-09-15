@@ -70,12 +70,20 @@ ablation:
 
 # Each demo target starts its own server with its own stub script, waits for /health,
 # runs the curl script and always stops the server again.
+#
+# The trap does not merely signal the server, it **waits for it** (UX W5). `kill` returns as soon
+# as SIGTERM is delivered, so `make demo1 && make demo2` — which is how the two are run, and how CI
+# and the report run them — started demo2's uvicorn while demo1's was still unwinding on the same
+# fixed $(PORT), and the second bind lost the race intermittently: `[Errno 48] Address already in
+# use`, then a `wait_for_health` timeout on a server that never came up. `wait` blocks until the
+# process is reaped and the listening socket is gone, which is the whole fix; the `|| true` keeps a
+# non-zero exit status from the signalled child out of the target's own result.
 define demo
 	set -e; \
 	LLM_PROVIDER=stub LLM_STUB_SCRIPT=tests/fixtures/llm_scripts/$(1).json \
 	  $(BIN)/uvicorn hrmosaic.web.main:app --host $(HOST) --port $(PORT) --workers 1 & \
 	server=$$!; \
-	trap 'kill $$server 2>/dev/null || true' EXIT INT TERM; \
+	trap 'kill $$server 2>/dev/null || true; wait $$server 2>/dev/null || true' EXIT INT TERM; \
 	$(BIN)/python scripts/wait_for_health.py --url $(BASE_URL) --timeout 120; \
 	BASE_URL=$(BASE_URL) sh scripts/$(1).sh
 endef

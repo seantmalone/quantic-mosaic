@@ -21,6 +21,13 @@ deployed URL. Output goes to a git-ignored directory (`.ux-capture/` by default)
 `.full.png` / `.fold.png` / `.txt` / `.numbers.json` / `.overflow.json` per screen and viewport,
 plus an `index.json` with the same shape the audit's carries.
 
+**Both colour schemes, since UX W5.** `brand.css` ships a whole dark palette behind
+`prefers-color-scheme` and no screen of the audit had ever been taken in it. After the light pass a
+second context runs with `color_scheme="dark"` over the key page, chat at rest, the demo panel, the
+answered conversation and every dashboard route, under ids suffixed `-dark`. It asks **no new
+question**: the four servers share one trace store, so `/?session=<id>` rehydrates the conversation
+the light pass produced and the dashboard renders the same records.
+
     make ux-capture                 # into .ux-capture/
     make ux-capture UX_OUT=/tmp/w1  # somewhere else
 
@@ -756,6 +763,79 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             state="404 as a page",
             notes="NEW at W1: an HTML refusal is a page with the masthead and a route back.",
         )
+
+        # -- the second colour scheme (UX W5) ---------------------------------------------
+        #
+        # `brand.css` ships a whole dark palette behind `prefers-color-scheme`, and until now not
+        # one screen of the audit had ever been taken in it: every before/after pair in
+        # `docs/evidence/` is the light theme, so a dark-only regression — a hard-coded rgba, an
+        # ink on the wrong ground — could land green.
+        #
+        # The dark pass deliberately asks no new question. `StubAdapter` spends its script once per
+        # process, and all four servers share one `TRACE_DB_PATH`, so `/?session=<id>` rehydrates
+        # demo 1's answered conversation and every dashboard route renders the same records the
+        # light pass photographed. Same states, same data, one emulated preference apart.
+        context.close()
+        context = browser.new_context(viewport={"width": 1440, "height": 900}, color_scheme="dark")
+        page = context.new_page()
+        page.goto(f"{urls['dash']}/access", wait_until="networkidle")
+        shot.screen(
+            page,
+            "access-key-page-dark",
+            route="/access",
+            state="no cookie, prefers-color-scheme: dark",
+            notes="NEW at W5: the key page in the dark palette.",
+        )
+        page = sign_in(context, urls["dash"], "E1042")
+        shot.screen(
+            page,
+            "chat-rest-dark",
+            route="/",
+            state="persona E1042, no turns, prefers-color-scheme: dark",
+            notes="NEW at W5: chat at rest in the dark palette.",
+        )
+        shot.screen(
+            page,
+            "demo-panel-dark",
+            route="/",
+            state="persona E1042, panel opened, prefers-color-scheme: dark",
+            notes="NEW at W5: the demo panel's dashed border and muted ground in dark.",
+            selector="section.demo-panel",
+            before=open_demo_panel,
+        )
+        set_demo_panel(page, open_=False)
+        page.goto(f"{urls['dash']}/?session={session}", wait_until="networkidle")
+        shot.screen(
+            page,
+            "chat-answer-dark",
+            route=f"/?session={session}",
+            state="cited answer, rehydrated, prefers-color-scheme: dark",
+            notes="NEW at W5: the answered conversation in dark — rehydrated, so no second model "
+            "call was made to photograph it.",
+        )
+        for screen_id, route, state in routes:
+            # The two `*-403-employee` ids are the *same page* as the two below them, captured
+            # under the name of the 403 W1 removed; one dark photograph of each page is enough.
+            if not route.startswith("/dashboard") or screen_id.endswith("-403-employee"):
+                continue
+            page.goto(urls["dash"] + route, wait_until="networkidle", timeout=90_000)
+            page.wait_for_timeout(400)
+            shot.screen(
+                page,
+                f"{screen_id}-dark",
+                route=route,
+                state=f"{state}, prefers-color-scheme: dark",
+                notes=f"NEW at W5: dashboard route {route} in the dark palette.",
+            )
+        if run_id:
+            page.goto(urls["dash"] + run_id, wait_until="networkidle")
+            shot.screen(
+                page,
+                "dashboard-eval-run-dark",
+                route=run_id,
+                state="one run, prefers-color-scheme: dark",
+                notes="NEW at W5: the run a grader reads first, in the dark palette.",
+            )
 
         # chat in the admin persona — identical chrome, which is the W1 claim
         context.close()

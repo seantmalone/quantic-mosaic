@@ -92,6 +92,35 @@ async def test_a_wrong_access_parameter_is_401_and_the_key_page(web):
     assert "set-cookie" not in response.headers
 
 
+async def test_a_rejected_key_says_so_in_three_places_a_reader_can_reach(web):
+    """`accessibility-and-responsive-12` (UX W5).
+
+    `role="alert"` on a *server render* announces nothing: the region is already in the document
+    when the assistive layer first reads the page, so there is no mutation to announce. What reaches
+    a reader who cannot see the red sentence is the title, the field marked invalid, the field
+    described by the sentence, and focus landing in the field that was rejected. All four only on a
+    genuine rejection: an anonymous request that offered no credential is not one, and marking its
+    empty field invalid would be a lie.
+    """
+    async with web(**_gated()) as client:
+        rejected = await client.get("/", params={"access": "not-the-token"}, headers=HTML)
+        posted = await client.post("/access", data={"access": "wrong"}, headers=HTML)
+        anonymous = await client.get("/", headers=HTML)
+        blank = await client.get("/access", headers=HTML)
+
+    for response in (rejected, posted):
+        assert "<title>Key not recognised — " in response.text
+        assert 'aria-invalid="true"' in response.text
+        assert 'aria-describedby="access-message"' in response.text
+        assert 'id="access-message"' in response.text
+        assert "autofocus" in response.text
+
+    for response in (anonymous, blank):
+        assert "<title>Key not recognised — " not in response.text
+        assert "aria-invalid" not in response.text
+        assert "autofocus" not in response.text
+
+
 async def test_the_cookie_alone_opens_a_gated_route(web):
     async with web(**_gated()) as client:
         client.cookies.set("mosaic_access", TOKEN)

@@ -341,3 +341,119 @@ def test_a_deep_linked_turn_is_highlighted_and_not_merely_scrolled_to(dashboard)
     targeted = tab.eval_on_selector("#turn-1", "e => getComputedStyle(e).backgroundColor")
 
     assert targeted != plain, f"the deep-linked turn is painted like every other one: {targeted}"
+
+
+# -- P7 and the W5 accessibility findings, on the same server ------------------------------
+#
+# These share the module's one server and its one real turn rather than booting another: the
+# `ux` CI job already starts several, and a wave that adds a suite should not also add a minute.
+
+
+VIEWPORTS = (("1440x900", 1440, 900), ("1280x800", 1280, 800), ("390x844", 390, 844))
+
+
+def test_p7_no_dashboard_route_scrolls_the_document_sideways(dashboard):
+    """**P7** at the three viewports the audit measured, over every route at once.
+
+    `tests/ux/test_principles.py` asserts this on chat, which is where the finding was; the
+    dashboard was clean at the audit and has been rewritten twice since. W4's own `.span-axis`
+    regressed it on four screens and only the capture harness noticed.
+    """
+    sideways = []
+    try:
+        for label, width, height in VIEWPORTS:
+            dashboard.tab.set_viewport_size({"width": width, "height": height})
+            for route in dashboard.routes:
+                dashboard.tab.goto(dashboard.base_url + route, wait_until="networkidle")
+                dashboard.tab.wait_for_timeout(80)
+                if dashboard.tab.evaluate(
+                    "() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"
+                ):
+                    sideways.append(f"{route}@{label}")
+    finally:
+        dashboard.tab.set_viewport_size({"width": 1440, "height": 900})
+
+    assert not sideways, f"the document scrolls sideways on: {sideways}"
+
+
+def test_the_waterfall_keeps_its_durations_on_a_phone(dashboard):
+    """`accessibility-and-responsive-9`, and W4's own carry-over.
+
+    Below 1120px the waterfall used to **delete** the duration bar and the millisecond value, so the
+    one thing a step's row is for was missing on exactly the viewport that has least room for the
+    prose beside it. W4 then hid the axis too, to stop a six-column grid 46rem wide scrolling the
+    document sideways. W5's restack is four explicit columns: the track — the only decorative part —
+    is what goes, the number comes back, and the axis keeps its label and its total inside the
+    container.
+    """
+    try:
+        dashboard.tab.set_viewport_size({"width": 390, "height": 844})
+        tab = dashboard.visit(dashboard.session_route)
+        tab.wait_for_timeout(120)
+        measured = tab.evaluate(
+            "() => {"
+            " const box = el => el ? el.getBoundingClientRect() : null;"
+            " const durations = Array.from(document.querySelectorAll('.span-duration'))"
+            "   .filter(el => getComputedStyle(el).display !== 'none');"
+            " const axis = document.querySelector('.span-axis');"
+            " const card = document.querySelector('.turn-card');"
+            " return {"
+            "  durations: durations.length,"
+            "  texts: durations.slice(0, 3).map(el => el.textContent.trim()),"
+            "  tracks: Array.from(document.querySelectorAll('.span-track'))"
+            "    .filter(el => getComputedStyle(el).display !== 'none').length,"
+            "  axis: box(axis) && {right: box(axis).right, width: box(axis).width},"
+            "  card: box(card) && {right: box(card).right},"
+            " };"
+            "}"
+        )
+    finally:
+        dashboard.tab.set_viewport_size({"width": 1440, "height": 900})
+
+    assert measured["durations"] > 0, "the duration column is gone again on a phone"
+    assert all(text for text in measured["texts"]), f"the durations are painted but empty: {measured}"
+    assert measured["tracks"] == 0, "the proportional track has no room at 390px and is decorative"
+    assert measured["axis"] and measured["axis"]["width"] > 0, "the axis went with the track again"
+    assert measured["axis"]["right"] <= measured["card"]["right"] + 1, (
+        f"the axis is wider than the card it is drawn in: {measured}"
+    )
+
+
+def test_every_chart_hands_its_numbers_over_in_words(dashboard):
+    """`accessibility-and-responsive-19`: six canvases exposed no data at all.
+
+    A `<canvas>` is a bitmap and an `aria-label` on it names the picture, not the figures. Each one
+    is now decorative, inside a `figure.chart-figure` whose visually-hidden caption is either the
+    table of the same values or the sentence saying where on the page they already are.
+    """
+    naked = []
+    for route in dashboard.routes:
+        tab = dashboard.visit(route)
+        naked += tab.evaluate(
+            "route => Array.from(document.querySelectorAll('canvas')).filter(el => {"
+            "  const figure = el.closest('figure.chart-figure');"
+            "  if (!figure) return true;"
+            "  if (el.getAttribute('aria-hidden') !== 'true') return true;"
+            "  const caption = figure.querySelector('figcaption');"
+            "  return !caption || !caption.textContent.trim();"
+            "}).map(el => route + ' ' + el.id)",
+            route,
+        )
+    assert not naked, f"these charts show numbers no reader can reach: {naked}"
+
+
+def test_a_deep_link_moves_focus_to_the_turn_it_names(dashboard):
+    """`accessibility-and-responsive-10`: the viewport moved and the reading position did not.
+
+    Both link shapes, because they land on different elements: the chat panel's `#turn-<seq>` is the
+    card, and the turns listing's `#turn-<turn_id>` is the `visibility: hidden` anchor inside it —
+    which cannot take focus, so the card takes it instead.
+    """
+    tab = dashboard.visit(dashboard.session_route)
+    turn_id = tab.eval_on_selector(".turn-card .anchor", "e => e.id")
+
+    for fragment in ("#turn-1", f"#{turn_id}"):
+        tab.goto(f"{dashboard.base_url}{dashboard.session_route}{fragment}", wait_until="networkidle")
+        tab.wait_for_timeout(150)
+        landed = tab.evaluate("() => document.activeElement && document.activeElement.className.toString()")
+        assert "turn-card" in (landed or ""), f"{fragment} left focus on {landed!r}"

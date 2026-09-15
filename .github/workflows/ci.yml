@@ -82,10 +82,14 @@ jobs:
         if: always()
         with: { name: coverage-xml, path: coverage.xml }
 
-  # The UX principle suite (P3–P7): the rendered page, in a real browser, at the three viewports
-  # the audit measured. Its own job because it is the only thing in the repo that needs a browser
-  # binary, and `needs:` is deliberately absent — it must never block `test` or `deploy`. The
-  # chromium build is cached on the pinned playwright version, so a cache hit makes it a no-op.
+  # The UX principle suite: the rendered page, in a real browser, at the three viewports the audit
+  # measured. `pytest -q -m ux` is the **whole** marked suite and always has been — since UX W5 that
+  # is P1, P3–P11, P12 and P14 across `test_principles.py`, `test_dashboard_principles.py` and
+  # `test_accessibility.py`, the last of which also drives a second browser context at
+  # `color_scheme=dark` and one at `reduced_motion=reduce`. Its own job because it is the only thing
+  # in the repo that needs a browser binary, and `needs:` is deliberately absent — it must never
+  # block `test` or `deploy`. The chromium build is cached on the pinned playwright version, so a
+  # cache hit makes it a no-op.
   ux:
     runs-on: ubuntu-latest
     env:

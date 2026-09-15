@@ -74,11 +74,18 @@ def _numeric_field_names() -> set[str]:
 
 
 def _is_numeric(annotation: object) -> bool:
-    """`int`, `float`, `int | None`, `float | None` — and never `bool`, which renders as a word."""
+    """A field a template can print a number out of — and never `bool`, which renders as a word.
+
+    `int` and `float`, and anything that *holds* one: `int | None`, `dict[str, int]`,
+    `dict[str, dict[str, int]]`, `list[float]`. The containers matter because three of them are on
+    page 11 — `escalation_matrix`, `router_matrix` and `n_scored` — and the first version of this
+    reader looked only one level deep, so `{{ view.metrics.escalation_matrix[a][b] }}` was a bare
+    integer the check could not see (UX W4 report §7.3). One was found by hand; this is what finds
+    the next one.
+    """
     if annotation in (int, float):
         return True
-    args = typing.get_args(annotation)
-    return bool(args) and any(argument in (int, float) for argument in args)
+    return any(_is_numeric(argument) for argument in typing.get_args(annotation))
 
 
 def _text_expressions(body: str) -> list[tuple[str, str]]:
@@ -99,6 +106,9 @@ def test_every_numeric_expression_a_dashboard_page_prints_goes_through_a_filter(
     numeric = _numeric_field_names()
     assert {"duration_ms", "est_cost_usd", "error_rate", "n_turns"} <= numeric, (
         "the field set is read off the view-models; if this fails the reader below is broken"
+    )
+    assert {"escalation_matrix", "router_matrix", "n_scored"} <= numeric, (
+        "a number inside a dict field is still a number the page prints (UX W5)"
     )
 
     bare: dict[str, list[str]] = {}
