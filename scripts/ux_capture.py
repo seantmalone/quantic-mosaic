@@ -239,6 +239,14 @@ class Capture:
             try:
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(300)
+                # A resize preserves the scroll offset in pixels, not the thing that was on
+                # screen — so a fragment-addressed page (a citation's landing) has to be
+                # re-landed at each viewport, or the shot photographs the wrong section.
+                page.evaluate(
+                    "() => { const t = location.hash && document.getElementById(location.hash.slice(1));"
+                    " if (t) { t.scrollIntoView({block: 'start'}); } }"
+                )
+                page.wait_for_timeout(150)
                 if before is not None:
                     before(page)
                 self._one(page, screen_id, label, route=route, state=state, notes=notes, selector=selector)
