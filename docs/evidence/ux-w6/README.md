@@ -25,3 +25,9 @@ paragraph's source lines with `<br>`, so the corpus's ~150-character hard wrap w
 forced break mid-sentence (*"…anywhere there is a laptop and a reliable / connection."*). The
 paragraphs in the current file wrap to the column they are read in, which is what the previous
 `<p>{{ chunk.text }}</p>` did before this wave and what the fix restores.
+
+**Refreshed after W6b.** `dashboard-safety-after.png` was first captured before the wave's own
+self-review fix to `row_name()` and still showed the disclosure named by an epoch
+(*"What was written in full — 1789487770345981, row 1"*). The file now in this directory is the
+`make ux-capture` screen from the W6b commit, where the disclosure is named by the row's first
+worded column (*"hr_ticket, row 1"*). Nothing else in the set changed.
