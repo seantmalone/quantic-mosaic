@@ -619,6 +619,19 @@ TABLE_BUDGET_JS = """
 
 DESKTOPS = (("1440x900", 1440, 900), ("1280x800", 1280, 800))
 
+#: The tab panels a dashboard route hides behind `?tab=` — and the reason this test measured half
+#: the tables it thought it did (UX W8, W7 review). A hidden panel's elements have `clientWidth`
+#: 0, which the probe above skips by construction, so `eval-items-table` — the widest table in the
+#: product, and the one whose QUERY column the defect was found in — was never measured at all.
+#: The tab is chosen server-side from `?tab=`, so each panel is reachable as its own URL.
+TAB_PANELS: tuple[str, ...] = ("items", "system", "compare")
+
+
+def _tabbed(route: str) -> list[str]:
+    """`route`, then `route?tab=…` for each panel it has. A route with no tabs is just itself."""
+    joiner = "&" if "?" in route else "?"
+    return [route, *(f"{route}{joiner}tab={panel}" for panel in TAB_PANELS)]
+
 
 @pytest.mark.parametrize("label,width,height", DESKTOPS, ids=[label for label, _, _ in DESKTOPS])
 def test_no_table_overflows_without_the_affordance_and_no_narrow_column_holds_prose(
@@ -633,11 +646,14 @@ def test_no_table_overflows_without_the_affordance_and_no_narrow_column_holds_pr
         tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
         offenders: dict[str, dict] = {}
         for route in dashboard.routes:
-            tab.goto(dashboard.base_url + route, wait_until="networkidle")
-            tab.wait_for_timeout(100)
-            measured = tab.evaluate(TABLE_BUDGET_JS)
-            if measured["sideways"] or measured["narrowProse"]:
-                offenders[route] = measured
+            # Every tab panel, not only the one the route opens on: a hidden panel measures 0 wide,
+            # so `eval-items-table` was skipped by the probe's own `clientWidth === 0` guard.
+            for url in _tabbed(route):
+                tab.goto(dashboard.base_url + url, wait_until="networkidle")
+                tab.wait_for_timeout(100)
+                measured = tab.evaluate(TABLE_BUDGET_JS)
+                if measured["sideways"] or measured["narrowProse"]:
+                    offenders[url] = measured
         assert not offenders, f"at {label}: {offenders}"
     finally:
         context.close()

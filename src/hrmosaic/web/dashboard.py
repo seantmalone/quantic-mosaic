@@ -275,6 +275,22 @@ def _f_ts(value: Any) -> str:
         return str(value)
 
 
+def _f_iso(value: Any) -> str:
+    """The same instant as a **machine-readable** `datetime` attribute (UX W8, W7 review).
+
+    `<time datetime="1789487770345981">` is not a datetime: the attribute takes an HTML date-time
+    string, and epoch microseconds are neither parsed by a browser nor read by an assistive
+    technology, so the one element on the page whose whole purpose is to publish a machine-readable
+    instant was publishing an opaque integer. The visible text is still `_f_ts`'s.
+    """
+    if value in (None, ""):
+        return ""
+    try:
+        return datetime.fromtimestamp(int(value) / 1_000_000, tz=UTC).isoformat(timespec="seconds")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return ""
+
+
 def _f_ms(value: Any) -> str:
     """A duration in the largest unit that still says something — and never a truncated zero.
 
@@ -566,20 +582,35 @@ def _f_span_summary(span: dict[str, Any]) -> str:
     # labelled value — `intent=workflow workflow=pto_request catalog_reopened=false` was the last
     # raw enum the capture's sidecars found (UX W7, JX2-01 = DR2-09, DR2-04).
     if span.get("kind") in {"plan", "llm_call", "guardrail"}:
-        return _PAIR.sub(_said_pair, summary)
+        return _said_pairs(summary)
     return summary
 
 
-_PAIR = re.compile(r"\b([a-z_]+)=([A-Za-z0-9_.:-]+)")
+_PAIR = re.compile(r"(\s*)\b([a-z_]+)=([A-Za-z0-9_.:-]+)")
 
 
-def _said_pair(match: re.Match[str]) -> str:
-    key, value = match.group(1), match.group(2)
-    if value in {"true", "false"}:
-        value = "yes" if value == "true" else "no"
-    elif key not in {"purpose"}:
-        value = _f_enum_label(value)
-    return f"{_f_enum_label(key)}: {value}"
+def _said_pairs(summary: str) -> str:
+    """`intent=workflow workflow=pto_request` → `intent: workflow · workflow: PTO request`.
+
+    Each pair becomes a label and a labelled value, and the pairs are separated (UX W8, W7 review):
+    joined by the original single space, `intent: workflow workflow: PTO request` reads as one
+    four-word label with a colon in the middle of it, and the reader cannot see where one fact ends
+    and the next begins.
+    """
+    seen = False
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal seen
+        lead, key, value = match.group(1), match.group(2), match.group(3)
+        if value in {"true", "false"}:
+            value = "yes" if value == "true" else "no"
+        elif key not in {"purpose"}:
+            value = _f_enum_label(value)
+        separator = " · " if seen and lead else lead
+        seen = True
+        return f"{separator}{_f_enum_label(key)}: {value}"
+
+    return _PAIR.sub(replace, summary)
 
 
 #: Every display vocabulary the dashboard has, and the whole of it: **P10** is that a numeric or
@@ -592,6 +623,7 @@ DASHBOARD_FILTERS = (
     ("secs", _f_secs),
     ("num", _f_num),
     ("pct", _f_pct),
+    ("iso", _f_iso),
     ("rate", _f_rate),
     ("score", _f_score),
     ("usd", _f_usd),
@@ -1303,6 +1335,11 @@ class EvalMetrics(BaseModel):
 class EvalRunRow(_View):
     run_id: str
     label: str
+    #: What `eval_runs.label` actually holds (UX W8, W7 review). `label` above is the one spelling
+    #: the page uses everywhere a run is named; this is the stored string, which `/api/eval/runs`
+    #: published until UX W7 rewrote the field in place — and **P15** is that the raw value stays
+    #: reachable rather than being replaced by the rendering.
+    stored_label: str | None = None
     variant: str
     target: str
     git_sha: str
@@ -1617,6 +1654,9 @@ def _turn_detail(store: Store, row: dict[str, Any]) -> TurnDetail:
             (row["id"],),
         ).dicts()
     )
+    # One call for the one pair it returns (UX W8, W7 review). `api.safety_checks` walks every
+    # span of the turn; calling it twice to take `[0]` and then `[1]` walked them twice.
+    rules_passed, rules_ran = api.safety_checks(spans)
     return TurnDetail(
         turn_id=row["id"],
         session_id=row["session_id"],
@@ -1638,8 +1678,8 @@ def _turn_detail(store: Store, row: dict[str, Any]) -> TurnDetail:
             tool_calls=row["tool_calls"],
             retrievals=row["retrievals"],
             guardrail_hits=row["guardrail_hits"],
-            rules_passed=api.safety_checks(spans)[0],
-            rules_ran=api.safety_checks(spans)[1],
+            rules_passed=rules_passed,
+            rules_ran=rules_ran,
             checks_run=sum(1 for span in spans if span["kind"] == "guardrail"),
             tokens_in=row["total_tokens_in"],
             tokens_out=row["total_tokens_out"],
@@ -2460,6 +2500,7 @@ def _run_row(row: dict[str, Any]) -> EvalRunRow:
         # `no_structured_tools · deployed` three inches from a cell reading "no structured tools"
         # (UX W7, npo3-01 = DR2-08 = JX2-06). The raw label stays in `eval_runs` (P15).
         label=f"{_f_enum_label(row['variant'])} · {_f_enum_label(row['target'])}",
+        stored_label=row.get("label"),
         variant=row["variant"],
         target=row["target"],
         git_sha=row["git_sha"],

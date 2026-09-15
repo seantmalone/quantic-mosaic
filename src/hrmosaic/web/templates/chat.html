@@ -215,6 +215,15 @@
     var RESIZE_SETTLE_MS = 120;
     var resizeTimer = null;
 
+    // **There has to be something to jump to** (UX W8, W7 review). The load-time branch below
+    // already knows this — a transcript with no turns is scrolled to its TOP, because the greeting
+    // is what a reader at rest should see — but `onScroll` and `stickToBottom` did not, so on a
+    // phone at rest the starters are tall enough to scroll, and scrolling them revealed "Jump to
+    // latest" pointing at nothing. The control only exists while a conversation does.
+    function hasTurns() {
+      return document.querySelectorAll("#messages .turn").length > 0;
+    }
+
     function stickToBottom(force) {
       var box = scroller();
       if (force || atBottom()) {
@@ -223,14 +232,14 @@
         jumpButton.hidden = true;
       } else {
         following = false;
-        jumpButton.hidden = false;
+        jumpButton.hidden = !hasTurns();
       }
     }
 
     function onScroll() {
       if (resizeTimer !== null) { return; }
       following = atBottom();
-      jumpButton.hidden = following;
+      jumpButton.hidden = following || !hasTurns();
     }
     transcript.addEventListener("scroll", onScroll);
     // …and on the window, because below 30rem the document is the scroller and the box below it

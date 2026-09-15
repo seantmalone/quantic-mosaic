@@ -59,7 +59,7 @@
               hover-only `title` to keep the RUN cell to one line, and fifteen rows collapsed back
               to six repeated strings for a touch or screen-reader user. A Created column, first,
               as the Runs table above has it; the label stays one line. -#}
-          <td class="cell-time" data-label="Created"><time datetime="{{ run.created_at }}">{{ run.created_at|ts }}</time></td>
+          <td class="cell-time" data-label="Created"><time datetime="{{ run.created_at|iso }}">{{ run.created_at|ts }}</time></td>
           <td class="cell-run" data-label="Run"><a href="/dashboard/evals/{{ run.run_id }}">{{ run.label }}</a></td>
           {% for metric in headline_metrics %}
           <td data-col="{{ metric }}" data-label="{{ metric|metric_label }}" class="cell-num">

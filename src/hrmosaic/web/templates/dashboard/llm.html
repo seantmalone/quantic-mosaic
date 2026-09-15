@@ -25,8 +25,13 @@
 <p class="note">Answers come from <strong>{{ provider_label }}</strong>.</p>
 <section class="panel">
   <h3>By model</h3>
+  {#- The Model column carries the model's **name**, not an enum (UX W8, W7 review). `enum_label`
+      maps `stub` → "recorded script", which is the right word for a PROVIDER and the wrong one
+      here: every row of a stubbed run read "recorded script" in both columns, saying the same
+      thing twice and losing the one identity the column exists to publish. The `stub` label stays
+      where it belongs, on Provider below. -#}
   {{ t.table('by-model-table', [
-      {'label': 'Model', 'key': 'model', 'kind': 'enum'},
+      {'label': 'Model', 'key': 'model'},
       {'label': 'Calls', 'key': 'calls', 'kind': 'num'},
       {'label': 'Tokens in', 'key': 'tokens_in', 'kind': 'num'},
       {'label': 'Tokens out', 'key': 'tokens_out', 'kind': 'num'},
@@ -40,7 +45,7 @@
 <section class="panel">
   <h3>Calls <span class="muted">(newest {{ row_limit }})</span></h3>
   {{ t.table('llm-table', [
-      {'label': 'Model', 'key': 'model', 'kind': 'enum', 'mobile': 'detail'},
+      {'label': 'Model', 'key': 'model', 'mobile': 'detail'},
       {'label': 'Purpose', 'key': 'purpose', 'kind': 'badge', 'mobile': 'lead'},
       {'label': 'Tokens in', 'key': 'prompt_tokens', 'kind': 'num'},
       {'label': 'Tokens out', 'key': 'completion_tokens', 'kind': 'num'},

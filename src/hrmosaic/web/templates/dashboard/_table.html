@@ -90,7 +90,8 @@
     {%- else -%}<span class="muted">—</span>{%- endif -%}
   {%- elif value is none -%}<span class="muted">—</span>
   {%- elif column.get('zero_dash') and value == 0 -%}<span class="muted">—</span>
-  {%- elif kind == 'time' -%}<time datetime="{{ value }}">{{ value|ts }}</time>
+  {#- `datetime` takes an HTML date-time string, never epoch microseconds (UX W8, W7 review). -#}
+  {%- elif kind == 'time' -%}<time datetime="{{ value|iso }}">{{ value|ts }}</time>
   {%- elif kind == 'ms' -%}{{ value|ms }}
   {%- elif kind == 'ms_n' -%}{{ value|ms_n(row.get(column.get('n_key'))) }}
   {%- elif kind == 'secs' -%}{{ value|secs }}

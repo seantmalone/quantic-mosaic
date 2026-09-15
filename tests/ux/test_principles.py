@@ -202,19 +202,33 @@ def _ask(page, question: str) -> None:
 DEMO_1 = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
 
 
-def test_p11_the_conversation_owns_the_page_at_a_readable_measure(page, ux_server):
+#: The two desktop widths the audit measured. A single width is a single column position: the
+#: centring assertion below was written against 1440 and said nothing about 1280, which is the
+#: width the dashboard's own overflow defect was found at (UX W8, W7 review).
+P11_WIDTHS = ((1440, 900), (1280, 800))
+
+
+@pytest.mark.parametrize(("width", "height"), P11_WIDTHS, ids=[f"{w}x{h}" for w, h in P11_WIDTHS])
+def test_p11_the_conversation_owns_the_page_at_a_readable_measure(page, ux_server, width, height):
     """navigation-and-ia-18 / chat-production-ux-16: 836 of 1440px, at 99–107 characters."""
+    page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{ux_server}/", wait_until="networkidle")
 
     assert page.query_selector("aside.rail") is None, "the technical rail is not co-resident with the product"
     box = page.eval_on_selector(".conversation", "e => e.getBoundingClientRect().toJSON()")
-    assert 37 * 16 <= box["width"] <= 40 * 16 + 1, f"the measure is {box['width']}px"
+    assert 37 * 16 <= box["width"] <= 40 * 16 + 1, f"at {width}px the measure is {box['width']}px"
     centre = box["left"] + box["width"] / 2
-    assert abs(centre - 1440 / 2) <= 2, f"the column is not centred: {box}"
+    assert abs(centre - width / 2) <= 2, f"at {width}px the column is not centred: {box}"
 
 
 def test_p11_the_composer_stays_reachable_and_the_newest_message_stays_in_view(fresh_page, fresh_server):
-    """chat-production-ux-2: after one answer the document was 1406px against a 900px viewport."""
+    """chat-production-ux-2: after one answer the document was 1406px against a 900px viewport.
+
+    One viewport on purpose, unlike its sibling above: this drives three real turns through
+    `fresh_server`'s stub script, and a second parametrisation would ask that script for three
+    turns it does not have. The phone geometry is measured by
+    `test_the_newest_turn_is_brought_into_view_on_a_phone_and_jump_to_latest_works`.
+    """
     fresh_page.goto(f"{fresh_server}/", wait_until="networkidle")
     assert fresh_page.eval_on_selector("#chat-form", "e => getComputedStyle(e).position") == "sticky"
 
@@ -610,6 +624,26 @@ def test_the_newest_turn_is_brought_into_view_on_a_phone_and_jump_to_latest_work
         newest = page.evaluate(NEWEST_TURN_JS)
         assert newest["bottom"] <= newest["viewport"], f"Jump to latest did not: {newest}"
         assert page.eval_on_selector("#jump-latest", "e => e.hidden")
+    finally:
+        context.close()
+
+
+def test_a_phone_at_rest_is_never_offered_a_jump_to_nothing(browser, fresh_server):
+    """W8, the W7 review. The load-time branch already knew a transcript with no turns belongs at
+    its TOP — the greeting is what a reader at rest should see — but `onScroll` did not, and at
+    390px the starters are tall enough to scroll. Scrolling them revealed "Jump to latest" with no
+    turn to jump to, which is a control that cannot do what it says."""
+    context, page = _fresh_tab(browser, fresh_server, 390, 844)
+    try:
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden"), "at rest there is nothing to jump to"
+
+        page.evaluate("() => window.scrollTo(0, document.scrollingElement.scrollHeight)")
+        page.wait_for_timeout(250)
+        page.evaluate("() => window.scrollTo(0, 0)")
+        page.wait_for_timeout(250)
+
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden"), "and still nothing after scrolling"
+        assert page.evaluate("() => document.querySelectorAll('#messages .turn').length") == 0
     finally:
         context.close()
 

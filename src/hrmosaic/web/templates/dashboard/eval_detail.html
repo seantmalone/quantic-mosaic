@@ -70,7 +70,11 @@
         {% if view.metrics[metric] is none %}
           {% if metric in judged_metrics %}<span class="not-judged">not judged on this variant</span>
           {% else %}<span class="muted">—</span>{% endif %}
-        {% elif metric in rate_metrics %}{{ view.metrics[metric]|pct }}
+        {#- Through `rate`, not `pct` (UX W8, W7 review): every other rate on this page carries its
+            denominator while the sample is small (**P14**, npo3-07 = M14), and the headline strip
+            — the first figures a reader sees — was the one place still printing `50.0%` from one
+            of two items. -#}
+        {% elif metric in rate_metrics %}{{ view.metrics[metric]|rate(view.metrics.n_scored.get(metric), 'item') }}
         {% else %}{{ view.metrics[metric]|num }}{% endif %}
       </span>
       <span class="metric-label">{{ metric|metric_label }}</span>
