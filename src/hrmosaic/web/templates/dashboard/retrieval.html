@@ -35,7 +35,7 @@
   {{ t.table('zero-evidence', [
       {'label': 'When', 'key': 'started_at', 'kind': 'time'},
       {'label': 'Query', 'key': 'query'},
-      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
       view.zero_evidence_queries, 'Every retrieval returned evidence.',
       label='Searches that found no evidence') }}
@@ -58,7 +58,7 @@
        'help': 'What set that number: the question\u2019s own shape, a tool argument, or the default.'},
       {'label': 'Embed', 'key': 'embed_ms', 'kind': 'ms'},
       {'label': 'Search', 'key': 'search_ms', 'kind': 'ms'},
-      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
       view.rows, 'No retrieval matches these filters.',
       label='Recent retrievals') }}

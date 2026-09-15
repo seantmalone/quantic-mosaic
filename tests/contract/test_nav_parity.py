@@ -151,6 +151,35 @@ async def test_the_dashboard_nav_is_grouped_and_carries_no_ordinals_or_inert_ent
         assert group in body, f"the nav group {group!r}"
 
 
+async def test_the_nav_group_labels_are_eyebrows_and_only_the_page_links_are_targets(web):
+    """UX W7, Addendum 2 — the owner's decision. ACTIVITY / UNDER THE HOOD / QUALITY / REFERENCE
+    sat in the same row and weight as the page links and read as targets. Each is now a
+    non-interactive eyebrow: not an `<a>`, not a `<button>`, no `href`, not focusable, hidden from
+    assistive tech — which hears the group's name from the `aria-label` on its `<ul>` instead."""
+    async with web() as client:
+        html = (await client.get("/dashboard/tools")).text
+
+    nav = re.search(r'<nav id="dash-nav".*?</nav>', html, re.S)
+    assert nav, "the dashboard page nav"
+    body = nav.group(0)
+    groups = re.findall(r'<ul class="dash-nav-group" aria-label="([^"]+)">', body)
+    assert groups == ["Activity", "Under the hood", "Quality", "Reference"], groups
+    eyebrows = re.findall(r'<li class="dash-nav-eyebrow"([^>]*)>([^<]+)</li>', body)
+    assert [text for _attrs, text in eyebrows] == groups, "one eyebrow per group, in the group's own words"
+    for attrs, text in eyebrows:
+        assert 'aria-hidden="true"' in attrs, f"{text!r} is announced twice"
+        assert "href" not in attrs and "tabindex" not in attrs and "role" not in attrs, f"{text!r} is a target: {attrs}"
+    for group in groups:
+        assert not re.search(rf"<(a|button)\b[^>]*>\s*{re.escape(group)}\s*</(a|button)>", body), (
+            f"the group label {group!r} is rendered as a control"
+        )
+    links = re.findall(r'<a class="dash-nav-link"[^>]*>', body)
+    assert len(links) == 10 and all("href=" in link for link in links), links
+    assert "Corpus &amp; chunks" in body and "Policy library" not in body, (
+        "the inspector is named for what it is; the reader keeps the library's name (nav-r2-5)"
+    )
+
+
 async def test_session_detail_highlights_its_real_parent_in_the_nav(seeded):
     """…as the section it is *in*, not as the page the reader is on (UX W4, navigation-and-ia-10).
 

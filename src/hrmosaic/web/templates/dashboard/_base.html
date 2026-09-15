@@ -36,16 +36,34 @@
 
 <nav id="dash-nav" class="dash-nav" aria-label="Dashboard pages">
   {% for group, items in nav %}
-  {#- A `role="group"` with a name, so the grouping a sighted reader can see is announced too: the
-      three groups were sibling `<span>`s and invisible to AT (UX W6, a11y-reaudit-6). -#}
-  <span class="dash-nav-group" role="group" aria-label="{{ group }}">
-    <span class="dash-nav-group-label" aria-hidden="true">{{ group }}</span>
+  {#- One list per group, named for assistive tech by its `aria-label` (UX W6, a11y-reaudit-6 —
+      the groups were sibling `<span>`s and invisible to AT). The visible group label is an
+      **eyebrow** and nothing else (UX W7, Addendum 2 — the owner's decision): a muted, smaller,
+      letter-spaced `<li>` that is not a link, not a button, not focusable and `aria-hidden`,
+      because in the same row and weight as the page links it read as one more target. The page
+      links are the pills that follow it. -#}
+  <ul class="dash-nav-group" aria-label="{{ group }}">
+    <li class="dash-nav-eyebrow" aria-hidden="true">{{ group }}</li>
     {% for number, label, href in items %}
-    <a class="dash-nav-link" data-nav="{{ number }}" href="{{ href }}"{% if number == nav_current %} aria-current="{{ 'page' if nav_exact else 'true' }}"{% endif %}>{{ label }}</a>
+    <li><a class="dash-nav-link" data-nav="{{ number }}" href="{{ href }}"{% if number == nav_current %} aria-current="{{ 'page' if nav_exact else 'true' }}"{% endif %}>{{ label }}</a></li>
     {% endfor %}
-  </span>
+  </ul>
   {% endfor %}
 </nav>
+<script>
+  // The row scrolls sideways on a phone, and it opened at scrollLeft 0 on every page — so on
+  // seven of the ten pages the lit item was off screen and the 59px the nav costs showed only
+  // "Overview Sessions Turns" (UX W7, nav-r2-4 = a11y-re2-3). Centre the current item in the
+  // row itself, and only the row: `scrollIntoView` would also be free to move the document.
+  (function () {
+    "use strict";
+    var nav = document.getElementById("dash-nav");
+    var current = nav && nav.querySelector("[aria-current]");
+    if (!nav || !current || nav.scrollWidth <= nav.clientWidth) { return; }
+    var left = current.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
+    nav.scrollLeft = Math.max(0, left - (nav.clientWidth - current.offsetWidth) / 2);
+  })();
+</script>
 </div>
 
 <main class="dash-main" id="main-content" tabindex="-1">

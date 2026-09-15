@@ -147,6 +147,34 @@ def surface_page(browser, surfaces):
         context.close()
 
 
+#: The two viewports a geometry or accessible-name check is measured at (UX W7, the scorer's §6):
+#: the desktop the suite always used, and the phone whose DOM W6 made genuinely different — the
+#: per-card disclosures, the one-row nav, the document-scrolling transcript. Each is a FRESH load:
+#: resizing a loaded page photographs a state no reader reaches by loading (cpux2-2).
+PHONE_AND_DESKTOP = (("1440x900", 1440, 900), ("390x844", 390, 844))
+
+
+@pytest.fixture
+def sized_surface_page(browser, surfaces, request):
+    """`surface_page`, first painted at the viewport the test was parametrised with."""
+    label, width, height = request.param
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    tab.goto(f"{surfaces['base_url']}/?access={TOKEN}", wait_until="networkidle")
+    tab.viewport_label = label  # for the failure message
+    try:
+        yield tab
+    finally:
+        context.close()
+
+
+def sized(test):
+    """Parametrise a test over `PHONE_AND_DESKTOP` through `sized_surface_page`."""
+    return pytest.mark.parametrize(
+        "sized_surface_page", PHONE_AND_DESKTOP, indirect=True, ids=[label for label, _, _ in PHONE_AND_DESKTOP]
+    )(test)
+
+
 def _open(tab, surfaces, route: str):
     """Go to one route of `SURFACE_ROUTES`. A themed 404 is a page like any other (**P6**)."""
     tab.goto(surfaces["base_url"] + resolve(route, surfaces), wait_until="networkidle")
@@ -431,17 +459,26 @@ SUMMARY_NAMES_JS = """
 """
 
 
+@sized
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_no_two_disclosure_controls_share_an_accessible_name(surface_page, surfaces, route):
+def test_no_two_disclosure_controls_share_an_accessible_name(sized_surface_page, surfaces, route):
     """Plan §1's rule for **P12**, which had no test at all — and so shipped 56 violations on one
     page: `Scores in full` x28 and `Verdicts in full` x28 on an eval run, `Arguments in full` x14
     on Tools, all named after the *column* rather than the row (a11y-reaudit-3). A screen-reader
-    user listing the controls on such a page is given the same words twenty-eight times."""
-    page = _open(surface_page, surfaces, route)
+    user listing the controls on such a page is given the same words twenty-eight times.
+
+    At 390x844 as well as 1440x900 since UX W7 (a11y-re2-1): the per-card disclosures W6 added
+    only paint below 40rem, and the ordinal restarted in every table, so `/dashboard/tools` painted
+    two visible controls named "More about search_policy_documents, row 1" on a phone while this
+    test, at 1440, saw neither. The table's own name is now part of the row's."""
+    page = _open(sized_surface_page, surfaces, route)
     names = page.evaluate(SUMMARY_NAMES_JS)
     duplicated = sorted({name for name in names if name and names.count(name) > 1})
 
-    assert not duplicated, f"{route}: these disclosure names are shared by more than one control: {duplicated}"
+    assert not duplicated, (
+        f"{route} at {sized_surface_page.viewport_label}: these disclosure names are shared by more than one control: "
+        f"{duplicated}"
+    )
 
 
 # -- npo2-01 / dr-new-1: a chart fills the panel it was relocated to -------------------------

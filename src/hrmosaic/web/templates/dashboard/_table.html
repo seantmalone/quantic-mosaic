@@ -131,11 +131,14 @@
         {#- The card's own disclosure. Painted only under 40rem, where the `detail` columns above
             are folded away behind it; named for the row, because twenty summaries all reading
             "More" is the duplicate-name defect this wave is here to remove. -#}
-        <td class="card-toggle"><details class="card-detail"><summary>More about {{ row_name(row, columns, outer.index) }}</summary></details></td></tr>
+        {#- The table's own name is part of the row's: the ordinal restarts in every table, so two
+            tables on one page each had a "search_policy_documents, row 1", and at 390px both
+            cards' disclosures were painted with one accessible name (UX W7, a11y-re2-1). -#}
+        <td class="card-toggle"><details class="card-detail"><summary>More about {{ row_name(row, columns, outer.index) }} · {{ name }}</summary></details></td></tr>
       {% for column in columns if column.get('detail_key') and row.get(column.detail_key) is not none %}
       <tr class="detail-row"><td colspan="{{ columns|length + 1 }}" data-label="{{ column.label }}">
         <details class="row-detail"><summary>{{ column.get('detail_label', column.label) }} in full —
-          {{ row_name(row, columns, outer.index) }}</summary>
+          {{ row_name(row, columns, outer.index) }} · {{ name }}</summary>
           <pre class="mono">{{ row.get(column.detail_key)|pretty }}</pre></details>
       </td></tr>
       {% endfor %}

@@ -167,6 +167,8 @@
       the page offered 26 chips and 26 session pills — 52 links, all 404 (UX W6, nav-reaudit-3 /
       P5). The ids still print; they simply stop being offered as links. -#}
   <h3>Items</h3>
+  {#- The Trace chip goes into the session record, never the raw JSON API (UX W7, nav-r2-1):
+      `trace_url` is the `/dashboard/sessions/{session}#turn-{turn}` the pill list below links to. -#}
   {{ t.table('eval-items-table', [
       {'label': 'Question', 'key': 'question'},
       {'label': 'Passed', 'key': 'passed', 'kind': 'bool'},
@@ -181,7 +183,7 @@
       {'label': 'Phase', 'key': 'run_phase', 'kind': 'badge'},
       {'label': 'Item', 'key': 'item_id', 'kind': 'id', 'mobile': 'lead'},
       {'label': 'Trace', 'key': 'turn_id', 'kind': 'id',
-       'href_prefix': '/api/traces/turns/', 'link_when': 'trace_present'}],
+       'link_key': 'trace_url', 'link_when': 'trace_present'}],
       view['items'], 'This run recorded no items.',
       label='Scored items') }}
   <ul id="trace-links" class="pill-list">

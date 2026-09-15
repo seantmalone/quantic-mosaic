@@ -753,7 +753,8 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             "zoom-dash-nav",
             route="/dashboard",
             state="persona E1042",
-            notes="The grouped page nav.",
+            notes="The grouped page nav. Since W7 (Addendum 2) the group labels are muted eyebrows "
+            "and the page links are pills, so the two no longer read alike.",
             selector="#dash-nav",
         )
         page.goto(f"{urls['dash']}/dashboard/sessions/{session}#turn-1", wait_until="networkidle")

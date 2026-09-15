@@ -553,24 +553,42 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
 
 /* The second sticky row lives inside `.app-chrome`, so it is NOT sticky itself. */
 .dash-nav {
-  display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; align-items: baseline;
+  display: flex; flex-wrap: wrap; gap: 0.25rem 0; align-items: center;
   padding: 0.45rem 1.25rem;
   background: var(--card); border-bottom: 1px solid var(--line);
 }
-.dash-nav-group { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: baseline; min-width: 0; }
-.dash-nav-group-label {
-  font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft);
-  margin-right: 0.15rem;
+/* One group: its eyebrow and the pills it names, with a hairline between groups so the eyebrow
+   visibly belongs to the pills that follow it (UX W7, Addendum 2 — the owner's decision). */
+.dash-nav-group {
+  list-style: none; margin: 0; padding: 0 0.9rem 0 0;
+  display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; min-width: 0;
 }
+.dash-nav-group + .dash-nav-group { padding-left: 0.9rem; border-left: 1px solid var(--line); }
+/* The group label is a label: muted, smaller, uppercase and letter-spaced, and it does nothing —
+   no underline, no hover, no focus, an arrow cursor. It sat in the same row and weight as the
+   page links and read as one more of them. Not focusable (an `<li>`), `aria-hidden` (the `<ul>`'s
+   `aria-label` is what assistive tech hears). `--text-meta` is the type floor. */
+.dash-nav-eyebrow {
+  font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-mute);
+  text-decoration: none; cursor: default; user-select: none; margin-right: 0.35rem;
+}
+/* …and the page links are pills that look like what they are: a border and a ground at rest, a
+   lifted border and darker ink on hover, the accent ring on keyboard focus, the accent fill on the
+   current page. */
 .dash-nav-link {
-  padding: 0.3rem 0.6rem; border-radius: var(--radius-tile);
+  display: inline-flex; align-items: center;
+  padding: 0.3rem 0.75rem; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--paper);
   font: var(--text-small); text-decoration: none; color: var(--ink-soft); white-space: nowrap;
+  cursor: pointer;
 }
-.dash-nav-link:hover { background: var(--paper); color: var(--ink); }
+.dash-nav-link:hover { border-color: var(--accent); background: var(--card); color: var(--ink); }
+.dash-nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* `page` on the page itself; `true` on the parent of a detail page, which is lit but is not where
    the reader is (UX W4, `navigation-and-ia-10`). */
-.dash-nav-link[aria-current="page"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
-.dash-nav-link[aria-current="true"] { background: var(--sunk); color: var(--ink); font-weight: 600; }
+.dash-nav-link[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.dash-nav-link[aria-current="page"]:hover { color: var(--on-accent); background: var(--accent-strong); border-color: var(--accent-strong); }
+.dash-nav-link[aria-current="true"] { background: var(--sunk); border-color: var(--line-strong); color: var(--ink); font-weight: 600; }
 /* Below 44rem the eleven page names wrapped to four pinned rows — ~160px, a fifth of a 390x844
    viewport, of internal navigation above every page's first sentence (`navigation-and-ia-13`).
    One row that scrolls sideways *inside itself*, with the same thin scrollbar and edge shade the
@@ -592,7 +610,7 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
      `min-width: 0` from the wide layout — so without this the groups shrank past their content and
      painted on top of each other (caught in the W5 capture at 390x844). */
   .dash-nav-group { flex-wrap: nowrap; flex: none; }
-  .dash-nav-group-label, .dash-nav-link { flex: none; white-space: nowrap; }
+  .dash-nav-eyebrow, .dash-nav-link { flex: none; white-space: nowrap; }
   .dash-nav::-webkit-scrollbar { height: 0.4rem; }
   .dash-nav::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 }

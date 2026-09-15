@@ -102,7 +102,9 @@ NAV: tuple[tuple[str, tuple[tuple[int, str, str], ...]], ...] = (
         ),
     ),
     ("Quality", ((8, "Guardrails", "/dashboard/safety"), (11, "Evaluations", "/dashboard/evals"))),
-    ("Reference", ((10, "Policy library", "/dashboard/corpus"),)),
+    # "Corpus & chunks", not "Policy library": the readable library is `/policy`, and two surfaces
+    # sharing one name meant the inspector wore the reader's (UX W7, nav-r2-5).
+    ("Reference", ((10, "Corpus & chunks", "/dashboard/corpus"),)),
 )
 
 #: Which nav entry a page highlights when it is not an entry itself: session detail is opened from
@@ -578,6 +580,20 @@ def utc_day_start(days_ago: int = 0) -> int:
     return int(start.timestamp() * 1_000_000)
 
 
+def turn_record_url(session_id: Any, turn_id: Any) -> str | None:
+    """Where a turn-id chip goes: the session record, opened at that turn.
+
+    Five pages linked the chip to `/api/traces/turns/{id}` — an unstyled JSON document with no
+    masthead, no heading and no route back — while the sixth linked the identical concept to the
+    session page (UX W7, nav-r2-1). The session page anchors every turn by its id
+    (`<a class="anchor" id="turn-{turn_id}">`), so the record is one URL for every page that names
+    a turn. The raw JSON stays one click away behind *Export this page as JSON* (P15).
+    """
+    if not session_id or not turn_id:
+        return None
+    return f"/dashboard/sessions/{session_id}#turn-{turn_id}"
+
+
 def _payloads(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """Attach the parsed `payload_json` to each span row, tolerating a §10.5 truncation stub."""
     parsed = []
@@ -916,6 +932,8 @@ class TurnsView(_View):
 class LlmRow(_View):
     span_id: str
     turn_id: str
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     provider: str | None
     model: str | None
     purpose: str | None
@@ -949,6 +967,8 @@ class LlmView(_View):
 class RetrievalRow(_View):
     span_id: str
     turn_id: str
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     query: str
     strategy: str | None
     k: int | None
@@ -969,6 +989,8 @@ class DocumentHits(_View):
 class ZeroEvidenceQuery(_View):
     span_id: str
     turn_id: str
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     query: str
     started_at: int
 
@@ -1002,6 +1024,8 @@ class ToolRollup(_View):
 class ToolCallRow(_View):
     span_id: str
     turn_id: str
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     tool_name: str
     arguments: dict[str, Any]
     #: The same arguments as one line a person can scan. Twelve rows used to read identically —
@@ -1045,6 +1069,8 @@ class InjectionHit(_View):
 
 class ConfirmationRow(_View):
     turn_id: str
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     action: str
     human_summary: str
     user_response: str
@@ -1058,6 +1084,8 @@ class MockWriteRow(_View):
     employee_id: str
     created_at: int
     turn_id: str | None
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     payload: dict[str, Any]
     #: The payload as one scannable line, through the same `summarise_arguments()` the Tools page
     #: uses. The sandbox printed the raw body clipped mid-token — `{"employee_id": "E1042",
@@ -1076,6 +1104,8 @@ class SafetyView(_View):
 class HandshakeRow(_View):
     span_id: str
     turn_id: str
+    #: The turn's own record — `/dashboard/sessions/{session}#turn-{turn}` — never the raw JSON API (UX W7, nav-r2-1).
+    dashboard_url: str | None = None
     discovered_at: int | None
     handshake_ms: int | None
     tool_count: int
@@ -1689,7 +1719,7 @@ def build_llm(request: Request, filters: Filters) -> LlmView:
 
     rows = _payloads(
         store.execute(
-            "SELECT id, turn_id, duration_ms, payload_json FROM spans "
+            "SELECT id, turn_id, session_id, duration_ms, payload_json FROM spans "
             f"WHERE kind = 'llm_call'{where} ORDER BY started_at DESC LIMIT ?",
             [*params, ROW_LIMIT],
         ).dicts()
@@ -1707,6 +1737,7 @@ def build_llm(request: Request, filters: Filters) -> LlmView:
             LlmRow(
                 span_id=row["id"],
                 turn_id=row["turn_id"],
+                dashboard_url=turn_record_url(row.get("session_id"), row["turn_id"]),
                 provider=row["payload"].get("provider"),
                 model=row["payload"].get("model"),
                 purpose=row["payload"].get("purpose"),
@@ -1751,7 +1782,7 @@ def build_retrieval(request: Request, filters: Filters) -> RetrievalView:
 
     spans = _payloads(
         store.execute(
-            "SELECT id, turn_id, started_at, payload_json FROM spans "
+            "SELECT id, turn_id, session_id, started_at, payload_json FROM spans "
             f"WHERE kind = 'retrieval'{where} ORDER BY started_at DESC LIMIT ?",
             [*params, ROW_LIMIT],
         ).dicts()
@@ -1776,6 +1807,7 @@ def build_retrieval(request: Request, filters: Filters) -> RetrievalView:
                 ZeroEvidenceQuery(
                     span_id=span["id"],
                     turn_id=span["turn_id"],
+                    dashboard_url=turn_record_url(span.get("session_id"), span["turn_id"]),
                     query=payload.get("query") or "",
                     started_at=int(span["started_at"]),
                 )
@@ -1786,6 +1818,7 @@ def build_retrieval(request: Request, filters: Filters) -> RetrievalView:
             RetrievalRow(
                 span_id=span["id"],
                 turn_id=span["turn_id"],
+                dashboard_url=turn_record_url(span.get("session_id"), span["turn_id"]),
                 query=payload.get("query") or "",
                 strategy=payload.get("strategy"),
                 k=payload.get("k"),
@@ -1951,7 +1984,7 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
 
     recent_spans = _payloads(
         store.execute(
-            "SELECT id, turn_id, name, duration_ms, payload_json FROM spans "
+            "SELECT id, turn_id, session_id, name, duration_ms, payload_json FROM spans "
             f"WHERE kind = 'tool_call'{where} ORDER BY started_at DESC LIMIT ?",
             [*params, ROW_LIMIT],
         ).dicts()
@@ -1960,6 +1993,7 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
         ToolCallRow(
             span_id=span["id"],
             turn_id=span["turn_id"],
+            dashboard_url=turn_record_url(span.get("session_id"), span["turn_id"]),
             tool_name=span["payload"].get("tool_name") or span.get("name") or "unknown",
             arguments=span["payload"].get("arguments") or {},
             arguments_summary=summarise_arguments(span["payload"].get("arguments") or {}),
@@ -2066,13 +2100,13 @@ def build_safety(request: Request, filters: Filters) -> SafetyView:
         confirmation_where += " AND created_at < ?"
         confirmation_params.append(bound)
     confirmations = store.execute(
-        "SELECT turn_id, tool_name, human_summary, user_response, created_at, used_at FROM confirmations "
+        "SELECT turn_id, session_id, tool_name, human_summary, user_response, created_at, used_at FROM confirmations "
         f"WHERE 1=1{confirmation_where} ORDER BY created_at DESC LIMIT ?",
         [*confirmation_params, ROW_LIMIT],
     ).dicts()
 
     writes = store.execute(
-        "SELECT id, kind, employee_id, created_at, turn_id, payload_json FROM mock_writes "
+        "SELECT id, kind, employee_id, created_at, turn_id, session_id, payload_json FROM mock_writes "
         "ORDER BY created_at DESC LIMIT ?",
         (ROW_LIMIT,),
     ).dicts()
@@ -2091,6 +2125,7 @@ def build_safety(request: Request, filters: Filters) -> SafetyView:
         confirmations=[
             ConfirmationRow(
                 turn_id=row["turn_id"],
+                dashboard_url=turn_record_url(row.get("session_id"), row["turn_id"]),
                 action=row["tool_name"],
                 human_summary=row["human_summary"],
                 user_response=row["user_response"],
@@ -2106,6 +2141,7 @@ def build_safety(request: Request, filters: Filters) -> SafetyView:
                 employee_id=row["employee_id"],
                 created_at=int(row["created_at"]),
                 turn_id=row["turn_id"],
+                dashboard_url=turn_record_url(row.get("session_id"), row.get("turn_id")),
                 payload=json.loads(row["payload_json"] or "{}"),
                 payload_summary=summarise_arguments(json.loads(row["payload_json"] or "{}")),
             )
@@ -2122,13 +2158,15 @@ def build_safety(request: Request, filters: Filters) -> SafetyView:
 def _handshake_history(store: Store) -> list[HandshakeRow]:
     spans = _payloads(
         store.execute(
-            "SELECT id, turn_id, payload_json FROM spans WHERE kind = 'mcp_discovery' ORDER BY started_at DESC LIMIT 25"
+            "SELECT id, turn_id, session_id, payload_json FROM spans WHERE kind = 'mcp_discovery' "
+            "ORDER BY started_at DESC LIMIT 25"
         ).dicts()
     )
     return [
         HandshakeRow(
             span_id=span["id"],
             turn_id=span["turn_id"],
+            dashboard_url=turn_record_url(span.get("session_id"), span["turn_id"]),
             discovered_at=span["payload"].get("discovered_at"),
             handshake_ms=span["payload"].get("handshake_ms"),
             tool_count=int(span["payload"].get("tool_count") or 0),
@@ -2991,8 +3029,8 @@ async def page_corpus(request: Request) -> Response:
         "corpus.html",
         build_corpus(filters),
         page_number=10,
-        title="Policy library",
-        lede="The policy documents the assistant is allowed to answer from.",
+        title="Corpus & chunks",
+        lede="The policy documents the assistant is allowed to answer from, as the index holds them.",
         api_url=f"/api/corpus/documents?{filters.query_string()}",
         filters=filters,
     )

@@ -457,3 +457,131 @@ def test_a_deep_link_moves_focus_to_the_turn_it_names(dashboard):
         tab.wait_for_timeout(150)
         landed = tab.evaluate("() => document.activeElement && document.activeElement.className.toString()")
         assert "turn-card" in (landed or ""), f"{fragment} left focus on {landed!r}"
+
+
+# -- UX W7: the nav's group labels are labels, its page links are targets, and every link stays in the product --
+
+#: One eyebrow and one page link, with what the browser resolved for each, plus the same link's
+#: colours while hovered and while focused from the keyboard.
+NAV_STYLES_JS = """
+() => {
+  const nav = document.getElementById("dash-nav");
+  const eyebrow = nav.querySelector(".dash-nav-eyebrow");
+  const link = nav.querySelector(".dash-nav-link:not([aria-current])");
+  const paint = (el) => {
+    const s = getComputedStyle(el);
+    return { cursor: s.cursor, underline: s.textDecorationLine, color: s.color, border: s.borderColor,
+             background: s.backgroundColor, outline: s.outlineStyle, tag: el.tagName.toLowerCase() };
+  };
+  return {
+    eyebrow: { ...paint(eyebrow), tabIndex: eyebrow.tabIndex, hidden: eyebrow.getAttribute("aria-hidden"),
+               href: eyebrow.getAttribute("href") },
+    link: { ...paint(link), tabIndex: link.tabIndex, href: link.getAttribute("href") },
+    groups: Array.from(nav.querySelectorAll("ul.dash-nav-group")).map((ul) => ul.getAttribute("aria-label")),
+  };
+}
+"""
+
+
+NAV_VIEWPORTS = (("1440x900", 1440, 900), ("390x844", 390, 844))
+
+#: The focus ring on the page link that has keyboard focus — or `null` when focus is elsewhere.
+FOCUSED_NAV_LINK_JS = """
+() => {
+  const el = document.activeElement;
+  if (!el || !el.classList.contains("dash-nav-link")) { return null; }
+  const s = getComputedStyle(el);
+  return { outline: s.outlineStyle, width: s.outlineWidth, shadow: s.boxShadow };
+}
+"""
+
+
+@pytest.mark.parametrize("label,width,height", NAV_VIEWPORTS, ids=[label for label, _, _ in NAV_VIEWPORTS])
+def test_the_nav_group_labels_read_as_labels_and_the_page_links_as_targets(
+    browser, dashboard_server, label, width, height
+):
+    """UX W7, Addendum 2 — the owner's decision: ACTIVITY / UNDER THE HOOD / QUALITY / REFERENCE
+    must not look clickable. Measured on a fresh load at each viewport: the eyebrow has an arrow
+    cursor, no underline and no focus stop; the page link has a pointer, a visibly different paint
+    under the mouse, and the accent ring when reached from the keyboard."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard_server}/?access={TOKEN}", wait_until="networkidle")
+        tab.goto(f"{dashboard_server}/dashboard/tools", wait_until="networkidle")
+        styles = tab.evaluate(NAV_STYLES_JS)
+        eyebrow, link = styles["eyebrow"], styles["link"]
+        assert styles["groups"] == ["Activity", "Under the hood", "Quality", "Reference"], styles["groups"]
+
+        assert eyebrow["tag"] == "li" and eyebrow["href"] is None and eyebrow["hidden"] == "true", eyebrow
+        assert eyebrow["tabIndex"] < 0, f"{label}: the group label is a focus stop: {eyebrow}"
+        assert eyebrow["cursor"] == "default", f"{label}: the group label invites a click: {eyebrow}"
+        assert eyebrow["underline"] == "none", f"{label}: the group label is underlined: {eyebrow}"
+
+        assert link["tag"] == "a" and link["href"] and link["tabIndex"] == 0, link
+        assert link["cursor"] == "pointer", f"{label}: the page link does not read as one: {link}"
+        assert link["border"] != "rgba(0, 0, 0, 0)" and link["background"] != "rgba(0, 0, 0, 0)", (
+            f"{label}: the page link has no pill to be: {link}"
+        )
+
+        tab.hover(".dash-nav-link:not([aria-current])")
+        tab.wait_for_timeout(120)
+        hovered = tab.evaluate(NAV_STYLES_JS)["link"]
+        assert (hovered["border"], hovered["background"], hovered["color"]) != (
+            link["border"],
+            link["background"],
+            link["color"],
+        ), f"{label}: hovering the page link changes nothing: {link} → {hovered}"
+
+        # From the keyboard: Tab from the top of the document until a page link has focus.
+        tab.evaluate("() => { document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); }")
+        focused = None
+        for _ in range(12):
+            tab.keyboard.press("Tab")
+            focused = tab.evaluate(FOCUSED_NAV_LINK_JS)
+            if focused:
+                break
+        assert focused, f"{label}: no page link is reachable from the keyboard within twelve stops"
+        assert focused["outline"] != "none" or focused["shadow"] != "none", f"{label}: no focus ring: {focused}"
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("route", ("/dashboard/evals", "/dashboard/corpus", "/dashboard/mcp"))
+def test_the_current_nav_item_is_scrolled_into_view_on_a_phone(browser, dashboard_server, route):
+    """nav-r2-4 = a11y-re2-3: the one-row nav opened at scrollLeft 0 on every page, so on seven of
+    the ten pages the lit item was off screen and the row said only "Overview Sessions Turns"."""
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard_server}/?access={TOKEN}", wait_until="networkidle")
+        tab.goto(f"{dashboard_server}{route}", wait_until="networkidle")
+        tab.wait_for_timeout(150)
+        boxes = tab.evaluate(
+            "() => { const nav = document.getElementById('dash-nav').getBoundingClientRect();"
+            " const cur = document.querySelector('#dash-nav [aria-current]').getBoundingClientRect();"
+            " return { nav: nav.toJSON(), current: cur.toJSON() }; }"
+        )
+        nav, current = boxes["nav"], boxes["current"]
+        assert nav["left"] - 1 <= current["left"] and current["right"] <= nav["right"] + 1, (
+            f"{route}: the current item is outside the nav's box on arrival: {boxes}"
+        )
+    finally:
+        context.close()
+
+
+def test_no_link_inside_the_page_leads_into_the_raw_json_api(dashboard):
+    """nav-r2-1: five pages linked the turn-id chip to `/api/traces/turns/…` — an unstyled JSON
+    document with no masthead and no route back — while the sixth linked the same chip to the
+    session record. Only the labelled export control may leave the product for the API."""
+    offenders: dict[str, list[str]] = {}
+    for route in dashboard.routes:
+        tab = dashboard.visit(route)
+        loose = tab.evaluate(
+            "() => Array.from(document.querySelectorAll('main a[href]'))"
+            ".filter(a => a.getAttribute('href').startsWith('/api/') && a.id !== 'export-json')"
+            ".map(a => a.getAttribute('href')).slice(0, 5)"
+        )
+        if loose:
+            offenders[route] = loose
+    assert not offenders, f"links into the raw API from inside the page: {offenders}"

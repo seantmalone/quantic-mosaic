@@ -71,7 +71,7 @@
       {'label': 'Decision', 'key': 'user_response', 'kind': 'badge'},
       {'label': 'Action', 'key': 'action'},
       {'label': 'Answered', 'key': 'used_at', 'kind': 'time'},
-      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'}],
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'}],
       view.confirmations, 'No write has been proposed yet.',
       label='Confirmations') }}
 </section>
@@ -86,7 +86,7 @@
       {'label': 'Employee', 'key': 'employee_id'},
       {'label': 'What was written', 'key': 'payload_summary', 'detail_key': 'payload',
        'detail_label': 'What was written'},
-      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'},
+      {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
       {'label': 'Id', 'key': 'id', 'kind': 'id'}],
       view.mock_writes, 'The sandbox is empty.',
       label='Simulated writes') }}
