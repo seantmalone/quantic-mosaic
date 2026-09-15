@@ -214,6 +214,8 @@ async def test_the_apps_own_copy_and_every_agent_written_string_use_plain_langua
         *g1.refusal(g1.OUT_OF_SCOPE).next_steps,
         *orchestrator.CLARIFY_QUESTIONS.values(),
         orchestrator.CLARIFY_FALLBACK,
+        *(chip for chips in orchestrator.CLARIFY_CHIPS.values() for chip in chips),
+        *orchestrator.CLARIFY_FALLBACK_CHIPS,
         orchestrator.WRITE_FAILED_NOTE,
         api.INTERNAL_ERROR_TEXT,
         api.INTERNAL_ESCALATION_TEXT,

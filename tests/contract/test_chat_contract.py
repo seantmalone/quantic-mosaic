@@ -28,6 +28,11 @@ RESPONSE_KEYS = {
     "answer",
     "answer_blocks",
     "next_steps",
+    # Chat chrome, not model output: the two quick replies a clarifying turn offers, empty on every
+    # other outcome (UX W2, chat-production-ux-7). It sits beside `next_steps`, which UX W2 added
+    # for the same reason — the page renders the blocks, and a field the page needs has to be on
+    # the response or it does not exist.
+    "quick_replies",
     "citations",
     "trace",
     "confirmation",

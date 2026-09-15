@@ -178,6 +178,20 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   font: var(--text-eyebrow); letter-spacing: 0;
   color: var(--on-accent); background: var(--accent); border-radius: var(--radius-tile);
 }
+/* When the turn was said, and one control over what it said. Both sit at the quiet end of the
+   speaker row and neither competes with the answer: the time is mute until you look for it, and
+   `Copy answer` only takes ink on hover or focus (chat-production-ux-17). */
+.speaker-time { margin-left: auto; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--ink-mute); }
+.copy-answer {
+  margin-left: var(--space-2); padding: 0 var(--space-2);
+  font: var(--text-meta); cursor: pointer;
+  color: var(--ink-mute); background: none; border: 1px solid transparent; border-radius: var(--radius-tile);
+}
+.copy-answer:hover, .copy-answer:focus-visible { color: var(--accent); border-color: var(--line); }
+/* The row still pushes its tail to the right when the turn carries no clock time. */
+.speaker-mark + .copy-answer { margin-left: auto; }
+
+.answer-body { margin: 0; }
 
 .answer-block { margin: 0 0 var(--space-4); }
 .answer-block:last-of-type { margin-bottom: 0; }
@@ -193,6 +207,20 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 .answer-refs { margin: 0 0 var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .source-ref { font: var(--text-meta); color: var(--accent); border-bottom: 1px dotted var(--accent); }
 .snapshot-note { margin: var(--space-3) 0 0; font: var(--text-meta); color: var(--ink-mute); }
+
+/* The two ways to answer a clarifying question. Shaped like the starter questions, because they
+   do the same thing — prefill the composer, submit nothing (§3.5, chat-production-ux-7). */
+.quick-replies {
+  list-style: none; margin: var(--space-3) 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+}
+.quick-reply {
+  padding: var(--space-2) var(--space-3); font: var(--text-small); text-align: left; cursor: pointer;
+  color: var(--accent); background: var(--card);
+  border: 1px solid var(--accent); border-radius: var(--radius-tile);
+}
+.quick-reply:hover { background: var(--accent-soft); }
+.quick-reply[disabled] { opacity: 0.55; cursor: default; }
 
 /* -- sources: always visible, each one expanding its own quoted passage --------------- */
 .sources {
@@ -416,6 +444,18 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 .turn-duration { margin-left: auto; font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); }
 .turn-question { margin: 0.6rem 0 0.3rem; }
 .turn-answer { margin: 0 0 0.6rem; padding: 0.6rem 0.8rem; background: var(--paper); border-radius: 8px; }
+/* The cited chunks of a turn, on the session record. Chat's own citations became the `Sources`
+   strip in W2; these are the dashboard's, read at a glance beside a waterfall, and they keep the
+   chip shape. Rebuilt on the brand tokens after the chat sweep deleted the ad-hoc rule this
+   template still consumed — `tests/contract/test_css_has_no_orphan_classes.py` is why the next
+   wave's deletions cannot orphan a dashboard class in silence. */
+.citation-chips { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); list-style: none; margin: 0 0 0.6rem; padding: 0; }
+.citation-chip {
+  display: inline-block; padding: var(--space-1) var(--space-2);
+  font: var(--text-meta); text-decoration: none;
+  color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-tile);
+}
+.citation-chip:hover { text-decoration: underline; }
 .rollups { margin: 0.6rem 0; }
 .continue-in-chat { margin: 0 0 0.75rem; }
 

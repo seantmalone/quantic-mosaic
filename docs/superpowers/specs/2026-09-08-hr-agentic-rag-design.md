@@ -1781,6 +1781,11 @@ and a tool-using query:
   "dashboard_url": "/dashboard/sessions/9f2c…#turn-1" }
 ```
 
+**Two list fields the page renders and the model does not write.** `next_steps[]` is `AnswerSchema`'s own list, lifted onto the response at UX W2
+because the page renders the *blocks*, not the joined `answer` string — so a refusal's redirect was generated on every refused turn and silently
+dropped. `quick_replies[]` is the pair of prefill chips a `clarify` turn offers (§11.5), written by the orchestrator from `CLARIFY_CHIPS` and `[]` on
+every other outcome. Both are additive; the four rubric-named fields are unchanged, and `tests/contract/test_chat_contract.py` holds the key set exact.
+
 When a write tool is proposed, `outcome` is `"awaiting_confirmation"` and `confirmation` carries `{action, human_summary, arguments_preview,
 expires_at}`. ⚠ **There is no `confirmation_token` field here, and there never can be:** the token is minted inside `POST /chat/confirm` after the
 human decision, and a token in this body would let anyone replaying the response complete the write.
@@ -1912,7 +1917,10 @@ grows to fit, and while a turn is in flight the composer, the demo prompts and t
 (client-side: it aborts the request and closes the stream, and says so). An empty conversation greets the persona by name, states in one line what the
 assistant answers from, and offers **four starter questions** that prefill the composer. What the page renders of a turn:
 
-* the question, echoed the moment it is sent, as a right-aligned user message;
+* the question, echoed the moment it is sent, as a right-aligned user message; the answer beside it is a left-aligned agent message under a
+  **speaker row** — the mark, the name, the turn's clock time from `turns.started_at` (`HH:MM`, the full form on hover, the machine form in
+  `datetime=`; never a duration) and **Copy answer**, which copies `.answer-body`: the blocks, the suggestions and the snapshot note, and none of the
+  chrome around them;
 * **one** progress line — `<p id="turn-status" role="status">`, throttled, taken verbatim from `web/narration.py::label_for()` and nothing else. The
   22 rem *"Live agent activity"* rail, its closed-span detail lines, its elapsed ticker and the per-turn *"Agent activity — N steps"* trace panel are
   **deleted**: the dashboard is the single home for the technical record, every value of which is still there, unrounded (P15);
@@ -1926,6 +1934,9 @@ assistant answers from, and offers **four starter questions** that prefill the c
 * a **Confirm / Cancel card** for `awaiting_confirmation` — a `<dl>` of the fields a person needs (`Request`, `Goes to` as the queue's human name from
   `QUEUE_LABELS`, `Priority` only when it is not `normal`), the line *"Nothing is written until you choose."* and the buttons *"Open the request"* /
   *"Don't open it"*. Resolving it re-renders the **question** with the turn and adds one resolved line (*"You approved this — it went ahead."*);
+* **two quick replies** under a clarifying question — each one a reply the reader would send, which **prefills** the composer and submits nothing, so
+  the message stays theirs to edit. They come from `orchestrator.CLARIFY_CHIPS` keyed by the workflow, not from the model, and a replayed transcript
+  rebuilds them from the stored `turns.workflow`;
 * a **Try again** button on a failed turn, carrying the question that failed;
 * a **cold-start notice**: one calm line behind a `/health` preflight and a grace period, with no elapsed counter.
 
@@ -1939,7 +1950,8 @@ act-as `<select>`, both demo buttons and the `#turn-status` line; then it posts 
 policy."*, and **≥ 1 source link whose `href` is the chunk's `source_url`** deep link. The labelling guarantee the rubric asks for is unchanged where
 it is measured: `orchestrator.render_answer()` still prefixes *"Recommendation — not company policy: "* in the plain-text `answer` the JSON contract
 and the eval harness read. `tests/contract/test_chat_has_no_jargon.py` (**P2/P13**) and `tests/contract/test_number_precision.py` (**P1**) are the
-permanent guards over every turn state.
+permanent guards over every turn state, and `tests/contract/test_css_has_no_orphan_classes.py` is the guard over the one stylesheet: every class any
+template renders has a rule, so a wave's deletions cannot silently un-paint a page that wave was not scoped to touch.
 
 **Demo reproducibility (R6.5):** the two buttons **and** `scripts/demo_task_1.sh` / `demo_task_2.sh` — plain `curl`, parameterised by `BASE_URL`,
 pretty-printing answer + citations + trace + `dashboard_url` — both documented in README. Every call they make sends
@@ -1951,7 +1963,10 @@ holding the token, kept because it is also what the poll looked like when the fa
 replayed through the same partial a live turn renders, and the page seeds the session id so the next question continues the conversation. It is
 readable by the persona that owns the session or by `admin`; any other id — foreign, unknown or malformed — renders an **empty** conversation and one
 plain sentence, naming no id and confirming nothing. A replay never rebuilds a **Confirm / Cancel card**: confirmation tokens are minted in exactly one
-place (`POST /chat/confirm`, §11.2), so a replayed card could not write and would be a lie. The dashboard's session page links here
+place (`POST /chat/confirm`, §11.2), so a replayed card could not write and would be a lie. Everything else is identical **by construction**: both the
+live fragment and the replayed one are rendered from `api._turn_context()`, and `tests/contract/test_conversation_reload.py` asserts the page binds
+every key of `TURN_CONTEXT_KEYS` and that the two renderings of one turn match. `next_steps` survives the round trip by being read back out of the
+stored `final_answer` (`orchestrator.parse_next_steps()`, the inverse of §7.3's join). The dashboard's session page links here
 (*"Continue this conversation in chat"*), which is the return leg of the `/dashboard/sessions/{id}#turn-{seq}` deep link.
 
 ### 11.6 Observability dashboard — 11 pages

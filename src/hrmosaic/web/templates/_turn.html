@@ -19,9 +19,9 @@
     quarantined chunks out before any of them reach a citation (demo-and-grader-controls-7,
     chat-production-ux-27).
 
-  Context: `turn`, `question`, `as_of`/`as_of_human`, `citations_by_id`, `confirm_fields`,
-  `decision_line`, `labelled`, `block_headings`, `suggestion_footnote` — all from
-  `web/api.py::_render_turn()`.
+  Context: every name in `web/api.py::TURN_CONTEXT_KEYS`, built by `_turn_context()` — the one
+  builder both `_render_turn()` (a live turn) and `_rehydrate()` (a replayed one) render from, so a
+  reloaded transcript cannot render differently from the turn it is replaying.
 #}
 <article class="turn" id="turn-{{ turn.turn_id }}" data-session-id="{{ turn.session_id }}"
          data-turn-id="{{ turn.turn_id }}" data-outcome="{{ turn.outcome }}"
@@ -31,10 +31,18 @@
   {% endif %}
 
   <div class="message message-agent">
-    <p class="speaker"><span class="speaker-mark" aria-hidden="true">M</span>Mosaic</p>
+    {#- The speaker row: who is talking, when they said it, and one control over what they said
+        (chat-production-ux-17). The time is the turn's own clock time, not a duration — `title`
+        carries the full local timestamp for a hover, the visible text carries `HH:MM`. -#}
+    <p class="speaker">
+      <span class="speaker-mark" aria-hidden="true">M</span>Mosaic
+      {% if sent_at %}<time class="speaker-time" datetime="{{ sent_at }}" title="{{ sent_at_full }}">{{ sent_at_human }}</time>{% endif %}
+      <button class="copy-answer" type="button">Copy answer</button>
+    </p>
 
     {% if decision_line %}<p class="confirm-resolved">{{ decision_line }}</p>{% endif %}
 
+    <div class="answer-body">
     {% set facts = turn.answer_blocks | selectattr('type', 'equalto', 'policy_fact') | list %}
     {% set suggestions = turn.answer_blocks | selectattr('type', 'equalto', 'recommendation') | list %}
     {% set escalations = turn.answer_blocks | selectattr('type', 'equalto', 'escalation') | list %}
@@ -94,6 +102,18 @@
 
     {% if as_of %}
     <p class="snapshot-note">Based on employee data from {{ as_of_human }}</p>
+    {% endif %}
+    </div><!-- /answer-body: what "Copy answer" copies -->
+
+    {#- A clarifying question with no quick way to answer it is a dead end (§3.5,
+        chat-production-ux-7). Each chip is a reply the reader would send: it PREFILLS the composer
+        and submits nothing, so the question stays theirs to edit. -#}
+    {% if quick_replies %}
+    <ul class="quick-replies">
+      {% for reply in quick_replies %}
+      <li><button class="quick-reply" type="button" data-prompt="{{ reply }}">{{ reply }}</button></li>
+      {% endfor %}
+    </ul>
     {% endif %}
 
     {% if turn.confirmation %}

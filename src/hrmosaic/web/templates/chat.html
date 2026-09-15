@@ -37,11 +37,19 @@
 
       <div id="messages" class="messages">
         {#- A conversation opened with `/?session=<id>`: the stored turns, replayed through the same
-            partial a live turn is rendered with (UX W1, navigation-and-ia-16). -#}
+            partial a live turn is rendered with (UX W1, navigation-and-ia-16).
+
+            Every name in `api.TURN_CONTEXT_KEYS` is bound here, because a name the partial reads and
+            this block forgets is `Undefined` — falsy, silent, and a transcript that renders
+            *differently* on reload than it did live. `labelled` was exactly that between the two W2
+            commits: the suggestion headings and their footnote disappeared on reload and nothing
+            failed. `test_conversation_reload.py` now asserts this list against that tuple. -#}
         {% for item in transcript %}
         {% with turn = item.turn, question = item.question, as_of = item.as_of, as_of_human = item.as_of_human,
-                citations_by_id = item.citations_by_id, confirm_fields = item.confirm_fields,
-                decision_line = item.decision_line %}
+                sent_at = item.sent_at, sent_at_human = item.sent_at_human, sent_at_full = item.sent_at_full,
+                decision_line = item.decision_line, labelled = item.labelled, quick_replies = item.quick_replies,
+                block_headings = item.block_headings, suggestion_footnote = item.suggestion_footnote,
+                citations_by_id = item.citations_by_id, confirm_fields = item.confirm_fields %}
         {% include "_turn.html" %}
         {% endwith %}
         {% endfor %}
@@ -218,7 +226,9 @@
       messageBox.disabled = busy;
       sendButton.hidden = busy;
       stopButton.hidden = !busy;
-      document.querySelectorAll(".demo-button, .starter").forEach(function (button) { button.disabled = busy; });
+      document.querySelectorAll(".demo-button, .starter, .quick-reply").forEach(function (button) {
+        button.disabled = busy;
+      });
       var actor = document.getElementById("actor-select");
       if (actor) { actor.disabled = busy; }
     }
@@ -357,12 +367,39 @@
     document.body.addEventListener("htmx:responseError", function () { setBusy(false); clearPending(); });
     document.body.addEventListener("htmx:sendError", function () { setBusy(false); clearPending(); });
 
-    document.querySelectorAll(".starter").forEach(function (button) {
-      button.addEventListener("click", function () {
-        messageBox.value = button.dataset.prompt;
-        autogrow();
-        messageBox.focus();
-      });
+    // The starter questions of the empty state and the quick replies under a clarifying question
+    // do the same thing — they PREFILL and submit nothing, so the reader still owns the message.
+    // Delegated, because a quick reply arrives inside an htmx swap long after this script ran
+    // (chat-production-ux-1, chat-production-ux-7).
+    function prefill(text) {
+      messageBox.value = text;
+      autogrow();
+      messageBox.focus();
+      messageBox.setSelectionRange(messageBox.value.length, messageBox.value.length);
+    }
+
+    document.body.addEventListener("click", function (event) {
+      var prompt = event.target.closest(".starter, .quick-reply");
+      if (prompt && !prompt.disabled) { prefill(prompt.dataset.prompt || ""); }
+    });
+
+    // Copy answer: the answer this turn gave, as a person reads it — the blocks, the suggestions
+    // and the snapshot note inside `.answer-body`, and none of the chrome around them
+    // (chat-production-ux-17). The label says what happened and goes back on its own.
+    var COPY_LABEL = "Copy answer";
+    var COPIED_LABEL = "Copied";
+    var COPIED_MS = 1600;
+
+    document.body.addEventListener("click", function (event) {
+      var button = event.target.closest(".copy-answer");
+      if (!button) { return; }
+      var body = button.closest(".message-agent").querySelector(".answer-body");
+      var text = body ? (body.innerText || body.textContent || "").trim() : "";
+      if (!text || !navigator.clipboard) { return; }
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = COPIED_LABEL;
+        setTimeout(function () { button.textContent = COPY_LABEL; }, COPIED_MS);
+      }).catch(function () { /* a denied clipboard is not an error worth a sentence */ });
     });
 
     document.querySelectorAll(".demo-button").forEach(function (button) {

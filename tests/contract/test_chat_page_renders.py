@@ -54,10 +54,12 @@ async def test_the_empty_conversation_greets_the_persona_and_offers_four_starter
 
     assert "Hi Priya — ask me anything about HR" in html
     assert html.count('class="starter"') == 4
-    # A starter prefills the composer and focuses it; nothing is submitted for the reader.
-    starters = html.split('document.querySelectorAll(".starter")')[1].split("document.querySelectorAll")[0]
-    assert "messageBox.value = button.dataset.prompt" in starters
-    assert "requestSubmit" not in starters
+    # A starter prefills the composer and focuses it; nothing is submitted for the reader. The
+    # handler is delegated, because the quick replies it shares (chat-production-ux-7) arrive inside
+    # an htmx swap long after the page script has run.
+    prefill = html.split('event.target.closest(".starter, .quick-reply")')[1].split("document.body")[0]
+    assert "prefill(prompt.dataset.prompt" in prefill
+    assert "requestSubmit" not in prefill
     assert "Enter to send · Shift+Enter for a new line" in html
 
 
@@ -242,3 +244,66 @@ async def test_the_same_post_returns_json_to_an_api_client(web):
 
     assert response.headers["content-type"].startswith("application/json")
     assert set(response.json()) >= {"answer", "citations", "trace", "answer_blocks"}
+
+
+async def test_the_speaker_row_carries_the_time_and_one_control_over_the_answer(web):
+    """chat-production-ux-17's third and fourth columns: a timestamp, and `Copy answer`.
+
+    The asymmetric bubbles and the speaker row landed in W2's first pass; the two controls beside
+    the speaker's name did not, and the phase gate is all of §5 "W2". The time is the turn's own
+    clock time from `turns.started_at` — `HH:MM` in the row, the full sentence on hover, the machine
+    form in `datetime=` — and never a duration or a millisecond count. `Copy answer` copies
+    `.answer-body`: the blocks, the suggestions and the snapshot note, and none of the chrome
+    (the sources strip, the confirmation card and the retry button stay outside it).
+    """
+    async with web("demo_task_1.json") as client:
+        html = (await client.get("/")).text
+        fragment = (await client.post("/chat", json={"message": TOOL_USING_QUESTION}, headers=HTMX)).text
+
+    moment = re.search(r'<time class="speaker-time" datetime="([^"]+)" title="([^"]+)">(\d\d:\d\d)</time>', fragment)
+    assert moment, "the speaker row states when the turn was said"
+    assert moment.group(3) in moment.group(2), "and the hover says the same time, with its date"
+    assert f"T{moment.group(3)}:" in moment.group(1), "and the machine form is the same clock time"
+    assert "ms" not in moment.group(2), "a timestamp, never a duration (numbers-precision-overflow-3)"
+
+    assert '<button class="copy-answer" type="button">Copy answer</button>' in fragment
+    body = fragment.split('<div class="answer-body">')[1].split("<!-- /answer-body")[0]
+    assert "answer-block-policy_fact" in body and "snapshot-note" in body
+    assert 'class="sources"' not in body, "Copy answer copies the answer, not the chrome around it"
+
+    # The clipboard write is delegated from the page, so it reaches a turn swapped in later.
+    assert '.closest(".copy-answer")' in html
+    assert 'querySelector(".answer-body")' in html
+    assert "navigator.clipboard.writeText" in html
+
+
+async def test_a_clarifying_question_offers_two_quick_replies_that_prefill(web):
+    """§3.5 / chat-production-ux-7: *"Same, plus no quick way to answer."*
+
+    The recital was fixed in W2's first pass; the two chips were not. Each one is a reply the reader
+    would send, so it PREFILLS the composer and submits nothing — the message stays theirs to edit,
+    which is the difference between a shortcut and an answer put in their mouth. They are chat
+    chrome written by the orchestrator, not model output, so a clarification always has them.
+    """
+    from hrmosaic.agent import orchestrator
+
+    async with web("fault_ambiguous.json") as client:
+        response = await client.post("/chat", json={"message": "Can I take some time off soon?"}, headers=HTMX)
+        payload = await client.get("/")
+
+    assert 'data-outcome="clarify"' in response.text
+    chips = re.findall(r'<button class="quick-reply" type="button" data-prompt="([^"]+)">', response.text)
+    assert len(chips) == 2, "two quick replies, as §3.5 specifies"
+    assert chips == list(orchestrator.clarify_chips("pto_request"))
+    assert "hx-post" not in response.text.split('<ul class="quick-replies">')[1].split("</ul>")[0]
+    # They prefill through the same delegated handler the starter questions use.
+    assert 'event.target.closest(".starter, .quick-reply")' in payload.text
+
+
+async def test_no_other_outcome_carries_a_quick_reply(web):
+    """A chip under an answer would be a suggestion of what to ask next; that is not what these are."""
+    async with web("demo_task_1.json") as client:
+        answered = await client.post("/chat", json={"message": TOOL_USING_QUESTION}, headers=HTMX)
+
+    assert 'data-outcome="answered"' in answered.text
+    assert "quick-replies" not in answered.text

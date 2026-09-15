@@ -154,6 +154,34 @@ CLARIFY_QUESTIONS: dict[str, str] = {
 #: When the router named no workflow. Still one question, still in the first person.
 CLARIFY_FALLBACK = "Happy to help — could you tell me a little more about what you are after?"
 
+#: The two quick replies a clarification offers, per workflow (UX W2, §3.5 of the UX plan,
+#: chat-production-ux-7). A clarifying question with no quick way to answer it is a dead end: the
+#: reader has to compose the reply the question already implies. Each chip is a **reply the user
+#: would send**, so it prefills the composer and sends nothing — the reader still edits and presses
+#: Enter, which is the difference between a shortcut and an answer put in their mouth.
+CLARIFY_CHIPS: dict[str, tuple[str, ...]] = {
+    "pto_request": (
+        "Three days, 15–17 September 2026",
+        "One day, this Friday",
+    ),
+    "remote_work_eligibility": (
+        "Berlin, for six weeks",
+        "Within the UK, for the rest of the year",
+    ),
+}
+
+#: The fallback pair, for a clarification the router could not attach to a workflow.
+CLARIFY_FALLBACK_CHIPS: tuple[str, ...] = (
+    "It is about my time off",
+    "It is about working somewhere else",
+)
+
+
+def clarify_chips(workflow: str | None) -> tuple[str, ...]:
+    """The quick replies for a clarification, by workflow name. Shared with the replay path."""
+    return CLARIFY_CHIPS.get(workflow or "", CLARIFY_FALLBACK_CHIPS)
+
+
 #: The write a confirmed resume re-issued came back `isError`: the token validated, the write did
 #: not. §9.4's graceful partial, not a silent success.
 WRITE_FAILED_NOTE = (
@@ -342,6 +370,11 @@ class ChatResponse(BaseModel):
     #: until UX W2 the refusal's redirect, which is the most useful half of a refusal, was
     #: generated on every refused turn and silently dropped by the web layer (jargon-and-exposure-3).
     next_steps: list[str] = Field(default_factory=list)
+    #: The two quick replies a clarifying turn offers (UX W2, chat-production-ux-7). Empty on every
+    #: other outcome. They are chat chrome, not model output: the orchestrator writes them from
+    #: `CLARIFY_CHIPS`, so a clarification always has a way to answer it even when the model's own
+    #: question is the fallback one.
+    quick_replies: list[str] = Field(default_factory=list)
     citations: list[Citation]
     trace: list[TraceEntry]
     confirmation: ConfirmationCard | None = None
@@ -469,6 +502,11 @@ def project(turn_id: str, *, session_id: str, store: Store | None = None) -> lis
     return entries
 
 
+#: The section `render_answer()` closes with when the answer carries steps, and the marker
+#: `parse_next_steps()` reads them back by.
+NEXT_STEPS_LEAD = "Next steps:\n"
+
+
 def render_answer(blocks: Sequence[AnswerBlock], next_steps: Sequence[str]) -> str:
     """The deterministic join of §7.3: a recommendation is labelled, an escalation is flagged."""
     parts: list[str] = []
@@ -480,8 +518,25 @@ def render_answer(blocks: Sequence[AnswerBlock], next_steps: Sequence[str]) -> s
         else:
             parts.append(block.text)
     if next_steps:
-        parts.append("Next steps:\n" + "\n".join(f"- {step}" for step in next_steps))
+        parts.append(NEXT_STEPS_LEAD + "\n".join(f"- {step}" for step in next_steps))
     return "\n\n".join(parts)
+
+
+def parse_next_steps(answer: str) -> list[str]:
+    """The inverse of the join above, for the one reader that has only the stored string.
+
+    `turns` stores `final_answer`, `answer_blocks_json` and `citations_json` — the blocks and their
+    sources, but not the steps beside them. So a replayed transcript used to lose `next_steps`
+    entirely, and a refusal came back from a reload without the redirect that is the most useful
+    half of it (UX W2 report §7.3). The steps are not gone: `render_answer()` put them in the very
+    string the row holds, as the last section, one `- ` bullet per step. This reads them back, and
+    `tests/unit/test_answer_rendering.py` pins the pair as a round trip so the format cannot drift
+    on one side only.
+    """
+    head, separator, tail = answer.rpartition(NEXT_STEPS_LEAD)
+    if not separator or (head and not head.endswith("\n\n")):
+        return []
+    return [line[2:] for line in tail.split("\n") if line.startswith("- ")]
 
 
 # --------------------------------------------------------------------------------------
@@ -1512,7 +1567,15 @@ class Orchestrator:
             next_steps=["Reply with the missing detail and I will pick this up."],
             rationale_summary="Clarification requested: a required detail is missing.",
         )
-        return self._finish(turn, answer, outcome="clarify", stop_reason="clarify", cold_start=cold_start)
+        workflow = turn.workflow
+        return self._finish(
+            turn,
+            answer,
+            outcome="clarify",
+            stop_reason="clarify",
+            cold_start=cold_start,
+            quick_replies=clarify_chips(workflow.name if workflow is not None else None),
+        )
 
     def _refuse(self, turn: _Turn, reason: str, *, cold_start: bool) -> ChatResponse:
         return self._finish(
@@ -1635,6 +1698,7 @@ class Orchestrator:
         confirmation: ConfirmationCard | None = None,
         error_kind: str | None = None,
         cold_start: bool = False,
+        quick_replies: Sequence[str] = (),
     ) -> ChatResponse:
         """Step 6: the closing UPDATE, then the response built from the very spans that were written."""
         decision = turn.decision
@@ -1661,6 +1725,7 @@ class Orchestrator:
             answer=rendered,
             answer_blocks=list(answer.blocks),
             next_steps=list(answer.next_steps),
+            quick_replies=list(quick_replies),
             citations=list(citations),
             trace=project(turn.buffer.turn_id, session_id=turn.buffer.session_id),
             confirmation=confirmation,

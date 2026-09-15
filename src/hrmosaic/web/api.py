@@ -45,6 +45,7 @@ import secrets
 import time
 from collections import deque
 from collections.abc import Mapping
+from datetime import datetime
 from html import escape
 from pathlib import Path
 from typing import Any, Literal
@@ -64,6 +65,8 @@ from hrmosaic.agent.orchestrator import (
     ChatResponse,
     Timings,
     Usage,
+    clarify_chips,
+    parse_next_steps,
     project,
     render_answer,
 )
@@ -859,6 +862,81 @@ DECISION_LINES = {
 }
 
 
+def sent_at_human(started_at: int | None) -> tuple[str, str, str]:
+    """A turn's clock time for the speaker row (UX W2, chat-production-ux-17).
+
+    `turns.started_at` is epoch **microseconds** on the real wall clock (constraint 6: no clock
+    module, no override). The three forms are the `<time datetime=…>` attribute, the `HH:MM` the row
+    shows, and the full sentence its hover carries — never a duration, never a millisecond count and
+    never an id: the timestamp a person wants beside a message is when it was said, in the same date
+    vocabulary as the snapshot note (`numbers-precision-overflow-12`).
+    """
+    if not started_at:
+        return "", "", ""
+    moment = datetime.fromtimestamp(started_at / 1_000_000).astimezone()
+    short = moment.strftime("%H:%M")
+    return moment.isoformat(timespec="seconds"), short, f"{short} on {human_date(moment.strftime('%Y-%m-%d'))}"
+
+
+#: Every name `_turn.html` reads out of its context. The partial is rendered from two places — a
+#: live turn (`_render_turn`) and a replayed one (`_rehydrate`) — and a name bound in one but not
+#: the other is silently `Undefined`, i.e. falsy, i.e. a reloaded transcript that renders
+#: *differently from the turn it is replaying*. That is exactly what happened to `labelled` between
+#: the two W2 commits: the headings and the suggestion footnote vanished on reload and nothing
+#: failed. Both paths now build their context through `_turn_context()` and
+#: `tests/contract/test_conversation_reload.py` asserts the page binds every key of this tuple.
+TURN_CONTEXT_KEYS = (
+    "turn",
+    "question",
+    "as_of",
+    "as_of_human",
+    "sent_at",
+    "sent_at_human",
+    "sent_at_full",
+    "decision_line",
+    "labelled",
+    "quick_replies",
+    "block_headings",
+    "suggestion_footnote",
+    "citations_by_id",
+    "confirm_fields",
+)
+
+
+def _turn_context(
+    response: ChatResponse,
+    *,
+    question: str | None,
+    as_of: str | None,
+    started_at: int | None,
+    decision: str | None = None,
+    confirm_fields: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """The one context `_turn.html` is rendered from, live and replayed alike."""
+    sent_at, sent_at_text, sent_at_full = sent_at_human(started_at)
+    return {
+        "turn": response,
+        "question": question,
+        "as_of": as_of,
+        "as_of_human": human_date(as_of) if as_of else None,
+        "sent_at": sent_at,
+        "sent_at_human": sent_at_text,
+        "sent_at_full": sent_at_full,
+        "decision_line": DECISION_LINES.get(decision or ""),
+        "labelled": response.outcome in LABELLED_OUTCOMES,
+        "quick_replies": list(response.quick_replies),
+        "block_headings": BLOCK_HEADINGS,
+        "suggestion_footnote": SUGGESTION_FOOTNOTE,
+        "citations_by_id": {citation.chunk_id: citation for citation in response.citations},
+        "confirm_fields": confirm_fields if confirm_fields is not None else [],
+    }
+
+
+def _started_at(store: Store, turn_id: str) -> int | None:
+    row = store.execute("SELECT started_at FROM turns WHERE id = ?", (turn_id,)).one()
+    return row["started_at"] if row else None
+
+
 def _render_turn(
     request: Request,
     response: ChatResponse,
@@ -869,28 +947,26 @@ def _render_turn(
     """JSON is the contract (§11.1); the chat page asks for the same turn as an htmx fragment.
 
     One endpoint, two representations — never a second route, because §11.8's endpoint list is
-    exact. The fragment is the *same* `ChatResponse`, rendered server-side, so the badges and the
-    citation chips `tests/contract/test_chat_page_renders.py` asserts on are the shipped ones.
+    exact. The fragment is the *same* `ChatResponse`, rendered server-side, so the headings, the
+    sources and the confirmation card `tests/contract/test_chat_page_renders.py` asserts on are the
+    shipped ones.
     """
     if request.headers.get("HX-Request") != "true":
         return JSONResponse(response.model_dump(mode="json"))
-    as_of = snapshot_as_of(_spans_of(_store(request), response.turn_id))
+    store = _store(request)
+    as_of = snapshot_as_of(_spans_of(store, response.turn_id))
     preview = response.confirmation.arguments_preview if response.confirmation else {}
     return TEMPLATES.TemplateResponse(
         request=request,
         name="_turn.html",
-        context={
-            "turn": response,
-            "question": question,
-            "as_of": as_of,
-            "as_of_human": human_date(as_of) if as_of else None,
-            "decision_line": DECISION_LINES.get(decision or ""),
-            "labelled": response.outcome in LABELLED_OUTCOMES,
-            "block_headings": BLOCK_HEADINGS,
-            "suggestion_footnote": SUGGESTION_FOOTNOTE,
-            "citations_by_id": {citation.chunk_id: citation for citation in response.citations},
-            "confirm_fields": _confirm_fields(preview),
-        },
+        context=_turn_context(
+            response,
+            question=question,
+            as_of=as_of,
+            started_at=_started_at(store, response.turn_id),
+            decision=decision,
+            confirm_fields=_confirm_fields(preview),
+        ),
     )
 
 
@@ -1090,8 +1166,8 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
     """
     store = _store(request)
     rows = store.execute(
-        "SELECT id, seq, user_message, final_answer, answer_blocks_json, citations_json, outcome, "
-        "llm_calls, tool_calls, retrievals, total_tokens_in, total_tokens_out, duration_ms "
+        "SELECT id, seq, started_at, user_message, final_answer, answer_blocks_json, citations_json, outcome, "
+        "workflow, llm_calls, tool_calls, retrievals, total_tokens_in, total_tokens_out, duration_ms "
         "FROM turns WHERE session_id = ? AND ended_at IS NOT NULL ORDER BY seq",
         (session_id,),
     ).dicts()
@@ -1099,12 +1175,22 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
     for row in rows:
         turn_id = row["id"]
         citations = [Citation.model_validate(item) for item in json.loads(row["citations_json"] or "[]")]
+        outcome = row["outcome"] or "answered"
         turn = ChatResponse(
             session_id=session_id,
             turn_id=turn_id,
             trace_id=session_id,
-            outcome=row["outcome"] or "answered",
+            outcome=outcome,
             answer=row["final_answer"] or "",
+            # `turns` stores the blocks, not the steps beside them — so a replay used to drop
+            # `next_steps`, and a refusal came back from a reload without its redirect. They are in
+            # the stored answer, as the section `render_answer()` closes with.
+            next_steps=parse_next_steps(row["final_answer"] or ""),
+            # `turns` stores the blocks and the citations, not the chrome built around them. The
+            # quick replies are not model output — they are `CLARIFY_CHIPS` keyed by the workflow,
+            # which the row does carry — so a replayed clarification still offers the same two ways
+            # to answer it that the live one did (chat-production-ux-7).
+            quick_replies=list(clarify_chips(row["workflow"])) if outcome == "clarify" else [],
             answer_blocks=[AnswerBlock.model_validate(item) for item in json.loads(row["answer_blocks_json"] or "[]")],
             citations=citations,
             trace=project(turn_id, session_id=session_id, store=store),
@@ -1118,20 +1204,17 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
             timings=Timings(total_ms=row["duration_ms"] or 0),
             dashboard_url=f"/dashboard/sessions/{session_id}#turn-{row['seq']}",
         )
-        as_of = snapshot_as_of(_spans_of(store, turn_id))
+        # The same context builder the live fragment is rendered from — not a second dict that
+        # looks like it. A replay never rebuilds a card (§11.5) and never re-states a decision: it
+        # is the transcript of what happened, not an offer to do it again, so `decision` and
+        # `confirm_fields` are the empty ones and everything else is identical by construction.
         replayed.append(
-            {
-                "turn": turn,
-                "question": row["user_message"],
-                "as_of": as_of,
-                "as_of_human": human_date(as_of) if as_of else None,
-                "citations_by_id": {citation.chunk_id: citation for citation in citations},
-                # A replay never rebuilds a card (§11.5) and never re-states a decision: it is the
-                # transcript of what happened, not an offer to do it again.
-                "confirm_fields": [],
-                "decision_line": None,
-                "labelled": turn.outcome in LABELLED_OUTCOMES,
-            }
+            _turn_context(
+                turn,
+                question=row["user_message"],
+                as_of=snapshot_as_of(_spans_of(store, turn_id)),
+                started_at=row["started_at"],
+            )
         )
     return replayed
 
@@ -1166,8 +1249,6 @@ async def chat_page(request: Request) -> Response:
             "greeting_name": _greeting_name(request, identity.actor),
             "demo_prompts": DEMO_PROMPTS,
             "starters": STARTER_PROMPTS,
-            "block_headings": BLOCK_HEADINGS,
-            "suggestion_footnote": SUGGESTION_FOOTNOTE,
             "transcript": transcript,
             "session_id": session_id,
             "session_notice": notice,
@@ -1643,6 +1724,7 @@ __all__ = [
     "LABELLED_OUTCOMES",
     "STARTER_PROMPTS",
     "SUGGESTION_FOOTNOTE",
+    "TURN_CONTEXT_KEYS",
     "AccessGateMiddleware",
     "ChatBody",
     "ConfirmBody",
@@ -1654,5 +1736,6 @@ __all__ = [
     "identity_of",
     "refusal_page",
     "router",
+    "sent_at_human",
     "shell_context",
 ]

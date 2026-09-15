@@ -13,11 +13,17 @@ never confirms whether the id exists.
 
 from __future__ import annotations
 
+import re
+
 import pytest
+
+from hrmosaic.web import api
 
 pytestmark = pytest.mark.anyio
 
+HTMX = {"HX-Request": "true"}
 QUESTION = "How much PTO do full-time employees accrue each month?"
+BERLIN = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
 NOTICE = "That conversation could not be opened here, so this is a new one."
 
 
@@ -99,3 +105,62 @@ async def test_a_plain_reload_with_no_session_parameter_is_unchanged(web):
     assert page.status_code == 200
     assert NOTICE not in page.text
     assert 'id="session-id" value=""' in page.text
+
+
+async def test_a_replayed_turn_renders_exactly_what_the_live_one_did(web):
+    """The parity the two render paths owe each other (UX W2 review, fix round 1).
+
+    `_rehydrate()` and `_render_turn()` build the same context through `_turn_context()`, but the
+    page has to *bind* it: `{% include %}` sees only what the surrounding `{% with %}` names, so a
+    key the partial reads and the loop forgets is `Undefined` — falsy, and silent. `labelled` was
+    that key. It is `turn.outcome in LABELLED_OUTCOMES`, it gates the *"What I suggest you do"*
+    heading and the *"Suggestions are guidance, not company policy."* footnote, and because the page
+    never bound it an answered turn came back from a reload as bare paragraphs: the labelling
+    guarantee §11.5 states was absent on every reloaded transcript, and `api.py`'s own computation
+    of it was dead code.
+    """
+    async with web("demo_task_1.json") as client:
+        live = await client.post("/chat", json={"message": BERLIN}, headers=HTMX)
+        assert live.status_code == 200, live.text
+        assert 'data-outcome="answered"' in live.text
+        reloaded = await client.get(f"/?session={_session_of(live.text)}")
+
+    assert reloaded.status_code == 200
+    for promise in (api.BLOCK_HEADINGS["recommendation"], api.SUGGESTION_FOOTNOTE):
+        assert promise in live.text, f"the live turn carries {promise!r}"
+        assert promise in reloaded.text, f"and so does the same turn replayed — {promise!r}"
+
+    # Not just the two strings: the whole agent message is the same markup, modulo the turn's own
+    # clock time, which is the only thing in it that depends on when it is rendered.
+    assert _agent_message(live.text) == _agent_message(reloaded.text)
+
+
+def _session_of(fragment: str) -> str:
+    found = re.search(r'data-session-id="([0-9a-f]+)"', fragment)
+    assert found, fragment[:400]
+    return found.group(1)
+
+
+def _agent_message(markup: str) -> str:
+    """The agent half of the first turn, whitespace-normalised."""
+    found = re.search(r'<div class="message message-agent">(.*?)\n  </div>', markup, re.S)
+    assert found, markup[:400]
+    return re.sub(r"\s+", " ", found.group(1)).strip()
+
+
+def test_the_page_binds_every_name_the_turn_partial_reads():
+    """The structural guard, so the next key added to the context cannot be half-wired.
+
+    `TURN_CONTEXT_KEYS` is what `_turn_context()` produces and what `_turn.html` reads. The live
+    path passes the dict straight to the template; the replay path goes through the page's
+    `{% with %}`, which is the only place a name can be dropped. So the list is asserted against
+    the tuple rather than against a screenshot of the defect.
+    """
+    chat = (api.PACKAGE_DIR / "templates" / "chat.html").read_text(encoding="utf-8")
+    block = re.search(r"\{% with turn = item\.turn,(.*?)%\}", chat, re.S)
+    assert block, "the replay loop still binds its context with a `{% with %}`"
+    bound = set(re.findall(r"(\w+) = item\.", "turn = item." + block.group(1)))
+    assert set(api.TURN_CONTEXT_KEYS) == bound, (
+        "every key `_turn_context()` builds must be bound for the replayed turn too; "
+        f"missing {sorted(set(api.TURN_CONTEXT_KEYS) - bound)}, extra {sorted(bound - set(api.TURN_CONTEXT_KEYS))}"
+    )
