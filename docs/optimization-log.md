@@ -434,6 +434,48 @@ the judge on that item.
 
 ---
 
+## 2026-09-14 → 15 — The interface: from a rendered-screen audit to a production-grade chat
+
+**The complaint.** Sean reviewed the live UI and found it clunky: technical detail and jargon on the
+chat surface, unrounded and overflowing numbers, buried functionality, navigation that changed with the
+page, and a needless "assume the HR admin role" step before the dashboard.
+
+**Method.** A headless browser captured 53 screens (every page and state at desktop, laptop and phone
+widths, with every visible number and every overflow measured); seven auditors reviewed the renders
+through separate lenses; skeptics confirmed each serious finding against its screenshot; the result was
+155 verified findings and a plan with 15 principles, each carrying a mechanical detection rule
+(`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md`, screens under `docs/evidence/ux-audit-2026-09-14/`).
+
+**Target.** Three surfaces behind one shell: a chat that reads as a consumer product (one conversation
+column, plain language, sources as friendly references, a calm progress line, sticky composer), a
+clearly labelled Demo & grader panel (persona, scripted prompts that prefill, the deep link to the
+session in the dashboard, a plain "how this answer was produced"), and a dashboard that keeps every
+technical detail but is tidy and open to anyone holding the token.
+
+**Waves.** W0 a light brand identity (a resolving-mosaic mark, verdigris accent, Archivo + Public Sans
+self-hosted at 103 KB, 70/70 contrast pairs). W1 one masthead on every page, one gate (roles gate only
+the three writes), themed error pages, a policy reader route, conversations that survive a reload, and a
+Playwright harness whose principle checks run in CI. W2 the chat redesign with jargon denylists as
+permanent tests. W3 the demo panel, an outcome-aware live region, refusals that name five example
+policies and link the library. W4 one formatter path for every number, ledes and breadcrumbs, tables
+that scan, KPI tiles that agree with their detail, and the tools rollup no longer counting the
+confirmation gate as an error. W5 skip link, focus management, 44 px targets, token and painted
+contrast checks, dark-theme captures, tenure in words at the tool boundary.
+
+| Measure | Before | After |
+|---|---|---|
+| Tests | 2,002 | 2,186 (71 of them real-browser checks in a CI job) |
+| Screens captured per run | 53 | 69 × 3 viewports × 2 colour schemes |
+| Screens scrolling sideways | several at 390 px | 0 |
+| Numbers on human surfaces with > 3 s.f. | many | 0 (contract test) |
+| Internal identifiers in chat | span kinds, guardrail names, token counts | 0 (denylist test) |
+| Steps to reach the dashboard | assume admin, then navigate | one click from any page |
+
+Each wave shipped with before/after screens (`docs/evidence/ux-w1` … `ux-w5`, `ux-final`). The
+independent re-audit's score is appended below when it lands.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
