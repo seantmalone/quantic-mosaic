@@ -47,7 +47,7 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 2,112 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 2,113 tests as of
 2026-09-15, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. Twenty-eight of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them

@@ -35,10 +35,12 @@
 #}
 <section class="demo-panel">
   <details id="demo-details">
-    <summary class="demo-summary"><h2>Demo &amp; grader controls</h2></summary>
-
-    <p class="demo-note">These controls exist for evaluation. A real user of this assistant never
-      sees them.</p>
+    {#- The disclaimer is inside the `<summary>`, so the collapsed panel still says what it is and
+        who it is not for: a heading alone reads as a section a reader might be missing something
+        by not opening (UX W3 review). #}
+    <summary class="demo-summary"><h2>Demo &amp; grader controls</h2>
+      <p class="demo-note">For evaluation only — a real user never sees this panel.</p>
+    </summary>
 
     <div class="demo-body">
       {#- Moved out of the masthead at W1 and given its real home here. The id and the name are
@@ -49,8 +51,10 @@
           <label for="actor-select">Act as</label>
           <select id="actor-select" name="actor" aria-label="Act as">
             {% for employee in employees %}
+            {#- Id and name only. With the job title too, the native control cut the label mid-word
+                inside the two-column panel body — "E1042 — Priya Raghavan, Senio" (UX W3 review). #}
             <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
-              {{ employee.employee_id }} — {{ employee.name }}, {{ employee.title }}
+              {{ employee.employee_id }} — {{ employee.name }}
             </option>
             {% endfor %}
             <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
@@ -95,4 +99,25 @@
       {% endif %}
     </div>
   </details>
+
+  {# The panel ships collapsed on every page load, but a grader who opened it should not have to
+     open it again on the next question. The *default* stays closed — only an explicit open is
+     remembered, per browser, and `localStorage` throws outright in some privacy modes, so every
+     access is guarded and a failure simply leaves the panel as the server rendered it. #}
+  <script>
+    (function () {
+      "use strict";
+      var details = document.getElementById("demo-details");
+      if (!details) { return; }
+      var KEY = "mosaic.demo-panel-open";
+      try {
+        if (window.localStorage.getItem(KEY) === "1") { details.open = true; }
+      } catch (error) { /* storage unavailable — the panel keeps its rendered state */ }
+      details.addEventListener("toggle", function () {
+        try {
+          window.localStorage.setItem(KEY, details.open ? "1" : "0");
+        } catch (error) { /* nothing to remember it with */ }
+      });
+    })();
+  </script>
 </section>

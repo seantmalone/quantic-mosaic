@@ -1139,6 +1139,10 @@ def unhandled_error_response(request: Request, exc: BaseException) -> Response:
             final_answer=answer,
             answer_blocks=blocks,
             citations=[],
+            # Explicitly empty rather than omitted: `_replayed_next_steps` treats a NULL column as
+            # a row written before migration 002 and re-parses the joined answer for it. This turn
+            # has no next steps, and the record should say so (UX W3 review).
+            next_steps=[],
         )
         store = _store(request)
         usage, timings = _turn_rollups(store, buffer.turn_id)
@@ -1231,7 +1235,12 @@ def _owns(session_row: dict[str, Any] | None, identity: Identity) -> bool:
 
 
 def _replayed_next_steps(row: Mapping[str, Any]) -> list[str]:
-    """`turns.next_steps_json`, or — for a row older than migration 002 — the joined answer."""
+    """`turns.next_steps_json`, or — for a row older than migration 002 — the joined answer.
+
+    Every path that closes a turn now passes the field, empty ones included, so the fallback really
+    is only the pre-migration one: the unmodelled-failure handler and the decline recorder used to
+    omit it and land here with nothing to parse (UX W3 review).
+    """
     stored = row["next_steps_json"]
     if stored:
         parsed = json.loads(stored)
@@ -1494,6 +1503,9 @@ def _record_decline(store: Store, buffer: trace_module.TurnBuffer, pending: dict
         final_answer=answer,
         answer_blocks=blocks,
         citations=[],
+        # A decline has no next step — the sentence above is the whole of it — and the column says
+        # so rather than reading as a pre-migration row (UX W3 review).
+        next_steps=[],
     )
     usage, timings = _turn_rollups(store, buffer.turn_id)
     return ChatResponse(

@@ -99,10 +99,11 @@ a { color: var(--accent); }
    that does not look like the product (P8). */
 .demo-panel {
   flex: none;
-  width: 100%; max-width: var(--measure); margin: 0 auto; padding: var(--space-3) var(--space-4);
+  width: 100%; max-width: var(--measure); margin: 0 auto; padding: var(--space-2) var(--space-4);
   border: 2px dashed var(--line-strong); border-radius: var(--radius); background: var(--sunk);
-  /* The panel ships collapsed (`_demo_controls.html`), so at rest this is a ~49px disclosure row and
-     the transcript keeps the whole empty state. The cap is the safety valve for the *opened* panel:
+  /* The panel ships collapsed (`_demo_controls.html`), so at rest this is a ~70px disclosure row —
+     the heading and the one line that says who the controls are not for — and the transcript keeps
+     the whole empty state, all four starter questions included at 390x844. The cap is the safety valve for the *opened* panel:
      `body.chat` has a definite height, so without one an open panel would push the composer off a
      short viewport. Narrow, the groups are one column (~642px) and nothing can make that fit in
      844px beside a conversation, so the panel scrolls inside itself and the transcript keeps a
@@ -113,7 +114,9 @@ a { color: var(--accent); }
 .demo-panel h2 { margin: 0; font: var(--text-h3); display: inline; }
 .demo-summary { cursor: pointer; list-style-position: outside; }
 .demo-summary::marker { color: var(--ink-soft); }
-.demo-note { margin: var(--space-1) 0 var(--space-3); font: var(--text-meta); color: var(--ink-soft); }
+/* Inside the `<summary>`: the collapsed panel is a heading *and* the sentence that says who the
+   controls are not for, which is the whole of P8 at rest. */
+.demo-note { margin: var(--space-1) 0 0; font: var(--text-meta); color: var(--ink-soft); }
 .demo-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
 .demo-group { margin-top: var(--space-4); }
 /* Two balanced columns once there is width for them. Expanded, this panel spends the transcript's

@@ -81,8 +81,12 @@ async def test_the_panel_says_what_it_is(web):
         panel = _panel((await client.get("/")).text)
 
     assert re.search(r"<h2>Demo &amp; grader controls</h2>", panel), "a heading that names the section"
-    assert "These controls exist for evaluation." in panel
-    assert "A real user of this assistant never" in panel
+    # Both inside the `<summary>`, so the collapsed panel carries the whole disclosure: the name of
+    # the section and the sentence saying who it is not for (UX W3 review).
+    summary = re.search(r"<summary class=\"demo-summary\">.*?</summary>", panel, re.S)
+    assert summary, "the collapsed panel is the summary"
+    assert "Demo &amp; grader controls" in summary.group(0)
+    assert "For evaluation only — a real user never sees this panel." in summary.group(0)
 
 
 async def test_no_demo_control_is_in_the_masthead_or_in_the_composer(web):

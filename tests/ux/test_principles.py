@@ -330,9 +330,13 @@ PANEL_BUDGET_JS = r"""
   const transcript = document.getElementById("transcript");
   const box = transcript.getBoundingClientRect();
   const starters = Array.from(document.querySelectorAll(".starter"));
+  const note = panel.querySelector(".demo-note");
+  const noteBox = note.getBoundingClientRect();
   return {
     open: details.open,
     heading: panel.querySelector("h2").textContent,
+    note: note.textContent.trim(),
+    note_painted: noteBox.height > 0 && noteBox.width > 0,
     panel: panel.getBoundingClientRect().height,
     panel_scroll: panel.scrollHeight,
     panel_client: panel.clientHeight,
@@ -379,6 +383,8 @@ def test_p8_the_panel_ships_collapsed_so_the_conversation_keeps_its_room(browser
         at_rest, (width, height) = measured["at_rest"], measured["viewport"]
         assert at_rest["open"] is False, f"the panel is open at rest at {label}: {measured}"
         assert "Demo" in at_rest["heading"], f"the collapsed panel says what it is at {label}"
+        assert at_rest["note_painted"], f"the collapsed panel hides its disclaimer at {label}: {at_rest}"
+        assert at_rest["note"] == "For evaluation only — a real user never sees this panel.", at_rest["note"]
         assert at_rest["panel_scroll"] <= at_rest["panel_client"] + 1, (
             f"the panel at rest hides part of itself at {label}: {at_rest}"
         )
@@ -410,6 +416,37 @@ def test_p8_the_panel_ships_collapsed_so_the_conversation_keeps_its_room(browser
         height = measured["viewport"][1]
         assert opened["send"]["bottom"] <= height + 1, f"the opened panel pushed the composer off {label}: {opened}"
         assert not opened["sideways"], f"the opened panel scrolls the document sideways at {label}"
+
+
+def test_p8_the_panel_remembers_that_a_grader_opened_it(browser, ux_server):
+    """Collapsed is the *default*, not a state a grader has to re-establish on every page load."""
+    context = browser.new_context(viewport={"width": 1440, "height": 900})
+    try:
+        tab = context.new_page()
+        tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+        assert tab.eval_on_selector("#demo-details", "e => e.open") is False, "it ships collapsed"
+        tab.click(".demo-summary")
+        tab.wait_for_timeout(200)
+
+        tab.reload(wait_until="networkidle")
+        assert tab.eval_on_selector("#demo-details", "e => e.open") is True, "the open state is not remembered"
+
+        tab.click(".demo-summary")
+        tab.wait_for_timeout(200)
+        tab.reload(wait_until="networkidle")
+        assert tab.eval_on_selector("#demo-details", "e => e.open") is False, "closing it again is remembered too"
+    finally:
+        context.close()
+
+    # A second browser profile has never opened it, so it is collapsed there — the memory is one
+    # reader's, not a change of default.
+    other = browser.new_context(viewport={"width": 1440, "height": 900})
+    try:
+        tab = other.new_page()
+        tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+        assert tab.eval_on_selector("#demo-details", "e => e.open") is False
+    finally:
+        other.close()
 
 
 def test_p8_a_demo_prompt_fills_the_composer_and_sends_nothing(page, ux_server):
