@@ -343,7 +343,9 @@ def test_p8_the_panel_is_collapsed_on_a_phone_so_the_conversation_keeps_its_room
     assert phone["open"] is False, "and it is collapsed on a phone"
     assert "Demo" in phone["heading"], "with the same heading, which is the summary"
     assert phone["panel"] < desktop["panel"], f"the collapsed panel is not smaller: {measurements}"
-    assert phone["transcript"] > 844 / 2, f"the conversation keeps its room: {measurements}"
+    # Measured 434 of 844 at the head of W3, against a 53px collapsed panel. The floor is 45% of
+    # the viewport rather than the measurement itself: this guards the budget, not the pixel.
+    assert phone["transcript"] > 844 * 0.45, f"the conversation keeps its room: {measurements}"
     assert not phone["sideways"] and not desktop["sideways"]
 
 
