@@ -224,6 +224,10 @@ async def test_the_apps_own_copy_and_every_agent_written_string_use_plain_langua
         *api.BLOCK_HEADINGS.values(),
         *api.DECISION_LINES.values(),
         *api.STARTER_PROMPTS,
+        # The five sentences the one live region announces a finished turn with (UX W3). They are
+        # the app talking about itself out loud, which is exactly where P13 points.
+        *api.TURN_ANNOUNCEMENTS.values(),
+        api.TURN_ANNOUNCEMENT_FALLBACK,
     ]
     for subject, where in [(chrome, "the chat page at rest"), (" ".join(written), "the agent's own copy")]:
         for pattern in COPY_FORBIDDEN:

@@ -25,7 +25,7 @@
 #}
 <article class="turn" id="turn-{{ turn.turn_id }}" data-session-id="{{ turn.session_id }}"
          data-turn-id="{{ turn.turn_id }}" data-outcome="{{ turn.outcome }}"
-         data-dashboard-url="{{ turn.dashboard_url }}">
+         data-dashboard-url="{{ turn.dashboard_url }}" data-produced="{{ produced }}">
   {% if question %}
   <div class="message message-user"><p>{{ question }}</p></div>
   {% endif %}

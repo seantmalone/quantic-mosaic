@@ -93,15 +93,33 @@ a { color: var(--accent); }
 }
 .nav-link:hover { text-decoration: underline; }
 
-/* -- the demo & grader panel (stub; W3 builds the rest around it) -------------------- */
+/* -- the demo & grader panel (UX W3, plan §3.7) --------------------------------------
+   One dashed, muted, clearly labelled section holding every affordance that exists because this
+   is a demo — and holding nothing that does not. It is deliberately the one part of the chat page
+   that does not look like the product (P8). */
 .demo-panel {
   flex: none;
   width: 100%; max-width: var(--measure); margin: 0 auto; padding: var(--space-3) var(--space-4);
   border: 2px dashed var(--line-strong); border-radius: var(--radius); background: var(--sunk);
+  max-height: 40vh; overflow-y: auto;
 }
-.demo-panel h2 { margin: 0; font: var(--text-h3); }
+.demo-panel h2 { margin: 0; font: var(--text-h3); display: inline; }
+.demo-summary { cursor: pointer; list-style-position: outside; }
+.demo-summary::marker { color: var(--ink-soft); }
 .demo-note { margin: var(--space-1) 0 var(--space-3); font: var(--text-meta); color: var(--ink-soft); }
-.demo-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.demo-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.demo-group { margin-top: var(--space-4); }
+.demo-group h3 { margin: 0 0 var(--space-2); font: var(--text-small); color: var(--ink-soft); }
+.demo-hint { margin: var(--space-2) 0 0; font: var(--text-meta); color: var(--ink-soft); }
+.demo-produced { margin: 0; font: var(--text-small); }
+.demo-link { font: var(--text-small); }
+.demo-env { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); font: var(--text-small); }
+.demo-env div { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.demo-env dt { color: var(--ink-soft); }
+.demo-env dd { margin: 0; }
+.demo-signout { margin-top: var(--space-4); }
+/* The scripted prompts are the questions they ask, so they wrap like sentences, not like chips. */
+.demo-button { text-align: left; white-space: normal; }
 .session-notice {
   margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3); font: var(--text-small);
   color: var(--ink-soft); background: var(--card); border: var(--edge); border-radius: var(--radius);

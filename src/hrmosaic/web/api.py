@@ -862,6 +862,72 @@ DECISION_LINES = {
 }
 
 
+#: What the one live region says when a turn finishes, by the outcome it finished with (UX W3).
+#:
+#: Until W3 every outcome announced *"Answer ready."* — including a refusal, a clarifying question,
+#: a crash and a confirmation card, none of which is an answer and two of which are waiting on the
+#: reader. A screen-reader user was told the opposite of what had happened three outcomes out of
+#: five. One sentence per outcome, in the same plain language the rest of the page speaks; the page
+#: reads this mapping rather than holding a second copy of it in JavaScript.
+TURN_ANNOUNCEMENTS = {
+    "answered": "Answer ready.",
+    "partial": "Partial answer ready.",
+    "escalated": "Answer ready — it points you to a person.",
+    "awaiting_confirmation": "Waiting for your confirmation.",
+    "refused": "I can't answer that one — see below.",
+    "clarify": "Could you clarify?",
+    "error": "Something went wrong — you can retry.",
+}
+
+#: The outcomes left are the two boot failures (`configuration_required`, `maintenance`). From the
+#: reader's chair they are the error turn, and saying so is better than saying nothing.
+TURN_ANNOUNCEMENT_FALLBACK = TURN_ANNOUNCEMENTS["error"]
+
+
+def _count(number: int, noun: str) -> str:
+    """`1 tool` / `7 tools` — the plural follows the count, and no `(s)` is ever rendered (P9)."""
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str:
+    """*"How this answer was produced"*, in three counts and no identifiers (plan §3.7).
+
+    The demo panel's one-line account of the last turn: what the assistant looked things up with,
+    what it read, and how many of the §7.4 rules passed over the result. Every one of those numbers
+    exists unrounded on `/dashboard/sessions/{id}` — this is the human summary beside the link to
+    it, not a second record (P15).
+
+    A *check* here is a guardrail span that returned `allow`. The ones that did not are the
+    interesting half and they are why the link beside this sentence exists; a panel line is not the
+    place to relitigate a refusal.
+    """
+    checks = sum(1 for span in spans if span["kind"] == "guardrail" and span["payload"].get("verdict") == "allow")
+    return (
+        f"Used {_count(response.usage.tool_calls, 'tool')}, "
+        f"read {_count(len(response.citations), 'policy section')} "
+        f"and passed {_count(checks, 'safety check')}."
+    )
+
+
+#: The demo panel's environment block (plan §3.7 item 5). Stated once, here, instead of inside the
+#: answers: a sentence about mock writes belongs to the demo, not to the policy an answer quotes.
+RECORDED_PROVIDER = "recorded script — no live model call"
+LIVE_PROVIDER = "a live model — every answer is written for you as you wait"
+SIMULATED_WRITES = "Writes are simulated — nothing leaves this app."
+
+
+def demo_environment(request: Request) -> dict[str, str]:
+    """What the demo is actually running on, in three lines a grader can check against the record."""
+    settings = getattr(request.app.state, "settings", None)
+    provider = settings.llm_provider if settings is not None else "stub"
+    as_of = getattr(request.app.state, "data_as_of", "")
+    return {
+        "provider": RECORDED_PROVIDER if provider == "stub" else LIVE_PROVIDER,
+        "snapshot": human_date(as_of) if as_of else "not loaded on this instance",
+        "writes": SIMULATED_WRITES,
+    }
+
+
 def sent_at_human(started_at: int | None) -> tuple[str, str, str]:
     """A turn's clock time for the speaker row (UX W2, chat-production-ux-17).
 
@@ -890,6 +956,7 @@ TURN_CONTEXT_KEYS = (
     "question",
     "as_of",
     "as_of_human",
+    "produced",
     "sent_at",
     "sent_at_human",
     "sent_at_full",
@@ -907,18 +974,25 @@ def _turn_context(
     response: ChatResponse,
     *,
     question: str | None,
-    as_of: str | None,
+    spans: list[dict[str, Any]],
     started_at: int | None,
     decision: str | None = None,
     confirm_fields: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """The one context `_turn.html` is rendered from, live and replayed alike."""
+    """The one context `_turn.html` is rendered from, live and replayed alike.
+
+    `spans` is the turn's own closed spans — the list both callers already read for the snapshot
+    note. Two things are derived from it here rather than by each caller: the *"Employee data from
+    …"* date, and the demo panel's plain-language account of the turn.
+    """
     sent_at, sent_at_text, sent_at_full = sent_at_human(started_at)
+    as_of = snapshot_as_of(spans)
     return {
         "turn": response,
         "question": question,
         "as_of": as_of,
         "as_of_human": human_date(as_of) if as_of else None,
+        "produced": produced_summary(response, spans),
         "sent_at": sent_at,
         "sent_at_human": sent_at_text,
         "sent_at_full": sent_at_full,
@@ -954,7 +1028,6 @@ def _render_turn(
     if request.headers.get("HX-Request") != "true":
         return JSONResponse(response.model_dump(mode="json"))
     store = _store(request)
-    as_of = snapshot_as_of(_spans_of(store, response.turn_id))
     preview = response.confirmation.arguments_preview if response.confirmation else {}
     return TEMPLATES.TemplateResponse(
         request=request,
@@ -962,7 +1035,7 @@ def _render_turn(
         context=_turn_context(
             response,
             question=question,
-            as_of=as_of,
+            spans=_spans_of(store, response.turn_id),
             started_at=_started_at(store, response.turn_id),
             decision=decision,
             confirm_fields=_confirm_fields(preview),
@@ -1230,7 +1303,7 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
             _turn_context(
                 turn,
                 question=row["user_message"],
-                as_of=snapshot_as_of(_spans_of(store, turn_id)),
+                spans=_spans_of(store, turn_id),
                 started_at=row["started_at"],
             )
         )
@@ -1266,6 +1339,9 @@ async def chat_page(request: Request) -> Response:
             "employees": request.app.state.employees,
             "greeting_name": _greeting_name(request, identity.actor),
             "demo_prompts": DEMO_PROMPTS,
+            "demo_environment": demo_environment(request),
+            "turn_announcements": TURN_ANNOUNCEMENTS,
+            "turn_announcement_fallback": TURN_ANNOUNCEMENT_FALLBACK,
             "starters": STARTER_PROMPTS,
             "transcript": transcript,
             "session_id": session_id,
@@ -1740,18 +1816,24 @@ __all__ = [
     "DEGRADATIONS",
     "DEMO_PROMPTS",
     "LABELLED_OUTCOMES",
+    "RECORDED_PROVIDER",
+    "SIMULATED_WRITES",
     "STARTER_PROMPTS",
     "SUGGESTION_FOOTNOTE",
+    "TURN_ANNOUNCEMENTS",
+    "TURN_ANNOUNCEMENT_FALLBACK",
     "TURN_CONTEXT_KEYS",
     "AccessGateMiddleware",
     "ChatBody",
     "ConfirmBody",
     "Identity",
     "RateLimiter",
+    "demo_environment",
     "gate_enabled",
     "gate_misconfigured",
     "health_payload",
     "identity_of",
+    "produced_summary",
     "refusal_page",
     "router",
     "sent_at_human",

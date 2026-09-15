@@ -30,6 +30,10 @@ HTMX = {"HX-Request": "true"}
 TOOL_USING_QUESTION = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
 SENSITIVE_QUESTION = "A colleague has been harassing me in meetings and I want to raise it formally."
 SUGGESTION_FOOTNOTE = "Suggestions are guidance, not company policy."
+#: The one delegated click handler behind every control that fills the composer: the four starters,
+#: a clarification's two quick replies, and — since UX W3 — the demo panel's two scripted prompts,
+#: which used to submit on the reader's behalf (navigation-and-ia-19).
+PREFILL_HANDLER = 'event.target.closest(".starter, .quick-reply, .demo-button")'
 
 
 async def test_the_chat_page_carries_the_selector_the_demo_buttons_and_the_status_line(web):
@@ -57,7 +61,7 @@ async def test_the_empty_conversation_greets_the_persona_and_offers_four_starter
     # A starter prefills the composer and focuses it; nothing is submitted for the reader. The
     # handler is delegated, because the quick replies it shares (chat-production-ux-7) arrive inside
     # an htmx swap long after the page script has run.
-    prefill = html.split('event.target.closest(".starter, .quick-reply")')[1].split("document.body")[0]
+    prefill = html.split(PREFILL_HANDLER)[1].split("document.body")[0]
     assert "prefill(prompt.dataset.prompt" in prefill
     assert "requestSubmit" not in prefill
     assert "Enter to send · Shift+Enter for a new line" in html
@@ -297,7 +301,7 @@ async def test_a_clarifying_question_offers_two_quick_replies_that_prefill(web):
     assert chips == list(orchestrator.clarify_chips("pto_request"))
     assert "hx-post" not in response.text.split('<ul class="quick-replies">')[1].split("</ul>")[0]
     # They prefill through the same delegated handler the starter questions use.
-    assert 'event.target.closest(".starter, .quick-reply")' in payload.text
+    assert PREFILL_HANDLER in payload.text
 
 
 async def test_no_other_outcome_carries_a_quick_reply(web):

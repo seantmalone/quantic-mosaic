@@ -46,6 +46,7 @@
             failed. `test_conversation_reload.py` now asserts this list against that tuple. -#}
         {% for item in transcript %}
         {% with turn = item.turn, question = item.question, as_of = item.as_of, as_of_human = item.as_of_human,
+                produced = item.produced,
                 sent_at = item.sent_at, sent_at_human = item.sent_at_human, sent_at_full = item.sent_at_full,
                 decision_line = item.decision_line, labelled = item.labelled, quick_replies = item.quick_replies,
                 block_headings = item.block_headings, suggestion_footnote = item.suggestion_footnote,
@@ -88,36 +89,12 @@
     </form>
   </section>
 
-  <!-- A temporary home for the persona control until W3 builds the real panel around it: it is a
-       demo affordance, not a production one, so it is out of the masthead and labelled as what it
-       is. The id and the name are unchanged — `POST /session/actor` and the contract tests both
-       key on them. -->
-  <section class="demo-panel">
-    <h2>Demo &amp; grader controls</h2>
-    <p class="demo-note">These controls exist for evaluation. A real user of this assistant never
-      sees them.</p>
-    <form class="actor-form" hx-post="/session/actor" hx-swap="none" hx-trigger="change from:#actor-select"
-          hx-on::after-request="window.location.reload()">
-      <label for="actor-select">Act as</label>
-      <select id="actor-select" name="actor" aria-label="Act as">
-        {% for employee in employees %}
-        <option value="{{ employee.employee_id }}" {% if employee.employee_id == actor %}selected{% endif %}>
-          {{ employee.employee_id }} — {{ employee.name }}, {{ employee.title }}
-        </option>
-        {% endfor %}
-        <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
-      </select>
-    </form>
-    <div class="demo-actions">
-      <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
-        Demo 1 — work from Berlin
-      </button>
-      <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
-        Demo 2 — book three days of PTO
-      </button>
-    </div>
-  </section>
+{% include "_demo_controls.html" %}
 </main>
+
+{#- The one place the page's outcome sentences are written is `web/api.py`; this is how they reach
+    the script, so there is no second copy to drift (UX W3). -#}
+<script id="turn-announcements" type="application/json">{{ turn_announcements | tojson }}</script>
 
 <script>
   (function () {
@@ -298,18 +275,28 @@
       stream.addEventListener("step_started", function (event) { setStatus(JSON.parse(event.data).label); });
       stream.addEventListener("span", function (event) { setStatus(JSON.parse(event.data).label); });
       stream.addEventListener("answer_delta", function (event) { answerDelta(JSON.parse(event.data)); });
-      stream.addEventListener("turn_completed", function () {
+      stream.addEventListener("turn_completed", function (event) {
         // The hard replace: the finished answer is the one the guardrails passed, and it is what
         // htmx swaps into `#messages` a moment later. The one announcement of the turn goes out
-        // here, in plain language and with nothing technical in it.
-        paintStatus(ANSWER_READY);
+        // here, in plain language, with nothing technical in it — and it says what actually
+        // happened: "Answer ready." announced over a refusal, a clarifying question or a crash was
+        // the opposite of the truth three outcomes out of five (UX W3).
+        paintStatus(announcementFor(JSON.parse(event.data).outcome));
         clearProvisional();
         stopStream();
       });
       stream.onerror = function () { stopStream(); };
     }
 
-    var ANSWER_READY = "Answer ready.";
+    // Written once, in `web/api.py`, and handed to the page as JSON: two copies of a sentence are
+    // two sentences waiting to disagree.
+    var ANNOUNCEMENTS = JSON.parse(document.getElementById("turn-announcements").textContent);
+    var ANNOUNCEMENT_FALLBACK = {{ turn_announcement_fallback | tojson }};
+
+    function announcementFor(outcome) {
+      return ANNOUNCEMENTS[outcome] || ANNOUNCEMENT_FALLBACK;
+    }
+
     var STOPPED = "Stopped. The full record is still in the dashboard.";
 
     // The UI generates `turn_id` and subscribes FIRST, then fires the POST — the POST does not
@@ -352,9 +339,37 @@
       messageBox.focus();
     });
 
+    // -- the demo & grader panel ----------------------------------------------------------
+    //
+    // The panel describes the LAST turn, so it is refreshed from the turn htmx just swapped in
+    // rather than from a second request: `article.turn` carries the deep link and the plain
+    // sentence, built server-side by `_turn_context()` (plan §3.7 items 3 and 4).
+    var demoLink = document.getElementById("demo-dashboard-link");
+    var demoProduced = document.getElementById("demo-produced");
+    var demoNoTurn = document.getElementById("demo-no-turn");
+
+    function describeLastTurn(turn) {
+      if (!turn) { return; }
+      var url = turn.dataset.dashboardUrl || "";
+      if (url) { demoLink.href = url; demoLink.hidden = false; }
+      demoProduced.textContent = turn.dataset.produced || "";
+      demoNoTurn.hidden = true;
+    }
+
+    // The panel is load-bearing for layout: `body.chat` has a definite height, so an expanded
+    // panel takes its room out of the transcript (UX W2 report §7.1). On a phone it starts
+    // collapsed; the markup ships `open`, so a page with no JavaScript keeps what W2 shipped.
+    var demoDetails = document.getElementById("demo-details");
+    var narrow = window.matchMedia("(max-width: 40rem)");
+
+    function fitDemoPanel(query) { demoDetails.open = !query.matches; }
+    fitDemoPanel(narrow);
+    narrow.addEventListener("change", fitDemoPanel);
+
     document.body.addEventListener("htmx:afterSwap", function (event) {
       var turns = document.querySelectorAll("#messages .turn");
       if (turns.length) { sessionField.value = turns[turns.length - 1].dataset.sessionId || ""; }
+      describeLastTurn(turns[turns.length - 1]);
       if (event.detail.requestConfig && event.detail.requestConfig.path === "/chat") { messageBox.value = ""; }
       autogrow();
       if (emptyState) { emptyState.hidden = true; }
@@ -367,10 +382,12 @@
     document.body.addEventListener("htmx:responseError", function () { setBusy(false); clearPending(); });
     document.body.addEventListener("htmx:sendError", function () { setBusy(false); clearPending(); });
 
-    // The starter questions of the empty state and the quick replies under a clarifying question
-    // do the same thing — they PREFILL and submit nothing, so the reader still owns the message.
-    // Delegated, because a quick reply arrives inside an htmx swap long after this script ran
-    // (chat-production-ux-1, chat-production-ux-7).
+    // The starter questions of the empty state, the quick replies under a clarifying question and
+    // the demo panel's two scripted prompts all do the same thing — they PREFILL and submit
+    // nothing, so the reader still owns the message. A demo button used to call `requestSubmit()`,
+    // which put someone else's question into the reader's conversation on one click
+    // (navigation-and-ia-19). Delegated, because a quick reply arrives inside an htmx swap long
+    // after this script ran (chat-production-ux-1, chat-production-ux-7).
     function prefill(text) {
       messageBox.value = text;
       autogrow();
@@ -379,7 +396,7 @@
     }
 
     document.body.addEventListener("click", function (event) {
-      var prompt = event.target.closest(".starter, .quick-reply");
+      var prompt = event.target.closest(".starter, .quick-reply, .demo-button");
       if (prompt && !prompt.disabled) { prefill(prompt.dataset.prompt || ""); }
     });
 
@@ -400,13 +417,6 @@
         button.textContent = COPIED_LABEL;
         setTimeout(function () { button.textContent = COPY_LABEL; }, COPIED_MS);
       }).catch(function () { /* a denied clipboard is not an error worth a sentence */ });
-    });
-
-    document.querySelectorAll(".demo-button").forEach(function (button) {
-      button.addEventListener("click", function () {
-        messageBox.value = button.dataset.prompt;
-        form.requestSubmit();
-      });
     });
 
     stickToBottom(true);
