@@ -19,13 +19,19 @@ Two moves, both read from the tool result rather than from model output:
    as the turn's lead sentence above the facts, outside the suggestions group and outside its
    *"guidance, not company policy"* footnote, which is where a `recommendation` had been putting it
    (JX-R1 = cpux-re-1). It carries the id verbatim and the queue's human name.
-2. **There is exactly one account of the write per turn.** If the model's own answer already names
-   the id, this step states nothing and an escalation denying the action becomes the one-line
-   `pointer` instead. If it does not, the `performed` block is the account and a denying escalation
-   is dropped outright — the `pointer` under a statement that has just said the same thing is the
-   answer arguing with itself. Only that kind of escalation is touched: G5's sensitive-topic block
-   names a People Operations contact and would be collateral damage, so the check is denial *plus*
-   a word for the action the performed tool performs.
+2. **There is exactly one account of the write per turn, and it is the `performed` statement.**
+   The first version of this guard was right about *one account* and wrong about which one: it read
+   any model block naming the id as that account, stated nothing itself, and left the sentence
+   where the model had filed it. So on 2026-09-15, live, the answer reported `MOCK-HR-000007` in a
+   `recommendation` — printed under *"What I suggest you do"* beneath *"Suggestions are guidance,
+   not company policy"* (JX-R1 = cpux-re-1, back on the live path), a created ticket disclaimed as
+   advice. A model block of **any** type whose text names `write.write_id` is therefore the model's
+   account of a write only the tool result can attest, and it is **removed**; the `performed`
+   statement is prepended in its place. An escalation that denies the action goes the same way and
+   for the same reason — the statement above it has already said what the denial was in the way of.
+   Only that kind of escalation is touched: G5's sensitive-topic block names a People Operations
+   contact and would be collateral damage, so the check is denial *plus* a word for the action the
+   performed tool performs.
 3. **A next step that sends the reader off to do it themselves is dropped.** `next_steps` is
    rendered into the same answer as the blocks, so the same contradiction reads the same way: the
    demo-2 answer stated the ticket and then closed with *"Log into MosaicOne and submit your PTO
@@ -157,21 +163,6 @@ class PerformedWrite:
         team = label if label == QUEUE_FALLBACK else f"the {label}"
         return f"Done — your request is with {team}. Reference {self.write_id}."
 
-    @property
-    def pointer(self) -> str:
-        """What replaces an escalation that denied this action: one reassuring line, not a rebuttal.
-
-        It used to be a second account of the write — *"The ticket already exists: MOCK-HR-000002
-        was opened in queue hr-timeoff on this turn after you confirmed it. There is nothing
-        further for you to file."* — printed directly under the `statement` that had just said the
-        same thing, so the answer argued with itself over a request that had simply gone through
-        (chat-production-ux-11). `statement` reports the write, once, at the top; this says the one
-        thing the denial was in the way of.
-        """
-        if self.tool_name == "draft_hr_email":
-            return "That is already taken care of — the draft is ready for you to review."
-        return "That is already taken care of — there is nothing further for you to file."
-
 
 @dataclass
 class Outcome:
@@ -180,9 +171,12 @@ class Outcome:
     blocks: list[dict[str, Any]]
     #: The next steps that survived, in order. The same list when nothing contradicted the write.
     next_steps: list[str] = field(default_factory=list)
-    #: Whether the outcome block was inserted. False when the model already stated the id.
+    #: Whether the outcome block was inserted — true on every turn that performed a write, since
+    #: the `performed` statement is now the turn's one account of it whatever the model wrote.
     stated: bool = False
-    #: Indexes **into the model's own block list**, before the outcome block is inserted.
+    #: Indexes **into the model's own block list**, before the outcome block is inserted, of the
+    #: blocks this step took out: the model's own account of the write (any block naming the id)
+    #: and any escalation denying it. Both are replaced by the one statement at the top.
     replaced: list[int] = field(default_factory=list)
     #: Indexes into the model's own `next_steps` of the directives that were dropped.
     dropped: list[int] = field(default_factory=list)
@@ -272,27 +266,21 @@ def apply(
         else:
             dropped.append(index)
 
-    # The de-dup guard reads the model's own blocks: **one account of the write per turn** (UX W6).
-    # If the answer already names the id, this step adds no statement of its own and the denying
-    # escalation below becomes the `pointer` — the single account. If it does not, the `performed`
-    # block is the single account and a denying escalation is *removed* rather than rewritten,
-    # because the `pointer` says in other words exactly what the statement above it has just said,
-    # which is how *"Done — your request is with HR"* and *"That is already taken care of"* came to
-    # print two bullets apart (JX-R1 = cpux-re-1).
-    already_stated = any(write.write_id in str(block.get("text") or "") for block in body)
-
+    # **One account of the write per turn, and it is the statement below** (P29). A model block
+    # that names the id is the model's account of a write it cannot see the result of — it was
+    # left in place while this step stayed silent, and the live 2026-09-15 turn reported
+    # `MOCK-HR-000007` in a `recommendation`, under *"What I suggest you do"* and its *"guidance,
+    # not company policy"* footnote (JX-R1 = cpux-re-1). It is removed here whatever its type, and
+    # so is an escalation denying the action, which the statement has already answered.
     replaced: list[int] = []
     survivors: list[dict[str, Any]] = []
     for index, block in enumerate(body):
-        if block.get("type") == "escalation" and denies(str(block.get("text") or ""), write.tool_name):
+        text = str(block.get("text") or "")
+        if write.write_id in text or (block.get("type") == "escalation" and denies(text, write.tool_name)):
             replaced.append(index)
-            if not already_stated:
-                continue
-            block = {**block, "type": "recommendation", "text": write.pointer, "citations": []}
+            continue
         survivors.append(block)
 
-    if already_stated:
-        return Outcome(blocks=survivors, next_steps=kept, replaced=replaced, dropped=dropped)
     statement = {"type": PERFORMED, "text": write.statement, "citations": []}
     return Outcome(blocks=[statement, *survivors], next_steps=kept, stated=True, replaced=replaced, dropped=dropped)
 

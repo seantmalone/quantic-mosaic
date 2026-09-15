@@ -100,10 +100,23 @@ import json, re, sys
 
 turn = json.load(open(sys.argv[1]))
 answer = turn.get("answer") or turn.get("final_answer") or ""
+blocks = turn.get("answer_blocks") or []
 print("-- outcome:", turn.get("outcome"))
 print()
 print("-- answer")
-print(answer)
+# The `performed` block is the turn's lede and the only account of the write (P29). It carries no
+# label in the joined string — `render_answer` labels a recommendation and an escalation and lets
+# a statement of what is so stand bare — so a transcript cannot tell it from a policy fact. This
+# names it, the way the page does with a heading above the facts. "Done — " is the statement's own
+# opening and is not printed twice.
+lede = blocks[0] if blocks and blocks[0].get("type") == "performed" else None
+if lede is not None:
+    body = answer.split("\n\n", 1)
+    print("Done: " + lede["text"].replace("Done — ", "", 1))
+    print()
+    print(body[1] if len(body) == 2 else "")
+else:
+    print(answer)
 print()
 
 # P22: a confirmed write is reported as done. The id comes from THIS response — the confirmed
@@ -123,7 +136,19 @@ ticket_id = created[-1]
 if ticket_id not in answer:
     print(f"the answer never names {ticket_id}, the ticket this turn created", file=sys.stderr)
     raise SystemExit(1)
-print(f"-- the confirmed write is reported as done: {ticket_id} is named in the answer")
+# …and it is named in the one block that may account for a write (P29). Naming it *somewhere* was
+# what this check used to ask, and the live 2026-09-15 turn passed it with the id inside a
+# `recommendation` — printed under "What I suggest you do" beneath "Suggestions are guidance, not
+# company policy", a created ticket disclaimed as advice. The `performed` block is the lede, so it
+# is blocks[0] or the answer does not open with what happened.
+if lede is None:
+    kinds = [block.get("type") for block in blocks]
+    print(f"the answer does not open with a 'performed' block: {kinds}", file=sys.stderr)
+    raise SystemExit(1)
+if ticket_id not in lede["text"]:
+    print(f"the 'performed' block does not name {ticket_id}: {lede['text']!r}", file=sys.stderr)
+    raise SystemExit(1)
+print(f"-- the confirmed write is reported as done: {ticket_id} in the lede 'performed' block")
 
 # ...and nothing under "Next steps:" sends the reader off to file the request that now exists.
 # The same live answer that denied the ticket also ended "Log into MosaicOne and submit your PTO

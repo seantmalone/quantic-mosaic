@@ -6,8 +6,9 @@ that result verbatim — and the answer still ended *"I cannot open PTO requests
 must submit the request directly in MosaicOne…"* and never named the ticket.
 
 So the outcome of a performed write is no longer left to the model. It is read out of the tool
-result and stated first, deterministically, and an escalation that denies the very action the
-result shows was performed is replaced by a line pointing at what was created.
+result and stated first, deterministically, in a `performed` block that is the turn's **one**
+account of the write: a model block of any type that names the id is the model's account of it and
+goes, and so does an escalation denying the very action the result shows was performed (P29).
 
 This is **not** a guardrail: it emits no `guardrail` span and carries no G-number (§7.4).
 """
@@ -101,7 +102,14 @@ def test_a_drafted_email_is_stated_first_with_its_id():
     assert result.blocks[0]["text"] == ("Done — the email draft is ready for Priya Raman. Reference MOCK-EMAIL-000001.")
 
 
-def test_an_id_the_answer_already_states_is_not_repeated():
+def test_the_models_own_account_of_the_write_is_replaced_by_the_statement():
+    """**P29**: the guard was right about *one account* and wrong about which one.
+
+    This block used to survive as the account, because it names the id — so a created ticket was
+    reported in whatever type the model had chosen for it, which on the live 2026-09-15 turn was a
+    `recommendation` under *"What I suggest you do"* (JX-R1 = cpux-re-1). Only the tool result can
+    attest a write, so the model's sentence goes and the `performed` statement takes its place.
+    """
     stated = {
         "type": "recommendation",
         "text": "Your request is filed as MOCK-HR-000002 in the hr-timeoff queue.",
@@ -110,17 +118,20 @@ def test_an_id_the_answer_already_states_is_not_repeated():
 
     result = outcome.apply([stated], envelopes(TICKET))
 
-    assert result.blocks == [stated], "the id is already in a block; a second statement is noise"
-    assert not result.changed
+    assert [block["type"] for block in result.blocks] == ["performed"]
+    assert result.blocks[0]["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert result.replaced == [0], "the model's own block index, before the statement is inserted"
+    assert result.stated and result.changed
+    assert "hr-timeoff" not in " ".join(block["text"] for block in result.blocks), "the slug left with it"
 
 
 def test_an_escalation_denying_the_performed_write_is_dropped_under_the_statement():
     """**One account of the write per turn** (UX W6, JX-R1 = cpux-re-1).
 
     The denial is what the statement above it was in the way of, so where the statement runs the
-    denial simply goes. Replacing it with the `pointer` instead printed *"Done — your request is
-    with HR"* and *"That is already taken care of — there is nothing further for you to file"* two
-    bullets apart, which is the answer saying the same thing twice in two voices.
+    denial simply goes. Replacing it with a reassuring line instead printed *"Done — your request
+    is with HR"* and *"That is already taken care of — there is nothing further for you to file"*
+    two bullets apart, which is the answer saying the same thing twice in two voices.
     """
     result = outcome.apply([POLICY_BLOCK, DENIAL_BLOCK], envelopes(TICKET))
 
@@ -130,17 +141,27 @@ def test_an_escalation_denying_the_performed_write_is_dropped_under_the_statemen
     assert result.replaced == [1], "the model's block index, before the outcome block is inserted"
 
 
-def test_a_denial_becomes_the_pointer_when_the_answer_already_stated_the_id():
-    """The other side of the same rule: the model's own sentence is the account, so this step adds
-    none of its own and the denial becomes the one line it was in the way of."""
+def test_the_models_account_and_its_denial_both_go_under_the_one_statement():
+    """An answer that both claims the ticket and denies it keeps neither sentence (P29)."""
     stated = {"type": "recommendation", "text": "Ticket MOCK-HR-000002 is open.", "citations": []}
 
     result = outcome.apply([stated, DENIAL_BLOCK], envelopes(TICKET))
 
-    assert [block["type"] for block in result.blocks] == ["recommendation", "recommendation"]
-    assert not result.stated, "the answer said it; this step does not say it again"
-    assert result.blocks[1]["text"] == "That is already taken care of — there is nothing further for you to file."
-    assert result.replaced == [1]
+    assert [block["type"] for block in result.blocks] == ["performed"], "one account, from the tool result"
+    assert result.stated
+    assert result.replaced == [0, 1], "both of the model's own block indexes"
+
+
+def test_a_model_block_typed_performed_that_names_the_id_is_replaced_not_duplicated():
+    """The demotion and the removal meet on one block: it leaves exactly one `performed` block."""
+    claimed = {"type": "performed", "text": "I have opened ticket MOCK-HR-000002 for you.", "citations": []}
+
+    result = outcome.apply([claimed, POLICY_BLOCK], envelopes(TICKET))
+
+    assert [block["type"] for block in result.blocks] == ["performed", "policy_fact"]
+    assert result.blocks[0]["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert "I have opened" not in " ".join(block["text"] for block in result.blocks)
+    assert result.replaced == [0]
 
 
 def test_a_model_that_types_a_block_performed_is_demoted_to_advice():
@@ -347,3 +368,87 @@ def test_directs_needs_both_halves_for_the_tool_that_performed_the_write():
     assert not outcome.directs("Submit your PTO request.", "check_pto_balance"), (
         "a read-only tool performs nothing, so no advice can contradict it"
     )
+
+
+# --------------------------------------------------------------------------------------
+# The live turn of 2026-09-15 — the defect the one-account rule was wrong about
+# --------------------------------------------------------------------------------------
+
+#: The confirmed write's own result, verbatim from `docs/evidence/demo-task-2-live-2026-09-15-
+#: session.json` (the `create_mock_hr_ticket` `tool_call` span that followed the confirmation).
+LIVE_TICKET = {
+    "status": "created",
+    "ticket_id": "MOCK-HR-000007",
+    "queue": "hr-timeoff",
+    "priority": "normal",
+    "created_at": "2026-09-15T18:34:30Z",
+    "employee_id": "E1042",
+    "mock": True,
+    "url": "/dashboard/safety#MOCK-HR-000007",
+}
+
+#: …and the six `answer_blocks` the same turn stored, in order. The last one is the model's own
+#: account of the write, which the old guard read as *the* account and left filed under
+#: "What I suggest you do" with "Suggestions are guidance, not company policy" beneath it.
+LIVE_BLOCKS = [
+    {
+        "type": "policy_fact",
+        "text": "PTO requests must be submitted at least 5 business days in advance.",
+        "citations": ["c_16186f87d12c1302"],
+    },
+    {
+        "type": "policy_fact",
+        "text": "Full-time employees with three or more years of service accrue 1.50 days of PTO per month.",
+        "citations": ["c_e178629918c7cd96"],
+    },
+    {
+        "type": "policy_fact",
+        "text": "Every PTO request requires written approval from the employee's direct manager in MosaicOne.",
+        "citations": ["c_d57a7964d974ba44"],
+    },
+    {
+        "type": "policy_fact",
+        "text": "PTO requests of any length are approved by the employee's direct manager.",
+        "citations": ["c_9948839107acfaaf"],
+    },
+    {
+        "type": "recommendation",
+        "text": (
+            "Your PTO balance as of 1 September 2026 is 13.5 days remaining, which covers your "
+            "three-day request. You have 8 business days of notice, which exceeds the 5-day "
+            "requirement. Submit the request in MosaicOne for Dana's written approval."
+        ),
+        "citations": [],
+    },
+    {
+        "type": "recommendation",
+        "text": "HR ticket MOCK-HR-000007 has been created to track your time-off request.",
+        "citations": [],
+    },
+]
+
+#: The one next step the same turn kept. It names nothing the tool did and is not aimed at the
+#: reader, so it survives — as it did live.
+LIVE_STEPS = ["Dana will review and approve in writing"]
+
+
+def test_the_live_turn_reports_the_write_in_the_performed_block_and_not_as_advice():
+    """`docs/evidence/demo-task-2-live-2026-09-15-session.json`, turn 1, through the fixed step.
+
+    What the page painted on the live path: four policy facts, a recommendation, and *"HR ticket
+    MOCK-HR-000007 has been created to track your time-off request."* — a completed, irreversible
+    write printed under *"What I suggest you do"* and footnoted *"Suggestions are guidance, not
+    company policy"*, with no `performed` block anywhere in the turn (JX-R1 = cpux-re-1).
+    """
+    result = outcome.apply(LIVE_BLOCKS, envelopes(LIVE_TICKET), next_steps=LIVE_STEPS)
+
+    assert result.blocks[0] == {
+        "type": "performed",
+        "text": "Done — your request is with the HR Time Off team. Reference MOCK-HR-000007.",
+        "citations": [],
+    }
+    assert result.blocks[1:] == LIVE_BLOCKS[:5], "the other five survive, in order and untouched"
+    assert "has been created" not in " ".join(block["text"] for block in result.blocks[1:])
+    assert [block["type"] for block in result.blocks].count("performed") == 1
+    assert result.replaced == [5] and result.stated
+    assert result.next_steps == LIVE_STEPS and result.dropped == []
