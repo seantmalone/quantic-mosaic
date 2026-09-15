@@ -107,9 +107,9 @@ default, so nothing a real user would never see is mixed into the product.
 
 The final screen set is committed under
 [`docs/evidence/ux-final/`](docs/evidence/ux-final/) — chat at rest, an answered turn with its
-sources, the confirmation card, a refusal, the phone layout, the dashboard's overview, session
-waterfall, guardrails and evaluation pages, each in the **light and the dark** palette. They are
-reproducible rather than curated: `make ux-capture` re-photographs all of them from four stub
+sources, the confirmation card, a refusal, a failed turn, the policy reader, all thirteen dashboard
+routes, five phone screens, and nine of the same surfaces again in the **dark** palette. They are
+reproducible rather than curated: `make ux-capture` re-photographs all 69 screen ids from four stub
 servers on loopback with `LLM_PROVIDER=stub`, and its own `index.json` records the geometry
 (`body_horizontal_scroll` false on every screen at 1440x900, 1280x800 and 390x844).
 
