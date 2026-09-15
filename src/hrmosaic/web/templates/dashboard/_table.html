@@ -59,10 +59,14 @@
     is not a name, and the leading column of a table ordered by time is an epoch (UX W6). The
     reversed loop leaves `ns.lead` on the FIRST match in document order. -#}
 {%- set ns = namespace(lead=columns[0]) -%}
-{%- for column in columns|reverse if column.get('kind', 'text') in ['text', 'badge', 'code', 'enum', 'rule'] -%}
+{%- for column in columns|reverse if column.get('kind', 'text') in ['text', 'run', 'badge', 'code', 'enum', 'rule'] -%}
 {%- set ns.lead = column -%}
 {%- endfor -%}
-{{- row.get(ns.lead.key)|string|truncate(40, true, '…') if row.get(ns.lead.key) else 'row' }}, row {{ index }}
+{#- A badge or enum lead is said as its label, not its stored value: the evals page's phone cards
+    were named "More about dense_only_k2, row 14" (UX W7, JX2-01). -#}
+{%- set lead_value = row.get(ns.lead.key) -%}
+{%- if lead_value and ns.lead.get('kind') in ['badge', 'enum'] %}{% set lead_value = lead_value|enum_label %}{% endif -%}
+{{- lead_value|string|truncate(40, true, '…') if lead_value else 'row' }}, row {{ index }}
 {%- endmacro %}
 
 {% macro cell(row, column) %}
