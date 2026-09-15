@@ -261,6 +261,13 @@ facts:
     quote: "New hires become eligible for medical, dental and vision coverage 90 days after their hire date."
 
 
+  benefits.new_hire.election_window_days:
+    value: 30
+    unit: days
+    doc_id: benefits-and-open-enrollment
+    section: "Eligibility > Waiting Period"
+    quote: "An employee has 30 days from the end of the waiting period to make elections in MosaicOne Benefits."
+
   benefits.open_enrollment.open_date:
     value: "2026-11-01"
     unit: date

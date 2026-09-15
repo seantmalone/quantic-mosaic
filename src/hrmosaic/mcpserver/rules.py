@@ -14,17 +14,27 @@ lowest `char_start` when a leaf was windowed. A stale id would be stripped silen
 which is why `tests/unit/test_rules_engine.py` asserts every emitted `evidence.chunk_id` resolves in
 the committed index.
 
-**Dates come from the snapshot, never the wall clock.** Notice days are computed by the engine from
-`parameters.start_date` against the mock-data `as_of` snapshot and a caller-supplied
-`notice_business_days` is ignored, exactly as §8.4 requires, so a verdict cannot swing on a model's
+**Notice is anchored on the submission date; balances and tenure keep the snapshot** (W8, C04).
+Notice is *how much warning a request gives*, which is measured from the day it is submitted —
+`submitted_on`, the turn's own date (`Settings.today()`, pinned by `MOCK_TODAY` for the recorded
+stubs). It was measured from the mock data's frozen `as_of: 2026-09-01`, so every same-day PTO
+request in the demo was scored as giving eight business days of notice it had not given. Balances,
+tenure and the claim age are properties of the record and still read `as_of`; a caller-supplied
+notice value is still ignored, exactly as §8.4 requires, so a verdict cannot swing on a model's
 guess.
+
+**Every requirement carries a `status`** (W8, C05): `met`, `unmet` or `not_stated`. `met: false`
+had been doing two jobs — "the engine checked this and it fails" and "the caller never supplied the
+parameter, so nothing was checked" — and the answer could not tell them apart, so a requirement
+nobody had evaluated was narrated as a settled failure. `met` stays for every existing consumer and
+means exactly `status == "met"`.
 """
 
 from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -56,10 +66,31 @@ COMPUTED_SUBJECTS = (
     "computed.notice_calendar_days",
     "computed.overlaps_blackout",
     "computed.claim_age_days",
+    "computed.days_since_eligibility",
 )
 #: `remaining_days` is an output of `check_pto_balance`, not a field of the employee profile: the two
 #: would drift if the profile grew a copy (P2 report §9.2).
 BALANCE_SUBJECTS = ("pto_balance.remaining_days",)
+
+#: A `fact_key` may be **indirect**: `pto_balance.accrual_fact_key` names the field of the
+#: employee's own balance row that holds the real key (W8, C29). `rules.yml` hard-coded
+#: `pto.accrual.ft_3y_plus` on the PTO balance requirement, so nine of the twenty-four mock
+#: employees were quoted the accrual band of a tenure they do not have on the one requirement that
+#: decides their request.
+FACT_KEY_INDIRECTION = ("pto_balance.",)
+
+#: The three values `status` takes (W8, C05). `not_stated` is the one `met: false` used to hide:
+#: nothing was supplied, so nothing was checked.
+STATUSES = ("met", "unmet", "not_stated")
+
+#: The subjects that read the frozen record rather than the request: they are evaluated against
+#: `as_of` and are not verifiable when the request was submitted **before** the snapshot they would
+#: be read from (W8, C04).
+SNAPSHOT_SUBJECTS = (
+    "employee.tenure_months_at_as_of",
+    "computed.tenure_days",
+    *BALANCE_SUBJECTS,
+)
 
 #: `check.operator` — the closed vocabulary.
 COMPARISON_OPERATORS = ("lte", "lt", "gte", "gt", "eq", "in", "date_lte", "date_gte")
@@ -167,6 +198,9 @@ class Context:
     """Everything one `check_policy_compliance` call may read. Assembled once, then read-only."""
 
     as_of: date
+    #: The day the request is submitted — the turn's own date (W8, C04). Notice is measured from
+    #: here; everything the record knows is still measured from `as_of`.
+    submitted_on: date
     employee: dict[str, Any]
     balance: dict[str, Any]
     parameters: dict[str, Any]
@@ -181,26 +215,71 @@ class Context:
 
     def notice_calendar_days(self) -> int | None:
         start = _parse_date(self.parameters.get("start_date"))
-        return None if start is None else max(0, (start - self.as_of).days)
+        return None if start is None else max(0, (start - self.submitted_on).days)
 
     def notice_business_days(self) -> int | None:
         start = _parse_date(self.parameters.get("start_date"))
-        return None if start is None else business_days_between(self.as_of, start, self.holidays)
+        return None if start is None else business_days_between(self.submitted_on, start, self.holidays)
 
     def claim_age_days(self) -> int | None:
         transaction = _parse_date(self.parameters.get("transaction_date"))
-        return None if transaction is None else max(0, (self.as_of - transaction).days)
+        return None if transaction is None else max(0, (self.submitted_on - transaction).days)
 
-    def overlaps_blackout(self) -> bool | None:
-        """True when the requested span touches a blackout date on the employee's balance record."""
+    def days_since_eligibility(self) -> int | None:
+        """Days since this employee's benefits waiting period ended — negative before it ends.
+
+        The new-hire election window runs from the END of the waiting period, not from the hire
+        date (W8, C30): a new hire told the open-enrollment window was their deadline lost three
+        weeks of it.
+        """
+        hire = _parse_date(self.employee.get("hire_date"))
+        waiting = _numeric(self.facts.get("benefits.eligibility.waiting_period_days", {}).get("value"))
+        if hire is None or waiting is None:
+            return None
+        return (self.submitted_on - (hire + timedelta(days=int(waiting)))).days
+
+    def eligibility_date(self) -> date | None:
+        """The day this employee's benefits waiting period ends."""
+        hire = _parse_date(self.employee.get("hire_date"))
+        waiting = _numeric(self.facts.get("benefits.eligibility.waiting_period_days", {}).get("value"))
+        return None if hire is None or waiting is None else hire + timedelta(days=int(waiting))
+
+    def span_end(self) -> date | None:
+        """The last day the request covers: `end_date`, or `days` business days from the start.
+
+        The `days` fallback used to add calendar days, so a three-business-day request starting on
+        a Friday was walked to Sunday and a blackout on the Monday it actually covered was missed
+        (W8, C04). The walk is the same calendar `business_days_between` uses — weekends and the
+        employee's own observed holidays.
+        """
         start = _parse_date(self.parameters.get("start_date"))
         if start is None:
             return None
         end = _parse_date(self.parameters.get("end_date"))
-        if end is None:
-            days = self.parameters.get("days")
-            span = int(days) if isinstance(days, int | float) else 1
-            end = start + timedelta(days=max(span, 1) - 1)
+        if end is not None:
+            return end
+        days = self.parameters.get("days")
+        span = int(days) if isinstance(days, int | float) and not isinstance(days, bool) else 1
+        cursor, remaining = start, max(span, 1)
+        while True:
+            if cursor.weekday() < 5 and cursor not in self.holidays:
+                remaining -= 1
+            if remaining <= 0:
+                return cursor
+            cursor += timedelta(days=1)
+
+    def duration_days(self) -> int | None:
+        """Consecutive calendar days the request covers, derived from the two dates (W8, C05)."""
+        start = _parse_date(self.parameters.get("start_date"))
+        end = _parse_date(self.parameters.get("end_date"))
+        return None if start is None or end is None else (end - start).days + 1
+
+    def overlaps_blackout(self) -> bool | None:
+        """True when the requested span touches a blackout date on the employee's balance record."""
+        start = _parse_date(self.parameters.get("start_date"))
+        end = self.span_end()
+        if start is None or end is None:
+            return None
         blackout = {parsed for parsed in (_parse_date(day) for day in self.balance.get("blackout_dates", [])) if parsed}
         return any(start <= day <= end for day in blackout)
 
@@ -219,9 +298,48 @@ class Context:
             return self.notice_business_days()
         if name == "computed.claim_age_days":
             return self.claim_age_days()
+        if name == "computed.days_since_eligibility":
+            return self.days_since_eligibility()
         if name == "computed.overlaps_blackout":
             return self.overlaps_blackout()
         raise RuleError(f"unknown check.subject {name!r}")
+
+    def resolve_fact_key(self, fact_key: str) -> str:
+        """A literal key, or the one the employee's own balance row names (W8, C29)."""
+        if not fact_key.startswith(FACT_KEY_INDIRECTION):
+            return fact_key
+        field = fact_key.split(".", 1)[1]
+        resolved = self.balance.get(field)
+        if not isinstance(resolved, str) or resolved not in self.facts:
+            raise RuleError(f"fact_key {fact_key!r} resolves to {resolved!r}, which is not a fact")
+        return resolved
+
+    def computed(self) -> dict[str, Any]:
+        """Every value the engine derived, for the answer to read instead of recomputing it.
+
+        The reader's tenure in months is in here for the same reason (W8, C22): a turn that
+        established tenure through the engine rather than through the profile tool had no envelope
+        carrying it, and handed the reader "45 months of continuous service".
+        """
+        eligibility = self.eligibility_date()
+        window = _numeric(self.facts.get("benefits.new_hire.election_window_days", {}).get("value"))
+        values: dict[str, Any] = {
+            "as_of": self.as_of.isoformat(),
+            "submitted_on": self.submitted_on.isoformat(),
+            "tenure_days": self.tenure_days(),
+            "tenure_months_at_as_of": self.employee.get("tenure_months_at_as_of"),
+            "notice_business_days": self.notice_business_days(),
+            "notice_calendar_days": self.notice_calendar_days(),
+            "duration_days": self.duration_days(),
+            "claim_age_days": self.claim_age_days(),
+            "overlaps_blackout": self.overlaps_blackout(),
+            "span_end": end.isoformat() if (end := self.span_end()) else None,
+            "benefits_eligibility_date": eligibility.isoformat() if eligibility else None,
+            "benefits_election_deadline": (
+                (eligibility + timedelta(days=int(window))).isoformat() if eligibility and window else None
+            ),
+        }
+        return {key: value for key, value in values.items() if value is not None}
 
     def fact(self, key: str) -> Any:
         if key not in self.facts:
@@ -341,27 +459,47 @@ def guard_holds(guard: Any, context: Context, decided: Mapping[str, bool], known
 
 @dataclass(frozen=True)
 class Decision:
-    """One evaluated requirement, in the §8.4 output shape plus the two fields the verdict needs."""
+    """One evaluated requirement, in the §8.4 output shape plus the three fields the verdict needs."""
 
     entry: dict[str, Any]
     met: bool
     evaluable: bool
     blocking: bool
+    #: Whether the requirement was decided by comparing real data (W8, C05). A `manual` row is
+    #: not, and a scenario made only of `manual` rows has evaluated nothing.
+    data_backed: bool = True
+
+    @property
+    def status(self) -> str:
+        return str(self.entry["status"])
 
 
-def _evaluate_requirement(requirement: Mapping[str, Any], context: Context) -> Decision:
-    check = requirement.get("check")
-    fact_key = str(requirement["fact_key"])
-    blocking = bool(requirement.get("blocking", False))
-    evidence = resolve_evidence(str(requirement["doc_id"]), str(requirement["heading_path"]), context.connection)
-    entry: dict[str, Any] = {
+def _entry(requirement: Mapping[str, Any], fact_key: str, evidence: dict[str, Any] | None) -> dict[str, Any]:
+    return {
         "id": str(requirement["id"]),
         "text": str(requirement["text"]),
         "met": False,
+        "status": "not_stated",
         "reason": "",
         "fact_key": fact_key,
         "evidence": evidence,
     }
+
+
+def _settle(entry: dict[str, Any], status: str, reason: str) -> dict[str, Any]:
+    """One place writes the pair, so `met` can never disagree with `status` (W8, C05)."""
+    entry["status"] = status
+    entry["met"] = status == "met"
+    entry["reason"] = reason
+    return entry
+
+
+def _evaluate_requirement(requirement: Mapping[str, Any], context: Context) -> Decision:
+    check = requirement.get("check")
+    fact_key = context.resolve_fact_key(str(requirement["fact_key"]))
+    blocking = bool(requirement.get("blocking", False))
+    evidence = resolve_evidence(str(requirement["doc_id"]), str(requirement["heading_path"]), context.connection)
+    entry = _entry(requirement, fact_key, evidence)
     if check is None:
         raise RuleError(f"requirement {requirement['id']!r} carries no check")
     operator = str(check.get("operator"))
@@ -372,25 +510,51 @@ def _evaluate_requirement(requirement: Mapping[str, Any], context: Context) -> D
         raise RuleError(f"unknown check.subject {subject_name!r}")
 
     if operator == "informational":
-        entry["met"] = True
-        entry["reason"] = f"Standing rule; {context.fact(fact_key)!r} applies whatever the request says."
-        return Decision(entry=entry, met=True, evaluable=True, blocking=blocking)
+        reason = f"Standing rule; {context.fact(fact_key)!r} applies whatever the request says."
+        return Decision(entry=_settle(entry, "met", reason), met=True, evaluable=True, blocking=blocking)
     if operator == "manual":
-        entry["reason"] = "Not verifiable from the synthetic record; confirm before proceeding."
-        return Decision(entry=entry, met=False, evaluable=True, blocking=False)
+        reason = "Not verifiable from the synthetic record; confirm before proceeding."
+        return Decision(
+            entry=_settle(entry, "not_stated", reason),
+            met=False,
+            evaluable=True,
+            blocking=False,
+            data_backed=False,
+        )
+
+    if subject_name in SNAPSHOT_SUBJECTS and context.submitted_on < context.as_of:
+        # The record is dated later than the request that would be judged against it, so this row
+        # is not a verdict anybody can stand behind (W8, C04).
+        reason = (
+            f"Not verifiable: the record snapshot is {context.as_of.isoformat()} and the request "
+            f"was submitted {context.submitted_on.isoformat()}."
+        )
+        return Decision(entry=_settle(entry, "not_stated", reason), met=False, evaluable=False, blocking=blocking)
 
     subject = context.subject(subject_name)
     if subject is None:
-        entry["reason"] = f"Not stated: {subject_name} was not supplied."
-        return Decision(entry=entry, met=False, evaluable=False, blocking=blocking)
+        reason = f"Not stated: {subject_name} was not supplied."
+        return Decision(entry=_settle(entry, "not_stated", reason), met=False, evaluable=False, blocking=blocking)
     expected = _compare_value(check, fact_key, context)
     if expected is None:
-        entry["reason"] = f"Not stated: {check.get('compare_to')} was not supplied."
-        return Decision(entry=entry, met=False, evaluable=False, blocking=blocking)
+        reason = f"Not stated: {check.get('compare_to')} was not supplied."
+        return Decision(entry=_settle(entry, "not_stated", reason), met=False, evaluable=False, blocking=blocking)
     met = _apply(operator, subject, expected)
-    entry["met"] = met
-    entry["reason"] = f"{subject_name} is {_render(subject)}; the policy value is {_render(expected)} ({operator})."
-    return Decision(entry=entry, met=met, evaluable=True, blocking=blocking)
+    reason = f"{subject_name} is {_render(subject)}; the policy value is {_render(expected)} ({operator})."
+    return Decision(entry=_settle(entry, "met" if met else "unmet", reason), met=met, evaluable=True, blocking=blocking)
+
+
+def _settle_manual(decisions: Sequence[Decision]) -> list[Decision]:
+    """A `manual` row is evaluable only beside a data-backed one (W8, C05).
+
+    Without this, a call that supplied no parameter at all still evaluated *something* — the
+    "confirm before proceeding" row — so `insufficient_evidence` was unreachable and a turn that
+    had checked nothing came back `conditional`.
+    """
+    grounded = any(decision.data_backed and decision.evaluable for decision in decisions)
+    return [
+        decision if decision.data_backed or grounded else replace(decision, evaluable=False) for decision in decisions
+    ]
 
 
 def _verdict(decisions: Sequence[Decision]) -> str:
@@ -403,6 +567,26 @@ def _verdict(decisions: Sequence[Decision]) -> str:
     return "compliant"
 
 
+def derive_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    """The caller's parameters plus what the two dates imply (W8, C05).
+
+    `duration_days` is derived from `start_date` and `end_date` rather than taken on trust, because
+    a model that supplied neither got a requirement reported as "Not stated" and an answer that
+    asserted a duration anyway. An `end_date` before its `start_date` is an **argument error**: it
+    is not a request the engine can score, and the live Berlin turn that sent one was answered with
+    a confident conclusion built on rows that had evaluated nothing.
+    """
+    derived = dict(parameters)
+    start, end = _parse_date(derived.get("start_date")), _parse_date(derived.get("end_date"))
+    if start is not None and end is not None:
+        if end < start:
+            raise RuleError(
+                f"end_date {end.isoformat()} is before start_date {start.isoformat()}; send the dates in order"
+            )
+        derived.setdefault("duration_days", (end - start).days + 1)
+    return derived
+
+
 def evaluate(
     scenario: str,
     *,
@@ -411,6 +595,7 @@ def evaluate(
     parameters: Mapping[str, Any],
     holidays: Sequence[str],
     as_of: str,
+    submitted_on: str,
     rule_set: RuleSet,
     connection: sqlite3.Connection | None = None,
 ) -> dict[str, Any]:
@@ -421,11 +606,15 @@ def evaluate(
     snapshot = _parse_date(as_of)
     if snapshot is None:
         raise RuleError(f"unparseable as_of {as_of!r}")
+    submitted = _parse_date(submitted_on)
+    if submitted is None:
+        raise RuleError(f"unparseable submitted_on {submitted_on!r}")
     context = Context(
         as_of=snapshot,
+        submitted_on=submitted,
         employee=dict(employee),
         balance=dict(balance),
-        parameters=dict(parameters),
+        parameters=derive_parameters(parameters),
         holidays=frozenset(parsed for parsed in (_parse_date(day) for day in holidays) if parsed),
         facts=rule_set.facts,
         connection=connection,
@@ -440,6 +629,7 @@ def evaluate(
         decision = _evaluate_requirement(requirement, context)
         decided[decision.entry["id"]] = decision.met
         decisions.append(decision)
+    decisions = _settle_manual(decisions)
 
     approvals = [
         {key: value for key, value in approval.items() if key != "applies_when"}
@@ -469,6 +659,8 @@ def evaluate(
         "scenario": scenario,
         "verdict": _verdict(decisions),
         "as_of": as_of,
+        "submitted_on": submitted.isoformat(),
+        "computed": context.computed(),
         "requirements": [decision.entry for decision in decisions],
         "unmet": [decision.entry["id"] for decision in decisions if not decision.met],
         "approvals_required": approvals,

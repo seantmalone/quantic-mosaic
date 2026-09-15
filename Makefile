@@ -9,6 +9,10 @@ HOST ?= 127.0.0.1
 GIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo dev)
 IMAGE ?= mosaic-hr
 BASE_URL ?= http://$(HOST):$(PORT)
+# The day the two recorded demo scripts were captured. `MOCK_TODAY` is what the rules engine
+# anchors notice on (W8, C04), so replaying a recording against today's wall clock would score its
+# fixed dates differently every day. Only the demo replays pin it; a real deployment leaves it unset.
+MOCK_TODAY ?= 2026-09-10
 
 .PHONY: setup run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
 
@@ -80,7 +84,7 @@ ablation:
 # non-zero exit status from the signalled child out of the target's own result.
 define demo
 	set -e; \
-	LLM_PROVIDER=stub LLM_STUB_SCRIPT=tests/fixtures/llm_scripts/$(1).json \
+	LLM_PROVIDER=stub LLM_STUB_SCRIPT=tests/fixtures/llm_scripts/$(1).json MOCK_TODAY=$(MOCK_TODAY) \
 	  $(BIN)/uvicorn hrmosaic.web.main:app --host $(HOST) --port $(PORT) --workers 1 & \
 	server=$$!; \
 	trap 'kill $$server 2>/dev/null || true; wait $$server 2>/dev/null || true' EXIT INT TERM; \

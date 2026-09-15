@@ -17,8 +17,10 @@ asserts the bijection in both directions.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import warnings
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -43,6 +45,9 @@ DERIVED_FIELDS: frozenset[str] = frozenset()
 Provider = Literal["anthropic", "openai_compat", "stub"]
 
 GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+#: `MOCK_TODAY`'s shape. A settings field validated at import, so a typo is a boot failure.
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 class Settings(BaseSettings):
@@ -138,6 +143,13 @@ class Settings(BaseSettings):
     eval_smoke_max_items: int = Field(default=6, ge=1)
 
     # --- misc ----------------------------------------------------------------------------------
+    #: The date the app treats as "today" when it anchors a submission (W8, C04). Empty in every
+    #: real deployment — the wall clock is the submission date, exactly as §12.3's "real wall clock
+    #: everywhere" requires. It exists for the two surfaces that must be reproducible: the recorded
+    #: stub scripts, which were captured on 2026-09-10 and whose expectations would otherwise move
+    #: every day, and the tests that assert a notice figure. It is NOT a clock override: balances,
+    #: tenure and every other snapshot figure still read the mock data's own `as_of`.
+    mock_today: str = ""
     llm_cache_ttl_s: int = Field(default=0, ge=0)
     ready_warmup_timeout_s: int = Field(default=30, ge=1)
 
@@ -171,6 +183,18 @@ class Settings(BaseSettings):
         if not self.mcp_server_url:
             self.mcp_server_url = self.default_mcp_server_url
         return self
+
+    @field_validator("mock_today")
+    @classmethod
+    def _iso_or_empty(cls, value: str) -> str:
+        """`MOCK_TODAY` is an ISO date or nothing. A typo must fail at import, not in a verdict."""
+        if value.strip() and not _ISO_DATE.fullmatch(value.strip()):
+            raise ValueError("MOCK_TODAY must be an ISO-8601 date, e.g. 2026-09-10")
+        return value.strip()
+
+    def today(self) -> date:
+        """The date a request submitted on this turn carries — `MOCK_TODAY`, else the wall clock."""
+        return date.fromisoformat(self.mock_today) if self.mock_today else date.today()
 
     @property
     def default_mcp_server_url(self) -> str:

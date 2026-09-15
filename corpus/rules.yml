@@ -37,13 +37,17 @@
 #                      employee.<field>               a field of the §8.4 tool 5 employee record
 #                      pto_balance.remaining_days     from the tool 6 result — NOT the employee profile
 #                      computed.tenure_days           hire_date → the `as_of` snapshot, in days
-#                      computed.notice_business_days  business days from the mock-data `as_of` snapshot
-#                                                     to `parameters.start_date`, computed by the engine
+#                      computed.notice_business_days  business days from the SUBMISSION date to
+#                                                     `parameters.start_date`, computed by the engine
 #                                                     and never taken from the caller (spec §8.4)
 #                      computed.notice_calendar_days  the same span in calendar days
 #                      computed.overlaps_blackout     true when the requested dates hit a blackout date
 #                      computed.claim_age_days        calendar days from `parameters.transaction_date`
-#                                                     to the snapshot
+#                                                     to the submission date
+#                      computed.days_since_eligibility
+#                                                     days from the end of the benefits waiting
+#                                                     period to the submission date, negative while
+#                                                     the waiting period is still running
 #
 #   check.operator     lte | lt | gte | gt | eq        numeric or boolean comparison
 #                      in                              subject is a member of a comma-separated list
@@ -53,6 +57,11 @@
 #                                                      `conditional` rather than falsely `compliant`
 #                      informational                   a standing rule that always holds: reported
 #                                                      `met: true`, cited, never listed in `unmet`
+#
+#   fact_key           <a key of facts.yml>            the literal fact
+#                      pto_balance.<field>             INDIRECT: that field of the employee's own
+#                                                      balance row holds the real key, so the accrual
+#                                                      band a requirement quotes is the reader's own
 #
 #   check.compare_to   fact (default)                  the `facts.yml` value named by `fact_key`
 #                      parameters.<name>               another caller-supplied value
@@ -250,7 +259,7 @@ scenarios:
         check: {subject: computed.notice_business_days, operator: gte}
       - id: pto.request.balance
         text: "The requested days must be covered by the balance accrued at the snapshot."
-        fact_key: pto.accrual.ft_3y_plus
+        fact_key: pto_balance.accrual_fact_key
         doc_id: pto-and-holidays
         heading_path: "Accrual > Standard Accrual Rates"
         blocking: true
@@ -416,6 +425,13 @@ scenarios:
         heading_path: "Open Enrollment > The 2026 Enrollment Window"
         applies_when: "parameter_eq:reason:open_enrollment"
         check: {subject: parameters.effective_date, operator: date_lte}
+      - id: benefits.new_hire_window
+        text: "A new hire has 30 days from the end of the 90-day waiting period to elect cover."
+        fact_key: benefits.new_hire.election_window_days
+        doc_id: benefits-and-open-enrollment
+        heading_path: "Eligibility > Waiting Period"
+        applies_when: "parameter_eq:reason:new_hire"
+        check: {subject: computed.days_since_eligibility, operator: lte}
       - id: benefits.qle_window
         text: "A qualifying life event must be reported within 30 days of the event."
         fact_key: benefits.qle.window_days
@@ -434,6 +450,8 @@ scenarios:
         applies_when: always
       - text: "Supply the dependent or life-event documentation within 60 days or the change is reversed."
         applies_when: "unmet:benefits.qle_window"
+      - text: "Make the new-hire elections in MosaicOne Benefits before the 30-day window closes."
+        applies_when: "parameter_eq:reason:new_hire"
 
   conduct_escalation:
     title: "A conduct, harassment or discrimination concern"

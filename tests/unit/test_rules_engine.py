@@ -89,7 +89,37 @@ async def compliance(scenario: str, parameters: dict, employee_id: str = DEFAULT
 
 @pytest.mark.parametrize(("scenario", "requirement"), REQUIREMENTS, ids=REQUIREMENT_IDS)
 def test_every_fact_key_exists(scenario, requirement):
-    assert requirement["fact_key"] in FACTS, scenario
+    """A literal key resolves in `facts.yml`; an indirect one resolves through every balance row.
+
+    `pto_balance.accrual_fact_key` names the field of the employee's own row that holds the real
+    key, so the accrual band the decisive PTO requirement quotes is the reader's own (W8, C29).
+    """
+    fact_key = requirement["fact_key"]
+    if fact_key.startswith("pto_balance."):
+        field = fact_key.removeprefix("pto_balance.")
+        resolved = {row[field] for row in DEPS.records("pto_balances")}
+        assert resolved, f"{scenario}: no balance row carries {field!r}"
+        assert resolved <= set(FACTS), f"{scenario}: {sorted(resolved - set(FACTS))} are not facts"
+        return
+    assert fact_key in FACTS, scenario
+
+
+@pytest.mark.parametrize("row", DEPS.records("pto_balances"), ids=lambda row: row["employee_id"])
+def test_the_balance_requirement_quotes_each_employees_own_accrual_band(row):
+    """W8, C29: the band on `pto.request.balance` is the one that employee actually accrues at."""
+    requirement = next(
+        item for item in RULE_SET.scenarios["pto_request"]["requirements"] if item["id"] == "pto.request.balance"
+    )
+    context = rules.Context(
+        as_of=date(2026, 9, 1),
+        submitted_on=date(2026, 9, 1),
+        employee={},
+        balance=dict(row),
+        parameters={},
+        holidays=frozenset(),
+        facts=FACTS,
+    )
+    assert context.resolve_fact_key(requirement["fact_key"]) == row["accrual_fact_key"]
 
 
 @pytest.mark.parametrize(("scenario", "requirement"), REQUIREMENTS, ids=REQUIREMENT_IDS)
@@ -134,7 +164,13 @@ def test_every_requirement_stays_inside_the_closed_grammar(scenario, requirement
 
 def test_an_unknown_operator_stops_the_build_rather_than_being_ignored():
     context = rules.Context(
-        as_of=date(2026, 9, 1), employee={}, balance={}, parameters={}, holidays=frozenset(), facts=FACTS
+        as_of=date(2026, 9, 1),
+        submitted_on=date(2026, 9, 1),
+        employee={},
+        balance={},
+        parameters={},
+        holidays=frozenset(),
+        facts=FACTS,
     )
     with pytest.raises(rules.RuleError):
         rules.guard_holds("whenever:something", context, {}, frozenset())
@@ -283,13 +319,15 @@ async def test_manual_and_informational_need_no_parameter_to_be_evaluable():
     assert body["verdict"] == "conditional"
 
 
-def test_a_manual_requirement_alone_keeps_a_scenario_off_insufficient_evidence():
-    """The isolating case for §8.4's "as an `informational` check is": `manual` on its own.
+def test_a_manual_requirement_alone_is_insufficient_evidence_not_a_verdict():
+    """W8, C05: "confirm this yourself" is not something the engine evaluated.
 
     No scenario in `corpus/rules.yml` is manual-only, so the rule set is narrowed to the one
-    `manual` requirement — `blocking: true` in the data — and run with no parameters at all. If
-    `manual` were treated as not evaluable, this would answer `insufficient_evidence`; if the
-    `blocking` flag were honoured for it, `non_compliant`.
+    `manual` requirement — `blocking: true` in the data — and run with no parameters at all. It
+    used to come back `conditional`, which reads as a decision: the engine had checked the request
+    and found one open item. Nothing had been checked. `manual` is evaluable only beside a
+    data-backed row; alone it is `insufficient_evidence`, and the `blocking` flag is still never
+    honoured for it.
     """
     spec = dict(RULE_SET.scenarios["conduct_escalation"])
     spec["requirements"] = [item for item in spec["requirements"] if item["id"] == "conduct.not_automated"]
@@ -303,12 +341,14 @@ def test_a_manual_requirement_alone_keeps_a_scenario_off_insufficient_evidence()
         parameters={},
         holidays=(),
         as_of="2026-09-01",
+        submitted_on="2026-09-01",
         rule_set=rules.RuleSet(
             rules_version=RULE_SET.rules_version, scenarios={"conduct_escalation": spec}, facts=RULE_SET.facts
         ),
     )
     assert body["unmet"] == ["conduct.not_automated"]
-    assert body["verdict"] == "conditional"
+    assert body["requirements"][0]["status"] == "not_stated"
+    assert body["verdict"] == "insufficient_evidence"
 
 
 async def test_an_unknown_employee_is_a_successful_not_found():
@@ -357,6 +397,7 @@ def run_probe(rule_set: rules.RuleSet, parameters: dict | None = None, **overrid
         "parameters": parameters or {},
         "holidays": (),
         "as_of": "2026-09-01",
+        "submitted_on": "2026-09-01",
         "rule_set": rule_set,
     }
     arguments.update(overrides)
@@ -375,6 +416,7 @@ def test_a_date_yaml_already_parsed_is_used_as_it_stands():
     """`corpus/rules.yml` and a caller may both hand over a real `date`, not only an ISO string."""
     context = rules.Context(
         as_of=date(2026, 9, 1),
+        submitted_on=date(2026, 9, 1),
         employee={"hire_date": date(2020, 9, 1)},
         balance={},
         parameters={},
@@ -388,6 +430,7 @@ def test_an_unparseable_date_is_not_stated_rather_than_a_crash_or_a_zero():
     """A date like `next tuesday` must not silently become "0 days of notice", and a verdict."""
     context = rules.Context(
         as_of=date(2026, 9, 1),
+        submitted_on=date(2026, 9, 1),
         employee={"hire_date": "next tuesday"},
         balance={},
         parameters={"start_date": 20261005},
@@ -404,6 +447,7 @@ def test_a_request_with_no_dates_has_no_blackout_answer_at_all():
     """Absent `start_date`, "does this overlap a blackout" is unanswerable — not `False`."""
     context = rules.Context(
         as_of=date(2026, 9, 1),
+        submitted_on=date(2026, 9, 1),
         employee={},
         balance={"blackout_dates": ["2026-09-02"]},
         parameters={},
@@ -509,6 +553,7 @@ def test_an_unknown_scenario_is_refused():
             parameters={},
             holidays=(),
             as_of="2026-09-01",
+            submitted_on="2026-09-01",
             rule_set=RULE_SET,
         )
 
@@ -518,3 +563,110 @@ def test_an_unparseable_as_of_is_refused_rather_than_defaulted_to_today():
     rule_set = one_requirement({"subject": "parameters.days", "operator": "lte", "compare_to": "literal:30"})
     with pytest.raises(rules.RuleError, match="unparseable as_of"):
         run_probe(rule_set, {"days": 1}, as_of="the first of September")
+
+
+# -- W8: the submission date, the three statuses, the approval chain -------------------
+#
+# The four defects these pin were all live on 2026-09-15 (`demo-path-review-2026-09-15.md`):
+# notice measured from a frozen snapshot, a requirement nobody evaluated narrated as a settled
+# failure, a director told to get her own approval, and a new hire given the annual open-enrolment
+# window as their election deadline.
+
+
+def _pto(parameters: dict, *, submitted_on: str, employee_id: str = DEFAULT_ACTOR) -> dict:
+    """One `pto_request` evaluation straight through the engine, at a stated submission date."""
+    from hrmosaic.mcpserver.tools.check_pto_balance import balance_row
+
+    employee = DEPS.employee(employee_id)
+    assert employee is not None
+    return rules.evaluate(
+        "pto_request",
+        employee=employee,
+        balance=balance_row(DEPS, employee_id) or {},
+        parameters=parameters,
+        holidays=(),
+        as_of=DEPS.as_of(),
+        submitted_on=submitted_on,
+        rule_set=RULE_SET,
+        connection=DEPS.index(),
+    )
+
+
+def _row(body: dict, requirement_id: str) -> dict:
+    return next(item for item in body["requirements"] if item["id"] == requirement_id)
+
+
+def test_notice_is_measured_from_the_submission_date_not_the_snapshot():
+    """C04. Every same-day PTO request in the demo scored eight business days of notice it had
+    not given, because the engine measured from `as_of: 2026-09-01` rather than from the day the
+    request was made."""
+    same_day = _pto({"start_date": "2026-09-15", "days": 3}, submitted_on="2026-09-15")
+    assert same_day["computed"]["notice_business_days"] == 0
+    assert _row(same_day, "pto.request.notice")["status"] == "unmet"
+
+    ahead = _pto({"start_date": "2026-09-15", "days": 3}, submitted_on="2026-09-01")
+    assert ahead["computed"]["notice_business_days"] == 9
+    assert _row(ahead, "pto.request.notice")["status"] == "met"
+
+
+def test_the_blackout_span_is_walked_in_business_days():
+    """C04. `days` counts business days, so three days from a Friday reaches the Tuesday — the
+    calendar walk stopped on the Sunday and missed a blackout the request actually covers."""
+    body = _pto({"start_date": "2026-12-18", "days": 3}, submitted_on="2026-11-01", employee_id="E1017")
+    assert body["computed"]["span_end"] == "2026-12-22"
+    assert body["computed"]["overlaps_blackout"] is True
+
+
+def test_a_requirement_nobody_supplied_a_parameter_for_says_so():
+    """C05. `met: false` meant both "checked and failed" and "never checked"; `status` separates
+    them, so an answer can no longer narrate an unevaluated row as a settled failure."""
+    body = _pto({"days": 3}, submitted_on="2026-09-10")
+    notice = _row(body, "pto.request.notice")
+    assert notice["status"] == "not_stated"
+    assert notice["met"] is False
+    assert "Not stated" in notice["reason"]
+    assert {item["status"] for item in body["requirements"]} <= set(rules.STATUSES)
+
+
+def test_duration_is_derived_from_the_two_dates():
+    """C05. The Berlin turn asserted "27 consecutive calendar days" the engine never computed."""
+    derived = rules.derive_parameters({"start_date": "2026-11-03", "end_date": "2026-12-14"})
+    assert derived["duration_days"] == 42
+
+
+def test_an_end_date_before_its_start_date_is_an_argument_error():
+    """C05. The live year-end turn sent 15 December → 10 January and was answered anyway."""
+    with pytest.raises(rules.RuleError, match="before start_date"):
+        rules.derive_parameters({"start_date": "2026-12-15", "end_date": "2026-01-10"})
+
+
+async def test_a_director_is_never_sent_to_her_own_director():
+    """C06. E1007 Dana *is* the Director of Engineering; the matrix routes one level higher."""
+    body = await compliance("international_remote", FIXTURES["international_remote"], employee_id="E1007")
+    roles = {entry["role"]: entry for entry in body["approvers"]}
+    assert [approval["role"] for approval in body["approvals_required"]] == [
+        "Direct manager",
+        "Director",
+        "Tax & Legal",
+    ]
+    assert roles["Direct manager"]["name"] == "Miguel"
+    director = roles["Director"]
+    assert director["self_approval_routed"] is True
+    assert director["name"] == "Miguel"
+    assert "one level higher" in director["reason"]
+    # A role that is a team and not a person stays a team rather than being guessed at.
+    assert roles["Tax & Legal"].get("name") is None
+
+
+async def test_an_engineer_is_given_her_managers_name():
+    """C06. "your manager" on a turn whose own envelope already carried the name."""
+    body = await compliance("pto_request", FIXTURES["pto_request"], employee_id="E1042")
+    assert [entry["name"] for entry in body["approvers"] if entry["role"] == "Direct manager"] == ["Dana"]
+
+
+async def test_a_new_hires_election_deadline_is_the_end_of_their_own_window():
+    """C30. E1108 was given the annual open-enrollment window — three weeks early."""
+    body = await compliance("benefits_change", {"reason": "new_hire"}, employee_id="E1108")
+    assert body["computed"]["benefits_eligibility_date"] == "2026-11-13"
+    assert body["computed"]["benefits_election_deadline"] == "2026-12-13"
+    assert _row(body, "benefits.new_hire_window")["status"] == "met"

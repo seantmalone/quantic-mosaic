@@ -39,9 +39,11 @@ reader over the chunked corpus.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
@@ -52,6 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CORPUS_DIR = REPO_ROOT / "corpus"
 FACTS_PATH = CORPUS_DIR / "facts.yml"
 RULES_PATH = CORPUS_DIR / "rules.yml"
+MOCK_DATA = REPO_ROOT / "mock_data"
 
 #: Files under `corpus/` that are index or documentation rather than policy documents.
 NON_DOCUMENT_STEMS = {"facts", "rules", "README"}
@@ -67,6 +70,20 @@ HEADING_SEPARATOR = " > "
 REQUIREMENT_KEYS = frozenset({"id", "text", "fact_key", "doc_id", "heading_path"})
 #: Keys a requirement may carry but need not: a requirement with no `check` is not evaluable.
 OPTIONAL_REQUIREMENT_KEYS = frozenset({"check", "applies_when", "blocking"})
+
+#: A `fact_key` prefix that names a field of the employee's own balance row rather than a fact
+#: (W8, C29). `mcpserver/rules.py::Context.resolve_fact_key` reads it; this file checks that every
+#: value the committed data puts there is a real fact.
+BALANCE_FACT_KEY_PREFIX = "pto_balance."
+
+#: `mock_data/pto_balances.json` fields this file cross-checks against the corpus (W8, C29). The
+#: data layer had been encoding two rules the corpus does not publish: the accrual band quoted on
+#: the decisive PTO requirement was `pto.accrual.ft_3y_plus` for everybody, and the December
+#: blackout was on all twenty-four employees although `pto-and-holidays.md` scopes it to three
+#: organisations and exempts the rest by name.
+BLACKOUT_FACT_KEYS = ("pto.blackout.year_end_2026",)
+BLACKOUT_ORGANISATIONS = ("Manufacturing", "Field Service", "Customer Support")
+ACCRUAL_BAND_FACT_KEYS = ("pto.accrual.ft_3y_plus", "pto.accrual.ft_under_3y")
 
 #: The running footer `scripts/build_pdf.py` stamps on every PDF page. Dropping it is the
 #: "drop the boilerplate footer" half of the uniform cleaning in spec §6.2.
@@ -270,6 +287,70 @@ def load_rules(path: Path = RULES_PATH) -> dict[str, dict]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))["scenarios"]
 
 
+def load_mock(name: str) -> list[dict]:
+    """One committed mock-data file's records, or `[]` when it is not there (nothing to check)."""
+    path = MOCK_DATA / f"{name}.json"
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))["records"]
+
+
+def _published_blackout_dates(facts: dict[str, dict]) -> set[str]:
+    """Every date the corpus publishes as a blackout, expanded from its `start..end` ranges."""
+    published: set[str] = set()
+    for key in BLACKOUT_FACT_KEYS:
+        value = str(facts.get(key, {}).get("value") or "")
+        start_text, _, end_text = value.partition("..")
+        try:
+            start = date.fromisoformat(start_text)
+            end = date.fromisoformat(end_text or start_text)
+        except ValueError:
+            continue
+        cursor = start
+        while cursor <= end:
+            published.add(cursor.isoformat())
+            cursor += timedelta(days=1)
+    return published
+
+
+def check_mock_data(facts: dict[str, dict]) -> list[str]:
+    """The data layer against the corpus: every blackout date scoped, every accrual band real.
+
+    Two rules, both from `corpus/pto-and-holidays.md` (W8, C29):
+
+    * a blackout date on an employee's row must be one the corpus publishes, **and** that employee
+      must be in one of the organisations the corpus says it applies to;
+    * `accrual_fact_key` must name a real accrual band and `accrual_rate_days_per_month` must equal
+      that band's published rate times the employee's FTE — the rate and the quote a requirement
+      shows the reader cannot be allowed to describe different bands.
+    """
+    problems: list[str] = []
+    employees = {row["employee_id"]: row for row in load_mock("employees")}
+    published = _published_blackout_dates(facts)
+    for row in load_mock("pto_balances"):
+        employee = employees.get(row["employee_id"], {})
+        where = f"pto_balances.json: {row['employee_id']}"
+        for day in row.get("blackout_dates") or []:
+            if day not in published:
+                problems.append(f"{where}: blackout date {day} is published in no facts.yml blackout range")
+            elif employee.get("department") not in BLACKOUT_ORGANISATIONS:
+                problems.append(
+                    f"{where}: blackout date {day} is scoped to {', '.join(BLACKOUT_ORGANISATIONS)} "
+                    f"and this employee is in {employee.get('department')!r}"
+                )
+        key = row.get("accrual_fact_key")
+        if key not in ACCRUAL_BAND_FACT_KEYS:
+            problems.append(f"{where}: accrual_fact_key {key!r} is not one of {ACCRUAL_BAND_FACT_KEYS}")
+            continue
+        expected = round(float(facts[key]["value"]) * float(employee.get("fte") or 1.0), 2)
+        if round(float(row["accrual_rate_days_per_month"]), 2) != expected:
+            problems.append(
+                f"{where}: accrual_rate_days_per_month {row['accrual_rate_days_per_month']} disagrees with "
+                f"{key} ({facts[key]['value']} × FTE {employee.get('fte')} = {expected})"
+            )
+    return problems
+
+
 def check_corpus() -> list[str]:
     """Return a list of human-readable problems; an empty list means the corpus is consistent."""
     documents = load_documents()
@@ -302,8 +383,19 @@ def check_corpus() -> list[str]:
             missing = sorted(REQUIREMENT_KEYS - set(requirement))
             if missing:
                 problems.append(f"{rid}: missing requirement key(s) {missing}")
-            if requirement["fact_key"] not in facts:
-                problems.append(f"{rid}: fact_key {requirement['fact_key']!r} is not in facts.yml")
+            fact_key = str(requirement["fact_key"])
+            if fact_key.startswith(BALANCE_FACT_KEY_PREFIX):
+                # An indirect key: the employee's own balance row holds the real one (W8, C29).
+                field = fact_key[len(BALANCE_FACT_KEY_PREFIX) :]
+                for row in load_mock("pto_balances"):
+                    resolved = row.get(field)
+                    if resolved not in facts:
+                        problems.append(
+                            f"{rid}: fact_key {fact_key!r} resolves to {resolved!r} for "
+                            f"{row['employee_id']}, which is not in facts.yml"
+                        )
+            elif fact_key not in facts:
+                problems.append(f"{rid}: fact_key {fact_key!r} is not in facts.yml")
             document = documents.get(requirement["doc_id"])
             if document is None:
                 problems.append(f"{rid}: unknown doc_id {requirement['doc_id']!r}")
@@ -312,7 +404,7 @@ def check_corpus() -> list[str]:
                     f"{rid}: heading_path {requirement['heading_path']!r} is not a heading path in {document.path.name}"
                 )
 
-    return problems
+    return problems + check_mock_data(facts)
 
 
 def main() -> int:
@@ -332,7 +424,8 @@ def main() -> int:
         for problem in problems:
             print(f"  - {problem}")
         return 1
-    print("OK — every quote is verbatim, every heading path is real, every fact_key resolves.")
+    print("OK — every quote is verbatim, every heading path is real, every fact_key resolves,")
+    print("     every blackout date is published and scoped, every accrual rate matches its band.")
     return 0
 
 

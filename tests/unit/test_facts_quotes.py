@@ -70,7 +70,12 @@ def test_the_quote_check_is_not_vacuous():
 
 @pytest.mark.parametrize(("scenario", "requirement"), REQUIREMENTS, ids=REQUIREMENT_IDS)
 def test_every_rule_requirement_resolves(scenario, requirement):
-    assert requirement["fact_key"] in FACTS, scenario
+    # An indirect `fact_key` (`pto_balance.<field>`) names the field of the employee's own balance
+    # row that holds the real key, so the accrual band quoted is the reader's own (W8, C29).
+    # `scripts/check_facts.py` resolves it against every committed row; here it is enough that the
+    # form is one the engine knows.
+    fact_key = requirement["fact_key"]
+    assert fact_key in FACTS or fact_key.startswith("pto_balance."), scenario
     document = DOCUMENTS[requirement["doc_id"]]
     assert requirement["heading_path"] in document.heading_paths
 

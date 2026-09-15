@@ -1056,17 +1056,31 @@ and must keep failing the check. `rules.py` still only ever compares codes, and 
 `blocking` flag; `approvals_required[]` and `next_steps[]` entries carry the same guard. The vocabularies are closed and `mcpserver/rules.py` raises on
 anything outside them rather than ignoring a rule quietly. `check.subject` is `parameters.<name>`, `employee.<field>`, `pto_balance.remaining_days`
 (read from the `check_pto_balance` result, never from the employee profile), or one of the engine-derived `computed.tenure_days`,
-`computed.notice_business_days`, `computed.notice_calendar_days`, `computed.overlaps_blackout` and `computed.claim_age_days`. `check.operator` is
+`computed.notice_business_days`, `computed.notice_calendar_days`, `computed.overlaps_blackout`, `computed.claim_age_days` and
+`computed.days_since_eligibility` (days from the end of the benefits waiting period to the submission date; negative while it is still running). `check.operator` is
 `lte`, `lt`, `gte`, `gt`, `eq`, `in`, `date_lte`, `date_gte`, or one of the two unverifiable operators `manual` and `informational`.
 `check.compare_to` is `fact` (the default: the `facts.yml` value this requirement's own `fact_key` names), `parameters.<name>` or `literal:<value>`.
+A `fact_key` is normally a literal key of `facts.yml`; the one indirect form, `pto_balance.<field>`, names the field of the employee's **own** balance
+row that holds the real key, so the accrual band a requirement quotes is the reader's own band and not a constant (W8, C29).
 `applies_when` is `always` (the default), `unmet:<id>`, `met:<id>`, `parameter_eq:<name>:<value>`, `parameter_gte:<name>:<fact_key>` or
 `employee_eq:<field>:<value>`; a requirement whose guard is false is omitted from `requirements[]` entirely, and the same guard selects which
 `approvals_required` and `next_steps` entries the result carries.
 
-**How the verdict is derived.** Two kinds of unmet requirement cannot prove a violation. A `manual` check is `met:false` with a confirm-before-you-act
-reason and is **never** blocking, whatever its own `blocking` says — but it is still *evaluable*, as an `informational` check is, so neither needs a
-supplied subject to keep a scenario off `insufficient_evidence`. A requirement whose subject or comparison value is absent is `met:false` with a
-`"Not stated: …"` reason and is **not** evaluable, so merely omitting a parameter can never be reported as a violation. Both land in `unmet[]`. The
+**Notice is anchored on the submission date** (W8, C04). `check_policy_compliance` takes a `submitted_on` parameter — the turn's own date, defaulting
+to today and pinned by the `MOCK_TODAY` setting for the recorded stubs — and `computed.notice_business_days` / `computed.notice_calendar_days` /
+`computed.claim_age_days` are measured from it. Balances, tenure and every other property of the record keep `as_of`; where a request is submitted
+*before* the snapshot it would be judged against, the snapshot-backed rows come back `not_stated` saying so. The engine also derives
+`parameters.duration_days` from `start_date` + `end_date`, walks the blackout span in the same business-day calendar `notice_business_days` uses, and
+**rejects** an `end_date` before its `start_date` as an argument error rather than scoring the request anyway. The result carries `submitted_on` and a
+`computed{}` block of every derived value, so an answer quotes the engine's arithmetic instead of redoing it.
+
+**Every requirement carries a `status`** (W8, C05): `met`, `unmet` or `not_stated`. `met` stays, and means exactly `status == "met"`.
+
+**How the verdict is derived.** Two kinds of unmet requirement cannot prove a violation. A `manual` check is `status:not_stated` with a
+confirm-before-you-act reason and is **never** blocking, whatever its own `blocking` says; it is *evaluable* only beside a data-backed row, so a
+scenario in which nothing but `manual` rows applied has evaluated nothing and answers `insufficient_evidence`. An `informational` check is `met` and
+evaluable on its own. A requirement whose subject or comparison value is absent is `status:not_stated` with a `"Not stated: …"` reason and is
+**not** evaluable, so merely omitting a parameter can never be reported as a violation. Both land in `unmet[]`. The
 verdict is then the first rung that holds: `insufficient_evidence` (no applicable requirement was evaluable at all) → `non_compliant` (an evaluable
 `blocking` requirement is unmet) → `conditional` (anything applicable is unmet) → `compliant`. This grammar and these rules were adopted at P5 from
 the candidate P2 authored and set aside (P2 report §9.3); `tests/unit/test_rules_engine.py` pins each rule and

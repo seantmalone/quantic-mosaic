@@ -47,9 +47,15 @@
           ]
         },
         "default": {},
-        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, duration_days, start_date, days, amount_usd, category, transaction_date. Notice days are always computed by the engine from start_date against the data snapshot and any supplied notice value is ignored.",
+        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, end_date, days, amount_usd, category, transaction_date, reason. Notice days are always computed by the engine from start_date against the submission date and any supplied notice value is ignored; duration_days is derived from start_date and end_date.",
         "title": "Parameters",
         "type": "object"
+      },
+      "submitted_on": {
+        "default": "",
+        "description": "The date the request is submitted, ISO-8601. Notice is measured from it, never from the data snapshot. Defaults to today.",
+        "title": "Submitted On",
+        "type": "string"
       }
     },
     "required": [
@@ -87,6 +93,73 @@
           "heading_path"
         ],
         "title": "Approval",
+        "type": "object"
+      },
+      "Approver": {
+        "description": "One approval role and the person who holds it for this reader, when there is one.",
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "employee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Employee Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "self_approval_routed": {
+            "default": false,
+            "title": "Self Approval Routed",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "Approver",
         "type": "object"
       },
       "Citation": {
@@ -153,6 +226,16 @@
           "met": {
             "title": "Met",
             "type": "boolean"
+          },
+          "status": {
+            "default": "not_stated",
+            "enum": [
+              "met",
+              "unmet",
+              "not_stated"
+            ],
+            "title": "Status",
+            "type": "string"
           },
           "reason": {
             "title": "Reason",
@@ -229,6 +312,31 @@
         "default": null,
         "title": "As Of"
       },
+      "submitted_on": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Submitted On"
+      },
+      "computed": {
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Computed"
+      },
       "requirements": {
         "anyOf": [
           {
@@ -273,6 +381,21 @@
         ],
         "default": null,
         "title": "Approvals Required"
+      },
+      "approvers": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/Approver"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Approvers"
       },
       "next_steps": {
         "anyOf": [

@@ -21,7 +21,7 @@ the approved list under any spelling and must keep failing the check.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import Context, MCPServer
@@ -29,10 +29,20 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hrmosaic.core.db import now_micros
+from hrmosaic.mcpserver import approvers as approver_chain
 from hrmosaic.mcpserver import rules
-from hrmosaic.mcpserver.server import READ_ONLY, ServerDeps, envelope, not_found, read_meta, result
+from hrmosaic.mcpserver.server import (
+    READ_ONLY,
+    ServerDeps,
+    envelope,
+    invalid_arguments,
+    not_found,
+    read_meta,
+    result,
+)
 from hrmosaic.mcpserver.tools.check_pto_balance import balance_row
 from hrmosaic.mcpserver.tools.lookup_employee_profile import EMPLOYEE_ID
+from hrmosaic.settings import settings
 
 Scenario = Literal[
     "international_remote",
@@ -92,10 +102,16 @@ def normalise_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
 
 
 PARAMETERS_DESCRIPTION = (
-    "Scenario facts the engine cannot read from the record, e.g. destination_country, "
-    "duration_days, start_date, days, amount_usd, category, transaction_date. Notice days are "
-    "always computed by the engine from start_date against the data snapshot and any supplied "
-    "notice value is ignored."
+    "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, "
+    "end_date, days, amount_usd, category, transaction_date, reason. Notice days are always "
+    "computed by the engine from start_date against the submission date and any supplied notice "
+    "value is ignored; duration_days is derived from start_date and end_date."
+)
+
+#: What `submitted_on` is for, in the words the tool schema publishes (W8, C04).
+SUBMITTED_ON_DESCRIPTION = (
+    "The date the request is submitted, ISO-8601. Notice is measured from it, never from the data "
+    "snapshot. Defaults to today."
 )
 
 
@@ -110,6 +126,10 @@ class Requirement(BaseModel):
     id: str
     text: str
     met: bool
+    #: `met` | `unmet` | `not_stated` (W8, C05). `met: false` used to mean both "checked and it
+    #: fails" and "never checked", and an answer cannot tell those apart from a boolean — so a
+    #: requirement nobody had evaluated was narrated as a settled failure.
+    status: Literal["met", "unmet", "not_stated"] = "not_stated"
     reason: str
     fact_key: str
     evidence: Evidence | None = None
@@ -134,9 +154,16 @@ class ComplianceOutput(BaseModel):
     scenario: str | None = None
     verdict: Literal["compliant", "conditional", "non_compliant", "insufficient_evidence"] | None = None
     as_of: str | None = None
+    #: The day the request is treated as submitted — what notice is measured from (W8, C04).
+    submitted_on: str | None = None
+    #: Every figure the engine derived — notice, duration, tenure, the blackout span, the benefits
+    #: dates — so the answer quotes them instead of computing them again (W8, C13, C22, C30).
+    computed: dict[str, Any] | None = None
     requirements: list[Requirement] | None = None
     unmet: list[str] | None = None
     approvals_required: list[Approval] | None = None
+    #: The approval roles above, resolved to the reader's own people (W8, C06).
+    approvers: list[approver_chain.Approver] | None = None
     next_steps: list[str] | None = None
     escalate_to: str | None = None
     citations: list[Citation] | None = None
@@ -165,12 +192,24 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
             list[str], Field(description="Advisory: topics the caller wants covered. Never changes a verdict.")
         ] = [],  # noqa: B006 - the schema publishes an empty-array default (§8.4); pydantic copies it per call
         parameters: Annotated[dict[str, str | float | bool], Field(description=PARAMETERS_DESCRIPTION)] = {},  # noqa: B006
+        submitted_on: Annotated[str, Field(description=SUBMITTED_ON_DESCRIPTION)] = "",
     ) -> ComplianceOutput:
         call = read_meta(ctx)
         started = now_micros()
-        body = await asyncio.to_thread(
-            _compliance, deps, scenario=scenario, employee_id=employee_id, parameters=dict(parameters)
-        )
+        try:
+            body = await asyncio.to_thread(
+                _compliance,
+                deps,
+                scenario=scenario,
+                employee_id=employee_id,
+                parameters=dict(parameters),
+                submitted_on=submitted_on,
+            )
+        except rules.RuleError as exc:
+            # An argument no verdict can be built on — `end_date` before `start_date` is the one the
+            # live Berlin turn sent (W8, C05). §9.1's one repair round trip gets a chance at it; an
+            # answer built on rows that evaluated nothing does not.
+            return invalid_arguments([str(exc)])
         ended = now_micros()
         body["_trace"] = envelope(call, server_timing_ms=max(0, (ended - started) // 1000), transport=deps.transport)
         return result(body)
@@ -184,7 +223,28 @@ def _holidays(deps: ServerDeps, employee: dict[str, Any]) -> list[str]:
     return [] if calendar is None else [holiday["observed"] for holiday in calendar["holidays"]]
 
 
-def _compliance(deps: ServerDeps, *, scenario: str, employee_id: str, parameters: dict[str, Any]) -> dict[str, Any]:
+def submission_date(supplied: str) -> str:
+    """The caller's `submitted_on`, or today (W8, C04). `MOCK_TODAY` pins "today" for the stubs."""
+    return supplied.strip() or settings.today().isoformat()
+
+
+def approvers_for(deps: ServerDeps, employee_id: str, roles: Sequence[str]) -> list[approver_chain.Approver]:
+    """The verdict's approval roles, resolved to people on the reader's own chain (W8, C06)."""
+    employees = {str(row["employee_id"]): row for row in deps.records("employees")}
+    managers = {str(row["employee_id"]): row.get("manager_id") for row in deps.records("org_manager_map")}
+    for employee_id_key, record in employees.items():
+        managers.setdefault(employee_id_key, record.get("manager_id"))
+    return approver_chain.resolve_all(list(roles), actor_id=employee_id, employees=employees, managers=managers)
+
+
+def _compliance(
+    deps: ServerDeps,
+    *,
+    scenario: str,
+    employee_id: str,
+    parameters: dict[str, Any],
+    submitted_on: str = "",
+) -> dict[str, Any]:
     """The blocking half: the YAML load, the index lookups behind the evidence, the pure evaluation."""
     employee = deps.employee(employee_id)
     if employee is None:
@@ -200,9 +260,11 @@ def _compliance(deps: ServerDeps, *, scenario: str, employee_id: str, parameters
             parameters=parameters,
             holidays=_holidays(deps, employee),
             as_of=deps.as_of(),
+            submitted_on=submission_date(submitted_on),
             rule_set=rule_set,
             connection=connection,
         )
+    body["approvers"] = approvers_for(deps, employee_id, [approval["role"] for approval in body["approvals_required"]])
     return ComplianceOutput(**body).model_dump(mode="json", exclude_none=True)
 
 
@@ -210,13 +272,16 @@ __all__ = [
     "APPROVED_COUNTRIES_FACT",
     "COUNTRY_ALIASES",
     "COUNTRY_PARAMETERS",
+    "SUBMITTED_ON_DESCRIPTION",
     "Approval",
     "Citation",
     "ComplianceOutput",
     "Evidence",
     "Requirement",
     "Scenario",
+    "approvers_for",
     "normalise_country",
     "normalise_parameters",
     "register",
+    "submission_date",
 ]

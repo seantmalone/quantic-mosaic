@@ -318,8 +318,14 @@ DE_HOLIDAYS = (
     ("2026-12-26", "Zweiter Weihnachtsfeiertag", "2026-12-26"),
 )
 
+#: The one blackout `corpus/pto-and-holidays.md` publishes, and the organisations it says it
+#: applies to (W8, C29). Every employee used to carry it, so the engine enforced the December
+#: window on the twenty of twenty-four employees the corpus explicitly exempts — *"Employees
+#: outside those organisations may take PTO on those dates under the ordinary notice rules."* A
+#: second, June blackout was generated for Manufacturing that the corpus publishes nowhere at all,
+#: so no reader could have been told where it came from; it is gone.
 COMPANY_BLACKOUT = ("2026-12-22", "2026-12-23")
-MANUFACTURING_BLACKOUT = ("2026-06-29", "2026-06-30")
+BLACKOUT_ORGANISATIONS = ("Manufacturing", "Field Service", "Customer Support")
 
 # The two tenure bands, keyed by the corpus/facts.yml (P2) entry each rate is quoted from; both
 # carry unit `days_per_month`. These are the *full-time* rates. A part-time employee accrues in
@@ -478,9 +484,7 @@ def build_pto_balances(rng: random.Random, employees: list[Employee]) -> list[Pt
             # documented answer is exactly 13.5 days remaining at the snapshot.
             carryover, expires_on, unexpired, used, pending = 0.0, None, 0.0, 0.0, 0.0
 
-        blackout = list(COMPANY_BLACKOUT)
-        if employee.department == "Manufacturing":
-            blackout += list(MANUFACTURING_BLACKOUT)
+        blackout = list(COMPANY_BLACKOUT) if employee.department in BLACKOUT_ORGANISATIONS else []
 
         balances.append(
             PtoBalance(

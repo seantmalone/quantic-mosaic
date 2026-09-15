@@ -24,6 +24,7 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hrmosaic.core.db import now_micros
+from hrmosaic.mcpserver import approvers as approver_chain
 from hrmosaic.mcpserver.server import READ_ONLY, ServerDeps, envelope, not_found, read_meta, result
 
 EMPLOYEE_ID = Field(pattern=r"^E1[0-9]{3}$", description="An employee id, e.g. E1042.")
@@ -63,6 +64,9 @@ class ProfileOutput(BaseModel):
     office: Office | None = None
     manager: Person | None = None
     skip_level: Person | None = None
+    #: Who approves this employee's requests, by role, resolved to a person (W8, C06). The answer
+    #: had been writing "your manager" on turns whose own envelope already carried the name.
+    approvers: list[approver_chain.Approver] | None = None
     status: str | None = None
     code: str | None = None
     hint: str | None = None
@@ -146,7 +150,30 @@ def _profile(deps: ServerDeps, *, employee_id: str) -> dict[str, Any]:
         office=Office(**{key: office_row[key] for key in Office.model_fields}) if office_row else None,
         manager=person(deps, org.get("manager_id") or record.get("manager_id")),
         skip_level=person(deps, org.get("skip_level_id")),
+        approvers=approvers_of(deps, employee_id),
     ).model_dump(mode="json", exclude_none=True)
 
 
-__all__ = ["EMPLOYEE_ID", "Office", "Person", "ProfileOutput", "human_tenure", "org_row", "person", "register"]
+def approvers_of(deps: ServerDeps, employee_id: str) -> list[approver_chain.Approver]:
+    """The two roles a profile can answer for on its own: the direct manager and the skip level."""
+    employees = {str(row["employee_id"]): row for row in deps.records("employees")}
+    managers = {str(row["employee_id"]): row.get("manager_id") for row in deps.records("org_manager_map")}
+    for key, value in employees.items():
+        managers.setdefault(key, value.get("manager_id"))
+    resolved = approver_chain.resolve_all(
+        ["Direct manager", "Skip-level"], actor_id=employee_id, employees=employees, managers=managers
+    )
+    return [entry for entry in resolved if entry.employee_id]
+
+
+__all__ = [
+    "EMPLOYEE_ID",
+    "Office",
+    "Person",
+    "ProfileOutput",
+    "approvers_of",
+    "human_tenure",
+    "org_row",
+    "person",
+    "register",
+]

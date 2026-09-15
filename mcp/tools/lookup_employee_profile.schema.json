@@ -18,6 +18,73 @@
   },
   "output_schema": {
     "$defs": {
+      "Approver": {
+        "description": "One approval role and the person who holds it for this reader, when there is one.",
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "employee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Employee Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "self_approval_routed": {
+            "default": false,
+            "title": "Self Approval Routed",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "Approver",
+        "type": "object"
+      },
       "Office": {
         "properties": {
           "office_id": {
@@ -277,6 +344,21 @@
           }
         ],
         "default": null
+      },
+      "approvers": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/Approver"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Approvers"
       },
       "status": {
         "anyOf": [
