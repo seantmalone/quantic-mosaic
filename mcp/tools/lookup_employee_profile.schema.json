@@ -209,6 +209,18 @@
         "default": null,
         "title": "Tenure Months At As Of"
       },
+      "tenure": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tenure"
+      },
       "work_arrangement": {
         "anyOf": [
           {

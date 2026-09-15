@@ -58,6 +58,19 @@ EVIDENCE = (
 #: `approvals_required`, `rules_version` and section chunk ids that exist nowhere else in the prompt.
 TOOL_RESULTS = [
     _ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5, "as_of": "2026-09-01"}'),
+    # Tool 5's record, pinned because of the field UX W5 added to it: `tenure_months_at_as_of` is
+    # the number the rules engine computes with, and `tenure` is the same fact in the words a person
+    # uses. EMPLOYEE CONTEXT renders each envelope verbatim, so the golden is where a reviewer sees
+    # that the human phrasing is what the model is handed — and that the months are still there.
+    _ToolEnvelope(
+        name="lookup_employee_profile",
+        result_json=(
+            '{"employee_id": "E1042", "as_of": "2026-09-01", "preferred_name": "Priya", '
+            '"title": "Senior Robotics Engineer", "department": "Engineering", "hire_date": '
+            '"2022-11-13", "tenure_months_at_as_of": 45, "tenure": "3 years 9 months", '
+            '"work_arrangement": "hybrid", "work_country": "US"}'
+        ),
+    ),
     _ToolEnvelope(
         name="get_policy_section",
         result_json=(
@@ -181,6 +194,15 @@ def test_a_quarantined_envelope_carries_no_citable_id():
     assert '<document doc="security-acceptable-use"' in user, "the evidence itself is still rendered"
     for chunk in citable:
         assert f'id="{chunk.chunk_id}"' in user
+
+
+def test_employee_context_hands_the_model_the_human_tenure_and_keeps_the_months():
+    """UX W5 (owner decision): the answer should be able to say "3 years 9 months" without doing
+    month arithmetic in prose, and the record the rules engine reads must survive alongside it."""
+    _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
+    assert '<tool_result tool="lookup_employee_profile"' in user
+    assert '"tenure": "3 years 9 months"' in user
+    assert '"tenure_months_at_as_of": 45' in user, "the months are the record, and they stay"
 
 
 def test_the_document_envelope_carries_the_whole_chunk_not_the_snippet():

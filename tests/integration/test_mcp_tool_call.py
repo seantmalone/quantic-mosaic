@@ -162,6 +162,9 @@ async def test_lookup_employee_profile_carries_the_org_chain(open_session):
     body = read_both_ways(result)
     assert body["as_of"] == "2026-09-01"
     assert body["tenure_months_at_as_of"] == 45
+    # UX W5 (owner decision): the months are the record the rules engine computes with, and
+    # `tenure` is the same fact in the words the answer can quote without doing the arithmetic.
+    assert body["tenure"] == "3 years 9 months"
     assert body["office"]["city"] == "Boston"
     assert body["manager"]["employee_id"] == "E1007"
     assert body["skip_level"]["employee_id"] == "E1002"

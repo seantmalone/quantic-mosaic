@@ -7,7 +7,11 @@ orchestrator turns it into a clarification turn rather than a repair round-trip.
 
 `tenure_months_at_as_of` is the dataset's own field, computed against the `as_of: 2026-09-01`
 snapshot by the P3 generator — never against the wall clock, which is why a verdict computed months
-from now still matches the demo narration.
+from now still matches the demo narration. `tenure` is the same number in the words a person uses
+("3 years 9 months"), added at the tool boundary (UX W5, owner decision) so that the synthesis
+prompt's EMPLOYEE CONTEXT — which renders each envelope verbatim — has a human phrasing to quote
+instead of doing the arithmetic in the answer. The months field is untouched: the rules engine
+computes against `hire_date` and every existing consumer keeps the value it reads.
 """
 
 from __future__ import annotations
@@ -53,6 +57,7 @@ class ProfileOutput(BaseModel):
     level: str | None = None
     hire_date: str | None = None
     tenure_months_at_as_of: int | None = None
+    tenure: str | None = None
     work_arrangement: str | None = None
     work_country: str | None = None
     office: Office | None = None
@@ -61,6 +66,26 @@ class ProfileOutput(BaseModel):
     status: str | None = None
     code: str | None = None
     hint: str | None = None
+
+
+def human_tenure(months: int | None) -> str | None:
+    """`45` → `"3 years 9 months"`. The months are the record; this is how a person says it.
+
+    Singular where the count is one, and the smaller unit dropped when it is zero — "3 years",
+    never "3 years 0 months". Below a month there is no unit left to name, so it says so in words
+    rather than printing a zero.
+    """
+    if months is None:
+        return None
+    if months <= 0:
+        return "less than a month"
+    years, remainder = divmod(months, 12)
+    parts = []
+    if years:
+        parts.append(f"{years} year{'s' if years != 1 else ''}")
+    if remainder:
+        parts.append(f"{remainder} month{'s' if remainder != 1 else ''}")
+    return " ".join(parts)
 
 
 def person(deps: ServerDeps, employee_id: str | None) -> Person | None:
@@ -115,6 +140,7 @@ def _profile(deps: ServerDeps, *, employee_id: str) -> dict[str, Any]:
         level=record["level"],
         hire_date=record["hire_date"],
         tenure_months_at_as_of=record["tenure_months_at_as_of"],
+        tenure=human_tenure(record["tenure_months_at_as_of"]),
         work_arrangement=record["work_arrangement"],
         work_country=record["work_country"],
         office=Office(**{key: office_row[key] for key in Office.model_fields}) if office_row else None,
@@ -123,4 +149,4 @@ def _profile(deps: ServerDeps, *, employee_id: str) -> dict[str, Any]:
     ).model_dump(mode="json", exclude_none=True)
 
 
-__all__ = ["EMPLOYEE_ID", "Office", "Person", "ProfileOutput", "org_row", "person", "register"]
+__all__ = ["EMPLOYEE_ID", "Office", "Person", "ProfileOutput", "human_tenure", "org_row", "person", "register"]
