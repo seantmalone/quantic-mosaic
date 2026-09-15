@@ -1,7 +1,11 @@
 {% extends "dashboard/_base.html" %}
 {% import "dashboard/_table.html" as t %}
 {% import "dashboard/_filters.html" as f %}
-{# Page 4 — every turn, with page 2's filter bar plus intent and workflow (§11.6). #}
+{# Page 4 — every turn, with page 2's filter bar plus intent and workflow (§11.6).
+
+   The question leads and links to the turn on its session page; both 32-hex ids are chips at the
+   end. Before, 575px of 1238 went to two hex columns and Duration was off-screen entirely
+   (UX W4, `dashboard-readability-11`, `numbers-precision-overflow-10`). #}
 
 {% block filters %}
 {{ f.bar([
@@ -9,35 +13,36 @@
     {'name': 'date_to', 'label': 'To', 'type': 'date'},
     {'name': 'client_label', 'label': 'Client', 'type': 'select',
      'options': ['web', 'api', 'eval', 'demo', 'eval_judge', 'maintenance']},
-    {'name': 'persona', 'label': 'Persona', 'placeholder': 'E1042'},
-    {'name': 'auth_mode', 'label': 'auth_mode', 'type': 'select', 'options': ['cookie', 'bearer', 'open']},
-    {'name': 'actor_role', 'label': 'actor_role', 'type': 'select', 'options': ['employee', 'admin']},
+    {'name': 'persona', 'label': 'Persona', 'placeholder': 'e.g. E1042'},
+    {'name': 'auth_mode', 'label': 'Sign-in', 'type': 'select', 'options': ['cookie', 'bearer', 'open']},
+    {'name': 'actor_role', 'label': 'Role', 'type': 'select', 'options': ['employee', 'admin']},
     {'name': 'outcome', 'label': 'Outcome', 'type': 'select',
      'options': ['answered', 'clarify', 'refused', 'escalated', 'awaiting_confirmation', 'partial',
                  'error', 'configuration_required', 'maintenance']},
-    {'name': 'intent', 'label': 'Intent', 'placeholder': 'workflow'},
-    {'name': 'workflow', 'label': 'Workflow', 'placeholder': 'pto_request'},
+    {'name': 'intent', 'label': 'Intent', 'placeholder': 'e.g. workflow'},
+    {'name': 'workflow', 'label': 'Workflow', 'placeholder': 'e.g. pto_request'},
     {'name': 'has_error', 'label': 'Errors only', 'type': 'checkbox'},
     {'name': 'min_duration_ms', 'label': 'Min duration (ms)', 'type': 'number'},
-    {'name': 'q', 'label': 'Message contains', 'placeholder': 'PTO'}],
+    {'name': 'q', 'label': 'Message contains', 'placeholder': 'e.g. PTO'}],
     filters, '/dashboard/turns') }}
 {% endblock %}
 
 {% block content %}
 {{ t.table('turns-table', [
-    {'label': 'Turn', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'},
-    {'label': 'Session', 'key': 'session_id', 'kind': 'code', 'href_prefix': '/dashboard/sessions/'},
-    {'label': '#', 'key': 'seq', 'kind': 'num'},
     {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
-    {'label': 'Question', 'key': 'user_message'},
+    {'label': 'Question', 'key': 'user_message', 'link_key': 'dashboard_url'},
     {'label': 'Outcome', 'key': 'outcome', 'kind': 'badge'},
+    {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms'},
+    {'label': '#', 'key': 'seq', 'kind': 'num', 'help': 'Where this turn sits in its conversation.'},
     {'label': 'Intent', 'key': 'intent'},
     {'label': 'Workflow', 'key': 'workflow'},
-    {'label': 'Duration', 'key': 'duration_ms', 'kind': 'ms'},
-    {'label': 'LLM', 'key': 'llm_calls', 'kind': 'num'},
+    {'label': 'Model calls', 'key': 'llm_calls', 'kind': 'num'},
     {'label': 'Tools', 'key': 'tool_calls', 'kind': 'num'},
     {'label': 'Retrievals', 'key': 'retrievals', 'kind': 'num'},
-    {'label': 'Guardrail hits', 'key': 'guardrail_hits', 'kind': 'num'}],
+    {'label': 'Guardrail blocks', 'key': 'guardrail_hits', 'kind': 'num',
+     'help': 'Safety checks that did not simply allow the turn. Every check that ran is on the session page.'},
+    {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
+    {'label': 'Session', 'key': 'session_id', 'kind': 'id', 'href_prefix': '/dashboard/sessions/'}],
     view.rows, 'No turn matches these filters.') }}
 {{ t.pager(view.page, view.total, page_size, filter_query) }}
 {% endblock %}

@@ -442,15 +442,22 @@ def _summary(kind: str, name: str, payload: dict[str, Any]) -> str:
             f"catalog_reopened={str(bool(payload.get('catalog_reopened'))).lower()}"
         )
     if kind == "llm_call":
+        # Thousands separators, because the tile above this row on the session page has them and
+        # `13512→648 tok` beside `45,497 → 2,445` is two conventions on one screen (UX W4,
+        # `numbers-precision-overflow-8`). This string is also the `/chat` `trace[]` `summary`.
         return (
             f"purpose={payload.get('purpose')} · "
-            f"{payload.get('prompt_tokens', 0)}→{payload.get('completion_tokens', 0)} tok"
+            f"{payload.get('prompt_tokens', 0):,}→{payload.get('completion_tokens', 0):,} tok"
         )
     if kind == "retrieval":
         chunks = payload.get("chunks") or []
         docs = sorted({chunk.get("doc_id", "") for chunk in chunks})
         top = payload.get("max_dense_score")
-        return f"{len(chunks)} chunks · top dense {top if top is not None else 'n/a'} · {', '.join(docs)}"
+        # Two decimal places: a cosine at four was `0.7612` beside `0.774` on one screen, two
+        # precisions for one quantity (UX W4, `numbers-precision-overflow-4`). The unrounded score
+        # is on the span payload, which is the record.
+        shown = f"{float(top):.2f}" if top is not None else "n/a"
+        return f"{len(chunks)} chunks · top dense {shown} · {', '.join(docs)}"
     if kind == "guardrail":
         return f"verdict={payload.get('verdict')} · {payload.get('reason', '')}"
     if kind == "confirmation":

@@ -1,24 +1,29 @@
 {% extends "dashboard/_base.html" %}
 {% import "dashboard/_table.html" as t %}
 {% import "dashboard/_filters.html" as f %}
-{# Page 10 — the corpus browser: the 14 documents behind every citation. #}
+{# Page 10 — the corpus browser: the 14 documents behind every citation.
+
+   `PAGES 3.8` for a markdown file was a fraction of a unit the document does not have
+   (`numbers-precision-overflow-16`, `dashboard-readability-25`). The index counts words; the page
+   shows the count, and `estimated_pages` stays in Export JSON for whoever wants the estimate. #}
 
 {% block filters %}
 {{ f.bar([
     {'name': 'topic', 'label': 'Topic', 'type': 'select', 'options': view.topics},
     {'name': 'source_format', 'label': 'Format', 'type': 'select', 'options': view.formats},
-    {'name': 'q', 'label': 'Text contains', 'placeholder': 'accrual'}],
+    {'name': 'q', 'label': 'Text contains', 'placeholder': 'e.g. accrual'}],
     filters, '/dashboard/corpus') }}
 {% endblock %}
 
 {% block content %}
 {{ t.table('corpus-documents', [
-    {'label': 'Document', 'key': 'doc_id', 'kind': 'code', 'href_prefix': '/dashboard/corpus/'},
-    {'label': 'Title', 'key': 'doc_title'},
-    {'label': 'Format', 'key': 'source_format', 'kind': 'badge'},
+    {'label': 'Title', 'key': 'doc_title', 'href_prefix': '/dashboard/corpus/', 'link_key': 'doc_id'},
     {'label': 'Topics', 'key': 'topics', 'kind': 'list'},
+    {'label': 'Format', 'key': 'source_format', 'kind': 'badge'},
     {'label': 'Sections', 'key': 'section_count', 'kind': 'num'},
-    {'label': 'Chunks', 'key': 'chunk_count', 'kind': 'num'},
-    {'label': 'Pages', 'key': 'estimated_pages'}],
-    view.documents, 'No document matches these filters (or the index is not built).') }}
+    {'label': 'Passages', 'key': 'chunk_count', 'kind': 'num',
+     'help': 'The indexed passages a citation can point at.'},
+    {'label': 'Words', 'key': 'word_count', 'kind': 'num'},
+    {'label': 'Document', 'key': 'doc_id', 'kind': 'id', 'href_prefix': '/dashboard/corpus/'}],
+    view.documents, 'No document matches these filters — or the policy index has not been built.') }}
 {% endblock %}

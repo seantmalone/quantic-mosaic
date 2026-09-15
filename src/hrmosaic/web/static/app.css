@@ -368,7 +368,7 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 /* than pushing the page sideways.                                                       */
 /* ==================================================================================== */
 
-body.dashboard { font-size: 1.0625rem; background: var(--paper); }
+body.dashboard { font: var(--text-body); background: var(--paper); }
 
 /* The second sticky row lives inside `.app-chrome`, so it is NOT sticky itself. */
 .dash-nav {
@@ -378,31 +378,39 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 }
 .dash-nav-group { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: baseline; min-width: 0; }
 .dash-nav-group-label {
-  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft);
+  font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft);
   margin-right: 0.15rem;
 }
 .dash-nav-link {
-  padding: 0.3rem 0.6rem; border-radius: 6px;
-  font-size: 0.88rem; text-decoration: none; color: var(--ink-soft); white-space: nowrap;
+  padding: 0.3rem 0.6rem; border-radius: var(--radius-tile);
+  font: var(--text-small); text-decoration: none; color: var(--ink-soft); white-space: nowrap;
 }
 .dash-nav-link:hover { background: var(--paper); color: var(--ink); }
+/* `page` on the page itself; `true` on the parent of a detail page, which is lit but is not where
+   the reader is (UX W4, `navigation-and-ia-10`). */
 .dash-nav-link[aria-current="page"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.dash-nav-link[aria-current="true"] { background: var(--sunk); color: var(--ink); font-weight: 600; }
 
 .dash-main { max-width: 96rem; margin: 1.25rem auto 4rem; padding: 0 1.25rem; }
-.crumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--ink-soft); }
+.crumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; font: var(--text-small); color: var(--ink-soft); }
 .crumbs a { color: var(--accent); }
 .dash-head { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; justify-content: space-between; }
-.dash-title { margin: 0 0 0.35rem; font-size: 1.6rem; overflow-wrap: anywhere; }
-.dash-lede { margin: 0 0 1rem; color: var(--ink-soft); }
-.export-json { text-decoration: none; }
+.dash-title { margin: 0 0 0.35rem; font: var(--text-h1); font-size: 1.6rem; overflow-wrap: anywhere; }
+.dash-lede { margin: 0 0 1rem; font: var(--text-body); color: var(--ink-soft); max-width: 60ch; }
+/* Demoted from a bordered button beside the H1 to a text link at the foot of the page
+   (`navigation-and-ia-21`). The href has not changed. */
+.dash-foot { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; align-items: baseline; margin-top: 1.5rem;
+  padding-top: 0.75rem; border-top: 1px solid var(--line); }
+.dash-foot .note { margin: 0; }
+.export-json { font: var(--text-small); }
 
 .panel {
   margin: 0 0 1.25rem; padding: 1rem 1.15rem;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
 }
-.panel h3 { margin: 0 0 0.75rem; font-size: 1.1rem; }
-.panel h4 { margin: 1.25rem 0 0.5rem; font-size: 0.98rem; color: var(--ink-soft); }
-.note { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--ink-soft); }
+.panel h3 { margin: 0 0 0.75rem; font: var(--text-h2); }
+.panel h4 { margin: 1.25rem 0 0.5rem; font: var(--text-h3); color: var(--ink-soft); }
+.note { margin: 0.5rem 0 0; font: var(--text-small); color: var(--ink-soft); max-width: 70ch; }
 .note.local-note { color: var(--warn); }
 .alert { margin: 0.5rem 0; padding: 0.5rem 0.7rem; border-radius: var(--radius-tile); background: var(--danger-soft); color: var(--danger); }
 .muted { color: var(--ink-soft); }
@@ -414,37 +422,117 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
   margin: 0 0 1.25rem; padding: 0.85rem 1rem;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
 }
-.filter-field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: var(--ink-soft); }
+.filter-field { display: flex; flex-direction: column; gap: 0.2rem; font: var(--text-meta); color: var(--ink-soft); }
 .filter-field input, .filter-field select {
-  padding: 0.35rem 0.5rem; font: inherit; font-size: 0.88rem;
-  border: 1px solid var(--line); border-radius: var(--radius-tile); background: var(--card); color: var(--ink);
+  padding: 0.35rem 0.5rem; font: var(--text-small); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-tile); background: var(--card);
 }
 .filter-checkbox { flex-direction: row; align-items: center; gap: 0.4rem; }
 .filter-actions { display: flex; gap: 0.5rem; margin-left: auto; }
 
-/* -- tables -------------------------------------------------------------------------- */
-.table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
-.data-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+/* -- tables (UX W4, plan §3.10 — the rules applied once and inherited by ~20 tables) ---- */
+/* A wide table scrolls inside its own box, and says so: a permanent thin scrollbar *and* an edge
+   shadow that cancels itself at the ends. Turns was 2474px of content in 1398px with no scrollbar,
+   no fade and no hint, so Duration and Estimated cost were simply not there
+   (`numbers-precision-overflow-10`). `tabindex="0"` because a scroll container a mouse can reach
+   and a keyboard cannot is not a scroll container. */
+.table-scroll {
+  overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-tile);
+  scrollbar-width: thin;
+  background:
+    linear-gradient(to right, var(--card) 30%, transparent) left / 2.5rem 100% no-repeat,
+    linear-gradient(to left, var(--card) 30%, transparent) right / 2.5rem 100% no-repeat,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.14), transparent) left / 0.7rem 100% no-repeat,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.14), transparent) right / 0.7rem 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+.table-scroll::-webkit-scrollbar { height: 0.55rem; }
+.table-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+.data-table { border-collapse: collapse; width: 100%; font: var(--text-small); background: var(--card); }
 .data-table th, .data-table td {
   padding: 0.45rem 0.65rem; text-align: left; vertical-align: top;
-  border-bottom: 1px solid var(--line); white-space: nowrap;
+  border-bottom: 1px solid var(--line);
 }
 .data-table thead th {
   position: sticky; top: 0;
-  background: var(--paper); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em;
+  background: var(--paper); font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.03em;
   color: var(--ink-soft);
 }
 .data-table tbody tr:nth-child(even) { background: var(--paper); }
 .data-table tbody tr:hover { background: var(--accent-soft); }
-.cell-num, .cell-ms, .cell-usd, .cell-pct { text-align: right; font-variant-numeric: tabular-nums; }
+/* Table-scoped, so `.data-table td` (0,1,1) cannot go on beating `.cell-num` (0,1,0) and leaving
+   every numeric column left-aligned and ragged (`numbers-precision-overflow-9`). The header carries
+   the same class, so the label sits over its values. */
+.data-table th.cell-num, .data-table td.cell-num,
+.data-table th.cell-ms, .data-table td.cell-ms,
+.data-table th.cell-ms_n, .data-table td.cell-ms_n,
+.data-table th.cell-secs, .data-table td.cell-secs,
+.data-table th.cell-usd, .data-table td.cell-usd,
+.data-table th.cell-pct, .data-table td.cell-pct,
+.data-table th.cell-pct_of, .data-table td.cell-pct_of,
+.data-table th.cell-score, .data-table td.cell-score {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* `white-space: nowrap` on *every* cell is what clipped `TOKENS` to `1,17` and spent 906px of a
+   1946px table on JSON nobody can read (`dashboard-readability-4`). It belongs on the cells whose
+   value is one token, and nowhere else. */
+.data-table td.cell-time, .data-table td.cell-badge, .data-table td.cell-bool, .data-table td.cell-id,
+.data-table th.cell-time, .data-table th.cell-badge, .data-table th.cell-bool, .data-table th.cell-id {
+  white-space: nowrap;
+}
+.data-table td.cell-text, .data-table td.cell-code { max-width: 24rem; overflow-wrap: anywhere; }
 .empty-row td { padding: 1rem; text-align: center; }
 
-.pager { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.75rem; font-size: 0.88rem; }
+/* An id is a chip at the end of the row, not the widest column at the front of it. The full value
+   is in `title=`, the link still carries it, and Export JSON has it unabridged (P15). */
+.id-chip {
+  font-family: var(--mono); font-size: 0.85em;
+  padding: 0.05rem 0.35rem; border-radius: var(--radius-tile);
+  background: var(--sunk); color: var(--ink-soft);
+}
+a .id-chip { color: var(--accent); }
+/* The owner ruled out a glossary page: a term a grader cannot be expected to know carries its
+   definition where it is used (`dashboard-readability-5`). */
+.has-help { border-bottom: 1px dotted var(--ink-soft); cursor: help; }
+/* The raw JSON a one-line human summary replaced, one row below it (`dashboard-readability-19`). */
+.detail-row td { padding: 0 0.65rem 0.5rem; background: var(--card); }
+.row-detail summary { font: var(--text-meta); color: var(--ink-soft); cursor: pointer; }
+.row-detail pre {
+  margin: 0.4rem 0 0; padding: 0.6rem; max-height: 18rem; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--sunk); border-radius: var(--radius-tile);
+}
+
+/* Under 640px a 13-column table is not a table. Each row becomes a card and each cell prints the
+   header it belongs to, from the `data-label` the macro emits on every cell. */
+@media (max-width: 40rem) {
+  .table-scroll { border: 0; background: none; }
+  .data-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .data-table tbody tr {
+    display: block; margin: 0 0 0.6rem; padding: 0.35rem 0.6rem;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-tile);
+  }
+  .data-table tbody tr:nth-child(even) { background: var(--card); }
+  .data-table td, .data-table th.cell-num, .data-table td.cell-num, .data-table td.cell-ms,
+  .data-table td.cell-ms_n, .data-table td.cell-secs, .data-table td.cell-usd, .data-table td.cell-pct,
+  .data-table td.cell-pct_of, .data-table td.cell-score {
+    display: flex; gap: 0.75rem; justify-content: space-between; text-align: right;
+    max-width: none; border-bottom: 0; padding: 0.15rem 0;
+  }
+  .data-table td::before {
+    content: attr(data-label); flex: none; text-align: left;
+    font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft);
+  }
+  .data-table td.cell-text { text-align: left; }
+  .detail-row td::before, .empty-row td::before { content: none; }
+}
+
+.pager { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.75rem; font: var(--text-small); }
 .pager-state { color: var(--ink-soft); margin-right: auto; }
 
 .pill {
   display: inline-block; margin: 0 0.2rem 0.2rem 0; padding: 0.05rem 0.45rem;
-  font-size: 0.76rem; border-radius: 999px;
+  font: var(--text-meta); border-radius: 999px;
   background: var(--paper); border: 1px solid var(--line); color: var(--ink-soft);
 }
 .pill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
@@ -453,34 +541,53 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 .pill-llm_call { background: var(--sunk); color: var(--ink-soft); border-color: transparent; }
 .pill-guardrail, .pill-confirmation, .pill-awaiting_confirmation { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .pill-error, .pill-escalated, .pill-refused { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
-.flag { font-weight: 600; font-size: 0.8rem; }
+/* A write that stopped at the confirmation gate: the designed pause, painted as the safety
+   behaviour it is and never as a failure (`dashboard-readability-13`). */
+.pill-paused { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.flag { font: var(--text-meta); font-weight: 600; }
 .flag-yes { color: var(--accent); }
 .flag-no { color: var(--ink-soft); }
 
 .facts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 0; }
 .facts > div { display: flex; flex-direction: column; }
-.facts dt { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
-.facts dd { margin: 0; font-size: 0.95rem; }
+.facts dt { font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.facts dd { margin: 0; font: var(--text-small); }
 
 /* -- page 1 -------------------------------------------------------------------------- */
 .kpi-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
 .kpi {
   display: flex; flex-direction: column; gap: 0.15rem;
   padding: 0.8rem 0.9rem; background: var(--card);
-  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px;
+  border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius);
 }
-.kpi-value { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.kpi-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); }
+.kpi-value { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi-label { font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); }
+/* The second line a tile needs to be honest: the denominator under a rate, today's figure under a
+   running total, the `n` under a percentile (**P9**, **P14**). */
+.kpi-sub { font: var(--text-meta); color: var(--ink-soft); }
+.kpi-group { margin: 0 0 1.25rem; }
+.kpi-group > h3 {
+  margin: 0 0 0.5rem; font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+.kpi[data-state="warn"] { border-left-color: var(--warn); }
+.kpi[data-state="bad"] { border-left-color: var(--danger); }
+/* Seventeen full-width single-number cards was 1,663px of stacked tiles before any content on a
+   phone (`numbers-precision-overflow-20`). */
+@media (max-width: 40rem) {
+  .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-value { font-size: 1.2rem; }
+}
 
 /* -- page 3, the waterfall ----------------------------------------------------------- */
 .toggle-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-.toggle { display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
+.toggle { display: flex; align-items: center; gap: 0.3rem; font: var(--text-small); }
 .turn-card { border-left: 4px solid var(--accent); }
 .turn-head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
 .turn-head h3 { margin: 0; }
-.turn-duration { margin-left: auto; font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); }
+.turn-duration { margin-left: auto; font-family: var(--mono); font: var(--text-small); color: var(--ink-soft); }
 .turn-question { margin: 0.6rem 0 0.3rem; }
-.turn-answer { margin: 0 0 0.6rem; padding: 0.6rem 0.8rem; background: var(--paper); border-radius: 8px; }
+.turn-answer { margin: 0 0 0.6rem; padding: 0.6rem 0.8rem; background: var(--paper); border-radius: var(--radius); }
 /* The cited chunks of a turn, on the session record. Chat's own citations became the `Sources`
    strip in W2; these are the dashboard's, read at a glance beside a waterfall, and they keep the
    chip shape. Rebuilt on the brand tokens after the chat sweep deleted the ad-hoc rule this
@@ -501,13 +608,13 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 .reader-doc { padding: 1.5rem 1.75rem; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
 .reader-title { margin: 0; font-size: 1.5rem; }
 .reader-meta { margin: 0.25rem 0 1.25rem; color: var(--ink-soft); font-size: 0.85rem; }
-.reader-contents { margin: 0 0 1.5rem; padding: 0.75rem 1rem; background: var(--paper); border-radius: 8px; }
+.reader-contents { margin: 0 0 1.5rem; padding: 0.75rem 1rem; background: var(--paper); border-radius: var(--radius); }
 .reader-contents h3 { margin: 0 0 0.4rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
 .reader-contents ol { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; }
 .reader-section { scroll-margin-top: 5.5rem; }
 .reader-section h3 { margin: 1.4rem 0 0.35rem; font-size: 1rem; color: var(--accent); }
 .reader-section p { margin: 0; }
-.reader-section:target { background: var(--accent-soft); border-radius: 8px; padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
+.reader-section:target { background: var(--accent-soft); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
 
 .policy-library { margin: var(--space-3) 0 0; font: var(--text-small); }
 
@@ -525,11 +632,20 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 .anchor { display: block; visibility: hidden; }
 .anchor, .turn-card, .chunk, [id^="turn-"] { scroll-margin-top: calc(var(--dash-nav-h, 6rem) + 0.75rem); }
 
-.waterfall { list-style: none; margin: 0.75rem 0 0; padding: 0; }
+/* A bar chart with no axis and no total is a picture of nothing: the waterfall now carries a
+   quarter-tick axis and says what the whole turn took (`dashboard-readability-9`). */
+.span-axis {
+  display: grid; align-items: center; gap: 0.5rem;
+  grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem;
+  font: var(--text-meta); color: var(--ink-soft);
+}
+.span-axis-track { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 0.2rem; }
+.span-axis-total { text-align: right; }
+.waterfall { list-style: none; margin: 0.25rem 0 0; padding: 0; }
 .span-row {
   display: grid; align-items: center; gap: 0.5rem;
   grid-template-columns: 2.2rem 7.5rem 14rem minmax(8rem, 1fr) 14rem 5rem;
-  padding: 0.3rem 0; border-top: 1px solid var(--line); font-size: 0.85rem;
+  padding: 0.3rem 0; border-top: 1px solid var(--line); font: var(--text-small);
 }
 .span-row[data-status="error"] .span-name { color: var(--danger); font-weight: 600; }
 .span-seq { color: var(--ink-soft); }
@@ -537,41 +653,77 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 .span-summary { color: var(--ink-soft); overflow-wrap: anywhere; }
 .span-track { display: block; height: 0.6rem; background: var(--paper); border-radius: 999px; }
 .span-bar { display: block; height: 0.6rem; min-width: 2px; background: var(--accent); border-radius: 999px; }
+/* A span with no measurable duration is an instant, and an instant is a tick. A 2px minimum bar in
+   a proportional track reads as a measurement (`numbers-precision-overflow-18`). */
+.span-bar.is-instant { width: 2px !important; min-width: 2px; background: var(--ink-soft); border-radius: 0; }
 .span-duration { text-align: right; color: var(--ink-soft); }
 .span-payload { grid-column: 1 / -1; }
+/* One `result_json` line ran 59,780px wide (`dashboard-readability-8`). The payload filter drops
+   that duplicate; this is what keeps every other long value inside its box. */
 .span-payload pre { max-height: 22rem; overflow: auto; margin: 0.4rem 0 0.6rem; padding: 0.6rem;
-  background: var(--sunk); border-radius: var(--radius-tile); font-size: 0.76rem; }
+  background: var(--sunk); border-radius: var(--radius-tile); font-size: 0.76rem;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 70rem) { .span-row { grid-template-columns: 2rem 6rem 1fr; } .span-track, .span-duration { display: none; } }
 
 /* -- pages 9 and 10 ------------------------------------------------------------------- */
 .tool-list, .chunk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
-.tool-card, .chunk { padding: 0.7rem 0.85rem; background: var(--paper); border-radius: 8px; }
-.tool-card h4 { margin: 0 0 0.25rem; font-size: 0.95rem; color: var(--accent); }
+.tool-card, .chunk { padding: 0.7rem 0.85rem; background: var(--paper); border-radius: var(--radius); }
+.tool-card h4 { margin: 0 0 0.25rem; font: var(--text-h3); color: var(--accent); }
 .tool-card p, .chunk-text { margin: 0.25rem 0; }
-.tool-card pre, .chunk-text { overflow: auto; }
-.chunk-head { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; font-size: 0.8rem; }
-.chunk-path { color: var(--ink-soft); }
+.tool-card pre, .chunk-text { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chunk-head { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; font: var(--text-meta); }
+/* The heading path is the chunk's name; the id is a chip beside it, not the section heading a
+   4,887px dump was organised by (`dashboard-readability-24`). */
+.chunk-path { font: var(--text-small); font-weight: 600; color: var(--ink); }
+.chunk-offsets { color: var(--ink-soft); }
+.chunk-contents { margin: 0 0 0.75rem; padding: 0.7rem 0.9rem; background: var(--paper); border-radius: var(--radius-tile); }
+.chunk-contents h4 { margin: 0 0 0.35rem; }
+.chunk-contents ol { margin: 0; padding-left: 1.2rem; font: var(--text-small); }
+.chunk > summary { cursor: pointer; }
 .full-text { max-height: 34rem; overflow: auto; padding: 0.8rem; background: var(--paper);
-  border-radius: 8px; font-size: 0.82rem; white-space: pre-wrap; }
+  border-radius: var(--radius); font-size: 0.82rem; white-space: pre-wrap; }
 
 /* -- page 11 --------------------------------------------------------------------------- */
 .tabs { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; }
 .tab {
-  padding: 0.4rem 0.9rem; font: inherit; font-size: 0.9rem; cursor: pointer;
+  padding: 0.4rem 0.9rem; font: var(--text-small); cursor: pointer;
   background: var(--card); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-soft);
 }
 .tab.is-current { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .metric-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; margin: 1rem 0; }
-.metric { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.8rem;
-  background: var(--paper); border-radius: 8px; }
-.metric-value { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-.metric-label { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-soft); }
-.not-judged { font-size: 0.82rem; font-style: italic; font-weight: 400; color: var(--warn); }
+/* `min-width: 0` is the whole of the 1280px overflow: a grid item's default `min-width: auto`
+   refuses to shrink below its content, so `0.9839181286549706` pushed twelve tiles across their
+   own borders (`numbers-precision-overflow-1`). Rounding fixed the cause; this fixes the class. */
+.metric { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.8rem; min-width: 0;
+  background: var(--paper); border-radius: var(--radius-tile); }
+.metric-value { font-size: 1.3rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* Not monospace: these are English labels now, not field names (`jargon-and-exposure-18`). */
+.metric-label { font: var(--text-meta); color: var(--ink-soft); }
+/* The verdict a run page never had: how many items passed, and how that compares with the previous
+   run of the same variant (`dashboard-readability-21`). */
+.verdict { margin: 0 0 1rem; padding: 0.8rem 1rem; background: var(--accent-soft); border-radius: var(--radius-tile); }
+.verdict-line { margin: 0; font-size: 1.15rem; font-weight: 650; }
+.verdict-delta { margin: 0.25rem 0 0; font: var(--text-small); color: var(--ink-soft); }
+.not-judged { font: var(--text-meta); font-style: italic; color: var(--warn); }
 .control-form { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; margin-top: 1rem;
-  padding: 0.85rem 1rem; background: var(--paper); border-radius: 8px; }
-.control-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: var(--ink-soft); }
-.control-form input, .control-form select { padding: 0.35rem 0.5rem; font: inherit; font-size: 0.88rem;
-  border: 1px solid var(--line); border-radius: 6px; }
+  padding: 0.85rem 1rem; background: var(--paper); border-radius: var(--radius); }
+.control-form label { display: flex; flex-direction: column; gap: 0.2rem; font: var(--text-meta); color: var(--ink-soft); }
+.control-form input, .control-form select { padding: 0.35rem 0.5rem; font: var(--text-small);
+  border: 1px solid var(--line); border-radius: var(--radius-tile); }
 .button-danger { background: var(--danger); border-color: var(--danger); color: var(--on-accent); }
+/* Demoted from solid red and moved below the table it destroys (`dashboard-readability-23`). */
+.sandbox-reset { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; margin-top: 0.9rem; }
+.sandbox-reset .note { margin: 0; }
+.sandbox-reset button { color: var(--danger); border-color: var(--danger); background: var(--card); }
+.sandbox-reset button[disabled] { color: var(--ink-soft); border-color: var(--line); cursor: not-allowed; }
 .trace-link { color: var(--accent); }
 canvas { max-width: 100%; margin: 0.5rem 0 1rem; }
+
+/* The session page renders the answer from `answer_blocks` — the typed sections the turn stored —
+   rather than flattening them into one paragraph with `- ` markers inline
+   (UX W4, `dashboard-readability-18`). The label names the section; the chat surface has its own,
+   friendlier names for the same types. */
+.answer-block-label {
+  display: block; font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}

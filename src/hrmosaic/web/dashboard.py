@@ -30,7 +30,7 @@ import logging
 import math
 import statistics
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -93,14 +93,14 @@ NAV: tuple[tuple[str, tuple[tuple[int, str, str], ...]], ...] = (
     (
         "Under the hood",
         (
-            (5, "LLM calls", "/dashboard/llm"),
+            (5, "Model calls", "/dashboard/llm"),
             (6, "Retrieval", "/dashboard/retrieval"),
             (7, "Tools", "/dashboard/tools"),
-            (9, "MCP", "/dashboard/mcp"),
+            (9, "Tool server", "/dashboard/mcp"),
         ),
     ),
-    ("Quality", ((8, "Safety", "/dashboard/safety"), (11, "Evaluations", "/dashboard/evals"))),
-    ("Reference", ((10, "Corpus", "/dashboard/corpus"),)),
+    ("Quality", ((8, "Guardrails", "/dashboard/safety"), (11, "Evaluations", "/dashboard/evals"))),
+    ("Reference", ((10, "Policy library", "/dashboard/corpus"),)),
 )
 
 #: Which nav entry a page highlights when it is not an entry itself: session detail is opened from
@@ -135,10 +135,92 @@ HEADLINE_METRICS = (
 
 TEMPLATES = api.TEMPLATES
 
+#: The audience is the technical grader (UX owner decision, 2026-09-14): the technical noun stays
+#: primary and the **key** never moves — `data-metric`, `data-col` and every `/api/*` field are
+#: exactly what they were (P15) — but the *label* is English. `GROUNDEDNESS_MEAN` as a tile caption
+#: pushed two of eight metric columns off a desktop viewport and told a reader nothing
+#: (`jargon-and-exposure-18`, `dashboard-readability-6`).
+METRIC_LABELS: dict[str, str] = {
+    "groundedness_mean": "Groundedness",
+    "citation_accuracy_mean": "Citation accuracy",
+    "cit_resolve_mean": "Citations that resolve",
+    "blocks_dropped_by_g2": "Blocks dropped by citation check",
+    "tool_selection_accuracy": "Tool selection accuracy",
+    "arg_correctness_rate": "Argument correctness",
+    "partial_match_mean": "Partial match",
+    "strict_pass_rate": "Strict pass rate",
+    "clarification_accuracy": "Clarification accuracy",
+    "over_refusal_rate": "Over-refusal rate",
+    "missed_refusal_rate": "Missed-refusal rate",
+    "action_safety_pass_rate": "Action-safety pass rate",
+    "recommendation_labeled_rate": "Recommendations labelled",
+    "catalog_reopened_rate": "Tool catalog reopened",
+    "judge_agreement_rate": "Judge agreement",
+}
+
+#: Which of those are 0–1 proportions, and therefore render as percentages. The rest are counts.
+#: One rate unit per page and per concept (**P10**): a metric used to read `1.0` on one page and
+#: `50.0%` one click away (`numbers-precision-overflow-2`). The **stored** value stays 0–1 in
+#: `/api/*`, in Export JSON and in the Chart.js series — page, export and chart agree.
+RATE_METRICS: frozenset[str] = frozenset(
+    {
+        "groundedness_mean",
+        "citation_accuracy_mean",
+        "cit_resolve_mean",
+        "tool_selection_accuracy",
+        "arg_correctness_rate",
+        "partial_match_mean",
+        "strict_pass_rate",
+        "clarification_accuracy",
+        "over_refusal_rate",
+        "missed_refusal_rate",
+        "action_safety_pass_rate",
+        "recommendation_labeled_rate",
+        "catalog_reopened_rate",
+        "judge_agreement_rate",
+    }
+)
+
+#: `G1`–`G6` with what each one does. `agent/guardrails/__init__.py` owns the identifier→name
+#: pairing that the span carries; this is the *display* half, and the chart's category labels come
+#: from it so the axis is not six bare letters (`dashboard-readability-17`).
+RULE_LABELS: dict[str, str] = {
+    "G1": "Evidence gate",
+    "G2": "Citation resolvability",
+    "G3": "Fact vs recommendation",
+    "G4": "Injection shield",
+    "G5": "Sensitive escalation",
+    "G6": "Redaction sweep",
+}
+
+#: A span kind as the page says it. The toggle row on page 3 used to be raw kinds
+#: (`jargon-and-exposure-20`); the `value` of each toggle is still the kind, because that is what
+#: `data-kind` filters on.
+SPAN_KIND_LABELS: dict[str, str] = {
+    "mcp_discovery": "Tool-server handshake",
+    "plan": "Plan",
+    "llm_call": "Model call",
+    "retrieval": "Retrieval",
+    "tool_call": "Tool call",
+    "guardrail": "Safety check",
+    "confirmation": "Confirmation",
+    "judge": "Judge",
+    "error": "Error",
+}
+
 
 # --------------------------------------------------------------------------------------
 # Jinja filters — the display vocabulary the eleven pages share
 # --------------------------------------------------------------------------------------
+
+
+#: **P14** — below this many samples a rate is shown with its denominator ("11.1% (1 of 9 turns)")
+#: rather than alone, because a percentage of nine is a percentage a reader will over-trust.
+SMALL_SAMPLE = 20
+
+#: **P14** — below this many samples a percentile is not a number at all: `n=3` says what the
+#: figure would have been computed from, which is the only honest thing to print.
+SMALL_PERCENTILE = 5
 
 
 def _f_ts(value: Any) -> str:
@@ -152,6 +234,12 @@ def _f_ts(value: Any) -> str:
 
 
 def _f_ms(value: Any) -> str:
+    """A duration in the largest unit that still says something — and never a truncated zero.
+
+    `spans.duration_ms` is whole milliseconds, so a sub-millisecond step stores `0`. Printing that
+    as *"0 ms"* claimed the work took no time at all on 16 of 28 waterfall rows, every model call
+    and every handshake (`numbers-precision-overflow-5`); `<1 ms` is what the record supports.
+    """
     if value is None:
         return "—"
     try:
@@ -162,14 +250,34 @@ def _f_ms(value: Any) -> str:
         return f"{milliseconds / 60_000:.1f} min"
     if milliseconds >= 1_000:
         return f"{milliseconds / 1_000:.2f} s"
+    if milliseconds < 1:
+        return "<1 ms"
     return f"{milliseconds:.0f} ms"
 
 
-def _f_num(value: Any) -> str:
+def _f_secs(value: Any) -> str:
+    """Seconds, through the one duration formatter — `569.4` was a number a reader had to divide."""
     if value is None:
         return "—"
+    try:
+        return _f_ms(float(value) * 1_000)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _f_num(value: Any) -> str:
+    """Counts with thousands separators; a float at a **fixed** two places.
+
+    The old `rstrip("0").rstrip(".")` gave every float column a ragged right edge — `1`, `0.75`,
+    `0.9839` one under the other — which is the alignment defect `numbers-precision-overflow-9`
+    reports, arriving from the formatter rather than from the CSS.
+    """
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
     if isinstance(value, float):
-        return f"{value:,.3f}".rstrip("0").rstrip(".")
+        return f"{value:,.2f}"
     try:
         return f"{int(value):,}"
     except (TypeError, ValueError):
@@ -177,17 +285,122 @@ def _f_num(value: Any) -> str:
 
 
 def _f_pct(value: Any) -> str:
+    """A 0–1 proportion as a percentage, one decimal place. The one rate convention on the pages."""
     return "—" if value is None else f"{float(value) * 100:.1f}%"
 
 
+def _f_rate(value: Any, n: Any = None, unit: str = "") -> str:
+    """**P14**: the same percentage, carrying its denominator while the sample is small.
+
+    `50.0%` from one of two calls and `11.1%` from one of nine turns are not percentages a reader
+    should read as rates, and the page is the only place that can say so — the JSON keeps the bare
+    float either way (P15).
+    """
+    if value is None:
+        return "—"
+    shown = _f_pct(value)
+    try:
+        sample = int(n)
+    except (TypeError, ValueError):
+        return shown
+    if sample <= 0 or sample >= SMALL_SAMPLE:
+        return shown
+    numerator = round(float(value) * sample)
+    tail = f"{sample:,} {_f_plural(sample, unit)}" if unit else f"{sample:,}"
+    return f"{shown} ({numerator:,} of {tail})"
+
+
+def _f_ms_n(value: Any, n: Any = None) -> str:
+    """**P14**: a percentile over fewer than five samples prints its `n`, not a figure."""
+    try:
+        sample = int(n)
+    except (TypeError, ValueError):
+        sample = None
+    if sample is not None and sample < SMALL_PERCENTILE:
+        return f"n={sample}"
+    return _f_ms(value)
+
+
+def _f_score(value: Any) -> str:
+    """A similarity score at two places — the precision the 0–1 scale actually carries."""
+    return "—" if value is None else f"{float(value):.2f}"
+
+
 def _f_usd(value: Any) -> str:
-    """Always presented as an estimate (§9.8) — the label lives beside it on every page."""
-    return "—" if value is None else f"${float(value):,.4f}"
+    """Money at two decimal places, with an exact-zero branch and a band below the cent.
+
+    Always an estimate (§9.8) — the label lives beside it on every page. Four decimal places made
+    three adjacent `$0.0000` tiles the loudest thing on the landing page and said nothing at all
+    (`numbers-precision-overflow-6`).
+    """
+    if value is None:
+        return "—"
+    amount = float(value)
+    if amount == 0:
+        return "$0.00"
+    if 0 < amount < 0.005:
+        return "<$0.01"
+    return f"${amount:,.2f}"
 
 
 def _f_orna(value: Any) -> str:
-    """A metric that was not computed reads as an em dash, never as a fabricated zero."""
-    return "—" if value is None else str(value)
+    """A metric that was not computed reads as an em dash, never as a fabricated zero.
+
+    A float that *was* computed goes through `_f_num`, so an "or n/a" cell cannot be the one place
+    a raw `0.9839181286549706` survives (P10: one formatter path per concept).
+    """
+    if value is None:
+        return "—"
+    return _f_num(value) if isinstance(value, float) else str(value)
+
+
+def _f_plural(count: Any, singular: str, plural: str | None = None) -> str:
+    """**P9**: the noun agrees with the count, so no page renders `row(s)`."""
+    try:
+        number = int(count)
+    except (TypeError, ValueError):
+        return singular
+    return singular if abs(number) == 1 else (plural or f"{singular}s")
+
+
+def _f_counted(count: Any, singular: str, plural: str | None = None) -> str:
+    """`1 row` / `9 rows` — the count and the noun it agrees with, formatted once."""
+    return f"{_f_num(count)} {_f_plural(count, singular, plural)}"
+
+
+def _f_metric_label(key: Any) -> str:
+    """A stored metric name as a person reads it (`GROUNDEDNESS_MEAN` → *Groundedness*).
+
+    The **key** never changes: it is the JSON field, the `data-metric` hook and the column the
+    contract tests select on. Only the label does (P15 — relocated, never destroyed).
+    """
+    name = str(key)
+    return METRIC_LABELS.get(name, name.replace("_", " ").capitalize())
+
+
+def _f_kind_label(kind: Any) -> str:
+    """A span kind as a person reads it — the chip row used to be raw `llm_call` / `mcp_discovery`."""
+    name = str(kind)
+    return SPAN_KIND_LABELS.get(name, name.replace("_", " ").capitalize())
+
+
+def _f_rule_label(rule_id: Any) -> str:
+    """`G1` → *G1 Evidence gate*: the identifier a grader greps for, plus what it does."""
+    name = str(rule_id)
+    return f"{name} {RULE_LABELS[name]}" if name in RULE_LABELS else name
+
+
+def _f_payload_pretty(value: Any) -> str:
+    """A span payload, pretty-printed, minus the field that is a copy of another field.
+
+    `result_json` is a double-encoded duplicate of `structured_content`: one 8 KB line that blew a
+    payload block to 59,780px of horizontal scroll (`dashboard-readability-8`). It is dropped from
+    the *rendering* only where the structured copy is present — `/api/*` and Export JSON still
+    carry both, because the record is never destroyed (P15).
+    """
+    if isinstance(value, dict) and value.get("structured_content") is not None and "result_json" in value:
+        value = {key: item for key, item in value.items() if key != "result_json"}
+    return _f_pretty(value)
 
 
 def _f_compact(value: Any, limit: int = 60) -> str:
@@ -220,18 +433,33 @@ def _f_span_summary(span: dict[str, Any]) -> str:
     return summarise_span(span.get("kind", ""), span.get("name", ""), span.get("payload") or {})
 
 
-for _name, _filter in (
+#: Every display vocabulary the dashboard has, and the whole of it: **P10** is that a numeric or
+#: temporal expression in a dashboard template goes through one of these and through nothing else
+#: (`tests/contract/test_formatter_coverage.py` greps the templates for a bare one).
+DASHBOARD_FILTERS = (
     ("ts", _f_ts),
     ("ms", _f_ms),
+    ("ms_n", _f_ms_n),
+    ("secs", _f_secs),
     ("num", _f_num),
     ("pct", _f_pct),
+    ("rate", _f_rate),
+    ("score", _f_score),
     ("usd", _f_usd),
     ("orna", _f_orna),
+    ("plural", _f_plural),
+    ("counted", _f_counted),
+    ("metric_label", _f_metric_label),
+    ("kind_label", _f_kind_label),
+    ("rule_label", _f_rule_label),
     ("compact", _f_compact),
     ("pretty", _f_pretty),
+    ("payload_pretty", _f_payload_pretty),
     ("clamp", _f_clamp),
     ("span_summary", _f_span_summary),
-):
+)
+
+for _name, _filter in DASHBOARD_FILTERS:
     TEMPLATES.env.filters[_name] = _filter
 
 
@@ -446,6 +674,13 @@ class OverviewKpis(_View):
     escalations: int
     pending_confirmations: int
     error_rate: float
+    #: The numerator of `error_rate` and the sample it was taken over, so the tile can show
+    #: "11.1% (1 of 9 turns)" while the sample is small (**P14**) and so the figure and the count
+    #: beside it provably come from one query (**P9**). Additive: no field was removed (P15).
+    error_turns: int
+    #: How many turns had a recorded duration — the sample behind `p50_ms` / `p95_ms`. A percentile
+    #: over fewer than five of them prints `n=` and not a number (**P14**).
+    duration_n: int
     p50_ms: float | None
     p95_ms: float | None
     tokens_in: int
@@ -463,6 +698,10 @@ class HourBucket(_View):
 
 
 class OverviewHealth(_View):
+    #: Which model provider answered, and which model. Without it every cost tile reading `$0.00`
+    #: looks like a broken meter rather than a recorded-script run (`dashboard-readability-14`).
+    llm_provider: str
+    llm_model: str
     mcp_up: bool
     tool_count: int
     doc_count: int
@@ -563,6 +802,8 @@ class SessionDetailView(_View):
 class TurnRow(_View):
     turn_id: str
     session_id: str
+    #: Where the row's question links: the turn on its session page, not the raw `/api/*` body.
+    dashboard_url: str
     seq: int
     started_at: int
     user_message: str
@@ -651,7 +892,18 @@ class RetrievalView(_View):
 class ToolRollup(_View):
     tool_name: str
     calls: int
+    #: `calls` again, under the name the rate's denominator is read by (**P14**). Kept as its own
+    #: field so the page never has to know which column happens to be the sample.
+    sample_n: int
+    #: The numerator of `error_rate`, so the two provably agree (**P9**).
+    errors: int
+    #: A tool call that stopped at the confirmation gate is **not** an error: it is the flagship
+    #: safety behaviour working. Counting it as one reported `create_mock_hr_ticket` at a 50.0%
+    #: error rate (`dashboard-readability-13`). It has its own column now, and its own count.
+    confirmation_pauses: int
     error_rate: float
+    #: How many of those calls carried a duration — the sample behind `p50_ms` / `p95_ms`.
+    duration_n: int
     p50_ms: float | None
     p95_ms: float | None
     last_called_at: int | None
@@ -662,8 +914,21 @@ class ToolCallRow(_View):
     turn_id: str
     tool_name: str
     arguments: dict[str, Any]
+    #: The same arguments as one line a person can scan. Twelve rows used to read identically —
+    #: `{"hits": [{"chunk_` — because the cell was JSON truncated mid-token
+    #: (`dashboard-readability-19`). The dict above is untouched and is what the row's disclosure
+    #: and Export JSON show (P15).
+    arguments_summary: str
     result_preview: str
+    #: The same for what came back: how many hits, from which documents, or what went wrong.
+    result_summary: str
     is_error: bool
+    #: `is_error` **and** the confirmation gate's own code: a write that stopped for a human is the
+    #: safety design working, and page 7 says so rather than counting it as a failure.
+    paused_for_confirmation: bool
+    #: The three states the two booleans above describe, as the one word the row's pill shows:
+    #: `ok`, `paused`, `error`. A classification, not a number — the figures stay unformatted.
+    outcome_label: Literal["ok", "paused", "error"]
     error_code: str | None
     duration_ms: int | None
     actor_employee_id: str | None
@@ -743,6 +1008,10 @@ class CorpusDocument(_View):
     topics: list[str]
     section_count: int
     chunk_count: int
+    #: What the index counted. `estimated_pages` is derived from it and is a fraction — "PAGES 3.8"
+    #: for a markdown file with no pages at all (`numbers-precision-overflow-16`) — so the page
+    #: shows the count and keeps the estimate in the JSON.
+    word_count: int
     estimated_pages: float
 
 
@@ -884,9 +1153,28 @@ class RssPoint(_View):
     rss_mb: float
 
 
+class RunVerdict(_View):
+    """The sentence a run page never had: how many items passed, and against what (`dashboard-readability-21`).
+
+    Counted from the scored items of this very run — the same rows the Items tab lists — so the
+    headline and the table cannot disagree (**P9**). The delta is against the previous run of the
+    *same variant*, because a baseline and an ablation arm are not comparable numbers.
+    """
+
+    items_scored: int
+    items_passed: int
+    pass_rate: float | None
+    #: How many items each category contributes — the dataset legend the page had no room to state.
+    by_category: dict[str, int]
+    previous_run_id: str | None = None
+    previous_created_at: int | None = None
+    previous_pass_rate: float | None = None
+
+
 class EvalRunDetailView(_View):
     run: EvalRunRow
     metrics: EvalMetrics
+    verdict: RunVerdict
     items: list[EvalItemRow]
     latency: LatencyBlock
     rss_series: list[RssPoint]
@@ -1055,6 +1343,8 @@ async def build_overview(request: Request) -> OverviewView:
         escalations=_scalar(store, "SELECT COUNT(*) AS n FROM turns WHERE outcome = 'escalated'"),
         pending_confirmations=_scalar(store, "SELECT COUNT(*) AS n FROM turns WHERE outcome = 'awaiting_confirmation'"),
         error_rate=round(errors / turns, 4) if turns else 0.0,
+        error_turns=errors,
+        duration_n=sum(1 for duration in durations if duration is not None),
         p50_ms=percentile(durations, 0.50),
         p95_ms=percentile(durations, 0.95),
         tokens_in=int(tokens.get("tin") or 0),
@@ -1072,6 +1362,8 @@ async def build_overview(request: Request) -> OverviewView:
         turns_per_hour=_turns_per_hour(store),
         latest_sessions=_session_rows(store, Filters(), limit=10),
         health=OverviewHealth(
+            llm_provider=str(health["llm"]["agent"]["provider"]),
+            llm_model=str(health["llm"]["agent"]["model"]),
             mcp_up=bool(health["mcp"]["connected"]),
             tool_count=int(health["mcp"]["tool_count"]),
             doc_count=int(index.get("doc_count") or 0),
@@ -1254,6 +1546,7 @@ def build_turns(request: Request, filters: Filters) -> TurnsView:
             TurnRow(
                 turn_id=row["id"],
                 session_id=row["session_id"],
+                dashboard_url=f"/dashboard/sessions/{row['session_id']}#turn-{row['seq']}",
                 seq=int(row["seq"]),
                 started_at=int(row["started_at"]),
                 user_message=row["user_message"],
@@ -1416,6 +1709,77 @@ def build_retrieval(request: Request, filters: Filters) -> RetrievalView:
 #: `NOT NULL` (§10.1), so this matches the Python fallback `recent` uses and can never group on NULL.
 TOOL_NAME_SQL = "COALESCE(json_extract(payload_json, '$.tool_name'), name, 'unknown')"
 
+#: The confirmation gate refuses an unconfirmed write with this code (§8.6), and the span records
+#: it as an error because that is what the tool server returned. It is the designed pause, not a
+#: failure, and page 7 counts and labels it as one (`dashboard-readability-13`).
+CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
+IS_A_PAUSE = f"json_extract(payload_json, '$.error_code') = '{CONFIRMATION_REQUIRED}'"
+NOT_A_PAUSE = f"COALESCE(json_extract(payload_json, '$.error_code'), '') <> '{CONFIRMATION_REQUIRED}'"
+
+
+#: How much of a one-line summary a table cell is given before it is elided.
+SUMMARY_CHARS = 90
+
+
+def summarise_arguments(arguments: Mapping[str, Any]) -> str:
+    """The arguments a tool was called with, as one scannable line.
+
+    `employee_id=E1042 · query="paid time off accrual"` rather than 906px of pretty-printed JSON
+    clipped mid-token (`dashboard-readability-19`). The dict itself is on the row's disclosure and
+    in `/api/*`, unchanged: this is a *summary*, and the record is never destroyed (P15).
+    """
+    if not arguments:
+        return "no arguments"
+    parts = []
+    for key, value in arguments.items():
+        if isinstance(value, str):
+            rendered = f'"{value}"' if len(value) <= 40 else f'"{value[:39]}…"'
+        elif isinstance(value, bool):
+            rendered = "yes" if value else "no"
+        elif isinstance(value, (int, float)):
+            rendered = _f_num(value)
+        elif isinstance(value, (list, tuple)):
+            rendered = _f_counted(len(value), "value")
+        else:
+            rendered = _f_compact(value, 30)
+        parts.append(f"{key}={rendered}")
+    return _f_compact(" · ".join(parts), SUMMARY_CHARS)
+
+
+def summarise_result(structured: Any, result_json: Any, *, error_code: str | None = None) -> str:
+    """What came back, as one scannable line.
+
+    A retrieval-shaped result says how much it found and where from; a write says what it made; a
+    refusal says which refusal. Anything unrecognised falls back to a capped preview, because a
+    summary that guesses is worse than the value itself.
+    """
+    if error_code == CONFIRMATION_REQUIRED:
+        return "paused for confirmation"
+    if error_code:
+        return f"refused · {error_code}"
+    payload = structured
+    if payload is None and isinstance(result_json, str) and result_json:
+        try:
+            payload = json.loads(result_json)
+        except ValueError:
+            return _f_compact(result_json, SUMMARY_CHARS)
+    if isinstance(payload, dict):
+        hits = payload.get("hits")
+        if isinstance(hits, list):
+            documents = sorted({str(hit.get("doc_id")) for hit in hits if isinstance(hit, dict) and hit.get("doc_id")})
+            found = _f_counted(len(hits), "hit")
+            return _f_compact(f"{found} · {', '.join(documents)}" if documents else found, SUMMARY_CHARS)
+        scalars = [
+            f"{key}={_f_num(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else value}"
+            for key, value in payload.items()
+            if isinstance(value, (str, int, float, bool))
+        ]
+        if scalars:
+            return _f_compact(" · ".join(scalars), SUMMARY_CHARS)
+    if payload is None:
+        return "—"
+    return _f_compact(payload, SUMMARY_CHARS)
+
 
 def build_tools(request: Request, filters: Filters) -> ToolsView:
     store = _store(request)
@@ -1425,7 +1789,10 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
         where += " AND json_extract(payload_json, '$.tool_name') = ?"
         params.append(filters.tool)
     if filters.errors_only:
-        where += " AND json_extract(payload_json, '$.is_error') = 1"
+        # A call that stopped at the confirmation gate answers `is_error` — the MCP server refuses
+        # an unconfirmed write (§8.6) — but it is the gate working, not a failure, so "Errors only"
+        # does not list it and the rate below does not count it (`dashboard-readability-13`).
+        where += f" AND json_extract(payload_json, '$.is_error') = 1 AND {NOT_A_PAUSE}"
 
     # The rollup is a SQL aggregate, not a Python loop over every row: a `tool_call` payload runs
     # to 32 KB (§10.5) and the store holds `TRACE_RETENTION_SESSIONS` sessions' worth of them, so
@@ -1433,7 +1800,8 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
     # Every sibling builder (`build_llm`, `build_retrieval`, `build_safety`) is bounded; so is this.
     rollups = store.execute(
         f"SELECT {TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls, "
-        "SUM(CASE WHEN json_extract(payload_json, '$.is_error') = 1 THEN 1 ELSE 0 END) AS errors, "
+        f"SUM(CASE WHEN json_extract(payload_json, '$.is_error') = 1 AND {NOT_A_PAUSE} THEN 1 ELSE 0 END) AS errors, "
+        f"SUM(CASE WHEN {IS_A_PAUSE} THEN 1 ELSE 0 END) AS pauses, "
         "MAX(started_at) AS last_called_at "
         f"FROM spans WHERE kind = 'tool_call'{where} "
         "GROUP BY tool_name ORDER BY calls DESC, tool_name",
@@ -1466,8 +1834,20 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
             turn_id=span["turn_id"],
             tool_name=span["payload"].get("tool_name") or span.get("name") or "unknown",
             arguments=span["payload"].get("arguments") or {},
+            arguments_summary=summarise_arguments(span["payload"].get("arguments") or {}),
             result_preview=preview_value(span["payload"].get("result_json") or ""),
+            result_summary=summarise_result(
+                span["payload"].get("structured_content"),
+                span["payload"].get("result_json"),
+                error_code=span["payload"].get("error_code"),
+            ),
             is_error=bool(span["payload"].get("is_error")),
+            paused_for_confirmation=span["payload"].get("error_code") == CONFIRMATION_REQUIRED,
+            outcome_label=(
+                "paused"
+                if span["payload"].get("error_code") == CONFIRMATION_REQUIRED
+                else ("error" if span["payload"].get("is_error") else "ok")
+            ),
             error_code=span["payload"].get("error_code"),
             duration_ms=span["duration_ms"],
             actor_employee_id=span["payload"].get("actor_employee_id"),
@@ -1478,7 +1858,11 @@ def build_tools(request: Request, filters: Filters) -> ToolsView:
         ToolRollup(
             tool_name=row["tool_name"],
             calls=int(row["calls"]),
+            sample_n=int(row["calls"]),
+            errors=int(row["errors"] or 0),
+            confirmation_pauses=int(row["pauses"] or 0),
             error_rate=round(int(row["errors"] or 0) / int(row["calls"]), 4) if row["calls"] else 0.0,
+            duration_n=len(durations[row["tool_name"]]),
             p50_ms=percentile(durations[row["tool_name"]], 0.50),
             p95_ms=percentile(durations[row["tool_name"]], 0.95),
             last_called_at=int(row["last_called_at"]) if row["last_called_at"] is not None else None,
@@ -1690,6 +2074,7 @@ def build_corpus(filters: Filters) -> CorpusView:
                 topics=list(document.topics),
                 section_count=document.section_count,
                 chunk_count=document.chunk_count,
+                word_count=document.word_count,
                 estimated_pages=document.estimated_pages,
             )
             for document in selected
@@ -1715,6 +2100,7 @@ def build_corpus_document(doc_id: str) -> CorpusDocumentView:
             topics=list(document.topics),
             section_count=document.section_count,
             chunk_count=document.chunk_count,
+            word_count=document.word_count,
             estimated_pages=document.estimated_pages,
             effective_date=document.effective_date,
             version=document.version,
@@ -1901,9 +2287,44 @@ def build_eval_run_detail(request: Request, run_id: str, filters: Filters) -> Ev
     return EvalRunDetailView(
         run=_run_row(run),
         metrics=EvalMetrics.model_validate(json.loads(run["metrics_json"] or "{}")),
+        verdict=_verdict(store, run, rows),
         items=items,
         latency=_latency_block(store, rows),
         rss_series=_rss_series(store, rows),
+    )
+
+
+def _scored_pass_rate(rows: Iterable[Mapping[str, Any]]) -> tuple[int, int]:
+    """`(passed, scored)` over the rows of one run — the cold probe and any unscored phase excluded."""
+    scored = [row for row in rows if (row["run_phase"] or "scored") == "scored"]
+    return sum(1 for row in scored if row["passed"]), len(scored)
+
+
+def _verdict(store: Store, run: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]) -> RunVerdict:
+    """The pass line, the dataset legend, and the delta against the previous run of this variant."""
+    passed, scored = _scored_pass_rate(rows)
+    categories: Counter[str] = Counter(
+        row["category"] for row in rows if (row["run_phase"] or "scored") == "scored" and row["category"]
+    )
+    previous = store.execute(
+        "SELECT id, created_at FROM eval_runs WHERE variant = ? AND created_at < ? ORDER BY created_at DESC LIMIT 1",
+        (run["variant"], run["created_at"]),
+    ).one()
+    previous_rate = None
+    if previous is not None:
+        earlier = store.execute(
+            "SELECT run_phase, passed FROM eval_results WHERE run_id = ?", (previous["id"],)
+        ).dicts()
+        was_passed, was_scored = _scored_pass_rate(earlier)
+        previous_rate = round(was_passed / was_scored, 4) if was_scored else None
+    return RunVerdict(
+        items_scored=scored,
+        items_passed=passed,
+        pass_rate=round(passed / scored, 4) if scored else None,
+        by_category=dict(sorted(categories.items())),
+        previous_run_id=previous["id"] if previous is not None else None,
+        previous_created_at=int(previous["created_at"]) if previous is not None else None,
+        previous_pass_rate=previous_rate,
     )
 
 
@@ -2014,9 +2435,9 @@ def _page(
     *,
     page_number: int,
     title: str,
+    lede: str,
     api_url: str,
     filters: Filters | None = None,
-    lede: str | None = None,
     breadcrumbs: Sequence[tuple[str, str]] | None = None,
     **extra: Any,
 ) -> Response:
@@ -2026,6 +2447,10 @@ def _page(
     `actor_name`, `gate_on` — so `_masthead.html` renders identically here and on `/`. It never did
     before: the dashboard had its own masthead with a `Chat` link, a static `HR ADMIN` chip and no
     way to sign out.
+
+    `lede` is **required** (UX W4, `dashboard-readability-15`). Eleven pages shared one seven-noun
+    tagline and no page said what it was for; a positional requirement is what stops the twelfth
+    page from shipping without one.
     """
     payload = view.model_dump(mode="json")
     context = {
@@ -2035,6 +2460,10 @@ def _page(
         "page_title": title,
         "page_lede": lede,
         "breadcrumbs": list(breadcrumbs or ()),
+        # A detail page lights its parent in the nav, and `aria-current="page"` on a link that is
+        # not this page is a lie a screen reader repeats. Within-section is `true`
+        # (`navigation-and-ia-10`).
+        "nav_exact": not breadcrumbs,
         "api_url": api_url,
         "nav": NAV,
         **api.shell_context(request, surface="dashboard"),
@@ -2063,7 +2492,15 @@ async def api_overview(request: Request) -> JSONResponse:
 @router.get("/dashboard", response_class=HTMLResponse)
 async def page_overview(request: Request) -> Response:
     view = await build_overview(request)
-    return _page(request, "overview.html", view, page_number=1, title="Overview", api_url="/api/traces/overview")
+    return _page(
+        request,
+        "overview.html",
+        view,
+        page_number=1,
+        title="Overview",
+        lede="The last 24 hours at a glance — traffic, quality and safety, speed and cost.",
+        api_url="/api/traces/overview",
+    )
 
 
 # -- page 2 --------------------------------------------------------------------------------
@@ -2084,6 +2521,7 @@ async def page_sessions(request: Request) -> Response:
         view,
         page_number=2,
         title="Sessions",
+        lede="Every conversation the assistant has had.",
         api_url=f"/api/traces/sessions?{filters.query_string()}",
         filters=filters,
         pages=max(1, math.ceil(view.total / PAGE_SIZE)),
@@ -2147,6 +2585,7 @@ async def page_turns(request: Request) -> Response:
         view,
         page_number=4,
         title="Turns",
+        lede="Every question asked, and how each one was answered.",
         api_url=f"/api/traces/turns?{filters.query_string()}",
         filters=filters,
         pages=max(1, math.ceil(view.total / PAGE_SIZE)),
@@ -2169,7 +2608,8 @@ async def page_llm(request: Request) -> Response:
         "llm.html",
         build_llm(request, filters),
         page_number=5,
-        title="LLM calls",
+        title="Model calls",
+        lede="Each call to the language model — which model, what for, how many tokens, how long.",
         api_url=f"/api/traces/llm?{filters.query_string()}",
         filters=filters,
     )
@@ -2192,6 +2632,7 @@ async def page_retrieval(request: Request) -> Response:
         build_retrieval(request, filters),
         page_number=6,
         title="Retrieval",
+        lede="Which policy passages each question pulled up, and how well they matched.",
         api_url=f"/api/traces/retrieval?{filters.query_string()}",
         filters=filters,
     )
@@ -2214,6 +2655,7 @@ async def page_tools(request: Request) -> Response:
         build_tools(request, filters),
         page_number=7,
         title="Tool calls",
+        lede="Every tool the assistant called, and what came back.",
         api_url=f"/api/traces/tools?{filters.query_string()}",
         filters=filters,
     )
@@ -2235,7 +2677,11 @@ async def page_safety(request: Request) -> Response:
         "safety.html",
         build_safety(request, filters),
         page_number=8,
-        title="Safety",
+        title="Guardrails",
+        lede="The six safety checks, what they allowed, and every human confirmation.",
+        # Every rule, named, so the chart can plot a zero bar for one that did not fire
+        # (`dashboard-readability-17`).
+        rule_labels={rule_id: f"{rule_id} {name}" for rule_id, name in RULE_LABELS.items()},
         api_url=f"/api/traces/safety?{filters.query_string()}",
         filters=filters,
     )
@@ -2296,7 +2742,15 @@ async def mcp_rediscover(request: Request) -> JSONResponse:
 @router.get("/dashboard/mcp", response_class=HTMLResponse)
 async def page_mcp(request: Request) -> Response:
     view = await build_mcp_discovery(request)
-    return _page(request, "mcp.html", view, page_number=9, title="MCP catalog", api_url="/api/mcp/discovery")
+    return _page(
+        request,
+        "mcp.html",
+        view,
+        page_number=9,
+        title="Tool server",
+        lede="The tool server the assistant is connected to, and the tools it offers.",
+        api_url="/api/mcp/discovery",
+    )
 
 
 # -- page 10 -------------------------------------------------------------------------------
@@ -2365,7 +2819,8 @@ async def page_corpus(request: Request) -> Response:
         "corpus.html",
         build_corpus(filters),
         page_number=10,
-        title="Corpus",
+        title="Policy library",
+        lede="The policy documents the assistant is allowed to answer from.",
         api_url=f"/api/corpus/documents?{filters.query_string()}",
         filters=filters,
     )
@@ -2380,6 +2835,8 @@ async def page_corpus_document(request: Request, doc_id: str) -> Response:
         view,
         page_number=10,
         title=view.document.doc_title,
+        lede="Every passage of this document a citation can point at.",
+        breadcrumbs=[("Policy library", "/dashboard/corpus")],
         api_url=f"/api/corpus/documents/{doc_id}",
     )
 
@@ -2455,11 +2912,15 @@ async def page_evals(request: Request) -> Response:
         view,
         page_number=11,
         title="Evaluations",
+        lede="Scored test runs — how accurate the answers are, and how well they cite.",
         api_url=f"/api/eval/runs?{filters.query_string()}",
         filters=filters,
         compare=build_eval_compare(request).model_dump(mode="json"),
+        headline_metrics=HEADLINE_METRICS,
         judged_metrics=JUDGED_METRICS,
         deterministic_metrics=DETERMINISTIC_METRICS,
+        rate_metrics=RATE_METRICS,
+        metric_labels=METRIC_LABELS,
         smoke_max_items=_settings(request).eval_smoke_max_items,
     )
 
@@ -2473,12 +2934,15 @@ async def page_eval_detail(request: Request, run_id: str) -> Response:
         "eval_detail.html",
         view,
         page_number=11,
-        title=f"Run {view.run.variant}",
+        title=view.run.label or f"Run {view.run.variant}",
+        lede=f"{_f_counted(view.run.n_items, 'item')} from the committed dataset, scored end to end.",
+        breadcrumbs=[("Evaluations", "/dashboard/evals")],
         api_url=f"/api/eval/runs/{run_id}",
         filters=filters,
         headline_metrics=HEADLINE_METRICS,
         judged_metrics=JUDGED_METRICS,
         deterministic_metrics=DETERMINISTIC_METRICS,
+        rate_metrics=RATE_METRICS,
     )
 
 

@@ -25,7 +25,7 @@
   <span class="dash-nav-group">
     <span class="dash-nav-group-label">{{ group }}</span>
     {% for number, label, href in items %}
-    <a class="dash-nav-link" data-nav="{{ number }}" href="{{ href }}"{% if number == nav_current %} aria-current="page"{% endif %}>{{ label }}</a>
+    <a class="dash-nav-link" data-nav="{{ number }}" href="{{ href }}"{% if number == nav_current %} aria-current="{{ 'page' if nav_exact else 'true' }}"{% endif %}>{{ label }}</a>
     {% endfor %}
   </span>
   {% endfor %}
@@ -41,11 +41,19 @@
   {% endif %}
   <div class="dash-head">
     <h2 class="dash-title">{{ page_title }}</h2>
-    <a id="export-json" class="button export-json" href="{{ api_url }}">Export JSON</a>
   </div>
-  {% if page_lede %}<p class="dash-lede">{{ page_lede }}</p>{% endif %}
+  <p class="dash-lede">{{ page_lede }}</p>
   {% block filters %}{% endblock %}
   {% block content %}{% endblock %}
+
+  {# `Export JSON` was a bordered button level with the H1 on all thirteen pages — a raw-API escape
+     hatch rendered as the page's dominant action (`navigation-and-ia-21`). It is still on every
+     page, byte-for-byte the same href, at the foot where a reader who wants the record goes. #}
+  <footer class="dash-foot">
+    <a id="export-json" class="export-json" href="{{ api_url }}">Export this page as JSON</a>
+    <span class="note">Every figure above, unrounded, from the same endpoint the page is rendered
+      from.</span>
+  </footer>
 </main>
 
 <script>

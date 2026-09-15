@@ -1,86 +1,152 @@
 {% extends "dashboard/_base.html" %}
 {% import "dashboard/_table.html" as t %}
-{# Page 1 — the KPI strip, the turns-per-hour sparkline (Chart.js) and the latest sessions. #}
+{# Page 1 — the KPI tiles, the turns-per-hour sparkline (Chart.js) and the latest sessions.
+
+   Seventeen equal-weight tiles opened this page, mixing measurements with configuration, with no
+   reading order and no status colour (`dashboard-readability-16`). They are twelve now, in three
+   labelled groups, and the figures that were tiles of their own because they existed — today's
+   spend, the seven-day spend, the daily call cap — are sub-lines under the tile they qualify.
+   Every `data-kpi` hook survives on the element that carries the figure, because the contract test
+   and any future selector key on them (P15: relocated, never destroyed).
+
+   Two tiles are honest about their sample (**P14**): the error rate carries "1 of 9 turns" while
+   the sample is under twenty, and a percentile over fewer than five turns prints its `n` instead
+   of a number a reader would over-trust. #}
 
 {% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
 
 {% block content %}
-<section id="kpi-strip" class="kpi-strip">
-  {% for key, label in [
-      ('sessions_24h', 'Sessions (24 h)'), ('sessions_total', 'Sessions total'), ('turns', 'Turns'),
-      ('tool_calls', 'Tool calls'), ('guardrail_blocks', 'Guardrail blocks'), ('escalations', 'Escalations'),
-      ('pending_confirmations', 'Pending confirmations'), ('llm_calls_today', 'LLM calls today')] %}
-  <div class="kpi" data-kpi="{{ key }}">
-    <span class="kpi-value">{{ view.kpis[key]|num }}</span>
-    <span class="kpi-label">{{ label }}</span>
+<section id="kpi-strip" class="kpi-group">
+  <h3>Traffic</h3>
+  <div class="kpi-strip">
+    <div class="kpi" data-kpi="sessions_24h">
+      <span class="kpi-value">{{ view.kpis.sessions_24h|num }}</span>
+      <span class="kpi-label">Conversations (24 h)</span>
+      <span class="kpi-sub" data-kpi="sessions_total">{{ view.kpis.sessions_total|counted('all time', 'all time') }}</span>
+    </div>
+    <div class="kpi" data-kpi="turns">
+      <span class="kpi-value">{{ view.kpis.turns|num }}</span>
+      <span class="kpi-label">Questions answered</span>
+    </div>
+    <div class="kpi" data-kpi="tool_calls">
+      <span class="kpi-value">{{ view.kpis.tool_calls|num }}</span>
+      <span class="kpi-label">Tool calls</span>
+    </div>
+    <div class="kpi" data-kpi="llm_calls_today">
+      <span class="kpi-value">{{ view.kpis.llm_calls_today|num }}</span>
+      <span class="kpi-label">Model calls today</span>
+      <span class="kpi-sub" data-kpi="llm_daily_call_cap">of a {{ view.kpis.llm_daily_call_cap|num }} daily cap</span>
+    </div>
   </div>
-  {% endfor %}
-  <div class="kpi" data-kpi="error_rate"><span class="kpi-value">{{ view.kpis.error_rate|pct }}</span>
-    <span class="kpi-label">Error rate</span></div>
-  <div class="kpi" data-kpi="p50_ms"><span class="kpi-value">{{ view.kpis.p50_ms|ms }}</span>
-    <span class="kpi-label">Turn p50</span></div>
-  <div class="kpi" data-kpi="p95_ms"><span class="kpi-value">{{ view.kpis.p95_ms|ms }}</span>
-    <span class="kpi-label">Turn p95</span></div>
-  <div class="kpi" data-kpi="tokens_in"><span class="kpi-value">{{ view.kpis.tokens_in|num }}</span>
-    <span class="kpi-label">Tokens in</span></div>
-  <div class="kpi" data-kpi="tokens_out"><span class="kpi-value">{{ view.kpis.tokens_out|num }}</span>
-    <span class="kpi-label">Tokens out</span></div>
-  <div class="kpi" data-kpi="est_cost_usd"><span class="kpi-value">{{ view.kpis.est_cost_usd|usd }}</span>
-    <span class="kpi-label">Estimated spend (all)</span></div>
-  <div class="kpi" data-kpi="spend_today_usd"><span class="kpi-value">{{ view.kpis.spend_today_usd|usd }}</span>
-    <span class="kpi-label">Estimated spend today</span></div>
-  <div class="kpi" data-kpi="spend_7d_usd"><span class="kpi-value">{{ view.kpis.spend_7d_usd|usd }}</span>
-    <span class="kpi-label">Estimated spend, 7 days</span></div>
-  <div class="kpi" data-kpi="llm_daily_call_cap"><span class="kpi-value">{{ view.kpis.llm_daily_call_cap|num }}</span>
-    <span class="kpi-label">Daily call cap</span></div>
 </section>
-<p class="note">Every cost figure is an <strong>estimate</strong> from the per-call token counts and
-  the committed price table (§9.8) — never a billed amount.</p>
+
+<section class="kpi-group">
+  <h3>Quality &amp; safety</h3>
+  <div class="kpi-strip">
+    <div class="kpi" data-kpi="guardrail_blocks">
+      <span class="kpi-value">{{ view.kpis.guardrail_blocks|num }}</span>
+      <span class="kpi-label">Guardrail blocks</span>
+      <span class="kpi-sub">safety checks that did not simply allow</span>
+    </div>
+    <div class="kpi" data-kpi="escalations">
+      <span class="kpi-value">{{ view.kpis.escalations|num }}</span>
+      <span class="kpi-label">Escalations to People Ops</span>
+    </div>
+    <div class="kpi" data-kpi="pending_confirmations">
+      <span class="kpi-value">{{ view.kpis.pending_confirmations|num }}</span>
+      <span class="kpi-label">Awaiting confirmation</span>
+    </div>
+    <div class="kpi" data-kpi="error_rate"{% if view.kpis.error_turns %} data-state="warn"{% endif %}>
+      <span class="kpi-value">{{ view.kpis.error_rate|pct }}</span>
+      <span class="kpi-label">Error rate</span>
+      <span class="kpi-sub">{{ view.kpis.error_turns|num }} of {{ view.kpis.turns|counted('turn') }}</span>
+    </div>
+  </div>
+</section>
+
+<section class="kpi-group">
+  <h3>Speed &amp; cost</h3>
+  <div class="kpi-strip">
+    <div class="kpi" data-kpi="p50_ms">
+      <span class="kpi-value">{{ view.kpis.p50_ms|ms_n(view.kpis.duration_n) }}</span>
+      <span class="kpi-label">Median turn</span>
+    </div>
+    <div class="kpi" data-kpi="p95_ms">
+      <span class="kpi-value">{{ view.kpis.p95_ms|ms_n(view.kpis.duration_n) }}</span>
+      <span class="kpi-label">Slowest 5% of turns</span>
+      <span class="kpi-sub">over {{ view.kpis.duration_n|counted('turn') }}</span>
+    </div>
+    <div class="kpi" data-kpi="tokens_in">
+      <span class="kpi-value">{{ view.kpis.tokens_in|num }}</span>
+      <span class="kpi-label">Tokens in</span>
+      <span class="kpi-sub" data-kpi="tokens_out">{{ view.kpis.tokens_out|num }} out</span>
+    </div>
+    <div class="kpi" data-kpi="est_cost_usd">
+      <span class="kpi-value">{{ view.kpis.est_cost_usd|usd }}</span>
+      <span class="kpi-label">Estimated spend, all time</span>
+      <span class="kpi-sub"><span data-kpi="spend_today_usd">{{ view.kpis.spend_today_usd|usd }} today</span> ·
+        <span data-kpi="spend_7d_usd">{{ view.kpis.spend_7d_usd|usd }} over 7 days</span></span>
+    </div>
+  </div>
+</section>
+
+<p class="note">Answers come from <strong>{{ view.health.llm_provider }}</strong>
+  ({{ view.health.llm_model }}). Every cost figure is an <strong>estimate</strong> from the
+  per-call token counts and the committed price table (§9.8) — never a billed amount, and
+  <strong>$0.00</strong> on a recorded-script run because no call was ever billed.</p>
 
 <section class="panel">
   <h3>Turns per hour — the last 24 hours</h3>
-  <canvas id="chart-turns-per-hour" height="90" aria-label="Turns per hour"></canvas>
+  <canvas id="chart-turns-per-hour" height="90" aria-label="Turns per hour, the last 24 hours, UTC"></canvas>
   <script id="chart-turns-per-hour-data" type="application/json">{{ view.turns_per_hour|tojson }}</script>
+  <p class="note" id="chart-turns-per-hour-flat" hidden>Nothing has been asked in the last 24 hours,
+    so every hour is zero.</p>
 </section>
 
 <section class="panel" id="health-block">
   <h3>Health</h3>
   <dl class="facts">
-    <div><dt>MCP</dt><dd><span class="flag flag-{{ 'yes' if view.health.mcp_up else 'no' }}">{{ 'up' if view.health.mcp_up else 'down' }}</span></dd></div>
-    <div><dt>Tools</dt><dd>{{ view.health.tool_count }}</dd></div>
-    <div><dt>Documents</dt><dd>{{ view.health.doc_count }}</dd></div>
-    <div><dt>Chunks</dt><dd>{{ view.health.chunk_count }}</dd></div>
-    <div><dt>Store</dt><dd>{{ view.health.store_backend }}</dd></div>
+    <div><dt>Tool server</dt><dd><span class="flag flag-{{ 'yes' if view.health.mcp_up else 'no' }}">{{ 'up' if view.health.mcp_up else 'down' }}</span></dd></div>
+    <div><dt>Tools</dt><dd>{{ view.health.tool_count|num }}</dd></div>
+    <div><dt>Documents</dt><dd>{{ view.health.doc_count|num }}</dd></div>
+    <div><dt>Passages</dt><dd>{{ view.health.chunk_count|num }}</dd></div>
+    <div><dt>Trace store</dt><dd>{{ view.health.store_backend }}</dd></div>
     <div><dt>Build</dt><dd class="mono">{{ view.health.git_sha[:12] }}</dd></div>
     <div><dt>Uptime</dt><dd>{{ view.health.uptime_ms|ms }}</dd></div>
-    <div><dt>RSS</dt><dd>{{ view.health.rss_mb }} MB</dd></div>
-    <div><dt>Data as of</dt><dd>{{ view.health.data_as_of }}</dd></div>
+    <div><dt>Memory</dt><dd>{{ view.health.rss_mb|num }} MB</dd></div>
+    <div><dt>Employee data as of</dt><dd>{{ view.health.data_as_of }}</dd></div>
   </dl>
 </section>
 
 <section class="panel">
-  <h3>Latest sessions</h3>
+  <h3>Latest conversations</h3>
   {{ t.table('latest-sessions', [
-      {'label': 'Session', 'key': 'session_id', 'kind': 'code', 'href_prefix': '/dashboard/sessions/'},
-      {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
-      {'label': 'Persona', 'key': 'employee_id'},
-      {'label': 'auth_mode', 'key': 'auth_mode', 'kind': 'badge'},
-      {'label': 'actor_role', 'key': 'actor_role', 'kind': 'badge'},
-      {'label': 'Client', 'key': 'client_label', 'kind': 'badge'},
-      {'label': 'Turns', 'key': 'n_turns', 'kind': 'num'},
-      {'label': 'Outcomes', 'key': 'outcomes', 'kind': 'list'},
-      {'label': 'Total', 'key': 'total_ms', 'kind': 'ms'},
-      {'label': 'Tokens', 'key': 'tokens', 'kind': 'num'},
-      {'label': 'Error', 'key': 'has_error', 'kind': 'bool'}],
-      view.latest_sessions, 'No sessions yet — run `make demo1`.') }}
+    {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
+    {'label': 'Persona', 'key': 'employee_id'},
+    {'label': 'Outcomes', 'key': 'outcomes', 'kind': 'list'},
+    {'label': 'Turns', 'key': 'n_turns', 'kind': 'num'},
+    {'label': 'Total', 'key': 'total_ms', 'kind': 'ms'},
+    {'label': 'Tokens', 'key': 'tokens', 'kind': 'num'},
+    {'label': 'Sign-in', 'key': 'auth_mode', 'kind': 'badge',
+     'help': 'How the request authenticated: the shared key in a cookie, a bearer header, or an open local run.'},
+    {'label': 'Role', 'key': 'actor_role', 'kind': 'badge',
+     'help': 'Which role the persona holds. It gates the three write controls and nothing else.'},
+    {'label': 'Client', 'key': 'client_label', 'kind': 'badge'},
+    {'label': 'Error', 'key': 'has_error', 'kind': 'bool'},
+    {'label': 'Session', 'key': 'session_id', 'kind': 'id', 'href_prefix': '/dashboard/sessions/'}],
+      view.latest_sessions, 'No conversation has been recorded yet.') }}
 </section>
 
 <script>
   (function () {
     "use strict";
     window.addEventListener("load", function () {
-      if (typeof Chart === "undefined") { return; }
       var data = JSON.parse(document.getElementById("chart-turns-per-hour-data").textContent);
+      // A flat line at zero is indistinguishable from a broken chart, so the page says which it is
+      // (dashboard-readability-17).
+      var flat = data.every(function (b) { return !b.turns; });
+      document.getElementById("chart-turns-per-hour-flat").hidden = !flat;
+      if (typeof Chart === "undefined") { return; }
       new Chart(document.getElementById("chart-turns-per-hour"), {
         type: "line",
         data: {
@@ -89,8 +155,13 @@
                        borderColor: "#1f6f6b", backgroundColor: "rgba(31,111,107,0.15)",
                        fill: true, tension: 0.3, pointRadius: 2 }]
         },
-        options: { plugins: { legend: { display: false } },
-                   scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { title: { display: true, text: "Hour (UTC)" } },
+            y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: "Turns" } }
+          }
+        }
       });
     });
   })();

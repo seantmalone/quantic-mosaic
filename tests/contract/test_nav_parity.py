@@ -152,9 +152,26 @@ async def test_the_dashboard_nav_is_grouped_and_carries_no_ordinals_or_inert_ent
 
 
 async def test_session_detail_highlights_its_real_parent_in_the_nav(seeded):
-    client, ids = seeded
-    html = (await client.get(f"/dashboard/sessions/{ids['session_id']}")).text
+    """…as the section it is *in*, not as the page the reader is on (UX W4, navigation-and-ia-10).
 
-    assert re.search(r'data-nav="2"[^>]*aria-current="page"|aria-current="page"[^>]*data-nav="2"', html), (
-        "session detail highlights Sessions, the page it is opened from"
+    W1 lit the parent with `aria-current="page"`, which tells a screen-reader user that the Sessions
+    link is the current page when it is not: following it goes somewhere else. A detail page is
+    `aria-current="true"` — within this section — and carries a breadcrumb to the parent instead.
+    """
+    client, ids = seeded
+    detail = (await client.get(f"/dashboard/sessions/{ids['session_id']}")).text
+    listing = (await client.get("/dashboard/sessions")).text
+
+    assert re.search(r'data-nav="2"[^>]*aria-current="true"|aria-current="true"[^>]*data-nav="2"', detail), (
+        "session detail highlights Sessions, the section it is opened from"
+    )
+    page_nav = re.search(r'<nav id="dash-nav".*?</nav>', detail, re.S)
+    assert page_nav and 'aria-current="page"' not in page_nav.group(0), (
+        "no page-nav link on a detail page claims to be the page the reader is on"
+    )
+    assert re.search(r'data-nav="2"[^>]*aria-current="page"|aria-current="page"[^>]*data-nav="2"', listing), (
+        "the listing itself is the current page"
+    )
+    assert re.search(r'<nav class="crumbs".*?href="/dashboard/sessions"', detail, re.S), (
+        "and the way back to the parent is a breadcrumb"
     )

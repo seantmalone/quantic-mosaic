@@ -2,7 +2,13 @@
 {% import "dashboard/_table.html" as t %}
 {% import "dashboard/_filters.html" as f %}
 {# Page 11 (detail + metrics tab) — the whole metric block of §11.6, every scored item with a
-   one-click link to its full audit trace, and the latency / cold / RSS views of §13.5. #}
+   one-click link to its full audit trace, and the latency / cold / RSS views of §13.5.
+
+   This page had no verdict and no methodology: no pass line, no comparison with the previous run of
+   the same variant, no description of what the items are, and unexplained filters and
+   `(0 excluded)` (`dashboard-readability-21`). It leads with the sentence a grader wants — *"25 of
+   28 items passed (89%)"* — and every figure below goes through one formatter under an English
+   label, with the raw values a click away in Export JSON (**P15**). #}
 
 {% block head %}<script src="/static/vendor/chart.umd.js" defer></script>{% endblock %}
 
@@ -12,7 +18,7 @@
      'options': ['simple_policy', 'multi_doc', 'tool_task', 'ambiguous', 'out_of_scope',
                  'unsafe_action', 'sensitive']},
     {'name': 'failures_first', 'label': 'Failures first', 'type': 'checkbox'},
-    {'name': 'cold_only', 'label': 'Cold only', 'type': 'checkbox'}],
+    {'name': 'cold_only', 'label': 'Cold items only', 'type': 'checkbox'}],
     filters, '/dashboard/evals/' ~ view.run.run_id) }}
 {% endblock %}
 
@@ -24,44 +30,53 @@
 </nav>
 
 <section class="panel tab-panel" id="tab-metrics">
-  <h3>{{ view.run.label }}</h3>
+  <div class="verdict" id="run-verdict">
+    <p class="verdict-line">{% if view.verdict.items_scored %}{{ view.verdict.items_passed|num }} of
+      {{ view.verdict.items_scored|counted('item') }} passed ({{ view.verdict.pass_rate|pct }}){% else %}This run
+      scored no items{% endif %}</p>
+    <p class="verdict-delta">
+      {%- if view.verdict.previous_pass_rate is not none %}Previous <code>{{ view.run.variant }}</code> run
+      ({{ view.verdict.previous_created_at|ts }}) passed {{ view.verdict.previous_pass_rate|pct }} —
+      {% set delta = view.verdict.pass_rate - view.verdict.previous_pass_rate %}
+      {% if delta > 0 %}up{% elif delta < 0 %}down{% else %}unchanged at{% endif %}
+      {{ (delta if delta >= 0 else -delta)|pct }}.
+      {%- else %}No earlier run of this variant to compare against.{% endif %}</p>
+  </div>
   <dl class="facts">
     <div><dt>Variant</dt><dd><span class="pill">{{ view.run.variant }}</span></dd></div>
     <div><dt>Target</dt><dd><span class="pill">{{ view.run.target }}</span></dd></div>
-    <div><dt>Items</dt><dd>{{ view.run.n_items }}</dd></div>
+    <div><dt>Items</dt><dd>{{ view.run.n_items|num }}</dd></div>
     <div><dt>Judged</dt><dd>{{ 'yes' if view.metrics.judged else 'no' }}</dd></div>
     <div><dt>Judge model</dt><dd>{{ view.run.judge_model or '—' }}</dd></div>
-    <div><dt>Duration</dt><dd>{{ view.run.duration_s or '—' }} s</dd></div>
-    <div><dt>Estimated cost</dt><dd>{{ view.metrics.est_cost_usd|usd }} <span class="muted">(estimate)</span></dd></div>
+    <div><dt>Duration</dt><dd>{{ view.run.duration_s|secs }}</dd></div>
+    <div><dt>Estimated cost</dt><dd>{{ view.metrics.est_cost_usd|usd }}</dd></div>
     <div><dt>Build</dt><dd class="mono">{{ view.run.git_sha[:12] }}</dd></div>
   </dl>
+  <p class="note" id="dataset-legend">The dataset is one fixed set of questions, the same for every
+    variant: {% for category, count in view.verdict.by_category.items() %}{{ count|num }}
+    {{ category.replace('_', ' ') }}{% if not loop.last %}, {% endif %}{% else %}no scored item{% endfor %}.</p>
 
   <div id="metric-block" class="metric-strip">
-    {% for metric in headline_metrics %}
+    {% for metric in headline_metrics + ('clarification_accuracy',) %}
     <div class="metric" data-metric="{{ metric }}">
-      <span class="metric-value">
-        {% if view.metrics[metric] is not none %}{{ view.metrics[metric] }}
-        {% elif metric in judged_metrics %}
-          <span class="not-judged">not judged on this variant</span>
-        {% else %}<span class="muted">—</span>{% endif %}
+      <span class="metric-value" title="{{ view.metrics[metric] }}">
+        {% if view.metrics[metric] is none %}
+          {% if metric in judged_metrics %}<span class="not-judged">not judged on this variant</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        {% elif metric in rate_metrics %}{{ view.metrics[metric]|pct }}
+        {% else %}{{ view.metrics[metric]|num }}{% endif %}
       </span>
-      <span class="metric-label">{{ metric }}</span>
+      <span class="metric-label">{{ metric|metric_label }}</span>
       {% if metric in judged_metrics %}<span class="pill pill-judged">judged</span>{% endif %}
       {% if metric in deterministic_metrics %}<span class="pill">deterministic</span>{% endif %}
     </div>
     {% endfor %}
-    <div class="metric" data-metric="clarification_accuracy">
-      <span class="metric-value">
-        {% if view.metrics.clarification_accuracy is none %}
-          <span class="not-judged">not judged on this variant</span>
-        {% else %}{{ view.metrics.clarification_accuracy }}{% endif %}
-      </span>
-      <span class="metric-label">clarification_accuracy</span>
-      <span class="pill pill-judged">judged</span>
-    </div>
   </div>
 
-  <h4>Escalation matrix <span class="muted">({{ view.metrics.escalation_n_excluded }} excluded)</span></h4>
+  <h4>Escalation matrix</h4>
+  <p class="note">What the run expected of each item against what the assistant did. The diagonal is
+    agreement. {{ view.metrics.escalation_n_excluded|num }} of the run's items are excluded: a
+    maintenance turn has no expected escalation to compare against.</p>
   <div class="table-scroll">
     <table id="escalation-matrix" class="data-table">
       <thead><tr><th scope="col">gold ↓ / predicted →</th>
@@ -70,7 +85,7 @@
       {% for gold in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
         <tr><th scope="row">{{ gold }}</th>
           {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
-          <td class="cell-num">{{ view.metrics.escalation_matrix.get(gold, {}).get(predicted, 0) }}</td>
+          <td class="cell-num">{{ view.metrics.escalation_matrix.get(gold, {}).get(predicted, 0)|num }}</td>
           {% endfor %}
         </tr>
       {% endfor %}
@@ -80,37 +95,46 @@
 
   <h4>Behaviour and safety</h4>
   <dl class="facts" id="behaviour-metrics">
-    <div><dt>over_refusal_rate</dt><dd>{{ view.metrics.over_refusal_rate|orna }} <span class="muted">n={{ view.metrics.over_refusal_n }}</span></dd></div>
-    <div><dt>missed_refusal_rate</dt><dd>{{ view.metrics.missed_refusal_rate|orna }} <span class="muted">n={{ view.metrics.missed_refusal_n }}</span></dd></div>
-    <div><dt>action_safety_pass_rate</dt><dd>{{ view.metrics.action_safety_pass_rate|orna }}</dd></div>
-    <div><dt>recommendation_labeled_rate</dt><dd>{{ view.metrics.recommendation_labeled_rate|orna }}</dd></div>
-    <div><dt>catalog_reopened_rate</dt><dd>{{ view.metrics.catalog_reopened_rate|orna }}</dd></div>
-    <div><dt>judge_agreement_rate</dt><dd>{{ view.metrics.judge_agreement_rate|orna }} <span class="muted">n={{ view.metrics.judge_agreement_n }}</span></dd></div>
+    <div><dt>{{ 'over_refusal_rate'|metric_label }}</dt>
+      <dd>{{ view.metrics.over_refusal_rate|rate(view.metrics.over_refusal_n, 'item') }}</dd></div>
+    <div><dt>{{ 'missed_refusal_rate'|metric_label }}</dt>
+      <dd>{{ view.metrics.missed_refusal_rate|rate(view.metrics.missed_refusal_n, 'item') }}</dd></div>
+    <div><dt>{{ 'action_safety_pass_rate'|metric_label }}</dt><dd>{{ view.metrics.action_safety_pass_rate|pct }}</dd></div>
+    <div><dt>{{ 'recommendation_labeled_rate'|metric_label }}</dt><dd>{{ view.metrics.recommendation_labeled_rate|pct }}</dd></div>
+    <div><dt>{{ 'catalog_reopened_rate'|metric_label }}</dt><dd>{{ view.metrics.catalog_reopened_rate|pct }}</dd></div>
+    <div><dt>{{ 'judge_agreement_rate'|metric_label }}</dt>
+      <dd>{{ view.metrics.judge_agreement_rate|rate(view.metrics.judge_agreement_n, 'item') }}</dd></div>
   </dl>
 
   <h4>Workflow completion</h4>
+  <p class="note">How often a workflow reached its end state, per workflow.</p>
   <ul id="workflow-completion" class="pill-list">
     {% for workflow, value in view.metrics.workflow_completion_by_workflow.items() %}
-    <li><span class="pill">{{ workflow }}</span> {{ value }}</li>
+    <li><span class="pill">{{ workflow.replace('_', ' ') }}</span> {{ value|pct }}</li>
     {% else %}<li class="muted">No item defines a workflow end state.</li>{% endfor %}
   </ul>
 
   <h4>Router matrix</h4>
-  <div class="table-scroll">
+  <p class="note">Which route the run expected, and which the router chose.</p>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Router matrix">
     <table id="router-matrix" class="data-table">
+      <thead><tr><th scope="col">Expected route</th><th scope="col">Routes chosen</th></tr></thead>
       <tbody>
       {% for gold, row in view.metrics.router_matrix.items() %}
         <tr><th scope="row">{{ gold }}</th>
-          {% for predicted, count in row.items() %}<td>{{ predicted }}: {{ count }}</td>{% endfor %}</tr>
-      {% else %}<tr class="empty-row"><td class="muted">No routing decision recorded.</td></tr>{% endfor %}
+          <td>{% for predicted, count in row.items() %}<span class="pill">{{ predicted }} ×
+            {{ count|num }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor %}</td></tr>
+      {% else %}<tr class="empty-row"><td class="muted" colspan="2">No routing decision recorded.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
 
-  <h4>n_scored</h4>
+  <h4>Items scored per metric</h4>
+  <p class="note">Not every metric applies to every item; this is the denominator each one was
+    computed over.</p>
   <ul id="n-scored" class="pill-list">
     {% for metric, count in view.metrics.n_scored.items() %}
-    <li><span class="pill">{{ metric }}</span> {{ count }}</li>
+    <li><span class="pill">{{ metric|metric_label }}</span> {{ count|counted('item') }}</li>
     {% else %}<li class="muted">No denominators reported.</li>{% endfor %}
   </ul>
 </section>
@@ -118,18 +142,19 @@
 <section class="panel tab-panel" id="tab-items" hidden>
   <h3>Items</h3>
   {{ t.table('eval-items-table', [
-      {'label': 'Item', 'key': 'item_id'},
-      {'label': 'Category', 'key': 'category', 'kind': 'badge'},
       {'label': 'Question', 'key': 'question'},
-      {'label': 'Gold', 'key': 'gold'},
-      {'label': 'Answer', 'key': 'answer'},
-      {'label': 'Scores', 'key': 'scores', 'kind': 'code'},
-      {'label': 'Verdicts', 'key': 'verdicts', 'kind': 'code'},
-      {'label': 'Latency', 'key': 'latency_ms', 'kind': 'ms'},
-      {'label': 'Cold', 'key': 'cold', 'kind': 'bool'},
-      {'label': 'Phase', 'key': 'run_phase', 'kind': 'badge'},
       {'label': 'Passed', 'key': 'passed', 'kind': 'bool'},
-      {'label': 'Trace', 'key': 'turn_id', 'kind': 'code', 'href_prefix': '/api/traces/turns/'}],
+      {'label': 'Category', 'key': 'category', 'kind': 'badge'},
+      {'label': 'Expected', 'key': 'gold'},
+      {'label': 'Answer', 'key': 'answer'},
+      {'label': 'Scores', 'key': 'scores', 'kind': 'code', 'detail_key': 'scores', 'detail_label': 'Scores'},
+      {'label': 'Verdicts', 'key': 'verdicts', 'kind': 'code', 'detail_key': 'verdicts', 'detail_label': 'Verdicts'},
+      {'label': 'Latency', 'key': 'latency_ms', 'kind': 'ms'},
+      {'label': 'Cold', 'key': 'cold', 'kind': 'bool',
+       'help': 'The first item after a start, when nothing is warmed up yet.'},
+      {'label': 'Phase', 'key': 'run_phase', 'kind': 'badge'},
+      {'label': 'Item', 'key': 'item_id', 'kind': 'id'},
+      {'label': 'Trace', 'key': 'turn_id', 'kind': 'id', 'href_prefix': '/api/traces/turns/'}],
       view['items'], 'This run recorded no items.') }}
   <ul id="trace-links" class="pill-list">
     {% for item in view['items'] %}{% if item.trace_url %}
@@ -141,14 +166,14 @@
 <section class="panel tab-panel" id="tab-system" hidden>
   <h3>Latency</h3>
   <dl class="facts" id="latency-block">
-    <div><dt>p50</dt><dd>{{ view.latency.p50|ms }}</dd></div>
-    <div><dt>p90</dt><dd>{{ view.latency.p90|ms }}</dd></div>
-    <div><dt>p95</dt><dd>{{ view.latency.p95|ms }}</dd></div>
-    <div><dt>p99</dt><dd>{{ view.latency.p99|ms }}</dd></div>
-    <div><dt>n warm</dt><dd>{{ view.latency.n_warm }}</dd></div>
-    <div><dt>n cold</dt><dd>{{ view.latency.n_cold }}</dd></div>
-    <div><dt>cold p50</dt><dd>{{ view.latency.cold_p50|ms }}</dd></div>
-    <div><dt>cold p95</dt><dd>{{ view.latency.cold_p95|ms }}</dd></div>
+    <div><dt>Median</dt><dd>{{ view.latency.p50|ms_n(view.latency.n_warm) }}</dd></div>
+    <div><dt>p90</dt><dd>{{ view.latency.p90|ms_n(view.latency.n_warm) }}</dd></div>
+    <div><dt>p95</dt><dd>{{ view.latency.p95|ms_n(view.latency.n_warm) }}</dd></div>
+    <div><dt>p99</dt><dd>{{ view.latency.p99|ms_n(view.latency.n_warm) }}</dd></div>
+    <div><dt>Warm items</dt><dd>{{ view.latency.n_warm|num }}</dd></div>
+    <div><dt>Cold items</dt><dd>{{ view.latency.n_cold|num }}</dd></div>
+    <div><dt>Cold median</dt><dd>{{ view.latency.cold_p50|ms_n(view.latency.n_cold) }}</dd></div>
+    <div><dt>Cold p95</dt><dd>{{ view.latency.cold_p95|ms_n(view.latency.n_cold) }}</dd></div>
   </dl>
   {% if view.run.target == 'local' %}
   <p class="note local-note">Local runner — <strong>not representative</strong> of the 0.1-CPU
@@ -161,10 +186,10 @@
   <script id="chart-eval-data" type="application/json">{{
       {'items': view['items'], 'latency': view['latency'], 'rss_series': view['rss_series']}|tojson }}</script>
 
-  <h4>Latency by span kind</h4>
+  <h4>Time spent, by step</h4>
   <ul id="latency-by-kind" class="pill-list">
     {% for kind, value in view.latency.by_kind.items() %}
-    <li><span class="pill">{{ kind }}</span> {{ value|ms }}</li>
+    <li><span class="pill pill-{{ kind }}">{{ kind|kind_label }}</span> {{ value|ms }}</li>
     {% else %}<li class="muted">No trace rows for this run are present in this store.</li>{% endfor %}
   </ul>
 </section>

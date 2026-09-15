@@ -1,44 +1,90 @@
 {# The shared table partial (§11.6). Wide tables scroll inside their own container, never the page.
 
-   `columns` is a list of dicts: {label, key, kind, cls?, href_prefix?, href_suffix?, link_key?}.
+   `columns` is a list of dicts:
+     {label, key, kind, cls?, help?, href_prefix?, href_suffix?, link_key?, n_key?, unit?, detail_key?}
+
    `rows` are the plain dicts of the view-model — the very dict the matching `/api/*` route
-   returns — so the table and the Export JSON button can never disagree. #}
+   returns — so the table and the Export JSON link can never disagree.
+
+   **The rules applied here once, and inherited by all ~20 tables (UX W4, plan §3.10).**
+   * Lead with the human column; ids move to the end as `kind: 'id'`, an 8-character chip carrying
+     the full value in `title=` and still linking to it. 32-hex ids were the first and widest
+     columns — 575px of 1238 on Turns — hiding the one column a reader came for
+     (`dashboard-readability-11`, `numbers-precision-overflow-10`).
+   * Every numeric kind is right-aligned with tabular figures, and the header carries the same
+     `cell-{kind}` class so the label sits over its values (`numbers-precision-overflow-9`).
+   * Every cell carries `data-label`, which is what the stacked card layout under 640px prints as
+     its row heading; `data-col` is unchanged, because the contract tests select on it.
+   * `help` puts a dotted-underline definition on a header for the terms a grader cannot be
+     expected to know (`dashboard-readability-5` — the owner ruled out a glossary page).
+   * Multi-value cells separate their pills, so copied or announced text is `clarify, error` and
+     not `clarifyerror` (`dashboard-readability-30`).
+   * `detail_key` renders a second, full-width row holding whatever the summary cell summarised —
+     the raw JSON a one-line human summary replaced (`dashboard-readability-19`).
+   * `zero_dash` is for a column where zero means *did not happen* — a rate-limit wait, a retry
+     count. `<1 ms` on every row of a column nothing ever used is noise, not a measurement.
+
+   Every numeric or temporal value below goes through a registered filter and none is interpolated
+   bare: that is **P10**, and `tests/contract/test_formatter_coverage.py` holds it. #}
+
+{% macro href(row, column) %}{{ column.get('href_prefix', '') }}{{ row.get(column.get('link_key', column.key)) }}{{ column.get('href_suffix', '') }}{% endmacro %}
 
 {% macro cell(row, column) %}
   {%- set value = row.get(column.key) -%}
   {%- set kind = column.get('kind', 'text') -%}
-  {%- if column.get('href_prefix') -%}
-    {%- set target = row.get(column.get('link_key', column.key)) -%}
-    {%- if target -%}
-      <a href="{{ column.href_prefix }}{{ target }}{{ column.get('href_suffix', '') }}">{{ value|string|truncate(70) }}</a>
+  {%- set linked = column.get('href_prefix') is not none or column.get('link_key') is not none -%}
+  {%- set target = row.get(column.get('link_key', column.key)) -%}
+  {%- if kind == 'id' -%}
+    {%- if value -%}
+      {%- set chip %}<code class="id-chip" title="{{ value }}">{{ value|string|truncate(9, true, '…') }}</code>{% endset -%}
+      {%- if linked and target -%}<a href="{{ href(row, column) }}">{{ chip }}</a>
+      {%- else -%}{{ chip }}{%- endif -%}
+    {%- else -%}<span class="muted">—</span>{%- endif -%}
+  {%- elif linked -%}
+    {%- if target and value is not none -%}
+      <a href="{{ href(row, column) }}">{{ value|string|truncate(70) }}</a>
     {%- else -%}<span class="muted">—</span>{%- endif -%}
   {%- elif value is none -%}<span class="muted">—</span>
+  {%- elif column.get('zero_dash') and value == 0 -%}<span class="muted">—</span>
   {%- elif kind == 'time' -%}<time datetime="{{ value }}">{{ value|ts }}</time>
   {%- elif kind == 'ms' -%}{{ value|ms }}
+  {%- elif kind == 'ms_n' -%}{{ value|ms_n(row.get(column.get('n_key'))) }}
+  {%- elif kind == 'secs' -%}{{ value|secs }}
   {%- elif kind == 'num' -%}{{ value|num }}
+  {%- elif kind == 'score' -%}{{ value|score }}
   {%- elif kind == 'pct' -%}{{ value|pct }}
+  {%- elif kind == 'pct_of' -%}{{ value|rate(row.get(column.get('n_key')), column.get('unit', '')) }}
   {%- elif kind == 'usd' -%}{{ value|usd }}
   {%- elif kind == 'bool' -%}
     <span class="flag flag-{{ 'yes' if value else 'no' }}">{{ 'yes' if value else 'no' }}</span>
   {%- elif kind == 'list' -%}
-    {%- for item in value %}<span class="pill">{{ item }}</span>{% endfor -%}
+    {%- for item in value %}<span class="pill">{{ item }}</span>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor -%}
     {%- if not value %}<span class="muted">—</span>{% endif -%}
   {%- elif kind == 'badge' -%}<span class="pill pill-{{ value }}">{{ value }}</span>
+  {%- elif kind == 'rule' -%}<span class="pill pill-{{ value }}">{{ value|rule_label }}</span>
   {%- elif kind == 'code' -%}<code class="mono">{{ value|compact(60) }}</code>
   {%- else -%}{{ value|string|truncate(120) }}
   {%- endif -%}
 {% endmacro %}
 
 {% macro table(id, columns, rows, empty='Nothing recorded yet.') %}
-<div class="table-scroll">
+<div class="table-scroll" tabindex="0" role="region" aria-label="{{ id }}">
   <table id="{{ id }}" class="data-table">
     <thead>
-      <tr>{% for column in columns %}<th data-col="{{ column.key }}" scope="col">{{ column.label }}</th>{% endfor %}</tr>
+      <tr>{% for column in columns %}<th data-col="{{ column.key }}" scope="col"
+          class="cell-{{ column.get('kind', 'text') }}">{% if column.get('help') %}<span
+          class="has-help" title="{{ column.help }}">{{ column.label }}</span>{% else %}{{ column.label }}{% endif %}</th>{% endfor %}</tr>
     </thead>
     <tbody>
       {% for row in rows %}
-      <tr>{% for column in columns %}<td data-col="{{ column.key }}"
+      <tr>{% for column in columns %}<td data-col="{{ column.key }}" data-label="{{ column.label }}"
           class="{{ column.get('cls', '') }} cell-{{ column.get('kind', 'text') }}">{{ cell(row, column) }}</td>{% endfor %}</tr>
+      {% for column in columns if column.get('detail_key') and row.get(column.detail_key) is not none %}
+      <tr class="detail-row"><td colspan="{{ columns|length }}" data-label="{{ column.label }}">
+        <details class="row-detail"><summary>{{ column.get('detail_label', column.label) }} in full</summary>
+          <pre class="mono">{{ row.get(column.detail_key)|pretty }}</pre></details>
+      </td></tr>
+      {% endfor %}
       {% else %}
       <tr class="empty-row"><td class="muted" colspan="{{ columns|length }}">{{ empty }}</td></tr>
       {% endfor %}
@@ -50,7 +96,7 @@
 {% macro pager(page, total, page_size, filters_query) %}
 <nav class="pager" aria-label="Pagination">
   {% set pages = ((total / page_size)|round(0, 'ceil')|int) or 1 %}
-  <span class="pager-state">Page {{ page }} of {{ pages }} · {{ total }} row(s)</span>
+  <span class="pager-state">Page {{ page|num }} of {{ pages|num }} · {{ total|counted('row') }}</span>
   {% if page > 1 %}<a class="button" href="?{{ filters_query }}{% if filters_query %}&{% endif %}page={{ page - 1 }}">Previous</a>{% endif %}
   {% if page < pages %}<a class="button" href="?{{ filters_query }}{% if filters_query %}&{% endif %}page={{ page + 1 }}">Next</a>{% endif %}
 </nav>
