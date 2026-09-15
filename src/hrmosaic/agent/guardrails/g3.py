@@ -51,14 +51,18 @@ def apply(blocks: Sequence[Mapping[str, Any]]) -> Outcome:
 def check(blocks: Sequence[Mapping[str, Any]], *, turn: TurnBuffer | None = None) -> Outcome:
     """Relabel and emit the one `guardrail` span."""
     outcome = apply(blocks)
+    # The noun agrees with the count: this reason is read on the session waterfall, where
+    # `7 block(s)` was the same lazy plural page 3 printed everywhere else (UX W4, **P9**).
+    relabelled = "block" if len(outcome.relabelled) == 1 else "blocks"
+    counted = "block" if len(outcome.blocks) == 1 else "blocks"
     emit(
         turn,
         "G3",
         verdict="repair" if outcome.repaired else "allow",
         reason=(
-            f"{len(outcome.relabelled)} uncited policy_fact block(s) relabelled as recommendation"
+            f"{len(outcome.relabelled)} uncited policy_fact {relabelled} relabelled as recommendation"
             if outcome.repaired
-            else f"{len(outcome.blocks)} block(s), every policy_fact cited"
+            else f"{len(outcome.blocks)} {counted}, every policy_fact cited"
         ),
         details={"blocks": len(outcome.blocks), "relabelled_indexes": outcome.relabelled},
     )

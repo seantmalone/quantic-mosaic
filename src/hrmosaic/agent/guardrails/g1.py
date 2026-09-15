@@ -84,14 +84,20 @@ def evaluate(
     scores = [float(candidate.dense_score) for candidate in candidates]
     top = max(scores) if scores else 0.0
     supporting = sum(1 for score in scores if score >= min_support_score)
+    # Two decimal places, and a noun that agrees with its count (UX W4,
+    # `numbers-precision-overflow-4`, `-15`): the score is a 0-1 cosine, three places said nothing
+    # a reader could use and `chunk(s)` is a plural nobody speaks. "best evidence score" names what
+    # the figure is — the best score of the evidence the gate accumulated, first-seen-wins — rather
+    # than describing the retriever that produced it.
+    passages = "passage" if supporting == 1 else "passages"
     if not scores:
         reason = NO_EVIDENCE
     elif top < min_evidence_score:
-        reason = f"{WEAK_EVIDENCE}: max dense score {top:.3f} < {min_evidence_score:.2f}"
+        reason = f"{WEAK_EVIDENCE}: best evidence score {top:.2f} < {min_evidence_score:.2f}"
     elif supporting < 2:
-        reason = f"{WEAK_EVIDENCE}: {supporting} chunk(s) at or above {min_support_score:.2f}, 2 required"
+        reason = f"{WEAK_EVIDENCE}: {supporting} {passages} at or above {min_support_score:.2f}, 2 required"
     else:
-        reason = f"max dense score {top:.3f}, {supporting} supporting chunk(s)"
+        reason = f"best evidence score {top:.2f}, {supporting} supporting {passages}"
     return Verdict(
         passed=bool(scores) and top >= min_evidence_score and supporting >= 2,
         reason=reason,

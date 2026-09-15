@@ -65,6 +65,7 @@ MARKUP_FORBIDDEN = (
     r"→\s*\d+\s*tok",
     r"top dense",
     r"max dense score",
+    r"best evidence score",  # G1's reason since UX W4 — the span's words, never the reader's
     r"verdict=",
     r"purpose=",
     r"intent=",

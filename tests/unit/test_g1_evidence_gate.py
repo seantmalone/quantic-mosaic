@@ -47,13 +47,14 @@ def test_everything_below_the_evidence_threshold_refuses():
     # out-of-corpus probe at `max_dense_score` ≤ 0.584 against an in-scope floor of 0.622.
     verdict = g1.evaluate([Candidate(0.58), Candidate(0.57), Candidate(0.54)])
     assert not verdict.passed
-    assert "0.580" in verdict.reason and "0.60" in verdict.reason
+    # Two decimal places since UX W4: the span's arithmetic at the precision the 0-1 scale carries.
+    assert "best evidence score 0.58 < 0.60" in verdict.reason
 
 
 def test_one_strong_chunk_alone_is_not_enough_support():
     verdict = g1.evaluate([Candidate(0.71), Candidate(0.11)])
     assert not verdict.passed
-    assert "1 chunk(s) at or above 0.45" in verdict.reason
+    assert "1 passage at or above 0.45" in verdict.reason, "the noun agrees with the count (P9)"
 
 
 def test_an_empty_candidate_set_refuses():

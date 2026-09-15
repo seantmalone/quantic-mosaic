@@ -137,14 +137,19 @@ def check(
     checked?*, and an absent span cannot distinguish "nothing matched" from "nobody looked".
     """
     matches = scan_all(chunks)
+    # The noun agrees with the count and the source reads as words: "1 user_message chunks clean"
+    # was one figure disagreeing with its own plural and a snake_case field name in a sentence
+    # (UX W4, `numbers-precision-overflow-15`).
+    scanned = "passage" if len(chunks) == 1 else "passages"
+    scope = str(source).replace("_", " ")
     emit(
         turn,
         "G4",
         verdict="warn" if matches else "allow",
         reason=(
-            f"{len(matches)} of {len(chunks)} {source} chunks quarantined"
+            f"{len(matches)} of {len(chunks)} {scope} {scanned} quarantined"
             if matches
-            else f"{len(chunks)} {source} chunks clean"
+            else f"{len(chunks)} {scope} {scanned} clean"
         ),
         matched_pattern=matches[0].pattern if matches else None,
         details={

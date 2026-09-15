@@ -917,7 +917,8 @@ class Orchestrator:
                     step_summaries=list(turn.step_summaries),
                     selected_tools=sorted(turn.state.results),
                     rationale_summary=clamp_rationale(
-                        f"{turn.steps_taken} act step(s), {turn.tool_calls_made} tool call(s), "
+                        f"{turn.steps_taken} act {'step' if turn.steps_taken == 1 else 'steps'}, "
+                        f"{turn.tool_calls_made} tool {'call' if turn.tool_calls_made == 1 else 'calls'}, "
                         f"stop_reason={turn.stop_reason}."
                     ),
                     step_index=turn.steps_taken,
