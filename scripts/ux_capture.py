@@ -420,6 +420,7 @@ def ask(page: Any, base_url: str, prompt: str, *, hold: bool = False) -> None:
     before = page.eval_on_selector_all("#messages .turn", "els => els.length")
     if hold:
         _HELD.clear()
+
         # A plain `def`, not `_HELD.append`: Playwright stamps an attribute onto the handler it is
         # given, and a builtin method object cannot carry one.
         def park(route: Any) -> None:
