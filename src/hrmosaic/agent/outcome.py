@@ -74,8 +74,10 @@ import json
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
+from hrmosaic.agent import dates as date_consistency
 from hrmosaic.core.models import UNRENDERED_ENVELOPES
 from hrmosaic.core.queues import QUEUE_FALLBACK, queue_label
 
@@ -143,6 +145,37 @@ IMPERATIVES: dict[str, tuple[str, ...]] = {
     "create_mock_hr_ticket": ("submit", "file", "open", "raise", "create", "log", "enter"),
     "draft_hr_email": ("send", "write", "compose", "draft", "email"),
 }
+
+#: The same verbs with the prefix English puts in front of *doing it again* (W8, C01). "Resubmit
+#: the request in MosaicOne once Dana agrees" walked straight past a list of bare stems.
+RE_PREFIXES = ("re", "re-")
+
+#: The modal frames that make a statement an instruction without the imperative mood (W8, C01).
+#: *"You must still submit the formal PTO request in MosaicOne"* is a directive; the sentence never
+#: opens with a verb, so every clause-head test in the world misses it.
+DIRECTIVE_MODALS = (
+    "must",
+    "need to",
+    "needs to",
+    "should",
+    "have to",
+    "has to",
+    "are required to",
+    "will need to",
+    "are expected to",
+    "ought to",
+)
+
+#: Objects that stand in for the thing the tool made, when the sentence does not name it again.
+#: *"Submit it in MosaicOne for your manager written approval."* is the same instruction as
+#: *"Submit the request …"*, and it was surviving (W8, C01).
+PRONOUN_OBJECTS: frozenset[str] = frozenset({"it", "this", "that", "these", "those", "them", "one"})
+
+#: A preposition where the object should be means the object was elided — "Submit in MosaicOne so
+#: your manager can approve it" — which is still an instruction to go and file it.
+PREPOSITIONS: frozenset[str] = frozenset(
+    {"in", "into", "to", "on", "at", "for", "via", "through", "with", "from", "under", "by", "onto"}
+)
 
 #: The verbs that open a directive clause, for the `record` backstop's "no imperative" half: every
 #: write tool's own IMPERATIVES, plus the verbs an HR answer uses when it tells the reader to do
@@ -267,6 +300,34 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[\"'“‘(\[A-Z0-9])")
 #: A number as prose writes it: `13.5`, `45`, the `3` of `3-day`, never the `2` of `v2.1`.
 _NUMBER = re.compile(r"(?<![\w.])\d+(?:\.\d+)?(?!\w|\.\d)")
 
+#: A sentence whose subject is the reader (W8, C15). *"Your manager is Dana."* is a statement of
+#: the reader's own record however few numbers it contains, and it had been shipping under
+#: *"Recommendation — not company policy"*.
+_ABOUT_THE_READER = re.compile(r"^\W*(?:you|your|you're|yours|you've|you'll)\b", re.IGNORECASE)
+
+#: The predicates that turn a sentence naming the write's id into the model's own claim that the
+#: write happened (W8, C01, and P29 before it). The `performed` statement is the turn's one
+#: account of the write; this is what a second account looks like.
+_CLAIMS_THE_WRITE = re.compile(
+    r"\b(?:has been|have been|had been|was|were|is|are|i(?:'ve| have)?)\s+(?:successfully\s+)?"
+    r"(?:created|opened|open|filed|raised|submitted|logged|entered|drafted|sent|generated)\b"
+    r"|^\W*done\b",
+    re.IGNORECASE,
+)
+
+#: Envelope fields whose value is prose rather than a record value (W8, C15). A requirement's
+#: `text` is a sentence of company policy; counting it as one of the reader's own scalars would
+#: retype every faithful `policy_fact` as the reader's data.
+PROSE_FIELDS: frozenset[str] = frozenset(
+    {"text", "reason", "quote", "snippet", "hint", "note", "summary", "details", "human_summary", "prompt_shown"}
+)
+
+#: How long a scalar may be and still be a value rather than a sentence (W8, C15).
+MAX_SCALAR_CHARS = 48
+
+#: An ISO date, so the human form of the same day joins the scalar set.
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
 #: The quote marks a clause may open with, stripped before its first word is read.
 _QUOTES = "\"'()“”‘’"
 
@@ -389,20 +450,78 @@ def _clause_heads(text: str) -> Iterator[tuple[str, str]]:
         yield head, (words[0].strip(_QUOTES) if words else "")
 
 
-def directs(text: str, tool_name: str) -> bool:
-    """Does this text tell the reader to go and do what `tool_name` has already done?
-
-    The imperative twin of `denies`: an imperative verb for the tool at the head of a clause, and
-    one of that tool's own objects in the same clause. Both halves are needed — "Your manager will
-    receive the request" has the object and no imperative, "Open the policy" has the imperative and
-    no object, and neither contradicts a ticket that exists. Since UX W7 (Addendum 3) it is put to
-    every sentence of every block as well as to every next step.
-    """
+def filing_verbs(tool_name: str) -> tuple[str, ...]:
+    """The tool's own imperative verbs, and the same verbs meaning *do it again* (W8, C01)."""
     verbs = IMPERATIVES.get(tool_name, ())
+    return (*verbs, *(f"{prefix}{verb}" for verb in verbs for prefix in RE_PREFIXES))
+
+
+def _acts_on_the_write(clause: str, objects: Sequence[str]) -> bool:
+    """Does this clause's opening verb act on the thing the tool made?
+
+    Three shapes count. The tool's own noun anywhere in the clause, however modified — *"submit the
+    formal PTO request"*; a pronoun standing in for it — *"submit it"*; and an object elided
+    straight into a preposition — *"submit in MosaicOne"*, *"log into MosaicOne"*. A clause that
+    opens with the verb and acts on something else — *"open the policy"*, *"create a calendar
+    hold"* — is not about the write and survives.
+    """
+    words = [word.strip(_QUOTES + ",.;:") for word in clause.split()[1:]]
+    if not words:
+        return False
+    # A pronoun or a preposition counts only in the object's own position, right after the verb:
+    # "submit it", "log into MosaicOne". Further along, "for those dates" is not an object at all.
+    if words[0] in PREPOSITIONS or words[0] in PRONOUN_OBJECTS:
+        return True
+    return any(word in objects for word in words)
+
+
+def _imperative(text: str, tool_name: str) -> bool:
+    """A clause in the imperative mood whose object is the thing the tool made.
+
+    Three objects count, and the second and third are what UX W7's lexical list missed: the tool's
+    own nouns ("submit the request"), a pronoun standing in for them ("submit it"), and an elided
+    object in front of a preposition ("submit in MosaicOne"). *"Open the policy and read section 4"*
+    has an imperative and an object that is neither, so it survives — it names the topic, not the
+    ticket.
+    """
+    verbs = filing_verbs(tool_name)
     objects = ACTION_OBJECTS.get(tool_name, ())
     if not verbs or not objects:
         return False
-    return any(first in verbs and any(word in head for word in objects) for head, first in _clause_heads(text))
+    return any(first in verbs and _acts_on_the_write(head, objects) for head, first in _clause_heads(text))
+
+
+def directs(text: str, tool_name: str) -> bool:
+    """Does this text tell the reader to go and do what `tool_name` has already done?
+
+    **Grammatical, not lexical** (W8, C01). UX W7 shipped an imperative-verb list crossed with an
+    object list, and the model's own recorded output already walked past it four ways: a pronoun
+    object, a modal frame, a `re-` prefix and an infinitival. The review executed HEAD's own
+    `directs()` against those wordings and got `False` for all four. So the question is asked about
+    the *shape* of the sentence instead, in four ways, any one of which is a directive:
+
+    1. the imperative mood, with the tool's object, a pronoun for it, or no object at all;
+    2. a directive modal aimed at the reader — "you must / need to / should / have to … submit";
+    3. `still` beside a filing verb — the hedge that concedes the write and directs anyway;
+    4. an infinitival addressed back to the reader — "To submit the request … yourself".
+
+    "Your manager will receive the request" and "Watch for your manager's approval in MosaicOne"
+    are none of these and survive, which is the whole point: an answer after a performed write
+    should still be able to say what happens next.
+    """
+    verbs = filing_verbs(tool_name)
+    if not verbs or not ACTION_OBJECTS.get(tool_name):
+        return False
+    lowered = text.lower()
+    named = any(re.search(rf"\b{verb}\b", lowered) for verb in verbs)
+    if named:
+        if "still" in lowered:
+            return True
+        if re.search(rf"\byou\b[^.!?]*?\b(?:{'|'.join(DIRECTIVE_MODALS)})\b", lowered):
+            return True
+        if re.search(rf"\bto\s+(?:{'|'.join(verbs)})\b[^.!?]*\byourself\b", lowered):
+            return True
+    return _imperative(text, tool_name)
 
 
 def opens_with_a_directive(text: str) -> bool:
@@ -415,16 +534,40 @@ def sentences(text: str) -> list[str]:
     return [part for part in _SENTENCE.split(text) if part.strip()]
 
 
-def trim(text: str, write: PerformedWrite) -> tuple[str, list[str]]:
-    """`text` without the sentences that direct the reader to do what `write` did — and those sentences.
+def claims_the_write(text: str, write: PerformedWrite) -> bool:
+    """Is this sentence the **model's** account of the write, rather than a use of its id?
 
-    Unchanged bytes when nothing directs: the join only happens where a sentence came out.
+    The precedence the two rules need, decided here (W8, Addendum 4). Before this, `apply()`
+    removed any block whose text named the write id, so `trim()`'s "a sentence naming the id is
+    kept" branch could never run — the block was already gone — and the stand-in test asserted the
+    opposite of what shipped. Removal is sentence-level now, and the id alone is no longer the
+    test:
+
+    * *"HR ticket MOCK-HR-000007 has been created."* is the model asserting the outcome of a call
+      it was never shown the result of, printed under *"Suggestions are guidance, not company
+      policy"*. There is exactly one account of a write per turn and it is the `performed`
+      statement (P29), so this goes.
+    * *"Dana Whitfield approves request MOCK-HR-000123."* names the same id to say what happens
+      next. It survives, and so does a directive that names it — that one is talking about the
+      request that exists rather than asking for another.
+    """
+    return write.write_id in text and bool(_CLAIMS_THE_WRITE.search(text))
+
+
+def trim(text: str, write: PerformedWrite) -> tuple[str, list[str]]:
+    """`text` without the sentences a performed write contradicts — and those sentences.
+
+    Two kinds come out: the model's own account of the write (`claims_the_write`), and a sentence
+    that tells the reader to go and do what the write did (`directs`). A sentence naming the id
+    that does neither is kept. Unchanged bytes when nothing comes out: the join only happens where
+    a sentence was removed.
     """
     kept: list[str] = []
     removed: list[str] = []
     for sentence in sentences(text):
-        # A sentence naming the id is talking about the request that exists, not asking for another.
-        if write.write_id in sentence or not directs(sentence, write.tool_name):
+        if claims_the_write(sentence, write):
+            removed.append(sentence)
+        elif write.write_id in sentence or not directs(sentence, write.tool_name):
             kept.append(sentence)
         else:
             removed.append(sentence)
@@ -470,10 +613,118 @@ def envelope_numbers(envelopes: Iterable[Any]) -> set[float]:
     return found
 
 
-def states_the_record(text: str, numbers: set[float]) -> bool:
-    """The backstop's rule (UX W7, JX2-05): no clause opens with a directive verb, and the text states
-    a number a data tool on this turn returned — a balance, a tenure in months, notice days."""
-    return bool(numbers) and not opens_with_a_directive(text) and bool(numbers_in(text) & numbers)
+def envelope_scalars(envelopes: Iterable[Any]) -> set[str]:
+    """Every short scalar value a *data* tool result carried, lower-cased (W8, C15).
+
+    The UX W7 backstop asked for a number, so *"Your manager is Dana."* and *"Your office is
+    Boston."* could never qualify and `record` was emitted zero times in 512 turns. A name, a city,
+    a work arrangement and an ISO date are the reader's own record just as a balance is — but a
+    requirement's `text` is a sentence of company policy, so `PROSE_FIELDS` and a length cap keep
+    prose out of the set. ISO dates contribute the human form as well, because that is how an
+    answer writes them.
+    """
+    found: set[str] = set()
+
+    def walk(node: Any, key: str = "") -> None:
+        if isinstance(node, str):
+            value = node.strip()
+            if key in PROSE_FIELDS or not value or len(value) > MAX_SCALAR_CHARS:
+                return
+            found.add(value.casefold())
+            if _ISO_DATE.fullmatch(value):
+                found.add(date_consistency.human_date(date.fromisoformat(value)).casefold())
+        elif isinstance(node, dict):
+            for name, value in node.items():
+                walk(value, str(name))
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, key)
+
+    for envelope in envelopes:
+        if getattr(envelope, "name", "") in UNRENDERED_ENVELOPES:
+            continue
+        try:
+            body = json.loads(getattr(envelope, "result_json", "") or "")
+        except (TypeError, ValueError):
+            continue
+        walk(body)
+    return found
+
+
+def about_the_reader(text: str) -> bool:
+    """Is this sentence about the person reading it? *"Your manager is Dana."* is (W8, C15)."""
+    return bool(_ABOUT_THE_READER.match(text))
+
+
+def states_the_record(
+    text: str, numbers: set[float], scalars: Iterable[str] = (), *, scalars_only: bool = False
+) -> bool:
+    """The backstop's rule (UX W7, JX2-05; widened W8, C15): no clause opens with a directive verb,
+    and the text states a value a data tool on this turn returned — a balance, a tenure, a notice
+    figure, a manager's name, an office, a date.
+
+    `scalars_only` drops the numeric half. It is what a **cited** block is judged by: *"You accrue
+    1.50 days of PTO per month"* states a number the envelope also carries and is still company
+    policy, written in the second person; *"Your manager is Dana"* names a person only the
+    reader's own record knows.
+    """
+    if opens_with_a_directive(text):
+        return False
+    if not scalars_only and numbers and numbers_in(text) & numbers:
+        return True
+    lowered = text.casefold()
+    return any(scalar in lowered for scalar in scalars)
+
+
+def _record_split(
+    block: Mapping[str, Any],
+    is_policy_claim: bool,
+    *,
+    numbers: set[float],
+    scalars: set[str],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool]:
+    """`(what is left of the block, the `record` block split out of it, whether anything moved)`.
+
+    The reader's own record is neither policy nor advice, and it had been shipping as both. Two
+    shapes are handled (W8, C15):
+
+    * a `recommendation` that is nothing but the reader's record is retyped where it stands — the
+      UX W7 backstop, now reading strings and dates as well as numbers;
+    * a block that **mixes** them gives up only the sentences that are the record. A `policy_fact`
+      does so only for a sentence whose subject is the reader — *"Your manager is Dana"* under a
+      citation to the approval matrix is the reader's record wearing a policy's authority, and the
+      citation leaves with it — because a policy sentence that merely quotes a threshold the
+      envelope also carries is still policy.
+
+    A block G3 demoted from an uncited `policy_fact` is exempt throughout: that one is a policy
+    claim wearing the wrong label, not a record.
+    """
+    kind = str(block.get("type") or "")
+    text = str(block.get("text") or "")
+    if is_policy_claim or kind not in ("recommendation", "policy_fact") or not text:
+        return dict(block), None, False
+
+    def is_record(sentence: str) -> bool:
+        # A **cited** block gives up only a sentence about the reader that names a value only the
+        # reader's record knows. A policy sentence written in the second person — *"You accrue
+        # 1.50 days of PTO per month"* — is still policy, and retyping it would strip the citation
+        # that is the reader's only way to check it.
+        if kind == "policy_fact":
+            return about_the_reader(sentence) and states_the_record(sentence, numbers, scalars, scalars_only=True)
+        return states_the_record(sentence, numbers, scalars)
+
+    parts = sentences(text)
+    directives = [sentence for sentence in parts if opens_with_a_directive(sentence)]
+    records = [sentence for sentence in parts if sentence not in directives and is_record(sentence)]
+    if directives and records:
+        # A **mixed** block gives up only its record half; the advice keeps its own type and its
+        # place. Splitting a block that is all record would fragment one statement into two.
+        rest = [sentence for sentence in parts if sentence not in records]
+        kept = {**block, "text": " ".join(part.strip() for part in rest)}
+        return kept, {"type": RECORD, "text": " ".join(part.strip() for part in records), "citations": []}, True
+    if not directives and is_record(text):
+        return {**block, "type": RECORD, "citations": []}, None, True
+    return dict(block), None, False
 
 
 def apply(
@@ -492,11 +743,16 @@ def apply(
     write = performed_write(envelopes)
     # Only this step may claim a write happened, and it claims it from the tool result. A model
     # that typed a block `performed` is asserting the outcome of a call whose result it has not
-    # been shown, so the claim is demoted to what it actually is — advice (UX W6).
+    # been shown, so the claim is demoted to what it actually is — advice (UX W6). On a turn that
+    # DID perform a write the block goes entirely: the statement below is re-emitted from the tool
+    # result, and re-reading a previous run's own statement as model prose is what made this step
+    # non-idempotent (W8).
+    typed_performed = [index for index, block in enumerate(blocks) if block.get("type") == PERFORMED]
     body = [{**block, "type": "recommendation"} if block.get("type") == PERFORMED else dict(block) for block in blocks]
     steps = [str(step) for step in next_steps]
     claims = set(policy_claims)
     numbers = envelope_numbers(envelopes)
+    scalars = envelope_scalars(envelopes)
 
     kept_steps: list[str] = []
     dropped: list[int] = []
@@ -509,7 +765,9 @@ def apply(
     if write is not None:
         for index, step in enumerate(steps):
             # A step naming the id is talking about the ticket that exists, not asking for another.
-            if write.write_id in step or not directs(step, write.tool_name):
+            if claims_the_write(step, write):
+                dropped.append(index)
+            elif write.write_id in step or not directs(step, write.tool_name):
                 kept_steps.append(step)
             else:
                 dropped.append(index)
@@ -519,22 +777,29 @@ def apply(
     for index, block in enumerate(body):
         text = str(block.get("text") or "")
         if write is not None:
-            # **One account of the write per turn, and it is the statement below** (P29). A model
-            # block that names the id is the model's account of a write it cannot see the result
-            # of — it was left in place while this step stayed silent, and the live 2026-09-15 turn
-            # reported `MOCK-HR-000007` in a `recommendation`, under *"What I suggest you do"* and
-            # its *"guidance, not company policy"* footnote (JX-R1 = cpux-re-1). It is removed here
-            # whatever its type, and so is an escalation denying the action, which the statement
-            # has already answered.
-            if write.write_id in text or (block.get("type") == "escalation" and denies(text, write.tool_name)):
+            # An escalation denying the very action the result shows was performed is answered by
+            # the statement below, and goes whole: it is one claim, not a paragraph (P22). So does
+            # a block the model typed `performed`, and so does this step's own statement from a
+            # previous pass.
+            if index in typed_performed or (block.get("type") == "escalation" and denies(text, write.tool_name)):
                 replaced.append(index)
                 continue
-            # **No sentence tells the reader to go and do it either** (UX W7, Addendum 3).
+            # **One account of the write per turn, and no sentence sends the reader to repeat it**
+            # (P29; UX W7 Addendum 3; W8 C01). Sentence-level, so a sentence that uses the id to
+            # say what happens next survives while the model's own claim that the write happened
+            # does not — see `claims_the_write` for the precedence.
             text, removed = trim(text, write)
             if removed:
-                trimmed.extend((index, sentence) for sentence in removed)
+                # Two removals, two records. A sentence that was the model's own account of the
+                # write is `replaced` — the statement below takes its place; a sentence that
+                # directed the reader to go and file it is `trimmed`.
+                claimed = [sentence for sentence in removed if claims_the_write(sentence, write)]
+                trimmed.extend((index, sentence) for sentence in removed if sentence not in claimed)
+                if claimed:
+                    replaced.append(index)
                 if not text:
-                    emptied.append(index)
+                    if not claimed:
+                        emptied.append(index)
                     continue
                 block = {**block, "text": text}
                 # What is left of a block that mixed a directive about the write with statements
@@ -542,12 +807,16 @@ def apply(
                 if block.get("type") == "recommendation" and index not in claims and not opens_with_a_directive(text):
                     block["type"] = RECORD
                     retyped.append(index)
-        # **The reader's own data is not advice** (UX W7, JX2-05 = cpux2-4): a `recommendation`
-        # with no directive in it that states a number a data tool on this turn returned.
-        if block.get("type") == "recommendation" and index not in claims and states_the_record(text, numbers):
-            block = {**block, "type": RECORD}
+        # **The reader's own data is not advice** (UX W7, JX2-05 = cpux2-4; widened W8, C15): a
+        # block that states a value a data tool on this turn returned, split at sentence
+        # boundaries so a mixed block gives up only the half that is the reader's record.
+        block, record, split = _record_split(block, index in claims, numbers=numbers, scalars=scalars)
+        if split:
             retyped.append(index)
-        survivors.append((index, block))
+        if block is not None:
+            survivors.append((index, block))
+        if record is not None:
+            survivors.append((index, record))
 
     result = [block for _index, block in survivors]
     if write is None:
@@ -569,19 +838,29 @@ __all__ = [
     "ACTION_OBJECTS",
     "ACTION_WORDS",
     "DENIALS",
+    "DIRECTIVE_MODALS",
     "DIRECTIVE_VERBS",
     "IMPERATIVES",
+    "MAX_SCALAR_CHARS",
     "NEXT_EVENT",
     "PERFORMED",
+    "PREPOSITIONS",
+    "PRONOUN_OBJECTS",
+    "PROSE_FIELDS",
     "RECORD",
+    "RE_PREFIXES",
     "STEP_NAME",
     "WRITE_SUCCESS",
     "Outcome",
     "PerformedWrite",
+    "about_the_reader",
     "apply",
+    "claims_the_write",
     "denies",
     "directs",
     "envelope_numbers",
+    "envelope_scalars",
+    "filing_verbs",
     "numbers_in",
     "opens_with_a_directive",
     "performed_write",

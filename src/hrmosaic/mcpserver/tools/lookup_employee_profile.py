@@ -24,6 +24,7 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hrmosaic.core.db import now_micros
+from hrmosaic.core.tenure import human_tenure
 from hrmosaic.mcpserver import approvers as approver_chain
 from hrmosaic.mcpserver.server import READ_ONLY, ServerDeps, envelope, not_found, read_meta, result
 
@@ -70,26 +71,6 @@ class ProfileOutput(BaseModel):
     status: str | None = None
     code: str | None = None
     hint: str | None = None
-
-
-def human_tenure(months: int | None) -> str | None:
-    """`45` → `"3 years 9 months"`. The months are the record; this is how a person says it.
-
-    Singular where the count is one, and the smaller unit dropped when it is zero — "3 years",
-    never "3 years 0 months". Below a month there is no unit left to name, so it says so in words
-    rather than printing a zero.
-    """
-    if months is None:
-        return None
-    if months <= 0:
-        return "less than a month"
-    years, remainder = divmod(months, 12)
-    parts = []
-    if years:
-        parts.append(f"{years} year{'s' if years != 1 else ''}")
-    if remainder:
-        parts.append(f"{remainder} month{'s' if remainder != 1 else ''}")
-    return " ".join(parts)
 
 
 def person(deps: ServerDeps, employee_id: str | None) -> Person | None:

@@ -19,6 +19,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from hrmosaic.agent import outcome
 from hrmosaic.agent.orchestrator import _ToolEnvelope
 
@@ -553,15 +555,33 @@ def test_a_recommendation_with_no_directive_in_it_is_untouched():
 
 
 def test_a_directive_sentence_that_names_the_ticket_is_kept():
-    """It is talking about the request that exists, not asking for another."""
+    """It is talking about the request that exists, not asking for another.
+
+    **The precedence, decided at W8** (Addendum 4). Until now `apply()` removed any block whose
+    text named the write id, so this branch of `trim()` could never run and the stand-in test
+    asserted the opposite of what shipped. Removal is sentence-level now: a sentence that is the
+    model's own *account* of the write goes (there is one account per turn and it is the
+    `performed` statement), and a sentence that merely uses the id to say what to do with the
+    request that exists stays.
+    """
     block = {
         "type": "recommendation",
         "text": "Quote MOCK-HR-000002 if you contact HR. Submit the request in MosaicOne so it is on file.",
         "citations": [],
     }
     result = outcome.apply([block], envelopes(TICKET))
-    # The block names the id, so it is the model's own account of the write and is replaced
-    # whole (P29) — the id sentence is kept only in a block that is not that account.
+    assert result.blocks[1]["text"] == "Quote MOCK-HR-000002 if you contact HR."
+    assert result.trimmed == [(0, "Submit the request in MosaicOne so it is on file.")]
+    assert result.replaced == [], "the id sentence is not an account of the write, so nothing is replaced"
+
+    # …and the account itself still goes, whatever type it wears.
+    claiming = {
+        "type": "recommendation",
+        "text": "Quote MOCK-HR-000002 if you contact HR. Ticket MOCK-HR-000002 has been created for you.",
+        "citations": [],
+    }
+    result = outcome.apply([claiming], envelopes(TICKET))
+    assert result.blocks[1]["text"] == "Quote MOCK-HR-000002 if you contact HR."
     assert result.replaced == [0]
 
     quoting = {"type": "recommendation", "text": "Quote the reference if you contact HR.", "citations": []}
@@ -678,3 +698,125 @@ def test_envelope_numbers_are_read_however_deep_they_sit():
     )
     assert outcome.envelope_numbers([nested]) == {45.0, 12.0}
     assert outcome.numbers_in("45 months, 3-day, 13.5 days, v2.1, by 2026.") == {45.0, 3.0, 13.5, 2026.0}
+
+
+# -- W8 C01: the grammar of a directive, against the model's own recorded wordings -------
+#
+# §3 of `demo-path-review-2026-09-15.md` executed HEAD's own `directs()` against five sentences
+# `claude-haiku-4-5` has actually produced after a confirmed write. One matched. Four did not: a
+# pronoun object, a modal frame, a `re-` prefix and an infinitival all walked past a verb/object
+# whitelist. These are those five sentences, verbatim.
+
+DEFEATING_WORDINGS = [
+    "Submit your request in MosaicOne so your manager can approve it in writing.",
+    "Submit it in MosaicOne for your manager written approval.",
+    "You must still submit the formal PTO request in MosaicOne for manager approval.",
+    "Resubmit the request in MosaicOne once Dana agrees.",
+    "To submit the PTO request in MosaicOne yourself, contact People Operations.",
+]
+
+#: Sentences an answer after a performed write is still allowed to make: they say what happens
+#: next, or they name the request that exists.
+SURVIVING_WORDINGS = [
+    "Dana Whitfield approves request MOCK-HR-000123.",
+    "Watch for your manager's approval in MosaicOne.",
+    "Your manager will receive the request and must approve it in writing.",
+    "Open the PTO & Holidays Policy and read the notice section.",
+    "Create a calendar hold for those dates.",
+]
+
+
+@pytest.mark.parametrize("sentence", DEFEATING_WORDINGS)
+def test_every_observed_wording_of_the_directive_is_a_directive(sentence):
+    assert outcome.directs(sentence, "create_mock_hr_ticket"), sentence
+
+
+@pytest.mark.parametrize("sentence", SURVIVING_WORDINGS)
+def test_a_sentence_about_what_happens_next_is_not_a_directive(sentence):
+    assert not outcome.directs(sentence, "create_mock_hr_ticket"), sentence
+
+
+def test_no_observed_wording_survives_a_performed_write():
+    """The whole class, through the step: five blocks in, none of those sentences out."""
+    blocks = [{"type": "recommendation", "text": sentence, "citations": []} for sentence in DEFEATING_WORDINGS]
+    result = outcome.apply(blocks, envelopes(TICKET), next_steps=list(DEFEATING_WORDINGS))
+
+    assert [block["type"] for block in result.blocks] == ["performed"]
+    assert result.next_steps == []
+    assert result.emptied == [0, 1, 2, 3, 4]
+
+
+def test_the_manager_next_action_survives_beside_the_statement():
+    """The other half of C01: the answer may still say what happens next, and name the ticket."""
+    blocks = [{"type": "recommendation", "text": sentence, "citations": []} for sentence in SURVIVING_WORDINGS]
+    result = outcome.apply(blocks, envelopes(TICKET))
+
+    assert [block["text"] for block in result.blocks[1:]] == SURVIVING_WORDINGS
+    assert result.trimmed == [] and result.emptied == []
+
+
+# -- W8 C15: the reader's own record, in strings as well as numbers ----------------------
+
+PROFILE = _ToolEnvelope(
+    name="lookup_employee_profile",
+    result_json=json.dumps(
+        {
+            "employee_id": "E1042",
+            "preferred_name": "Priya",
+            "work_arrangement": "hybrid",
+            "office": {"city": "Boston"},
+            "manager": {"employee_id": "E1007", "preferred_name": "Dana", "title": "Director, Engineering"},
+        }
+    ),
+)
+
+
+def test_a_record_fact_with_no_number_in_it_is_still_the_readers_record():
+    """`eval:profile-001:1` — *"Recommendation — not company policy: Your manager is Dana."*
+
+    The UX W7 backstop asked for a number equal to a numeric field of an envelope, so a record
+    fact made of names could never qualify: `record` was emitted **0 times in 512 turns**.
+    """
+    block = {"type": "recommendation", "text": "Your manager is Dana (Director, Engineering).", "citations": []}
+    result = outcome.apply([block], [PROFILE])
+
+    assert result.blocks == [{**block, "type": "record"}]
+    assert result.retyped == [0]
+
+
+def test_a_cited_block_about_the_reader_loses_the_citation_with_the_type():
+    """A citation to the approval matrix is not what makes *"Your manager is Dana"* true."""
+    block = {"type": "policy_fact", "text": "Your office is Boston.", "citations": ["c_9948839107acfaaf"]}
+    result = outcome.apply([block], [PROFILE])
+
+    assert result.blocks == [{"type": "record", "text": "Your office is Boston.", "citations": []}]
+
+
+def test_a_policy_sentence_written_in_the_second_person_keeps_its_citation():
+    """The other side of the same rule: policy is policy however it addresses the reader."""
+    balance = _ToolEnvelope(name="check_pto_balance", result_json='{"accrual_rate_days_per_month": 1.5}')
+    block = {
+        "type": "policy_fact",
+        "text": "You accrue 1.50 days of PTO per month as a full-time employee with three or more years of service.",
+        "citations": ["c_e178629918c7cd96"],
+    }
+    result = outcome.apply([block], [balance])
+
+    assert result.blocks == [block]
+    assert result.retyped == []
+
+
+def test_a_mixed_block_gives_up_only_its_record_half():
+    """A block that mixes the reader's record with advice is split at the sentence boundary."""
+    block = {
+        "type": "recommendation",
+        "text": "Your manager is Dana. Ask Dana to record the approval in MosaicOne.",
+        "citations": [],
+    }
+    result = outcome.apply([block], [PROFILE])
+
+    assert result.blocks == [
+        {"type": "recommendation", "text": "Ask Dana to record the approval in MosaicOne.", "citations": []},
+        {"type": "record", "text": "Your manager is Dana.", "citations": []},
+    ]
+    assert result.retyped == [0]
