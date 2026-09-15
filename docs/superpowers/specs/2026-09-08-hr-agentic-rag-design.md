@@ -1074,13 +1074,20 @@ seven scenarios has a fixture input producing a non-`insufficient_evidence` verd
 ```jsonc
 {"employee_id":"E1042","as_of":"2026-09-01","preferred_name":"Priya","legal_name":"Priya Raghavan",
  "title":"Senior Robotics Engineer","department":"Engineering","employment_type":"full_time","fte":1.0,
- "level":"L5","hire_date":"2022-11-13","tenure_months_at_as_of":45,"work_arrangement":"hybrid",
- "work_country":"US",
+ "level":"L5","hire_date":"2022-11-13","tenure_months_at_as_of":45,"tenure":"3 years 9 months",
+ "work_arrangement":"hybrid","work_country":"US",
  "office":{"office_id":"bos","city":"Boston","country":"US","timezone":"America/New_York","entity":"Mosaic Robotics, Inc."},
  "manager":{"employee_id":"E1007","preferred_name":"Dana","title":"Director, Engineering"},
  "skip_level":{"employee_id":"E1002","preferred_name":"Miguel","title":"VP Engineering"}}
 // or {"status":"not_found","code":"EMPLOYEE_NOT_FOUND","hint":"Employee ids look like E1042."}
 ```
+
+**Amended, UX W5 (owner decision).** `tenure` is additive: the same fact as `tenure_months_at_as_of`
+in the words a person uses, so the synthesis prompt's EMPLOYEE CONTEXT — which renders each envelope
+verbatim — hands the model *"3 years 9 months"* instead of `45` and an invitation to do month
+arithmetic in prose. The integer is the record and is unchanged; the rules engine's
+`computed.tenure_days` still derives from `hire_date`. `tests/unit/test_human_tenure.py` pins the
+phrasing and `tests/fixtures/prompts/synthesize.user.txt` pins what the model is shown.
 
 **6. `check_pto_balance`** — input `{"employee_id":"E1042","as_of":"2026-09-15"}` (`as_of` optional).
 
@@ -1971,6 +1978,22 @@ every key of `TURN_CONTEXT_KEYS` and that the two renderings of one turn match. 
 stored `final_answer` (`orchestrator.parse_next_steps()`, the inverse of §7.3's join). The dashboard's session page links here
 (*"Continue this conversation in chat"*), which is the return leg of the `/dashboard/sessions/{id}#turn-{seq}` deep link.
 
+**Amended, UX W5 — accessibility and responsiveness.** Nothing on the page moved; what changed is what a keyboard, a screen reader, a thumb and a
+dark-mode preference get. Every authenticated surface (`chat.html`, `dashboard/_base.html`, `policy.html`, `policy_index.html`, `refused.html`) opens
+with a **skip link** to `#main-content`, which is the page's `<main>`, focusable and ringless. Each turn is a labelled region: a visually-hidden `<h2>`
+carrying the question, `aria-labelledby` on the `<article>`, and an `aria-label` on `.conversation`. A turn that lands **awaiting confirmation** moves
+focus to the card's heading (`.confirm-heading`, `tabindex="-1"`) instead of the composer, because the decision is what the reader now has to answer;
+every other outcome still returns focus to `#message`. `:focus-visible` paints the brand ring **and** a transparent outline, so a forced-colours reader
+gets an indicator a `box-shadow` alone would not give them. Below 40 rem every control is at least **44 px** in both directions, no rendered type falls
+below the `--text-floor` (13 px) the brand ramp's `--text-meta` sets, and `prefers-reduced-motion: reduce` switches off every transition and Chart.js's
+animations. The key page marks a **genuine rejection** only — `aria-invalid`, `aria-describedby` and `autofocus` on the field, and a title prefixed
+*"Key not recognised"* — never the blank form or an anonymous request, which offered no key to reject. Brand contrast is measured rather than asserted:
+`tests/contract/test_brand_contrast.py` recomputes every `docs/brand.md` §3 pair from the shipped tokens in both themes, and
+`tests/ux/test_accessibility.py` measures what a browser actually painted, at `color_scheme` light **and** dark, on chat and on the dashboard. Both
+share `tests/support/contrast.py`, and `make ux-capture` now photographs the key page, chat and every dashboard route a second time under
+`prefers-color-scheme: dark` (ids suffixed `-dark`), asking no new question — the four stub servers share one trace store, so the answered conversation
+is rehydrated rather than re-run.
+
 ### 11.6 Observability dashboard — 11 pages
 
 All server-rendered Jinja, htmx for filters / pagination / drill-down, Chart.js on pages 1, 8 and 11. **Every page renders from a typed Pydantic
@@ -2032,6 +2055,18 @@ from the eval escalation matrix (§13.4) and is never an eval item.
 **Access (amended, UX W1).** The whole dashboard — every page and every `/api/*` read — is reachable by **anyone holding the access token of §11**;
 the persona gates only the three write controls below. The data is entirely synthetic, so the grader browses freely by following the tokenized link:
 the `Chat | Dashboard` switch in the shared masthead is on every page, in every persona. Stated in `deployed.md`.
+
+**Amended, UX W5 — the dashboard's half of the same wave.** Every `<canvas>` on pages 1, 8 and 11 is now **decorative** (`aria-hidden="true"`) inside a
+`figure.chart-figure` whose visually-hidden `<figcaption>` carries either a table of the same figures — through the same registered filters the rest of
+the page uses, so the spoken numbers and the printed ones are one convention — or the sentence naming where on the page those figures already are. The
+ablation chart and its table read one shared `ablation_series` list, so they cannot plot different things under one heading. The page-3 waterfall
+**restacks** below 70 rem into four explicit columns: the proportional track is the only decorative part and is what goes, the per-step duration comes
+back, and the axis keeps its label and its total inside the card. A failed step says *failed* in a word beside the red it is painted in. The eleven-item
+page nav becomes **one row that scrolls inside itself** below 44 rem, with the thin scrollbar and edge shade the wide tables use, instead of four pinned
+rows consuming a fifth of a phone viewport. A fragment deep link — `#turn-{seq}`, `#turn-{turn_id}` or a citation's `#{chunk_id}` — now **moves focus**
+to what it names as well as scrolling to it (`templates/_deep_link.html`, shared by the dashboard and the policy reader); where the target is the
+`visibility: hidden` `.anchor`, the turn card around it takes the focus. `tests/ux/test_dashboard_principles.py` asserts P7 over every route at all
+three viewports, the restack, the chart figures and the deep-link landing.
 
 ### 11.7 Bounded eval launch from the dashboard
 

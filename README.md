@@ -47,14 +47,14 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 2,143 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 2,257 tests as of
 2026-09-15, unit, contract, integration, architecture and e2e-with-stub, every one of them against
-the scripted stub provider, so no credential is involved. Forty-two of those are the browser-based UX
+the scripted stub provider, so no credential is involved. Seventy-one of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
 and CI runs them in a job of their own that never blocks `test` or `deploy`. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-15: **95% of statements and 87% of branches
-over 7,684 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+over 7,697 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
@@ -95,6 +95,30 @@ returning all nine tools, a real `search_policy_documents` call with its retriev
 what makes the "attachable by an external MCP client" claim checkable rather than asserted. Its own
 header states which calls from that session were *not* captured and are therefore attributed to the
 build ledger rather than pinned.
+
+## The interface
+
+Two surfaces and one shell: a **chat** page that is nothing but the conversation, and an
+**observability dashboard** holding every technical detail the chat page does not show. The masthead
+is the same partial on both, the `Chat | Dashboard` switch is on every page in every persona, and
+the demo-only controls — the persona picker, the scripted prompts, the deep link into the record —
+live in one labelled *Demo & grader controls* panel at the foot of the chat page, collapsed by
+default, so nothing a real user would never see is mixed into the product.
+
+The final screen set is committed under
+[`docs/evidence/ux-final/`](docs/evidence/ux-final/) — chat at rest, an answered turn with its
+sources, the confirmation card, a refusal, the phone layout, the dashboard's overview, session
+waterfall, guardrails and evaluation pages, each in the **light and the dark** palette. They are
+reproducible rather than curated: `make ux-capture` re-photographs all of them from four stub
+servers on loopback with `LLM_PROVIDER=stub`, and its own `index.json` records the geometry
+(`body_horizontal_scroll` false on every screen at 1440x900, 1280x800 and 390x844).
+
+Accessibility is measured, not asserted. `pytest -m ux` drives a real browser and checks the skip
+link, the focus indicator on every keyboard stop, 44 px tap targets at 390 px, the 13 px type floor,
+`prefers-reduced-motion`, form labels, and WCAG AA contrast on the colours the browser actually
+painted in both colour schemes; `pytest -q` recomputes every brand colour pair from the shipped
+tokens (`tests/contract/test_brand_contrast.py`) and holds the design document's published table to
+what the tokens really measure.
 
 ## Deployment
 

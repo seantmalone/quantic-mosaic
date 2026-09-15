@@ -21,8 +21,10 @@ Before you start, tick [`pre-submission-checklist.md`](pre-submission-checklist.
 - **Continuous narration.** No silent scrolling; if you are moving the mouse, you are talking.
 - **The government ID is held legibly still for ≥ 3 seconds at ~0:15**, framed large enough to
   read, in addition to speaking your name.
-- **Check the overlay does not occlude** the citation chips (bottom of each answer block) or the
-  live span rail (right-hand column). Move the PiP to the top-left if it does.
+- **Check the overlay does not occlude** the **Sources (n)** strip at the foot of an answer or the
+  sticky composer at the bottom of the conversation column. Move the PiP to the top-left if it does.
+  (The right-hand *live span rail* this line used to name was deleted in UX W2: chat is one centred
+  conversation column now, and the technical record lives on the dashboard.)
 - **Verify audio on a 20-second test clip** before the real take. Re-recording nine minutes
   because of a dead microphone is the single most common way this goes wrong.
 - **Screen setup:** browser at 1440-wide or more, zoom at 100 %. **One profile is enough** since
@@ -119,7 +121,8 @@ Tick all five on camera:
       `met: false` on the duration rule, the `verdict`, and the fact that **every requirement
       carries its own citation** — *"this verdict is a deterministic rules engine over
       `corpus/rules.yml`, with no LLM in the path."*
-- [ ] **④ Retrieved citations** — point at the citation chips under the answer. Breadth here is not
+- [ ] **④ Retrieved citations** — open the **Sources (n)** strip under the answer: each reference is
+      a document title and a section, and expanding one shows the quoted passage. Breadth here is not
       deterministic. The live run pinned as
       [`docs/evidence/demo-task-1-live-2026-09-11.txt`](evidence/demo-task-1-live-2026-09-11.txt)
       cited **8 chunks across three documents** (`remote-and-hybrid-work`,
@@ -128,20 +131,25 @@ Tick all five on camera:
       expected documents — no block was dropped by the citation guardrail this time
       (`blocks_dropped_by_g2` = 0), the answer was simply narrower than its three-document end
       state, which is why that item is one of the three the run reports as failing. **Read off the
-      chips that are actually on screen** — if two appear, say so and click both through. Then
-      click one through to the corpus browser and show the 30-day sentence highlighted at its
-      exact character offsets.
+      references that are actually on screen** — if two appear, say so and open both. Then follow
+      *"Open the full policy"* on one: since UX W1 a citation lands in the **policy reader** at
+      `/policy/{doc_id}#{chunk_id}`, which highlights the 30-day section in the document a person
+      would read, not in a chunk inspector.
 - [ ] **⑤ Final answer** — read the verdict aloud: **conditional** — 42 days exceeds the 30-day
       threshold so Tax & Legal review is required before travel, Germany is on the approved-country
       list, a company-managed encrypted device with always-on VPN is mandatory, and written manager
-      approval is needed at least 21 calendar days before departure. Point out the typed blocks:
-      `policy_fact` versus `recommendation`, the latter labelled *"Recommendation — not company
-      policy"* in the interface.
+      approval is needed at least 21 calendar days before departure. Point out the two kinds of
+      statement: a cited policy fact reads as prose with its source under it, and everything that is
+      advice rather than policy is grouped once under **"What I suggest you do"** with the footnote
+      *"Suggestions are guidance, not company policy."* (Since UX W2 the chat surface says it that
+      way; the literal `Recommendation — not company policy:` prefix is still in the JSON `answer`
+      the API and the eval harness read, which is where the rubric measures it.)
 
-The *Full span waterfall* link renders for every persona, and since UX W1 it **resolves** for every
-persona too: clicking it under `E1042` lands on the session page, and that page's
-*"Continue this conversation in chat"* brings the transcript back. Click it here, or fold this
-turn's waterfall into the 5:30 dashboard tour.
+The deep link into the record is **"Open this conversation in the dashboard"**, inside the
+*Demo & grader controls* panel at the foot of the chat page (UX W3 moved it there, out of the
+answer). It resolves for every persona: clicking it under `E1042` lands on the session page at this
+turn, and that page's *"Continue this conversation in chat"* brings the transcript back. Click it
+here, or fold this turn's waterfall into the 5:30 dashboard tour.
 
 ---
 
@@ -165,8 +173,8 @@ Tick all five on camera:
       snapshot line out loud — *"the mock data carries an explicit `as_of` snapshot; there is no
       frozen clock anywhere in this system."* Then the compliance verdict: notice requirement met
       with 8 business days against a 5-day rule.
-- [ ] **④ Retrieved citations** — **read the chips that are actually on screen.** Breadth here is
-      not deterministic: the live run captured in
+- [ ] **④ Retrieved citations** — **read the references that are actually on screen.** Breadth here
+      is not deterministic: the live run captured in
       [`docs/evidence/demo-task-2-live-2026-09-11.txt`](evidence/demo-task-2-live-2026-09-11.txt)
       cited four chunks across **two** documents (`pto-and-holidays`, `manager-approval-matrix`),
       while earlier live turns cited `pto-and-holidays` alone. Two documents is the design
