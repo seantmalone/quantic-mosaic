@@ -3,7 +3,8 @@
 
 The audit that produced `docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` is evidence, and
 evidence has to be reproducible: this is the harness that reproduces it, so a wave can be checked
-against the same 53 screen ids at the same three viewports rather than eyeballed.
+against the same screen ids at the same three viewports rather than eyeballed — each
+viewport a fresh load of the page, never a resize (UX W7).
 
 **How it runs, and it is exactly how the audit ran.** Four stub servers, each with its own
 `LLM_STUB_SCRIPT`, all sharing **one** `TRACE_DB_PATH` — so the dashboard screens show all four
@@ -249,25 +250,65 @@ class Capture:
         notes: str,
         selector: str | None = None,
         before: Callable[[Any], None] | None = None,
+        fresh: Callable[[Any], None] | None = None,
+        after: Callable[[Any], None] | None = None,
+        live: bool = False,
     ) -> None:
+        """One screen id at every viewport — each one a FRESH load, never a resize.
+
+        The harness used to resize one loaded page three times, and three of the second re-audit's
+        findings were invisible at 1440 while two others were artefacts of the resize itself: the
+        390px half of the evidence photographed a post-resize state no reader reaches by loading
+        (UX W7, the scorer's §6). Now every viewport is a new page whose first paint is at that
+        size. The default reproduces the state by loading the source page's own URL — a
+        conversation is `/?session=<id>` and rehydrates, a fragment lands itself; `fresh` rebuilds a
+        state a plain load cannot (a parked in-flight turn, a rejected key), `before` applies a
+        client-side state (a disclosure opened), `after` tears one down (a parked request).
+
+        `live=True` is the one documented exception: a state that exists on the source page only
+        and that no load can rebuild — the confirmation card, which a replay never offers
+        (`test_a_replayed_turn_never_offers_a_confirmation_it_cannot_honour`) and which the spent
+        stub script cannot produce twice. Those screens are taken on the source page by resizing
+        it, and their `state` says so.
+        """
         for label, width, height in VIEWPORTS:
+            if live:
+                try:
+                    page.set_viewport_size({"width": width, "height": height})
+                    page.wait_for_timeout(300)
+                    if before is not None:
+                        before(page)
+                    self._one(
+                        page,
+                        screen_id,
+                        label,
+                        route=route,
+                        state=f"{state} (live page, resized)",
+                        notes=notes,
+                        selector=selector,
+                    )
+                except Exception as exc:
+                    self.failures.append(f"{screen_id}@{label}: {exc}")
+                    print(f"  ! {screen_id}@{label}: {exc}", file=sys.stderr)
+                continue
+            tab = page.context.new_page()
             try:
-                page.set_viewport_size({"width": width, "height": height})
-                page.wait_for_timeout(300)
-                # A resize preserves the scroll offset in pixels, not the thing that was on
-                # screen — so a fragment-addressed page (a citation's landing) has to be
-                # re-landed at each viewport, or the shot photographs the wrong section.
-                page.evaluate(
-                    "() => { const t = location.hash && document.getElementById(location.hash.slice(1));"
-                    " if (t) { t.scrollIntoView({block: 'start'}); } }"
-                )
-                page.wait_for_timeout(150)
+                tab.set_viewport_size({"width": width, "height": height})
+                if fresh is not None:
+                    fresh(tab)
+                else:
+                    tab.goto(page.url, wait_until="networkidle", timeout=90_000)
+                tab.wait_for_timeout(300)
                 if before is not None:
-                    before(page)
-                self._one(page, screen_id, label, route=route, state=state, notes=notes, selector=selector)
+                    before(tab)
+                self._one(tab, screen_id, label, route=route, state=state, notes=notes, selector=selector)
+                if after is not None:
+                    after(tab)
             except Exception as exc:  # a broken page must not pass as a picture
                 self.failures.append(f"{screen_id}@{label}: {exc}")
                 print(f"  ! {screen_id}@{label}: {exc}", file=sys.stderr)
+            finally:
+                tab.close()
 
     def _one(
         self, page: Any, screen_id: str, label: str, *, route: str, state: str, notes: str, selector: str | None
@@ -415,6 +456,12 @@ def ask(page: Any, base_url: str, prompt: str, *, hold: bool = False) -> None:
     page.click("#send-button")
     if hold:
         page.wait_for_function(IN_FLIGHT_JS, timeout=30_000)
+        # …and the status line says something: the pending state is seeded ("Working on it…")
+        # from the moment the question is sent (UX W7, dgc-r2-3), so an empty line is a defect
+        # this capture fails on rather than photographs (M01 = JX2-07, M26 = cpux2-6).
+        page.wait_for_function(
+            "() => (document.getElementById('turn-status').textContent || '').trim().length > 0", timeout=10_000
+        )
         page.wait_for_timeout(400)
         return
     page.wait_for_function("n => document.querySelectorAll('#messages .turn').length > n", arg=before, timeout=180_000)
@@ -425,6 +472,15 @@ def release(page: Any) -> None:
     """Let the parked `POST /chat` through, so the turn it was carrying finishes."""
     for route in _HELD:
         route.continue_()
+    _HELD.clear()
+    page.unroute("**/chat")
+
+
+def abort_held(page: Any) -> None:
+    """Drop the parked `POST /chat` unanswered: the in-flight screen was a fresh tab's, and the
+    real turn is asked on the source page afterwards (UX W7). The stub script is never spent."""
+    for route in _HELD:
+        route.abort()
     _HELD.clear()
     page.unroute("**/chat")
 
@@ -448,15 +504,20 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             state="no cookie, blank form",
             notes="The key page as a first-time visitor sees it.",
         )
-        page.fill("#access", "not-the-key")
-        page.click(".access-form button")
-        page.wait_for_load_state("networkidle")
+
+        def wrong_key(tab: Any) -> None:
+            tab.goto(f"{urls['demo_1']}/access", wait_until="networkidle")
+            tab.fill("#access", "not-the-key")
+            tab.click(".access-form button")
+            tab.wait_for_load_state("networkidle")
+
         shot.screen(
             page,
             "access-key-wrong",
             route="/access",
             state="rejected key",
             notes="What a wrong key says, and what it offers next.",
+            fresh=wrong_key,
         )
         page.goto(f"{urls['demo_1']}/", wait_until="networkidle")
         shot.screen(page, "gate-401-root", route="/", state="no credential", notes="The gate's 401 on the chat route.")
@@ -510,17 +571,34 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             selector="section.demo-panel",
         )
 
-        ask(page, urls["demo_1"], PROMPTS["demo_1"], hold=True)
+        def in_flight(base_url: str, prompt: str) -> Callable[[Any], None]:
+            def fresh(tab: Any) -> None:
+                tab.goto(page.url, wait_until="networkidle")
+                ask(tab, base_url, prompt, hold=True)
+
+            return fresh
+
         shot.screen(
             page,
             "chat-inflight",
             route="/",
-            state="turn in flight (POST parked, Stop on screen)",
+            state="turn in flight (POST parked, Stop on screen, status seeded)",
             notes="What a question looks like while it is being answered.",
+            fresh=in_flight(urls["demo_1"], PROMPTS["demo_1"]),
+            after=abort_held,
         )
-        release(page)
-        page.wait_for_selector("#messages .turn", timeout=180_000)
-        page.wait_for_timeout(1500)
+        shot.screen(
+            page,
+            "zoom-pending-turn",
+            route="/",
+            state="turn in flight, the seeded pending state",
+            notes="NEW at W7 (dgc-r2-3): the assistant's bubble and the first status line exist from "
+            "the moment the question is sent — not an echoed question over empty ground.",
+            selector="#pending-turn",
+            fresh=in_flight(urls["demo_1"], PROMPTS["demo_1"]),
+            after=abort_held,
+        )
+        ask(page, urls["demo_1"], PROMPTS["demo_1"])
         facts["demo_1"] = page.eval_on_selector("#messages .turn", TURN_FACTS_JS)
         shot.screen(
             page, "chat-answer", route="/", state="cited multi-document answer", notes="The answer a grader is shown."
@@ -572,6 +650,14 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             state="followed a citation",
             notes="NEW at W1: where a citation goes — the reader, not the chunk inspector.",
         )
+        page.goto(f"{urls['demo_1']}/policy", wait_until="networkidle")
+        shot.screen(
+            page,
+            "policy-library",
+            route="/policy",
+            state="the reader's index",
+            notes="NEW at W7 (nav-r2-5): the library, reachable from chat at rest and from the reader.",
+        )
         session = facts["demo_1"]["session"]
         page.goto(f"{urls['demo_1']}/?session={session}", wait_until="networkidle")
         shot.screen(
@@ -586,20 +672,29 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         # -- server 2: the confirmation card, and the confirmed resume --------------------
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         page = sign_in(context, urls["demo_2"], "E1042")
-        ask(page, urls["demo_2"], PROMPTS["demo_2"], hold=True)
         shot.screen(
             page,
             "chat-confirm-inflight",
             route="/",
-            state="gated turn in flight (POST parked, Stop on screen)",
+            state="gated turn in flight (POST parked, Stop on screen, status seeded)",
             notes="The turn that is about to ask for a confirmation.",
+            fresh=in_flight(urls["demo_2"], PROMPTS["demo_2"]),
+            after=abort_held,
         )
-        release(page)
+        page.fill("#message", PROMPTS["demo_2"])
+        page.click("#send-button")
         page.wait_for_selector(".confirm-card", timeout=180_000)
         page.wait_for_timeout(1000)
+        # The three card screens are `live=True`: the card exists on this page only (see `screen`).
+        page.set_viewport_size({"width": 1440, "height": 900})
         facts["demo_2"] = page.eval_on_selector("#messages .turn", TURN_FACTS_JS)
         shot.screen(
-            page, "chat-confirm-card", route="/", state="awaiting_confirmation", notes="Nothing has been written yet."
+            page,
+            "chat-confirm-card",
+            route="/",
+            state="awaiting_confirmation",
+            notes="Nothing has been written yet.",
+            live=True,
         )
         shot.screen(
             page,
@@ -608,6 +703,7 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             state="awaiting_confirmation",
             notes="The card itself.",
             selector=".confirm-card",
+            live=True,
         )
         shot.screen(
             page,
@@ -616,6 +712,7 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
             state="awaiting_confirmation, expanders open",
             notes="The gated turn with every disclosure open.",
             before=expand_all,
+            live=True,
         )
         page.set_viewport_size({"width": 1440, "height": 900})
         page.click(".button-confirm")
@@ -685,7 +782,6 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         )
 
         # a second question exhausts the one-entry stub script: the graceful error turn
-        page.set_viewport_size({"width": 1440, "height": 900})
         page.fill("#message", "And what about carrying unused days into next year?")
         page.click("#send-button")
         page.wait_for_timeout(9000)

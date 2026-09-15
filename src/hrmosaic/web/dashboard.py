@@ -560,7 +560,26 @@ def _f_span_summary(span: dict[str, Any]) -> str:
     concise trace and the live rail describe a span identically, or the panel the rail collapses
     into would disagree with the page it links to.
     """
-    return summarise_span(span.get("kind", ""), span.get("name", ""), span.get("payload") or {})
+    summary = summarise_span(span.get("kind", ""), span.get("name", ""), span.get("payload") or {})
+    # The plan, model-call and guardrail lines are `key=value` in the `/chat` trace (§11.1's
+    # shapes, which that contract pins); on the dashboard each pair is said as a label and a
+    # labelled value — `intent=workflow workflow=pto_request catalog_reopened=false` was the last
+    # raw enum the capture's sidecars found (UX W7, JX2-01 = DR2-09, DR2-04).
+    if span.get("kind") in {"plan", "llm_call", "guardrail"}:
+        return _PAIR.sub(_said_pair, summary)
+    return summary
+
+
+_PAIR = re.compile(r"\b([a-z_]+)=([A-Za-z0-9_.:-]+)")
+
+
+def _said_pair(match: re.Match[str]) -> str:
+    key, value = match.group(1), match.group(2)
+    if value in {"true", "false"}:
+        value = "yes" if value == "true" else "no"
+    elif key not in {"purpose"}:
+        value = _f_enum_label(value)
+    return f"{_f_enum_label(key)}: {value}"
 
 
 #: Every display vocabulary the dashboard has, and the whole of it: **P10** is that a numeric or

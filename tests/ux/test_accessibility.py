@@ -250,14 +250,17 @@ def test_every_control_is_at_least_44px_on_a_phone(surface_page, surfaces, route
 # -- accessibility-and-responsive-20: the type floor --------------------------------------
 
 
+@sized
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_no_text_renders_below_the_type_floor(surface_page, surfaces, route):
+def test_no_text_renders_below_the_type_floor(sized_surface_page, surfaces, route):
     """`body { font: 16px }` and `body.dashboard { font-size: 17px }` pinned body copy to pixels; the
     ramp fixed that, but `0.85em` of an already-small parent kept drifting under it. 13 px is the
-    floor `--text-floor` names, and it is the size `--text-meta` sets."""
-    page = _open(surface_page, surfaces, route)
+    floor `--text-floor` names, and it is the size `--text-meta` sets. At both viewports on a fresh
+    load since UX W7: the phone paints type the desktop never does — the per-card disclosures, the
+    inline kind pills, the one-row nav."""
+    page = _open(sized_surface_page, surfaces, route)
     tiny = sorted({(item["size"], item["path"]) for item in page.evaluate(PAINTED_TEXT_JS) if item["size"] < 13})
-    assert not tiny, f"text below the 13px floor: {tiny}"
+    assert not tiny, f"{route} at {sized_surface_page.viewport_label}: text below the 13px floor: {tiny}"
 
 
 #: `font: …16px…` or `font-size: 14px` in any rule. It replaced W2's narrower guard, which looked
@@ -340,11 +343,12 @@ def test_no_state_is_painted_in_colour_alone(surface_page, surfaces):
 # -- every control has a name ---------------------------------------------------------------
 
 
+@sized
 @pytest.mark.parametrize("route", CHAT_AND_DASHBOARD)
-def test_every_form_control_carries_a_label(surface_page, surfaces, route):
+def test_every_form_control_carries_a_label(sized_surface_page, surfaces, route):
     """A `<select>` or a text field whose only name is its position is unusable by voice or by
     screen reader; the filter bars are eleven of them on one page."""
-    page = _open(surface_page, surfaces, route)
+    page = _open(sized_surface_page, surfaces, route)
     unnamed = page.evaluate(
         "() => Array.from(document.querySelectorAll('input:not([type=hidden]), select, textarea'))"
         ".filter(el => {"
