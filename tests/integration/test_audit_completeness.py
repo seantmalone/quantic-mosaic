@@ -168,4 +168,4 @@ async def test_the_final_answer_and_its_citations_are_persisted_on_the_turn(audi
     assert {citation["chunk_id"] for citation in citations} == {
         citation["chunk_id"] for citation in audited["body"]["citations"]
     }
-    assert all(citation["source_url"].startswith("/dashboard/corpus/") for citation in citations)
+    assert all(citation["source_url"].startswith("/policy/") for citation in citations)

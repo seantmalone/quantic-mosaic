@@ -1,0 +1,32 @@
+{#
+  The one shell every authenticated page wears (UX W1, plan §2 *Shell*).
+
+  `chat.html`, `dashboard/_base.html`, `refused.html` and `policy.html` all include this file and
+  nothing else, so the rendered block is **byte-identical** across the surfaces modulo the single
+  `aria-current="page"` that marks which half of the switch you are standing on —
+  `tests/contract/test_nav_parity.py` asserts exactly that.
+
+  What is deliberately NOT here:
+  * the "Act as" `<select>` — it is a demo control, it lists 24 employees with job titles, and at
+    390px it was the one element making the chat page scroll sideways. It lives in the demo panel.
+  * the static `HR ADMIN` chip — it asserted a rule W1 removed, in the slot chat used for a real
+    control. The identity chip below replaces both.
+  * the "…tools over MCP, and a full audit trail" tagline and "— observability": one product, one
+    name, one H1, one size.
+
+  Context: `surface` ("chat" | "dashboard"), `actor_name`, `gate_on` — all from
+  `web/api.py::shell_context()`.
+#}
+<header class="masthead">
+  <h1 class="wordmark">Mosaic HR Copilot</h1>
+  <nav class="masthead-nav" aria-label="Primary">
+    <div class="nav-switch">
+      <a class="nav-switch-link" id="chat-link" href="/"{% if surface == 'chat' %} aria-current="page"{% endif %}>Chat</a>
+      <a class="nav-switch-link" id="dashboard-link" href="/dashboard"{% if surface == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
+    </div>
+    <span class="identity-chip">{{ actor_name }}</span>
+    {% if gate_on %}
+    <form class="signout-form" method="post" action="/access/logout"><button class="nav-link" type="submit">Sign out</button></form>
+    {% endif %}
+  </nav>
+</header>

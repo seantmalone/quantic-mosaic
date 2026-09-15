@@ -1,0 +1,30 @@
+{#
+  The themed refusal (UX W1, navigation-and-ia-3). Every HTML navigation that fails — a stale deep
+  link, a write control reached without the admin persona, a rate-limited retry — used to answer
+  with a bare JSON body: no `<html lang>`, no heading, no landmark, nothing focusable and no way
+  back. This is that body's HTML representation; API clients still get the JSON, unchanged.
+
+  Context: `status`, `headline`, `detail`, plus `shell_context()`'s `surface`/`actor_name`/`gate_on`.
+#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ headline }} · Mosaic HR Copilot</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app-chrome">
+{% include "_masthead.html" %}
+</div>
+
+<main class="refused-main">
+  <div class="access-card">
+    <h2>{{ headline }}</h2>
+    <p>{{ detail }}</p>
+    <p><a class="button" href="/">Back to chat</a></p>
+  </div>
+</main>
+</body>
+</html>

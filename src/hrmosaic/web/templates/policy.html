@@ -1,0 +1,49 @@
+{#
+  The policy reader (UX W1, plan §2A / navigation-and-ia-11): where a citation goes.
+
+  Every citation chip used to point at `/dashboard/corpus/{doc}#{chunk}` — a 403 raw JSON body for
+  24 of the 25 personas, and, for the one that could reach it, a chunk inspector with character
+  offsets and ids rather than something to read. This route is gated by the access token and by
+  nothing else, and it renders the document as a document: the heading path leads each section, the
+  chunk id is the anchor a citation targets, and nothing here is a technical control.
+#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ view.document.doc_title }} · Mosaic HR Copilot</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app-chrome">
+{% include "_masthead.html" %}
+</div>
+
+<main class="reader">
+  <article class="reader-doc">
+    <h2 class="reader-title">{{ view.document.doc_title }}</h2>
+    <p class="reader-meta">Mosaic HR policy · version {{ view.document.version }} ·
+      effective {{ view.document.effective_date }}</p>
+
+    <nav class="reader-contents" aria-label="Sections">
+      <h3>Sections</h3>
+      <ol>
+        {% for chunk in view.chunks %}
+        <li><a href="#{{ chunk.chunk_id }}">{{ chunk.heading_path }}</a></li>
+        {% endfor %}
+      </ol>
+    </nav>
+
+    {% for chunk in view.chunks %}
+    <section class="reader-section" id="{{ chunk.chunk_id }}">
+      <h3>{{ chunk.heading_path }}</h3>
+      <p>{{ chunk.text }}</p>
+    </section>
+    {% else %}
+    <p class="muted">This document has no sections yet.</p>
+    {% endfor %}
+  </article>
+</main>
+</body>
+</html>

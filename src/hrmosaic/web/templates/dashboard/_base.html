@@ -1,5 +1,10 @@
-{# The dashboard chrome: the eleven-page nav, the title bar and the Export JSON button §11.6
-   requires on every page. Each page extends this and fills `filters` and `content`. #}
+{# The dashboard chrome: the shared masthead, the grouped page nav, the title bar and the Export
+   JSON button §11.6 requires on every page. Each page extends this and fills `filters` and
+   `content`.
+
+   Both rows sit inside one sticky `.app-chrome` (UX W1, navigation-and-ia-7): before, the row of
+   internal page names was pinned and the only route back to chat was not, on pages 1.9–5.1
+   viewports tall — exactly the wrong half. #}
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,37 +16,51 @@
   {% block head %}{% endblock %}
 </head>
 <body class="dashboard" data-page="{{ page_number }}">
-<header class="masthead">
-  <div class="masthead-title">
-    <h1>Mosaic HR Copilot — observability</h1>
-    <p class="tagline">Every session, turn, model call, retrieval, tool call, guardrail and
-      confirmation, read back from the one trace store.</p>
-  </div>
-  <nav class="masthead-nav">
-    <a class="nav-link" href="/">Chat</a>
-    <span class="persona-chip" title="The whole dashboard is admin-only">HR admin</span>
-  </nav>
-</header>
+<div class="app-chrome" id="app-chrome">
+{% include "_masthead.html" %}
 
 <nav id="dash-nav" class="dash-nav" aria-label="Dashboard pages">
-  {% for number, label, href in nav %}
-  {% if number in detail_only_pages and number != page_number %}
-  <span class="dash-nav-link is-detail" data-nav="{{ number }}"
-        title="Opened from Sessions">{{ number }}. {{ label }}</span>
-  {% else %}
-  <a class="dash-nav-link{% if number == page_number %} is-current{% endif %}"
-     data-nav="{{ number }}" href="{{ href }}">{{ number }}. {{ label }}</a>
-  {% endif %}
+  {% for group, items in nav %}
+  <span class="dash-nav-group">
+    <span class="dash-nav-group-label">{{ group }}</span>
+    {% for number, label, href in items %}
+    <a class="dash-nav-link" data-nav="{{ number }}" href="{{ href }}"{% if number == nav_current %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </span>
   {% endfor %}
 </nav>
+</div>
 
 <main class="dash-main">
+  {% if breadcrumbs %}
+  <nav class="crumbs" aria-label="Breadcrumb">
+    {% for label, href in breadcrumbs %}<a href="{{ href }}">{{ label }}</a><span aria-hidden="true">/</span>{% endfor %}
+    <span class="crumbs-current">{{ page_title }}</span>
+  </nav>
+  {% endif %}
   <div class="dash-head">
     <h2 class="dash-title">{{ page_title }}</h2>
     <a id="export-json" class="button export-json" href="{{ api_url }}">Export JSON</a>
   </div>
+  {% if page_lede %}<p class="dash-lede">{{ page_lede }}</p>{% endif %}
   {% block filters %}{% endblock %}
   {% block content %}{% endblock %}
 </main>
+
+<script>
+  // `scroll-margin-top` on every anchor target has to equal the real chrome height, and the chrome
+  // is one row on the desktop and three on a phone — so it is measured, not guessed (UX W1,
+  // navigation-and-ia-17). Without it a `#turn-N` deep link lands with its heading under the
+  // sticky rows.
+  (function () {
+    "use strict";
+    var chrome = document.getElementById("app-chrome");
+    function measure() {
+      document.documentElement.style.setProperty("--dash-nav-h", chrome.offsetHeight + "px");
+    }
+    measure();
+    window.addEventListener("resize", measure);
+  })();
+</script>
 </body>
 </html>

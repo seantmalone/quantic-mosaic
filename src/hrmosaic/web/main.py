@@ -44,7 +44,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 
@@ -248,9 +248,15 @@ def _install_error_handlers(app: FastAPI) -> None:
     and leaving the turn row open until the next boot sweep (§12.3).
     """
 
-    async def http_exception(_: Request, exc: Exception) -> JSONResponse:
+    async def http_exception(request: Request, exc: Exception) -> Response:
         assert isinstance(exc, HTTPException)
         body = exc.detail if isinstance(exc.detail, dict) else {"code": "ERROR", "detail": exc.detail}
+        # **P6, no dead ends (UX W1).** A browser following a stale deep link used to be shown the
+        # raw `{"code": "UNKNOWN_SESSION", …}` body: no page, no nav, no way back. The JSON is
+        # unchanged for everyone who did not ask for HTML — §11.8's codes are the contract.
+        if "text/html" in request.headers.get("accept", ""):
+            code = "NOT_FOUND" if exc.status_code == 404 else str(body.get("code") or "ERROR")
+            return api.refusal_page(request, status_code=exc.status_code, code=code)
         return JSONResponse(body, status_code=exc.status_code, headers=getattr(exc, "headers", None))
 
     async def validation_error(_: Request, exc: Exception) -> JSONResponse:

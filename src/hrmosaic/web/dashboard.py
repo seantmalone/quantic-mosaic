@@ -73,25 +73,37 @@ ROW_LIMIT = 200
 #: The last 24 hours, one bucket an hour — page 1's sparkline.
 SPARKLINE_HOURS = 24
 
-#: §11.6's eleven pages, in order: the nav, and the only place the ordering is written down.
-NAV: tuple[tuple[int, str, str], ...] = (
-    (1, "Overview", "/dashboard"),
-    (2, "Sessions", "/dashboard/sessions"),
-    (3, "Session detail", "/dashboard/sessions"),
-    (4, "Turns", "/dashboard/turns"),
-    (5, "LLM calls", "/dashboard/llm"),
-    (6, "Retrieval", "/dashboard/retrieval"),
-    (7, "Tools", "/dashboard/tools"),
-    (8, "Safety", "/dashboard/safety"),
-    (9, "MCP", "/dashboard/mcp"),
-    (10, "Corpus", "/dashboard/corpus"),
-    (11, "Evaluations", "/dashboard/evals"),
+#: §11.6's pages, grouped for the nav (UX W1, navigation-and-ia-8). The page *numbers* are still
+#: the spec's — `data-page` and `data-nav` carry them and the contract tests key on them — but they
+#: are no longer printed as `1.`–`11.` labels: the nav is a way around the app, not a rubric
+#: checklist. Page 3 (session detail) has no standalone URL, so it is not an entry at all; it used
+#: to be rendered as an inert grey pseudo-link at 2.455:1 contrast whose only explanation was a
+#: hover `title`. It now highlights its real parent, Sessions.
+NAV: tuple[tuple[str, tuple[tuple[int, str, str], ...]], ...] = (
+    (
+        "Activity",
+        (
+            (1, "Overview", "/dashboard"),
+            (2, "Sessions", "/dashboard/sessions"),
+            (4, "Turns", "/dashboard/turns"),
+        ),
+    ),
+    (
+        "Under the hood",
+        (
+            (5, "LLM calls", "/dashboard/llm"),
+            (6, "Retrieval", "/dashboard/retrieval"),
+            (7, "Tools", "/dashboard/tools"),
+            (9, "MCP", "/dashboard/mcp"),
+        ),
+    ),
+    ("Quality", ((8, "Safety", "/dashboard/safety"), (11, "Evaluations", "/dashboard/evals"))),
+    ("Reference", ((10, "Corpus", "/dashboard/corpus"),)),
 )
 
-#: Page 3 has no standalone URL of its own — it is opened from page 2 — so the nav renders it as
-#: a plain label everywhere except on page 3 itself. Skipping it would leave a "where is 3?" gap in
-#: the middle of a nav a demo narrates by number.
-DETAIL_ONLY_PAGES = (3,)
+#: Which nav entry a page highlights when it is not an entry itself: session detail is opened from
+#: Sessions, so Sessions is what stays lit.
+NAV_PARENT = {3: 2}
 
 #: §11.6: the four judged aggregates are `Optional[float]` beside `judged: bool`, and the page
 #: renders *"not judged on this variant"* rather than a zero. Judging happens on `baseline` only
@@ -2002,17 +2014,28 @@ def _page(
     title: str,
     api_url: str,
     filters: Filters | None = None,
+    lede: str | None = None,
+    breadcrumbs: Sequence[tuple[str, str]] | None = None,
     **extra: Any,
 ) -> Response:
-    """Render the page from the **same dict** the matching `/api/*` route returns."""
+    """Render the page from the **same dict** the matching `/api/*` route returns.
+
+    Since UX W1 the context also carries the shell every authenticated page wears — `surface`,
+    `actor_name`, `gate_on` — so `_masthead.html` renders identically here and on `/`. It never did
+    before: the dashboard had its own masthead with a `Chat` link, a static `HR ADMIN` chip and no
+    way to sign out.
+    """
     payload = view.model_dump(mode="json")
     context = {
         "view": payload,
         "page_number": page_number,
+        "nav_current": NAV_PARENT.get(page_number, page_number),
         "page_title": title,
+        "page_lede": lede,
+        "breadcrumbs": list(breadcrumbs or ()),
         "api_url": api_url,
         "nav": NAV,
-        "detail_only_pages": DETAIL_ONLY_PAGES,
+        **api.shell_context(request, surface="dashboard"),
         "filters": (filters or Filters()).as_dict(),
         # `page` is always dropped here: the pager appends its own, and two `page=` values in
         # one query string would silently resolve to the first.
@@ -2073,16 +2096,25 @@ async def api_session_detail(request: Request, session_id: str) -> JSONResponse:
     return _json(build_session_detail(request, session_id))
 
 
+#: How much of the opening question the session-detail title shows before it is elided. The title
+#: used to be `Session fd7a7cb56895…`, which names the record and not the conversation.
+SESSION_TITLE_CHARS = 80
+
+
 @router.get("/dashboard/sessions/{session_id}", response_class=HTMLResponse)
 async def page_session_detail(request: Request, session_id: str) -> Response:
     view = build_session_detail(request, session_id)
     longest = max((turn.duration_ms or 0) for turn in view.turns) if view.turns else 0
+    opening = view.turns[0].user_message if view.turns else ""
+    title = opening if len(opening) <= SESSION_TITLE_CHARS else opening[:SESSION_TITLE_CHARS].rstrip() + "…"
     return _page(
         request,
         "session_detail.html",
         view,
         page_number=3,
-        title=f"Session {session_id[:12]}…",
+        title=title or f"Session {session_id[:12]}…",
+        lede="Every turn of this conversation, and every step behind each answer.",
+        breadcrumbs=[("Sessions", "/dashboard/sessions")],
         api_url=f"/api/traces/sessions/{session_id}",
         kinds=sorted({span.kind for turn in view.turns for span in turn.spans}),
         longest_ms=longest,
@@ -2281,6 +2313,25 @@ async def api_corpus_document(doc_id: str) -> JSONResponse:
 @router.get("/api/corpus/chunks/{chunk_id}")
 async def api_corpus_chunk(chunk_id: str) -> JSONResponse:
     return _json(build_corpus_chunk(chunk_id))
+
+
+# -- the policy reader ---------------------------------------------------------------------
+#
+# Not a dashboard page: the shared masthead, the document, and nothing else. It is where a citation
+# goes (UX W1, navigation-and-ia-11). `/dashboard/corpus/{doc_id}` stays exactly as it is — it is a
+# chunk inspector with offsets and ids, which is the right tool for the observability surface and
+# the wrong one to hand a person who clicked "Remote & Hybrid Work Policy · Eligibility".
+
+
+@router.get("/policy/{doc_id}", response_class=HTMLResponse)
+async def page_policy_reader(request: Request, doc_id: str) -> Response:
+    """One policy document, an anchor per chunk, gated by the access token and by nothing else."""
+    view = build_corpus_document(doc_id)
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="policy.html",
+        context={"view": view.model_dump(mode="json"), **api.shell_context(request, surface="chat")},
+    )
 
 
 @router.get("/dashboard/corpus", response_class=HTMLResponse)

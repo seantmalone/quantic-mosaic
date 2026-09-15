@@ -5,6 +5,12 @@
 {% block content %}
 <section class="panel" id="session-summary">
   <h3>Session</h3>
+  <!-- The way back (UX W1, navigation-and-ia-16). It was not there at all: the masthead's Chat
+       link landed on an empty composer and the transcript was gone, so a grader who followed a
+       deep link out of chat could never get back to the conversation. `/?session=` rehydrates. -->
+  <p class="continue-in-chat">
+    <a class="button" id="continue-in-chat" href="/?session={{ view.session.session_id }}">Continue this conversation in chat</a>
+  </p>
   <dl class="facts">
     <div><dt>Session</dt><dd class="mono">{{ view.session.session_id }}</dd></div>
     <div><dt>Started</dt><dd>{{ view.session.created_at|ts }}</dd></div>

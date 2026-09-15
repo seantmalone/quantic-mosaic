@@ -39,24 +39,66 @@ body {
   white-space: nowrap;
 }
 
-/* -- masthead ---------------------------------------------------------------------- */
+/* -- the shell: one sticky chrome, one masthead, on every authenticated page (UX W1) ---
+   `.app-chrome` wraps the masthead (and, on the dashboard, the page nav) so that scrolling can
+   never hide the way back to chat. Before W1 the dashboard pinned the row of internal page names
+   and let the only `Chat` link scroll away — exactly the wrong half, on pages up to five viewports
+   tall. */
+.app-chrome { position: sticky; top: 0; z-index: 20; }
+
 .masthead {
-  display: flex; flex-wrap: wrap; gap: 1rem;
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1rem;
   align-items: center; justify-content: space-between;
   padding: 0.9rem 1.25rem;
   background: var(--card);
   border-bottom: 1px solid var(--line);
 }
 .masthead h1 { font-size: 1.15rem; margin: 0; }
-.tagline { margin: 0.15rem 0 0; color: var(--ink-soft); font-size: 0.85rem; }
-.masthead-nav { display: flex; align-items: center; gap: 0.75rem; }
-.actor-form { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
-.actor-form select { padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
+/* `min-width: 0` + `flex-wrap` is the structural guard behind the 390px fix: no child of the nav
+   may push the document sideways, whatever lands in it later. */
+.masthead-nav { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; min-width: 0; }
+
+/* The segmented Chat | Dashboard switch. `aria-current="page"` is the ONLY difference between the
+   two renderings of the masthead, so it is also the only thing the current state is painted from
+   (`tests/contract/test_nav_parity.py`). */
+.nav-switch {
+  display: flex; min-width: 0;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--paper); padding: 2px;
+}
+.nav-switch-link {
+  padding: 0.3rem 0.85rem; border-radius: 999px;
+  font-size: 0.85rem; text-decoration: none; color: var(--ink-soft); white-space: nowrap;
+}
+.nav-switch-link:hover { color: var(--ink); }
+.nav-switch-link[aria-current="page"] { background: var(--accent); color: #fff; font-weight: 600; }
+
+.identity-chip {
+  font-size: 0.85rem; color: var(--ink-soft);
+  padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--paper);
+  max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.signout-form { margin: 0; }
+.actor-form { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; flex-wrap: wrap; min-width: 0; }
+.actor-form select { flex: 1 1 12rem; min-width: 0; max-width: 100%; padding: 0.35rem 0.5rem;
+  font: inherit; font-size: 0.85rem; border: 1px solid var(--line); border-radius: 6px; }
 .nav-link {
   font-size: 0.85rem; color: var(--accent); text-decoration: none;
   background: none; border: 0; cursor: pointer; padding: 0.35rem 0.5rem;
 }
 .nav-link:hover { text-decoration: underline; }
+
+/* -- the demo & grader panel (stub; W3 builds the rest around it) -------------------- */
+.demo-panel {
+  grid-column: 1 / -1;
+  margin: 0; padding: 0.9rem 1.1rem;
+  border: 1px dashed var(--line); border-radius: var(--radius); background: var(--paper);
+}
+.demo-panel h2 { margin: 0; font-size: 0.95rem; }
+.demo-note { margin: 0.25rem 0 0.75rem; font-size: 0.82rem; color: var(--ink-soft); }
+.session-notice {
+  margin: 0 0 1rem; padding: 0.6rem 0.8rem; font-size: 0.9rem;
+  color: var(--ink-soft); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+}
 
 /* -- cold-start banner ------------------------------------------------------------- */
 .banner {
@@ -210,7 +252,6 @@ body {
 .access-form label { flex-basis: 100%; font-size: 0.85rem; color: var(--ink-soft); }
 .access-form input { flex: 1 1 14rem; padding: 0.45rem 0.6rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; }
 .access-error { color: var(--danger); font-size: 0.9rem; }
-.access-note { font-size: 0.82rem; color: var(--ink-soft); }
 
 /* ==================================================================================== */
 /* The observability dashboard (spec §11.6). Same stylesheet, same no-build rule.        */
@@ -220,28 +261,31 @@ body {
 /* ==================================================================================== */
 
 body.dashboard { font-size: 17px; background: #eef1f4; }
-body.dashboard .masthead h1 { font-size: 1.35rem; }
-.persona-chip {
-  font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 0.2rem 0.6rem; border-radius: 999px; color: var(--accent); background: var(--accent-soft);
-}
 
+/* The second sticky row lives inside `.app-chrome`, so it is NOT sticky itself. */
 .dash-nav {
-  display: flex; flex-wrap: wrap; gap: 0.25rem;
-  padding: 0.5rem 1.25rem;
+  display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; align-items: baseline;
+  padding: 0.45rem 1.25rem;
   background: var(--card); border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 5;
+}
+.dash-nav-group { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: baseline; min-width: 0; }
+.dash-nav-group-label {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft);
+  margin-right: 0.15rem;
 }
 .dash-nav-link {
-  padding: 0.35rem 0.7rem; border-radius: 6px;
-  font-size: 0.9rem; text-decoration: none; color: var(--ink-soft);
+  padding: 0.3rem 0.6rem; border-radius: 6px;
+  font-size: 0.88rem; text-decoration: none; color: var(--ink-soft); white-space: nowrap;
 }
 .dash-nav-link:hover { background: var(--paper); color: var(--ink); }
-.dash-nav-link.is-current { background: var(--accent); color: #fff; font-weight: 600; }
+.dash-nav-link[aria-current="page"] { background: var(--accent); color: #fff; font-weight: 600; }
 
 .dash-main { max-width: 96rem; margin: 1.25rem auto 4rem; padding: 0 1.25rem; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--ink-soft); }
+.crumbs a { color: var(--accent); }
 .dash-head { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; justify-content: space-between; }
-.dash-title { margin: 0 0 0.75rem; font-size: 1.6rem; }
+.dash-title { margin: 0 0 0.35rem; font-size: 1.6rem; overflow-wrap: anywhere; }
+.dash-lede { margin: 0 0 1rem; color: var(--ink-soft); }
 .export-json { text-decoration: none; }
 
 .panel {
@@ -330,7 +374,29 @@ body.dashboard .masthead h1 { font-size: 1.35rem; }
 .turn-question { margin: 0.6rem 0 0.3rem; }
 .turn-answer { margin: 0 0 0.6rem; padding: 0.6rem 0.8rem; background: var(--paper); border-radius: 8px; }
 .rollups { margin: 0.6rem 0; }
-.anchor { display: block; position: relative; top: -4rem; visibility: hidden; }
+.continue-in-chat { margin: 0 0 0.75rem; }
+
+/* -- the policy reader (UX W1) --------------------------------------------------------- */
+.reader { max-width: 46rem; margin: 1.5rem auto 4rem; padding: 0 1.25rem; }
+.reader-doc { padding: 1.5rem 1.75rem; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.reader-title { margin: 0; font-size: 1.5rem; }
+.reader-meta { margin: 0.25rem 0 1.25rem; color: var(--ink-soft); font-size: 0.85rem; }
+.reader-contents { margin: 0 0 1.5rem; padding: 0.75rem 1rem; background: var(--paper); border-radius: 8px; }
+.reader-contents h3 { margin: 0 0 0.4rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+.reader-contents ol { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; }
+.reader-section { scroll-margin-top: 5rem; }
+.reader-section h3 { margin: 1.4rem 0 0.35rem; font-size: 1rem; color: var(--accent); }
+.reader-section p { margin: 0; }
+.reader-section:target { background: var(--accent-soft); border-radius: 8px; padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
+
+/* -- the themed refusal (UX W1) -------------------------------------------------------- */
+.refused-main { display: flex; justify-content: center; padding: 3rem 1.25rem; }
+/* The deep-link landing rule. `.anchor` itself survives — the eval-row trace links and
+   `test_dashboard_pages.py` both target it — but its fixed `top: -4rem` hack does not: the chrome
+   is one row at 1440px and three at 390px, so the offset is measured into `--dash-nav-h` by
+   `dashboard/_base.html` and applied as `scroll-margin-top` (UX W1, navigation-and-ia-17). */
+.anchor { display: block; visibility: hidden; }
+.anchor, .turn-card, .chunk, [id^="turn-"] { scroll-margin-top: calc(var(--dash-nav-h, 6rem) + 0.75rem); }
 
 .waterfall { list-style: none; margin: 0.75rem 0 0; padding: 0; }
 .span-row {
@@ -382,4 +448,3 @@ body.dashboard .masthead h1 { font-size: 1.35rem; }
 .button-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .trace-link { color: var(--accent); }
 canvas { max-width: 100%; margin: 0.5rem 0 1rem; }
-.dash-nav-link.is-detail { color: #9aa7b3; cursor: default; }

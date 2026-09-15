@@ -57,14 +57,22 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from hrmosaic.agent import orchestrator as agent
 from hrmosaic.agent.client import McpUnavailable
 from hrmosaic.agent.guardrails import g5
-from hrmosaic.agent.orchestrator import ChatOptions, ChatRequest, ChatResponse, project, render_answer
+from hrmosaic.agent.orchestrator import (
+    ChatOptions,
+    ChatRequest,
+    ChatResponse,
+    Timings,
+    Usage,
+    project,
+    render_answer,
+)
 from hrmosaic.core import corpusread, procstat
 from hrmosaic.core import trace as trace_module
 from hrmosaic.core.corpusread import IndexModelMismatch
 from hrmosaic.core.db import Store, TursoHTTPStore, get_store, now_micros
 from hrmosaic.core.ids import new_session_id, new_turn_id, user_agent_hash
 from hrmosaic.core.llm import count_calls_today
-from hrmosaic.core.models import AnswerBlock, ConfirmationPayload, ErrorPayload
+from hrmosaic.core.models import AnswerBlock, Citation, ConfirmationPayload, ErrorPayload
 from hrmosaic.core.redact import redact_text
 from hrmosaic.mcpserver import confirm as confirm_gate
 from hrmosaic.settings import Settings, secret_value
@@ -212,18 +220,107 @@ def _wants_html(request: Request) -> bool:
     return "text/html" in request.headers.get("accept", "")
 
 
-def _key_page(request: Request, *, status_code: int, message: str) -> Response:
-    """The key page, or its JSON equivalent for a client that did not ask for HTML."""
+def actor_display_name(request: Request, actor: str) -> str:
+    """The persona's own name — what the masthead's read-only identity chip shows (UX W1).
+
+    `getattr`, not `request.app.state.employees`: the refusal page is rendered from inside the
+    ASGI gate, which can run before the lifespan has populated `app.state` (and after a failure
+    that left it empty). A masthead is not worth a 500.
+    """
+    if actor == "admin":
+        return "HR admin"
+    for employee in getattr(request.app.state, "employees", None) or ():
+        if employee.get("employee_id") == actor:
+            return str(employee.get("name") or actor)
+    return actor
+
+
+def shell_context(request: Request, *, surface: Literal["chat", "dashboard"]) -> dict[str, Any]:
+    """What `_masthead.html` needs, and the only thing that differs between the two surfaces.
+
+    `web/dashboard.py::_page()` and every page in `web/api.py` call this, so the rendered masthead
+    is byte-identical modulo `aria-current` — `tests/contract/test_nav_parity.py` (**P3**).
+    """
+    identity = identity_of(request)
+    settings = getattr(request.app.state, "settings", None)
+    return {
+        "surface": surface,
+        "actor": identity.actor,
+        "actor_name": actor_display_name(request, identity.actor),
+        "is_admin": identity.is_admin,
+        "gate_on": gate_enabled(settings) if settings is not None else False,
+    }
+
+
+def _key_page(request: Request, *, status_code: int, message: str, detail: str | None = None) -> Response:
+    """The key page, or its JSON equivalent for a client that did not ask for HTML.
+
+    Two strings where the audience differs: `message` is what a visitor reads, `detail` is what an
+    operator's `curl` gets. They are the same string unless a caller says otherwise — the one case
+    that does is the unconfigured deployment, whose cause is an environment variable name and
+    therefore no business of a visitor (UX W1, jargon-and-exposure-17).
+    """
     if _wants_html(request):
         return TEMPLATES.TemplateResponse(
             request=request, name="access.html", context={"message": message}, status_code=status_code
         )
-    return JSONResponse({"code": "ACCESS_REQUIRED", "detail": message}, status_code=status_code)
+    return JSONResponse({"code": "ACCESS_REQUIRED", "detail": detail or message}, status_code=status_code)
 
 
 #: What a gated request is told when the gate is on and no token is configured (`APP_ENV=docker`
 #: with `APP_ACCESS_TOKEN` unset). It is a 403, not a 401: there is no key that would work.
-MISSING_TOKEN_MESSAGE = "APP_ACCESS_TOKEN is not set on this deployment."
+#:
+#: Two strings, because there are two audiences (jargon-and-exposure-17). The visitor is told what
+#: they can do about it and nothing else; the environment variable is the operator's business and
+#: travels only in the JSON `detail` an operator's `curl` sees.
+MISSING_TOKEN_MESSAGE = "This deployment is not finished being set up, so nothing can be opened yet."
+MISSING_TOKEN_DETAIL = "APP_ACCESS_TOKEN is not set on this deployment; every gated route is refused."
+
+#: The plain sentence each refusal code reads as on a themed page. Nothing here names a header, a
+#: cookie, an environment variable or a status code: the code itself is still in the JSON body a
+#: client gets from the same route (UX W1, navigation-and-ia-3).
+REFUSAL_COPY: dict[str, tuple[str, str]] = {
+    "ADMIN_REQUIRED": (
+        "That control is for the HR admin",
+        "You can read everything on this dashboard, but changing it is reserved for the HR admin "
+        "persona. Nothing was changed.",
+    ),
+    "ACCESS_TOKEN_MISSING": ("Not available yet", MISSING_TOKEN_MESSAGE),
+    "RATE_LIMITED": (
+        "That was a lot of questions at once",
+        "Give it a minute and try again — this demo runs on one small instance.",
+    ),
+    "NOT_FOUND": (
+        "That page is not here",
+        "The link may be old, or the conversation it points at may have been cleared. "
+        "Nothing is missing from your own chat.",
+    ),
+    "ERROR": (
+        "Something went wrong",
+        "That request could not be completed, and nothing was created or changed.",
+    ),
+}
+
+
+def refusal_page(request: Request, *, status_code: int, code: str) -> Response:
+    """The HTML representation of a refusal: the shared masthead, a sentence, and a route back.
+
+    Beside `_key_page()` and negotiated the same way. A browser gets `templates/refused.html`; an
+    API client gets the identical JSON body it has always got, because §11.8's codes are a
+    contract and this is a representation, not a second one.
+    """
+    headline, detail = REFUSAL_COPY.get(code, REFUSAL_COPY["ERROR"])
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="refused.html",
+        context={
+            "status": status_code,
+            "headline": headline,
+            "detail": detail,
+            **shell_context(request, surface="chat"),
+        },
+        status_code=status_code,
+    )
 
 
 def request_is_https(request: Request) -> bool:
@@ -373,11 +470,10 @@ class AccessGateMiddleware:
             return None
 
         if gate_misconfigured(self.settings):
+            if _wants_html(request):
+                return refusal_page(request, status_code=403, code="ACCESS_TOKEN_MISSING")
             return JSONResponse(
-                {
-                    "code": "ACCESS_TOKEN_MISSING",
-                    "detail": "APP_ACCESS_TOKEN is not set on this deployment; every gated route is refused.",
-                },
+                {"code": "ACCESS_TOKEN_MISSING", "detail": MISSING_TOKEN_DETAIL},
                 status_code=403,
             )
 
@@ -393,9 +489,13 @@ class AccessGateMiddleware:
         )
 
         if needs_admin(request.method, path) and role != "admin":
+            if _wants_html(request):
+                return refusal_page(request, status_code=403, code="ADMIN_REQUIRED")
             return JSONResponse({"code": "ADMIN_REQUIRED"}, status_code=403)
 
         if self._rate_limited(request, path):
+            if _wants_html(request):
+                return refusal_page(request, status_code=429, code="RATE_LIMITED")
             return JSONResponse(
                 {"code": "RATE_LIMITED", "detail": f"more than {self.limiter.per_minute} requests in a minute"},
                 status_code=429,
@@ -412,7 +512,7 @@ class AccessGateMiddleware:
             # gate that has just refused the anonymous request. `gate_misconfigured()` fails closed
             # for `render` only, by design (§11.4 scopes the `access_token_missing` degradation to
             # it), so the refusal belongs here: never compare against an empty secret.
-            return _key_page(request, status_code=403, message=MISSING_TOKEN_MESSAGE)
+            return _key_page(request, status_code=403, message=MISSING_TOKEN_MESSAGE, detail=MISSING_TOKEN_DETAIL)
         supplied = request.query_params.get("access")
         if supplied is not None and request.method == "GET":
             if not hmac.compare_digest(supplied, token):
@@ -428,7 +528,7 @@ class AccessGateMiddleware:
         if scheme.lower() == "bearer" and hmac.compare_digest(value.strip(), token):
             return "bearer"
 
-        return _key_page(request, status_code=401, message="This deployment needs an access key.")
+        return _key_page(request, status_code=401, message="Enter the access key you were given to continue.")
 
     def _exchange(self, request: Request, token: str) -> Response:
         """`?access=` → the cookie, and a 302 to the same URL with the parameter stripped (§11)."""
@@ -867,21 +967,109 @@ class UnhandledErrorMiddleware:
 router = APIRouter()
 
 
+#: What `GET /?session=<id>` says when the id names no session, or one another persona owns. It
+#: names no id and asserts nothing about who owns what: a stranger's session id is not a thing to
+#: confirm the existence of, and the honest user-facing fact is simply that this page could not
+#: open it (UX W1, navigation-and-ia-16).
+FOREIGN_SESSION_NOTICE = "That conversation could not be opened here, so this is a new one."
+
+
+def _owns(session_row: dict[str, Any] | None, identity: Identity) -> bool:
+    """Own-persona or admin. `/` is not admin-gated, so a raw id must not expose another's chat."""
+    if session_row is None:
+        return False
+    return identity.is_admin or session_row.get("employee_id") == identity.actor
+
+
+def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
+    """Replay a stored session's turns into the shape `_turn.html` renders a live one in (§11.5).
+
+    The turn rows already hold everything the partial reads — `answer_blocks_json` and
+    `citations_json` are written by `core/trace.py` on close — so this is a projection, not a second
+    renderer, and `project()` reads the same spans the `/chat` response's `trace[]` does.
+
+    `confirmation` is deliberately never rebuilt: a confirmation token is minted in exactly one
+    place (`POST /chat/confirm`, §11.2) and a replayed card offering a Confirm button that cannot
+    write would be a lie. A parked turn replays as the transcript it is.
+    """
+    store = _store(request)
+    rows = store.execute(
+        "SELECT id, seq, user_message, final_answer, answer_blocks_json, citations_json, outcome, "
+        "llm_calls, tool_calls, retrievals, total_tokens_in, total_tokens_out, duration_ms "
+        "FROM turns WHERE session_id = ? AND ended_at IS NOT NULL ORDER BY seq",
+        (session_id,),
+    ).dicts()
+    replayed: list[dict[str, Any]] = []
+    for row in rows:
+        turn_id = row["id"]
+        citations = [Citation.model_validate(item) for item in json.loads(row["citations_json"] or "[]")]
+        turn = ChatResponse(
+            session_id=session_id,
+            turn_id=turn_id,
+            trace_id=session_id,
+            outcome=row["outcome"] or "answered",
+            answer=row["final_answer"] or "",
+            answer_blocks=[AnswerBlock.model_validate(item) for item in json.loads(row["answer_blocks_json"] or "[]")],
+            citations=citations,
+            trace=project(turn_id, session_id=session_id, store=store),
+            usage=Usage(
+                prompt_tokens=row["total_tokens_in"] or 0,
+                completion_tokens=row["total_tokens_out"] or 0,
+                llm_calls=row["llm_calls"] or 0,
+                tool_calls=row["tool_calls"] or 0,
+                retrievals=row["retrievals"] or 0,
+            ),
+            timings=Timings(total_ms=row["duration_ms"] or 0),
+            dashboard_url=f"/dashboard/sessions/{session_id}#turn-{row['seq']}",
+        )
+        as_of = snapshot_as_of(_spans_of(store, turn_id))
+        replayed.append(
+            {
+                "turn": turn,
+                "question": row["user_message"],
+                "as_of": as_of,
+                "as_of_human": human_date(as_of) if as_of else None,
+                "citations_by_id": {citation.chunk_id: citation for citation in citations},
+                "arguments_preview": "{}",
+            }
+        )
+    return replayed
+
+
 @router.get("/", response_class=HTMLResponse)
 async def chat_page(request: Request) -> Response:
-    """The single Jinja page of §11.5."""
+    """The single Jinja page of §11.5, plus `?session=<id>` rehydration (UX W1).
+
+    Chat used to lose the whole transcript on any reload, which made "Continue this conversation in
+    chat" from a session record impossible to offer honestly. `?session=` replays the stored turns
+    for the persona that owns the session; anything else — an unknown id, a malformed one, another
+    persona's — renders an empty conversation and one plain sentence.
+    """
     identity = identity_of(request)
-    settings = _settings(request)
+    requested = request.query_params.get("session")
+    transcript: list[dict[str, Any]] = []
+    session_id, notice = "", None
+    if requested is not None:
+        row = None
+        if ID_PATTERN.match(requested):
+            row = _store(request).execute("SELECT employee_id FROM sessions WHERE id = ?", (requested,)).one()
+        if _owns(row, identity):
+            session_id = requested
+            transcript = _rehydrate(request, requested)
+        else:
+            notice = FOREIGN_SESSION_NOTICE
     return TEMPLATES.TemplateResponse(
         request=request,
         name="chat.html",
         context={
             "employees": request.app.state.employees,
-            "actor": identity.actor,
-            "is_admin": identity.is_admin,
             "demo_prompts": DEMO_PROMPTS,
             "data_as_of": request.app.state.data_as_of,
-            "gate_on": gate_enabled(settings),
+            "badge_text": BADGE_TEXT,
+            "transcript": transcript,
+            "session_id": session_id,
+            "session_notice": notice,
+            **shell_context(request, surface="chat"),
         },
     )
 
@@ -1328,11 +1516,11 @@ DEMO_PROMPTS = {
 __all__ = [
     "ACCESS_COOKIE",
     "ACTOR_COOKIE",
-    "APP_VERSION",
-    "DEGRADATIONS",
-    "BADGE_TEXT",
-    "DEMO_PROMPTS",
     "ADMIN_ROUTES",
+    "APP_VERSION",
+    "BADGE_TEXT",
+    "DEGRADATIONS",
+    "DEMO_PROMPTS",
     "AccessGateMiddleware",
     "ChatBody",
     "ConfirmBody",
@@ -1342,5 +1530,7 @@ __all__ = [
     "gate_misconfigured",
     "health_payload",
     "identity_of",
+    "refusal_page",
     "router",
+    "shell_context",
 ]

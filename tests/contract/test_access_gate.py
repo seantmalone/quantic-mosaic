@@ -332,7 +332,12 @@ async def test_the_gate_with_no_token_configured_refuses_every_empty_credential(
     assert form.status_code == 403, "the key form does not mint a cookie for an empty field"
     for refused in (anonymous, bearer, cookie, parameter, form):
         assert "set-cookie" not in refused.headers
+    # The cause is an environment variable name, so it travels in the JSON body an operator's
+    # `curl` gets and never on the page a visitor is shown (UX W1, jargon-and-exposure-17).
+    for refused in (anonymous, bearer, cookie, parameter):
         assert "APP_ACCESS_TOKEN" in refused.text
+    assert "APP_ACCESS_TOKEN" not in form.text
+    assert "not finished being set up" in form.text
 
 
 # --------------------------------------------------------------------------------------

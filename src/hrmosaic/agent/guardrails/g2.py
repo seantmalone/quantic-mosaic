@@ -42,8 +42,11 @@ if TYPE_CHECKING:
 
 _WHITESPACE = re.compile(r"\s+")
 
-#: The corpus browser route §7.3 gives every citation.
-SOURCE_URL = "/dashboard/corpus/{doc_id}#{chunk_id}"
+#: Where a citation points (§7.3). It used to be `/dashboard/corpus/{doc_id}#{chunk_id}` — the
+#: dashboard's chunk inspector, which 403'd for 24 of the 25 personas and, for the one it did not,
+#: showed character offsets and ids rather than a document to read. UX W1 repointed it at the
+#: reader route, which is gated by the access token and by nothing else.
+SOURCE_URL = "/policy/{doc_id}#{chunk_id}"
 
 #: How many leading characters an unknown cited id must share with an evidence id before the two
 #: are read as the same chunk. Sixteen is `c_` plus fourteen of the sixteen hex digits — the exact

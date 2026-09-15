@@ -78,4 +78,4 @@ async def test_the_filtered_catalog_was_the_discovered_one_and_the_answer_is_cit
 
     assert [block.type for block in answered.answer_blocks] == ["policy_fact"]
     assert [citation.doc_id for citation in answered.citations] == ["pto-and-holidays"]
-    assert answered.citations[0].source_url.startswith("/dashboard/corpus/pto-and-holidays#")
+    assert answered.citations[0].source_url.startswith("/policy/pto-and-holidays#")

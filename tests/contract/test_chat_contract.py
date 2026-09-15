@@ -71,7 +71,7 @@ async def test_a_rag_only_query_answers_with_the_four_rubric_fields(web):
         # The snippet is the rubric's third field: evidence the grader can read without leaving
         # the page, and the deep link is the fourth click.
         assert citation["snippet"].strip()
-        assert citation["source_url"].startswith(f"/dashboard/corpus/{citation['doc_id']}#")
+        assert citation["source_url"].startswith(f"/policy/{citation['doc_id']}#")
     assert body["trace"], "the concise trace is a top-level field, not a dashboard-only view"
     assert body["confirmation"] is None
     assert body["trace_id"] == body["session_id"]

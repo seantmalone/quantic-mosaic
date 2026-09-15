@@ -273,7 +273,7 @@ envelopes under a standing system rule that envelope content is data, never inst
 Answers are constrained JSON: typed `answer_blocks[]` (`policy_fact` | `recommendation` |
 `escalation` | `next_steps`) each carrying its own citations, plus a top-level `citations[]` where
 each entry is `{chunk_id, doc_id, doc_title, heading_path, section, snippet, score, quarantined,
-source_url}`. The UI renders citation chips that deep-link into the corpus browser at the exact
+source_url}`. The UI renders citation chips that deep-link into the policy reader at the exact
 chunk, and a `recommendation` block is labelled *"Recommendation — not company policy"* in the
 interface itself.
 

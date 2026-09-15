@@ -51,7 +51,7 @@ def test_an_id_in_the_index_that_was_never_retrieved_still_resolves():
     assert resolution.ok
     assert resolution.citation is not None
     assert resolution.citation.doc_id == chunk.doc_id
-    assert resolution.citation.source_url == f"/dashboard/corpus/{chunk.doc_id}#{chunk.chunk_id}"
+    assert resolution.citation.source_url == f"/policy/{chunk.doc_id}#{chunk.chunk_id}"
 
 
 def test_an_id_that_exists_nowhere_is_stripped():

@@ -733,7 +733,7 @@ class Citation(BaseModel):
     section: str          # leaf heading only — the compact form the UI renders
     snippet: str; score: float
     quarantined: bool     # always present; a quarantined chunk can never be cited (G2/G4)
-    source_url: str       # "/dashboard/corpus/{doc_id}#{chunk_id}"
+    source_url: str       # "/policy/{doc_id}#{chunk_id}" — the reader route (amended, UX W1)
 
 class AnswerBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -1760,7 +1760,7 @@ and a tool-using query:
     {"chunk_id": "c_1b7e…", "doc_id": "tax-and-location-addendum", "doc_title": "Tax & Location Addendum",
      "heading_path": "Duration Thresholds > Stays Exceeding 30 Days", "section": "Stays Exceeding 30 Days",
      "snippet": "Any assignment exceeding 30 consecutive days …", "score": 0.74, "quarantined": false,
-     "source_url": "/dashboard/corpus/tax-and-location-addendum#c_1b7e"}],
+     "source_url": "/policy/tax-and-location-addendum#c_1b7e"}],
   "trace": [
     {"seq": 1, "kind": "mcp_discovery", "name": "hr-mcp", "duration_ms": 14, "status": "ok",
      "summary": "9 tools discovered over streamable_http", "detail_url": "/dashboard/sessions/9f2c…?span=…"},
