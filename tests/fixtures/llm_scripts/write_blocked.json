@@ -1,0 +1,97 @@
+{
+  "scenario": "write_blocked",
+  "_note": "W8, C02: the engine scores the request `non_compliant` and the model proposes the write anyway. Written for this wave rather than recorded — `fresh:a771d87b…:1` is the recording, and what it records is the product filing MOCK-HR-000011 against 0.25 days of accrual, leading with \"Done\", and then telling E1108 he lacks the balance. Route, one act step for the record and the balance, one for the policy and the verdict, one that proposes the ticket (refused deterministically at the call boundary), then the synthesis. Drives tests/unit/test_write_is_coupled_to_the_verdict.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1108\", \"selected_tools\": [\"check_pto_balance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"PTO request for E1108 with a write.\"}",
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the record and the balance.",
+      "tool_calls": [
+        {
+          "id": "toolu_wb_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1108"
+          }
+        },
+        {
+          "id": "toolu_wb_2",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1108"
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Now the policy and the verdict.",
+      "tool_calls": [
+        {
+          "id": "toolu_wb_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO notice requirement business days advance",
+            "topic": "pto",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_wb_4",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO manager approval requirement MosaicOne",
+            "topic": "approvals",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_wb_5",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1108",
+            "parameters": {
+              "start_date": "2026-09-22",
+              "end_date": "2026-09-24",
+              "days": 3
+            }
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "I'll open the request for you now.",
+      "tool_calls": [
+        {
+          "id": "toolu_wb_6",
+          "name": "create_mock_hr_ticket",
+          "args": {
+            "employee_id": "E1108",
+            "queue": "hr-timeoff",
+            "summary": "PTO Request: 3 days, 22-24 September 2026",
+            "details": "Employee requests three days of PTO."
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"recommendation\", \"text\": \"Your balance covers the three days you asked for.\", \"citations\": []}], \"next_steps\": [\"Contact People Operations if the dates cannot move.\"], \"rationale_summary\": \"Balance is short of the request; the ticket was not opened.\"}",
+      "finish_reason": "stop"
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Your balance covers the three days you asked for.\", \"citations\": []}], \"next_steps\": [\"Contact People Operations if the dates cannot move.\"], \"rationale_summary\": \"Balance is short of the request; the ticket was not opened.\"}",
+      "finish_reason": "stop"
+    }
+  ]
+}

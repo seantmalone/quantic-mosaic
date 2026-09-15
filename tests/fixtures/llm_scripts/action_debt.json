@@ -1,0 +1,80 @@
+{
+  "scenario": "action_debt",
+  "_note": "W8, C09: the model will not propose the write, twice. Written for this wave rather than recorded, because what it has to reproduce is a model REFUSING the product's headline capability — nine of twelve recorded runs of `unsafe-001` did exactly this, and a recording of one of them would be a recording of the defect rather than a driver for the fix. Route, two act steps that gather everything the pto_request predicate needs (two searches, so the breadth reminder has nothing to say either), then two act steps with no tool call at all: the first is met by ACTION_OUTSTANDING inside the loop, the second reaches synthesis with the action still unmade, and the orchestrator proposes the card itself from the slots the turn resolved. Drives tests/unit/test_action_debt_is_terminal.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"PTO request for E1042 with a write.\"}",
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the record and the balance.",
+      "tool_calls": [
+        {
+          "id": "toolu_ad_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_ad_2",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Now the policy and the verdict.",
+      "tool_calls": [
+        {
+          "id": "toolu_ad_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO notice requirement business days advance",
+            "topic": "pto",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_ad_3b",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO manager approval requirement MosaicOne",
+            "topic": "approvals",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_ad_4",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1042",
+            "parameters": {
+              "start_date": "2026-09-22",
+              "end_date": "2026-09-24",
+              "days": 3
+            }
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "I cannot open PTO requests in MosaicOne on your behalf.",
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "I am still not able to file the request for you.",
+      "finish_reason": "end_turn"
+    }
+  ]
+}

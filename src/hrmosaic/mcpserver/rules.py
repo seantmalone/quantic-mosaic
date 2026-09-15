@@ -326,6 +326,11 @@ class Context:
         values: dict[str, Any] = {
             "as_of": self.as_of.isoformat(),
             "submitted_on": self.submitted_on.isoformat(),
+            # The two dates the request itself carries, echoed so an answer — and the orchestrator's
+            # own deterministic confirmation card (W8, C09) — can name the span the verdict scored
+            # without parsing it back out of a reason string.
+            "start_date": start.isoformat() if (start := _parse_date(self.parameters.get("start_date"))) else None,
+            "end_date": end.isoformat() if (end := _parse_date(self.parameters.get("end_date"))) else None,
             "tenure_days": self.tenure_days(),
             "tenure_months_at_as_of": self.employee.get("tenure_months_at_as_of"),
             "notice_business_days": self.notice_business_days(),

@@ -217,3 +217,87 @@ def test_the_step_is_idempotent():
 
     assert twice.blocks == once.blocks
     assert not twice.changed
+
+
+# -- W8 C07: a threshold the request has already outgrown --------------------------------
+#
+# `eval:expenses-002:1` — a USD 3,000 trip whose one policy fact is the USD 2,500 manager limit,
+# closed by a step routing the report to the manager. The limit is true; it is not the rule that
+# applies to this claim, and a reader who acts on it sends the report to the wrong person.
+
+EXPENSES_002 = {
+    "scenario": "expense_claim",
+    "verdict": "conditional",
+    "requirements": [
+        {
+            "id": "expense.manager_limit",
+            "text": "A direct manager may approve expense reports up to USD 2,500.",
+            "met": False,
+            "status": "unmet",
+            "reason": "parameters.amount_usd is 3000; the policy value is 2500 (lte).",
+        },
+        {
+            "id": "expense.vp_limit",
+            "text": "A vice president may approve expense reports up to USD 25,000.",
+            "met": True,
+            "status": "met",
+            "reason": "parameters.amount_usd is 3000; the policy value is 25000 (lte).",
+        },
+    ],
+    "approvals_required": [
+        {"role": "Direct manager", "reason": "Expense reports up to USD 2,500 are approved by the direct manager."},
+        {
+            "role": "Director",
+            "reason": "Reports above USD 2,500 need director approval and a Finance business partner review.",
+        },
+    ],
+}
+
+
+def test_the_amount_the_question_carries_is_read_off_the_engines_own_reasons():
+    assert compliance.stated_amount(compliance.rows([envelope(EXPENSES_002)])) == 3000.0
+
+
+def test_the_covering_tier_is_the_highest_approval_the_request_triggered():
+    assert compliance.covering_rule([envelope(EXPENSES_002)]) == (
+        "Reports above USD 2,500 need director approval and a Finance business partner review."
+    )
+
+
+def test_a_ceiling_below_the_claim_is_replaced_by_the_tier_that_applies():
+    quoted = block("A direct manager may approve expense reports up to USD 2,500.", "policy_fact")
+    quoted["citations"] = ["c_1"]
+    result = compliance.apply([quoted], [envelope(EXPENSES_002)])
+
+    assert result.blocks[0]["text"] == (
+        "Reports above USD 2,500 need director approval and a Finance business partner review."
+    )
+    assert result.thresholds == 1 and result.changed
+
+
+def test_a_ceiling_the_claim_is_within_is_left_alone():
+    quoted = block("A vice president may approve expense reports up to USD 25,000.", "policy_fact")
+    result = compliance.apply([quoted], [envelope(EXPENSES_002)])
+
+    assert result.blocks[0]["text"] == quoted["text"]
+    assert result.thresholds == 0
+
+
+def test_a_next_step_routing_to_the_outgrown_tier_is_rewritten_too():
+    result = compliance.apply(
+        [block("Nothing to see here.")],
+        [envelope(EXPENSES_002)],
+        next_steps=["Send the report to your manager, who may approve up to USD 2,500."],
+    )
+
+    assert result.next_steps == [
+        "Reports above USD 2,500 need director approval and a Finance business partner review."
+    ]
+
+
+def test_a_turn_with_no_amount_in_it_never_touches_a_threshold():
+    quoted = block("A direct manager may approve expense reports up to USD 2,500.", "policy_fact")
+    result = compliance.apply([quoted], [envelope(SCENARIO_4_VERDICT)])
+
+    assert result.blocks[0]["text"] == quoted["text"]
+    assert result.thresholds == 0

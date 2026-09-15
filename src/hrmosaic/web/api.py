@@ -46,7 +46,7 @@ import secrets
 import time
 from collections import deque
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from html import escape
 from pathlib import Path
 from typing import Any, Literal
@@ -84,6 +84,7 @@ from hrmosaic.core.redact import redact_text
 from hrmosaic.mcpserver import confirm as confirm_gate
 from hrmosaic.mcpserver.tools.create_mock_hr_ticket import queue_label
 from hrmosaic.settings import Settings, secret_value
+from hrmosaic.settings import settings as app_settings
 from hrmosaic.web.sse import broker
 
 logger = logging.getLogger(__name__)
@@ -1650,7 +1651,7 @@ async def chat_page(request: Request) -> Response:
         context={
             "employees": request.app.state.employees,
             "greeting_name": _greeting_name(request, identity.actor),
-            "demo_prompts": DEMO_PROMPTS,
+            "demo_prompts": demo_prompts(),
             "demo_prompt_labels": DEMO_PROMPT_LABELS,
             "demo_environment": demo_environment(request),
             "turn_announcements": TURN_ANNOUNCEMENTS,
@@ -2124,14 +2125,81 @@ DEMO_PROMPT_LABELS = {
     "demo_2": "Three days of PTO, opened for me",
 }
 
-#: The two one-click demo prompts of §18, shared by the UI buttons and `scripts/demo_task_*.sh`.
-DEMO_PROMPTS = {
-    "demo_1": "I want to work from Berlin from 3 November to 14 December 2026 — can I?",
-    "demo_2": (
-        "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
-        "— and can you open the request for me?"
-    ),
-}
+#: The day the two demo scripts were recorded, and the day `scripts/demo_task_*.sh` still send
+#: their fixed dates against (`MOCK_TODAY` pins it for `make demo1` / `make demo2`).
+RECORDED_TODAY = date(2026, 9, 10)
+
+#: How far ahead the Berlin trip has to start for §18.1's fixed dates to still make sense: the
+#: international-remote notice rule is 21 calendar days (`remote.international.manager_notice_days`).
+BERLIN_NOTICE_DAYS = 21
+
+#: …and where it rolls to when they do not: the first Monday at least five weeks out, for six weeks.
+BERLIN_ROLL_WEEKS = 5
+BERLIN_TRIP_WEEKS = 6
+
+
+def _pto_span(today: date) -> tuple[date, date]:
+    """Tuesday to Thursday of the **second** week after today (W8, C04).
+
+    §18.2's demo is "three days of PTO, opened for me", and its point is the confirmation gate —
+    not a notice shortfall. Now that notice is measured from the submission date rather than from
+    the frozen snapshot, a fixed 15–17 September gave zero business days' notice on every run after
+    that week, so the engine scored the demo's own request `unmet` on the notice requirement. The
+    second week out is always at least five business days away, whatever day the demo is run.
+    """
+    monday = today + timedelta(days=7 - today.weekday())
+    tuesday = monday + timedelta(days=8)
+    return tuesday, tuesday + timedelta(days=2)
+
+
+def _berlin_span(today: date) -> tuple[date, date]:
+    """3 November – 14 December 2026 while that start is far enough ahead, else the next fit."""
+    start, end = date(2026, 11, 3), date(2026, 12, 14)
+    if (start - today).days >= BERLIN_NOTICE_DAYS:
+        return start, end
+    earliest = today + timedelta(weeks=BERLIN_ROLL_WEEKS)
+    rolled = earliest + timedelta(days=(7 - earliest.weekday()) % 7)
+    return rolled, rolled + timedelta(weeks=BERLIN_TRIP_WEEKS, days=-1)
+
+
+def _spoken(value: date, *, with_year: bool = True) -> str:
+    """`3 November 2026` — the one date vocabulary the chat surface reads (§11.5's `human_date`)."""
+    rendered = human_date(value.isoformat())
+    return rendered if with_year else rendered.rsplit(" ", 1)[0]
+
+
+def demo_prompts(today: date | None = None) -> dict[str, str]:
+    """The two one-click demo prompts of §18, dated against the day they are being read (W8, C04).
+
+    They used to be two frozen strings, which was right while the engine measured notice from the
+    mock data's own `as_of`. It does not any more: notice is measured from the submission date, so
+    a demo prompt with September dates in it is a request with **no notice** in October — and §18's
+    two headline paths would demonstrate a policy failure rather than the gate. The dates move; the
+    questions, the personas and the two capabilities they show do not.
+
+    `scripts/demo_task_*.sh` still send the recorded wording, and the recorded stub scripts replay
+    against `MOCK_TODAY=2026-09-10`, so the fixed pair remains reachable as `DEMO_PROMPTS`.
+    """
+    today = today or app_settings.today()
+    berlin_start, berlin_end = _berlin_span(today)
+    pto_start, pto_end = _pto_span(today)
+    weekday = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    return {
+        "demo_1": (
+            f"I want to work from Berlin from {_spoken(berlin_start, with_year=False)} to "
+            f"{_spoken(berlin_end)} — can I?"
+        ),
+        "demo_2": (
+            f"Can I take three days of PTO from {weekday[pto_start.weekday()]} "
+            f"{_spoken(pto_start, with_year=False)} to {weekday[pto_end.weekday()]} "
+            f"{_spoken(pto_end)} — and can you open the request for me?"
+        ),
+    }
+
+
+#: The recorded pair: what `scripts/demo_task_*.sh` send and what the committed stub scripts were
+#: captured against. The page renders `demo_prompts()` instead, dated against today.
+DEMO_PROMPTS = demo_prompts(RECORDED_TODAY)
 
 __all__ = [
     "ACCESS_COOKIE",
@@ -2140,8 +2208,12 @@ __all__ = [
     "APP_VERSION",
     "BLOCK_HEADINGS",
     "DEGRADATIONS",
+    "BERLIN_NOTICE_DAYS",
+    "BERLIN_ROLL_WEEKS",
+    "BERLIN_TRIP_WEEKS",
     "DEMO_PROMPTS",
     "DEMO_PROMPT_LABELS",
+    "RECORDED_TODAY",
     "LABELLED_OUTCOMES",
     "LIVE_PROVIDER",
     "PRODUCED_LEAD",
@@ -2158,6 +2230,7 @@ __all__ = [
     "Identity",
     "RateLimiter",
     "demo_environment",
+    "demo_prompts",
     "gate_enabled",
     "gate_misconfigured",
     "health_payload",

@@ -95,6 +95,76 @@ def valid_employee_id(value: str | None) -> str | None:
     return value if value and EMPLOYEE_ID.match(value) else None
 
 
+#: What a request to approve one's own work, or to go round the chain, sounds like (W8, C20).
+#: `corpus/manager-approval-matrix.md`: *"Nobody approves their own request, and nobody approves a
+#: request from a person who approves theirs."* The live turn was neither refused nor escalated —
+#: it ran out of steps, apologised for it, stated the rule, and then recommended a skip-level route
+#: premised on a conflict its own lookup disproved.
+UNSAFE_PHRASES: tuple[str, ...] = (
+    "approve my own",
+    "approve it myself",
+    "approve my request myself",
+    "self-approve",
+    "self approve",
+    "sign off on my own",
+    "sign off my own",
+    "approve this myself",
+    "record the approval myself",
+    "mark it as approved",
+    "mark my request approved",
+    "skip my manager",
+    "skip the manager",
+    "skip-level instead",
+    "without my manager",
+    "without manager approval",
+    "bypass the approval",
+    "bypass my manager",
+    "go around my manager",
+    "around the approval chain",
+    "approve on my behalf",
+)
+
+#: …and the terms that make a monetary question an approval question (W8, C07). A USD 3,000 trip
+#: was routed to the manager under the USD 2,500 row because nothing made the amount part of the
+#: routing decision.
+APPROVAL_TERMS: tuple[str, ...] = (
+    "approve",
+    "approval",
+    "approver",
+    "sign off",
+    "sign-off",
+    "authorise",
+    "authorize",
+    "expense",
+    "reimburse",
+    "reimbursement",
+    "claim",
+    "spend",
+    "invoice",
+    "receipt",
+)
+
+#: A money amount written the way a person writes one: `USD 3,000`, `$3000`, `3,000 USD`.
+MONEY = re.compile(
+    r"(?:\b(?:usd|eur|gbp)\s*|[$€£]\s?)[\d,]+(?:\.\d+)?|\b[\d,]+(?:\.\d+)?\s*(?:usd|eur|gbp)\b", re.IGNORECASE
+)
+
+#: The tool a monetary approval question has to reach before anything is written about the tier.
+COMPLIANCE_TOOL = "check_policy_compliance"
+
+
+def is_unsafe(message: str) -> bool:
+    """Does this turn ask the assistant to approve the reader's own request, or route around it?"""
+    lowered = " ".join(message.lower().split())
+    return any(phrase in lowered for phrase in UNSAFE_PHRASES)
+
+
+def is_monetary_approval(message: str) -> bool:
+    """A money amount **and** an approval or expense term — the `expense_claim` shape (W8, C07)."""
+    lowered = message.lower()
+    return bool(MONEY.search(lowered)) and any(term in lowered for term in APPROVAL_TERMS)
+
+
 def find_employee_id(message: str) -> str | None:
     """The zero-LLM pre-check of §9.1 step 0: the employee id the user typed, if they typed one."""
     found = re.search(r"\bE1[0-9]{3}\b", message)
@@ -153,19 +223,41 @@ def fallback_decision(message: str, *, reason: str, out_of_scope: bool = False) 
 
 
 def normalise(decision: RouteDecision, *, catalog_names: Sequence[str], message: str) -> RouteDecision:
-    """Clean a model-supplied decision: cap the rationale, drop invented ids and unknown tools."""
+    """Clean a model-supplied decision: cap the rationale, drop invented ids and unknown tools.
+
+    A monetary approval question is recognised **here** rather than taken from the model (W8, C07):
+    a USD 3,000 question was answered from the USD 2,500 manager row because the amount never
+    reached the compliance engine and nothing made it part of the routing decision.
+
+    `is_unsafe()` is the other half of the same idea (W8, C20) and is deliberately **not** a field
+    of `RouteDecision`: §9.2's constrained-JSON schema is strict at every level — every property is
+    required — so a field the recorded scripts predate would turn every replay into a router
+    failure, and the classification is a property of the message rather than a judgement the model
+    is asked to make. The orchestrator reads it straight off the question.
+    """
+    tools = [name for name in decision.selected_tools if name in set(catalog_names)]
+    monetary = is_monetary_approval(message)
+    if monetary and COMPLIANCE_TOOL in catalog_names and COMPLIANCE_TOOL not in tools:
+        tools.append(COMPLIANCE_TOOL)
     return decision.model_copy(
         update={
             "rationale_summary": clamp_rationale(decision.rationale_summary),
             "target_employee_id": valid_employee_id(decision.target_employee_id) or find_employee_id(message),
-            "selected_tools": [name for name in decision.selected_tools if name in set(catalog_names)],
+            "selected_tools": tools,
+            # A question with an amount in it is about the reader's own approval tier, so the turn
+            # needs their record whatever the model said.
+            "needs_employee_data": bool(decision.needs_employee_data) or monetary,
         }
     )
 
 
 __all__ = [
+    "APPROVAL_TERMS",
+    "COMPLIANCE_TOOL",
     "EMPLOYEE_ID",
     "MAX_RATIONALE_CHARS",
+    "MONEY",
+    "UNSAFE_PHRASES",
     "Intent",
     "RouteDecision",
     "WorkflowName",
@@ -173,6 +265,8 @@ __all__ = [
     "clamp_rationale",
     "fallback_decision",
     "find_employee_id",
+    "is_monetary_approval",
+    "is_unsafe",
     "normalise",
     "offered",
     "valid_employee_id",

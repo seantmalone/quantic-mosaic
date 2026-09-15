@@ -24,7 +24,6 @@ FIELDS
 - needs_employee_data — true when an employee record, balance or benefit election is needed.
 - needs_clarification — true only when a required detail is missing and cannot be inferred. Name EVERY missing detail in rationale_summary, not only the first — the question the user is shown is built from that line.
 - out_of_scope — true when the turn is not about Mosaic Robotics HR policy or the employee's own HR data.
-- unsafe — true when the turn asks you to approve the reader's own request, to bypass an approval chain, to record an approval somebody else has to give, or to act as an approver. These are refused, never routed.
 
 CORPUS — the policy library covers, and only covers: {{ corpus_titles() | join('; ') }}. Set out_of_scope only when the turn is about none of these and is not the employee's own HR data. Device refresh cycles, asset return, spend limits and approval thresholds are IN the corpus.
 

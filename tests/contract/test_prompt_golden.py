@@ -338,7 +338,32 @@ def test_the_answer_never_restates_the_as_of_and_never_writes_an_employee_id():
 
     assert "NEVER restate a tool result's `as_of` date in the answer" in system
     assert "NEVER write an employee id" in system
-    assert "Never emit a `performed` block" in system
+    assert "never emit a `performed` block" in system
+
+
+def test_the_model_is_never_asked_to_narrate_the_write():
+    """W8, C01. Rule 10 used to ask for the write to be stated *"first, with its id, as a
+    recommendation block"* — so the answer's account of an irreversible action came from a model
+    that had not been shown the result, and the deterministic step then had to take it back out.
+    The orchestrator writes the `performed` statement from the tool result and the model writes
+    nothing about the write at all."""
+    system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
+    rule = system[system.index("\n10. ") + 1 :]
+
+    assert rule.startswith("10. NEVER narrate a write.")
+    assert "do not restate its id" in rule
+    assert "submit, file, raise, log, open, enter or resubmit" in rule
+
+
+def test_the_model_is_told_the_engine_owns_the_verdict_and_the_approvers():
+    """W8, C03 and C06: the two rules the deterministic steps repair after the fact."""
+    system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
+
+    assert "`check_policy_compliance` is the verdict" in system
+    assert "Never state the opposite of a `status`" in system
+    assert "never relabel the engine's units" in system
+    assert "Approvers are people" in system
+    assert "self_approval_routed" in system
 
 
 def test_the_router_is_told_to_name_every_missing_detail():

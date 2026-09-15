@@ -136,6 +136,18 @@ SUBJECT_LABELS: dict[str, str] = {
     "days_since_eligibility": "time since your benefits eligibility began",
 }
 
+#: *"up to USD 2,500"* — a ceiling quoted as though it were the rule that applies (W8, C07). The
+#: `expenses-002` answer quoted the manager's limit on a USD 3,000 claim and closed by routing the
+#: report to the manager, which is the tier the amount had already left.
+CEILING = re.compile(
+    r"\bup to\s+(?:USD|EUR|GBP)\s*(?P<value>[\d,]+(?:\.\d+)?)"
+    r"|\bup to\s+[$€£]\s?(?P<symbol>[\d,]+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+
+#: The subject whose value is the amount the question asked about.
+AMOUNT_SUBJECT = "parameters.amount_usd"
+
 #: The shape `rules.py::_evaluate_requirement` writes a decided reason in.
 REASON = re.compile(r"^(?P<subject>[\w.]+) is (?P<value>.+?); the policy value is (?P<expected>.+?) \((?P<op>\w+)\)\.$")
 
@@ -174,10 +186,12 @@ class Outcome:
     restated_steps: list[tuple[int, str]] = field(default_factory=list)
     #: `(index, requirement id)` for a sentence that opposes a row and could not be cut safely.
     unverified: list[tuple[int, str]] = field(default_factory=list)
+    #: How many sentences quoted a threshold the request had already outgrown (W8, C07).
+    thresholds: int = 0
 
     @property
     def changed(self) -> bool:
-        return bool(self.restated or self.restated_steps)
+        return bool(self.restated or self.restated_steps or self.thresholds)
 
 
 def rows(envelopes: Iterable[Any]) -> list[Row]:
@@ -295,6 +309,63 @@ def correct(text: str, rows_: Sequence[Row]) -> tuple[str, list[str], list[str]]
     return " ".join(part.strip() for part in repaired), restated, unverified
 
 
+def stated_amount(rows_: Sequence[Row]) -> float | None:
+    """The amount the question asked about, read off the engine's own requirement reasons."""
+    for row in rows_:
+        match = REASON.match(row.reason)
+        if match is not None and match["subject"] == AMOUNT_SUBJECT:
+            try:
+                return float(match["value"].replace(",", ""))
+            except ValueError:
+                continue
+    return None
+
+
+def covering_rule(envelopes: Iterable[Any]) -> str | None:
+    """The reason of the approval tier the amount actually reaches, or `None` (W8, C07).
+
+    `approvals_required[]` is already filtered by the scenario's own guards, so the **last** entry
+    is the highest tier this request triggered: on a USD 3,000 claim that is the director's row,
+    whose reason is the rule the answer should have quoted.
+    """
+    for envelope in envelopes:
+        if getattr(envelope, "name", "") != COMPLIANCE_TOOL:
+            continue
+        try:
+            body = json.loads(getattr(envelope, "result_json", "") or "")
+        except (TypeError, ValueError):
+            continue
+        approvals = body.get("approvals_required") if isinstance(body, dict) else None
+        if isinstance(approvals, list) and len(approvals) > 1:
+            reason = approvals[-1].get("reason") if isinstance(approvals[-1], dict) else None
+            if isinstance(reason, str) and reason.strip():
+                return reason.strip()
+    return None
+
+
+def correct_ceilings(text: str, amount: float | None, covering: str | None) -> tuple[str, int]:
+    """`(the text, how many ceiling sentences were replaced or dropped)` (W8, C07).
+
+    A sentence quoting a ceiling **below** the amount the question carries is describing a tier the
+    request has left. It is replaced by the tier that actually applies, in the engine's own words,
+    or dropped where the engine named no higher tier — a threshold that does not apply is worse
+    than no threshold, because the reader acts on it.
+    """
+    if amount is None:
+        return text, 0
+    kept: list[str] = []
+    changed = 0
+    for sentence in sentences(text):
+        ceilings = [float((match["value"] or match["symbol"]).replace(",", "")) for match in CEILING.finditer(sentence)]
+        if not ceilings or max(ceilings) >= amount:
+            kept.append(sentence)
+            continue
+        changed += 1
+        if covering:
+            kept.append(covering)
+    return (" ".join(part.strip() for part in kept) if changed else text), changed
+
+
 def apply(
     blocks: Sequence[Mapping[str, Any]],
     envelopes: Iterable[Any],
@@ -303,12 +374,19 @@ def apply(
 ) -> Outcome:
     """The pure rule, over everything `render_answer()` puts in front of one reader. Mutates nothing."""
     evaluated = rows(envelopes)
+    amount, covering = stated_amount(evaluated), covering_rule(envelopes)
     body: list[dict[str, Any]] = []
     restated: list[tuple[int, str]] = []
     unverified: list[tuple[int, str]] = []
+    rewritten = 0
     for index, block in enumerate(blocks):
         item = dict(block)
         text, changed, unsure = correct(str(item.get("text") or ""), evaluated)
+        text, ceilings = correct_ceilings(text, amount, covering)
+        rewritten += ceilings
+        if ceilings and not text.strip():
+            # The block was nothing but a threshold the request had already outgrown.
+            continue
         item["text"] = text
         restated.extend((index, requirement_id) for requirement_id in changed)
         unverified.extend((index, requirement_id) for requirement_id in unsure)
@@ -318,6 +396,10 @@ def apply(
     restated_steps: list[tuple[int, str]] = []
     for index, step in enumerate(next_steps):
         text, changed, unsure = correct(str(step), evaluated)
+        text, ceilings = correct_ceilings(text, amount, covering)
+        rewritten += ceilings
+        if ceilings and not text.strip():
+            continue
         steps.append(text)
         restated_steps.extend((index, requirement_id) for requirement_id in changed)
         unverified.extend((index, requirement_id) for requirement_id in unsure)
@@ -327,6 +409,7 @@ def apply(
         restated=restated,
         restated_steps=restated_steps,
         unverified=unverified,
+        thresholds=rewritten,
     )
 
 
@@ -338,12 +421,17 @@ __all__ = [
     "RELATIONS",
     "STEP_NAME",
     "SUBJECT_LABELS",
+    "AMOUNT_SUBJECT",
+    "CEILING",
     "SUBJECT_WORDS",
     "Outcome",
     "Row",
     "apply",
     "correct",
+    "correct_ceilings",
+    "covering_rule",
     "polarity",
     "reader_sentence",
     "rows",
+    "stated_amount",
 ]

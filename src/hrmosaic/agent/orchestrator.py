@@ -71,6 +71,7 @@ from hrmosaic.agent.router import (
     allowed_tools,
     clamp_rationale,
     fallback_decision,
+    is_unsafe,
     normalise,
     offered,
 )
@@ -283,6 +284,22 @@ def unfilled_slot(workflow: str | None, *, known: Collection[str], has_record: b
             return slot
     return None
 
+
+#: What the product will not do, said first and in its own voice (W8, C20, C17). It names the act
+#: and then the rule, in `corpus/manager-approval-matrix.md`'s own words, so a reader is told what
+#: happens instead rather than only what does not.
+UNSAFE_REFUSAL = (
+    "I will not approve a request for you, record an approval somebody else has to give, or route "
+    "a request around its approval chain. Nobody approves their own request, and nobody approves a "
+    "request from a person who approves theirs; where that would happen, MosaicOne routes the "
+    "request one level higher automatically."
+)
+
+#: …and what there is to do instead.
+UNSAFE_NEXT_STEPS: tuple[str, ...] = (
+    "Send the request through MosaicOne and let it route to the right approver.",
+    f"If the routing looks wrong, contact People Operations at {g5.PEOPLE_OPS}.",
+)
 
 #: What a cancelled proposal tells the reader, before the answer it already earned (W8, C11, C17).
 CANCELLED_NOTICE = "Cancelled — nothing was created. Ask again whenever you would like me to open it."
@@ -859,6 +876,12 @@ class Orchestrator:
             return self._finish(
                 turn, g5.escalation(verdict), outcome="escalated", stop_reason="escalated", cold_start=cold_start
             )
+        if is_unsafe(req.message):
+            # **The turn opens by saying what will not happen** (W8, C20). The live
+            # `unsafe-self-approve` turn was neither refused nor escalated: it ran out of steps,
+            # apologised for it, stated the no-self-approval rule, and then recommended a
+            # skip-level route premised on a conflict its own lookup disproved.
+            return self._refuse_unsafe(turn, cold_start=cold_start)
         if decision.out_of_scope:
             return self._refuse(turn, g1.OUT_OF_SCOPE, cold_start=cold_start)
         if decision.needs_clarification:
@@ -1344,6 +1367,7 @@ class Orchestrator:
             await self._propose_deterministically(turn)
         except McpUnavailable as exc:
             return self._degraded(turn, str(exc), cold_start=cold_start)
+        self._plan(turn, step_index=turn.steps_taken)
         return self._park(turn, cold_start=cold_start) if turn.pending is not None else None
 
     def _data_outstanding(self, turn: _Turn) -> bool:
@@ -1389,11 +1413,12 @@ class Orchestrator:
         queue = DETERMINISTIC_QUEUES.get(scenario)
         if queue is None:
             return None
-        span = " to ".join(
+        days = [
             date_consistency.human_date(date.fromisoformat(value))
             for key in ("start_date", "span_end")
             if isinstance(value := computed.get(key), str) and ISO_DATE.fullmatch(value)
-        )
+        ]
+        span = " to ".join(days) if len(days) == 2 else ""
         subject = DETERMINISTIC_SUBJECTS[scenario]
         summary = f"{subject}: {span}" if span else subject
         rows = [f"- {row['text']} — {row['reason']}" for row in body.get("requirements") or [] if row.get("text")]
@@ -1906,6 +1931,10 @@ class Orchestrator:
                 rationale_summary=clamp_rationale(decision.rationale_summary),
                 step_index=step_index,
                 catalog_reopened=catalog_reopened,
+                # What the turn has been reminded of, so a planning moment after the act summary —
+                # the orchestrator settling the action debt itself (W8, C09) — is on the record
+                # too. §13.4's reader takes `nudges` from every `plan` span of the turn.
+                nudges=list(turn.nudges),
             ),
         )
 
@@ -2062,6 +2091,15 @@ class Orchestrator:
             cold_start=cold_start,
             quick_replies=clarify_chips(turn.clarify_slot),
         )
+
+    def _refuse_unsafe(self, turn: _Turn, *, cold_start: bool) -> ChatResponse:
+        """`outcome="refused"`, naming what will not be done and what the matrix does instead."""
+        answer = AnswerSchema(
+            blocks=[AnswerBlock(type=NOTICE, text=UNSAFE_REFUSAL, citations=[])],
+            next_steps=list(UNSAFE_NEXT_STEPS),
+            rationale_summary="Refused: self-approval or a bypass of the approval chain.",
+        )
+        return self._finish(turn, answer, outcome="refused", stop_reason="refused", cold_start=cold_start)
 
     def _refuse(self, turn: _Turn, reason: str, *, cold_start: bool) -> ChatResponse:
         return self._finish(
