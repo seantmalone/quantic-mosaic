@@ -15,8 +15,22 @@
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/vendor/htmx.min.js" defer></script>
   {% block head %}{% endblock %}
+  <script>
+    // Reduced motion, once for every chart on every page (UX W5, accessibility-and-responsive-19).
+    // Registered in `<head>`, so it is the FIRST `load` listener on the document and Chart.js has
+    // its defaults set before any page script constructs a chart.
+    window.addEventListener("load", function () {
+      if (typeof Chart !== "undefined" && window.matchMedia
+          && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        Chart.defaults.animation = false;
+      }
+    });
+  </script>
 </head>
 <body class="dashboard" data-page="{{ page_number }}">
+{#- Eleven page links plus the masthead stand between a keyboard reader and the page on every
+    navigation (UX W5, accessibility-and-responsive-16). #}
+<a class="skip-link" href="#main-content">Skip to the page</a>
 <div class="app-chrome" id="app-chrome">
 {% include "_masthead.html" %}
 
@@ -32,7 +46,7 @@
 </nav>
 </div>
 
-<main class="dash-main">
+<main class="dash-main" id="main-content" tabindex="-1">
   {% if breadcrumbs %}
   {#- The trail is the way back, and it ends where it arrives: the `<h2>` immediately below **is**
       the current page. Printing the page title again as the trail's leaf put a whole question on
@@ -73,5 +87,8 @@
     window.addEventListener("resize", measure);
   })();
 </script>
+{#- …and landing is more than scrolling: `_deep_link.html` moves focus to the target, on this
+    surface and on the policy reader, from one file. -#}
+{% include "_deep_link.html" %}
 </body>
 </html>

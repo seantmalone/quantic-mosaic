@@ -16,11 +16,12 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to the message</a>
 <div class="app-chrome">
 {% include "_masthead.html" %}
 </div>
 
-<main class="refused-main">
+<main class="refused-main" id="main-content" tabindex="-1">
   <div class="access-card">
     <h2>{{ headline }}</h2>
     <p>{{ detail }}</p>

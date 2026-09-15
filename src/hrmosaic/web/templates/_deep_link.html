@@ -1,0 +1,33 @@
+{#
+  Where a deep link lands (UX W5, accessibility-and-responsive-10).
+
+  Two routes carry fragment links a reader arrives on from somewhere else: the dashboard's
+  `/dashboard/sessions/{id}#turn-{seq}` (from the chat panel and from the turns listing) and the
+  reader's `/policy/{doc_id}#{chunk_id}` (from every citation). Both scrolled and neither moved
+  focus, so a keyboard or screen-reader user arrived at the top of the page and had to find the
+  thing they had just followed a link to.
+
+  `scroll-margin-top` — measured into `--dash-nav-h` by the page that has a sticky chrome — has
+  already put the target in the right place, which is why the focus call is `preventScroll`.
+
+  One file, included by both surfaces, so the two cannot drift.
+#}
+<script>
+  (function () {
+    "use strict";
+    function land() {
+      var id = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+      var target = id && document.getElementById(id);
+      if (!target) { return; }
+      // `.anchor` is `visibility: hidden` — a hidden element cannot take focus, so the card around
+      // it does.
+      if (getComputedStyle(target).visibility === "hidden") {
+        target = target.closest(".turn-card") || target.parentElement || target;
+      }
+      if (!target.hasAttribute("tabindex")) { target.setAttribute("tabindex", "-1"); }
+      target.focus({ preventScroll: true });
+    }
+    window.addEventListener("load", land);
+    window.addEventListener("hashchange", land);
+  })();
+</script>

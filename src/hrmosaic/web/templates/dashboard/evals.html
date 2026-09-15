@@ -92,10 +92,34 @@
 </section>
 
 <section class="panel tab-panel" id="tab-compare" hidden>
+  {# One list, read by the chart and by the table beside it: two copies of the series would be two
+     pictures of different things under one heading (UX W5). #}
+  {% set ablation_series = ['cit_resolve_mean', 'tool_selection_accuracy', 'arg_correctness_rate',
+                            'strict_pass_rate', 'groundedness_mean', 'citation_accuracy_mean'] %}
   <h3>Ablation — three variants over the identical items</h3>
-  <canvas id="chart-ablation" height="120" aria-label="Grouped ablation bars"></canvas>
+  {# Decorative: the six series are read out as a table below, one row per variant, so a reader
+     who cannot tell six hues apart still gets the comparison (accessibility-and-responsive-19). #}
+  <figure class="chart-figure">
+    <canvas id="chart-ablation" height="120" aria-hidden="true"></canvas>
+    <figcaption class="visually-hidden">
+      <table>
+        <caption>Ablation — the same items under three variants</caption>
+        <thead><tr><th scope="col">Variant</th>
+          {% for metric in ablation_series %}<th scope="col">{{ metric|metric_label }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in compare.variants %}
+          <tr><td>{{ row.variant }}</td>
+            {% for metric in ablation_series %}
+            <td>{% if row.metrics.get(metric) is none %}not judged on this variant{% else %}{{ row.metrics.get(metric)|pct }}{% endif %}</td>
+            {% endfor %}</tr>
+          {% else %}<tr><td>No variant has been run yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </figcaption>
+  </figure>
   <script id="chart-ablation-data" type="application/json">{{ compare.variants|tojson }}</script>
   <script id="chart-ablation-labels" type="application/json">{{ metric_labels|tojson }}</script>
+  <script id="chart-ablation-series" type="application/json">{{ ablation_series|tojson }}</script>
   <p class="note">Judged metrics are computed on <code>baseline</code> only (§13.9): the two
     ablation arms report <span class="not-judged">not judged on this variant</span> rather than a
     zero, and the chart omits those series.</p>
@@ -133,8 +157,7 @@
       if (typeof Chart === "undefined") { return; }
       var variants = JSON.parse(document.getElementById("chart-ablation-data").textContent);
       var labels = JSON.parse(document.getElementById("chart-ablation-labels").textContent);
-      var series = ["cit_resolve_mean", "tool_selection_accuracy", "arg_correctness_rate", "strict_pass_rate",
-                    "groundedness_mean", "citation_accuracy_mean"];
+      var series = JSON.parse(document.getElementById("chart-ablation-series").textContent);
       var palette = ["#1f6f6b", "#3b6fb0", "#7a5bb5", "#8a5a00", "#2f7d32", "#9b2c2c"];
       var datasets = [];
       series.forEach(function (metric, index) {

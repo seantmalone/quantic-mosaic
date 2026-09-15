@@ -268,17 +268,27 @@ def shell_context(request: Request, *, surface: Literal["chat", "dashboard"]) ->
     }
 
 
-def _key_page(request: Request, *, status_code: int, message: str, detail: str | None = None) -> Response:
+def _key_page(
+    request: Request, *, status_code: int, message: str, detail: str | None = None, invalid: bool = False
+) -> Response:
     """The key page, or its JSON equivalent for a client that did not ask for HTML.
 
     Two strings where the audience differs: `message` is what a visitor reads, `detail` is what an
     operator's `curl` gets. They are the same string unless a caller says otherwise — the one case
     that does is the unconfigured deployment, whose cause is an environment variable name and
     therefore no business of a visitor (UX W1, jargon-and-exposure-17).
+
+    `invalid` is the narrower fact: a key was **supplied and rejected**. It is what the page marks
+    the field with and prefixes the title with, so a reader who cannot see the red sentence is
+    still told (UX W5, accessibility-and-responsive-12). An anonymous request that offered no
+    credential at all is not a rejection and never sets it.
     """
     if _wants_html(request):
         return TEMPLATES.TemplateResponse(
-            request=request, name="access.html", context={"message": message}, status_code=status_code
+            request=request,
+            name="access.html",
+            context={"message": message, "invalid": invalid},
+            status_code=status_code,
         )
     return JSONResponse({"code": "ACCESS_REQUIRED", "detail": detail or message}, status_code=status_code)
 
@@ -532,7 +542,7 @@ class AccessGateMiddleware:
         supplied = request.query_params.get("access")
         if supplied is not None and request.method == "GET":
             if not hmac.compare_digest(supplied, token):
-                return _key_page(request, status_code=401, message="That access key was not recognised.")
+                return _key_page(request, status_code=401, message="That access key was not recognised.", invalid=True)
             return self._exchange(request, token)
 
         cookie = request.cookies.get(ACCESS_COOKIE)
@@ -1567,7 +1577,7 @@ async def set_actor(request: Request) -> Response:
 
 @router.get("/access", response_class=HTMLResponse)
 async def access_page(request: Request) -> Response:
-    return TEMPLATES.TemplateResponse(request=request, name="access.html", context={"message": None})
+    return TEMPLATES.TemplateResponse(request=request, name="access.html", context={"message": None, "invalid": False})
 
 
 @router.post("/access")
@@ -1584,14 +1594,14 @@ async def access_submit(request: Request) -> Response:
         return TEMPLATES.TemplateResponse(
             request=request,
             name="access.html",
-            context={"message": MISSING_TOKEN_MESSAGE},
+            context={"message": MISSING_TOKEN_MESSAGE, "invalid": False},
             status_code=403,
         )
     if not hmac.compare_digest(supplied, token):
         return TEMPLATES.TemplateResponse(
             request=request,
             name="access.html",
-            context={"message": "That access key was not recognised."},
+            context={"message": "That access key was not recognised.", "invalid": True},
             status_code=401,
         )
     response = RedirectResponse("/", status_code=303)

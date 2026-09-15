@@ -398,6 +398,7 @@ brings the `@font-face` rules). Names that already exist in `app.css` — `--ink
   --text-body: 400 1rem/1.55 var(--font-body);
   --text-small: 400 0.875rem/1.5 var(--font-body);
   --text-meta: 400 0.8125rem/1.45 var(--font-body);
+  --text-floor: 0.8125rem;
   --track-display: -0.011em;
   --track-eyebrow: 0.08em;
 
@@ -423,6 +424,7 @@ brings the `@font-face` rules). Names that already exist in `app.css` — `--ink
   --lift-0: none;
   --lift-1: 0 1px 2px rgb(16 29 28 / 0.07);
   --lift-2: 0 2px 8px rgb(16 29 28 / 0.11);
+  --edge-shade: rgb(16 29 28 / 0.14);
   --focus-ring: 0 0 0 2px var(--card), 0 0 0 4px var(--focus);
 
   /* -- light: porcelain grounds, verdigris accent -------------------------------------- */
@@ -488,6 +490,7 @@ brings the `@font-face` rules). Names that already exist in `app.css` — `--ink
     /* shadows read as smudges on a dark ground; the hairline carries the elevation */
     --lift-1: 0 0 0 1px #24302e;
     --lift-2: 0 2px 10px rgb(0 0 0 / 0.5);
+    --edge-shade: rgb(0 0 0 / 0.55);
   }
 }
 
@@ -522,6 +525,7 @@ brings the `@font-face` rules). Names that already exist in `app.css` — `--ink
 
   --lift-1: 0 0 0 1px #24302e;
   --lift-2: 0 2px 10px rgb(0 0 0 / 0.5);
+  --edge-shade: rgb(0 0 0 / 0.55);
 }
 ```
 

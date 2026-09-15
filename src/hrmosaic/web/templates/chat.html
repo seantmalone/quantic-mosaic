@@ -9,6 +9,10 @@
   <script src="/static/vendor/htmx.min.js" defer></script>
 </head>
 <body class="chat">
+{#- The first stop in the tab order, and invisible until it is focused: without it a keyboard
+    reader walks the whole masthead on every page before reaching the conversation
+    (UX W5, accessibility-and-responsive-16). -#}
+<a class="skip-link" href="#main-content">Skip to the conversation</a>
 <div class="app-chrome">
 {% include "_masthead.html" %}
 </div>
@@ -18,8 +22,8 @@
     anything (UX W2, chat-production-ux-28, accessibility-and-responsive-3). -#}
 <p id="cold-start-banner" class="banner" hidden>Just waking up — the first answer may take a little longer.</p>
 
-<main class="layout">
-  <section class="conversation">
+<main class="layout" id="main-content" tabindex="-1">
+  <section class="conversation" aria-label="Conversation with the HR copilot">
     {% if session_notice %}<p class="session-notice" role="status">{{ session_notice }}</p>{% endif %}
 
     {#- The conversation scrolls inside this box; the document does not grow (P11). -#}
@@ -203,6 +207,12 @@
       messageBox.disabled = busy;
       sendButton.hidden = busy;
       stopButton.hidden = !busy;
+      // Disabling the composer blurs it to `<body>`, and the control that was just pressed is
+      // hidden — so a keyboard reader was left with no position and had to Tab to find the only
+      // action a running turn offers. Stop replaces Send; focus goes with it, and comes back to
+      // the composer in `htmx:afterSwap` when the turn lands (UX W5,
+      // accessibility-and-responsive-4).
+      if (busy) { stopButton.focus(); }
       document.querySelectorAll(".demo-button, .starter, .quick-reply").forEach(function (button) {
         button.disabled = busy;
       });
@@ -380,7 +390,12 @@
       clearPending();
       setBusy(false);
       stickToBottom(true);
-      messageBox.focus();
+      // Focus goes back where the next action is. That is the composer on every turn except one:
+      // a turn that is waiting for a decision puts it on the card's heading, because the composer
+      // is not what the reader has to answer and `hx-disabled-elt` has just blurred the pressed
+      // button to `<body>` (accessibility-and-responsive-4).
+      var decision = lastTurn && lastTurn.querySelector(".confirm-heading");
+      if (decision) { decision.focus({ preventScroll: true }); } else { messageBox.focus(); }
     });
 
     document.body.addEventListener("htmx:responseError", function () { setBusy(false); clearPending(); });

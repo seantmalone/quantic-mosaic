@@ -29,7 +29,13 @@
 {% block content %}
 <section class="panel">
   <h3>Verdicts by rule</h3>
-  <canvas id="chart-verdicts" height="130" aria-label="Guardrail verdict counts by rule"></canvas>
+  {# Decorative: every bar in it is a row of the table immediately below, which is on the page for
+     everyone (UX W5, accessibility-and-responsive-19). #}
+  <figure class="chart-figure">
+    <canvas id="chart-verdicts" height="130" aria-hidden="true"></canvas>
+    <figcaption class="visually-hidden">Guardrail verdict counts by rule. The same counts are in
+      the table below, one row per rule and verdict.</figcaption>
+  </figure>
   <script id="chart-verdicts-data" type="application/json">{{ view.by_rule|tojson }}</script>
   <script id="chart-verdicts-rules" type="application/json">{{ rule_labels|tojson }}</script>
   <p class="note">All six checks are plotted. A rule with a zero bar ran and allowed everything, or

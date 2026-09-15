@@ -17,11 +17,12 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to the policy</a>
 <div class="app-chrome">
 {% include "_masthead.html" %}
 </div>
 
-<main class="reader">
+<main class="reader" id="main-content" tabindex="-1">
   <article class="reader-doc">
     <h2 class="reader-title">{{ view.document.doc_title }}</h2>
     <p class="reader-meta">Mosaic HR policy · version {{ view.document.version }} ·
@@ -46,5 +47,7 @@
     {% endfor %}
   </article>
 </main>
+{#- A citation lands on `#{chunk_id}`; without this it lands there for the eye only. -#}
+{% include "_deep_link.html" %}
 </body>
 </html>

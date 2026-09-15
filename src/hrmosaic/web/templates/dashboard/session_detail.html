@@ -106,9 +106,15 @@
     <li class="span-row" data-kind="{{ span.kind }}" data-status="{{ span.status }}">
       <span class="span-seq mono">{{ span.seq|num }}</span>
       <span class="pill pill-{{ span.kind }}">{{ span.kind|kind_label }}</span>
-      <span class="span-name">{{ span.name }}</span>
+      {#- A failed step was red and bold and nothing else: colour was the only thing saying it went
+          wrong, which is exactly what a reader who cannot see the red is not told (UX W5). The word
+          is now in the row. -#}
+      <span class="span-name">{{ span.name }}{% if span.status == 'error' %}
+        <span class="flag flag-error">failed</span>{% endif %}</span>
       <span class="span-summary">{{ span|span_summary }}</span>
-      <span class="span-track">
+      {#- Decorative: the proportional bar is a picture of the duration printed beside it, and it is
+          dropped altogether below 70rem. -#}
+      <span class="span-track" aria-hidden="true">
         <span class="span-bar{% if not span.duration_ms %} is-instant{% endif %}"
               style="margin-left: {{ (100.0 * span.offset_ms / span_total)|clamp }}%;
               width: {{ (100.0 * (span.duration_ms or 0) / span_total)|clamp }}%;"></span>

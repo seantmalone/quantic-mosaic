@@ -193,9 +193,35 @@
     deployed instance (§13.2).</p>
   {% endif %}
 
-  <canvas id="chart-latency" height="110" aria-label="Latency histogram"></canvas>
-  <canvas id="chart-cold-warm" height="110" aria-label="Cold versus warm latency"></canvas>
-  <canvas id="chart-rss" height="110" aria-label="RSS at the end of each turn"></canvas>
+  {# Three decorative canvases (UX W5, accessibility-and-responsive-19). The first two plot figures
+     that are already on this page in words — every item's latency is a column of the items table,
+     and the four cold/warm percentiles are the list immediately above — so their captions say
+     where, rather than printing the same numbers a second time. The third has no other home, so it
+     carries its own table. #}
+  <figure class="chart-figure">
+    <canvas id="chart-latency" height="110" aria-hidden="true"></canvas>
+    <figcaption class="visually-hidden">Latency histogram of the scored items. Each item's own
+      latency is the Latency column of the items table on the Items tab.</figcaption>
+  </figure>
+  <figure class="chart-figure">
+    <canvas id="chart-cold-warm" height="110" aria-hidden="true"></canvas>
+    <figcaption class="visually-hidden">Cold versus warm latency. The four figures plotted are the
+      Median, p95, Cold median and Cold p95 entries listed above.</figcaption>
+  </figure>
+  <figure class="chart-figure">
+    <canvas id="chart-rss" height="110" aria-hidden="true"></canvas>
+    <figcaption class="visually-hidden">
+      <table>
+        <caption>Memory in use at the end of each turn</caption>
+        <thead><tr><th scope="col">Turn</th><th scope="col">Memory (MB)</th></tr></thead>
+        <tbody>
+          {% for point in view.rss_series %}
+          <tr><td>{{ point.turn_id[:8] }}</td><td>{{ point.rss_mb|num }}</td></tr>
+          {% else %}<tr><td colspan="2">This run recorded no memory readings.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </figcaption>
+  </figure>
   <script id="chart-eval-data" type="application/json">{{
       {'items': view['items'], 'latency': view['latency'], 'rss_series': view['rss_series']}|tojson }}</script>
 

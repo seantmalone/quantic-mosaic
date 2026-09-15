@@ -25,7 +25,13 @@
 #}
 <article class="turn" id="turn-{{ turn.turn_id }}" data-session-id="{{ turn.session_id }}"
          data-turn-id="{{ turn.turn_id }}" data-outcome="{{ turn.outcome }}"
-         data-dashboard-url="{{ turn.dashboard_url }}" data-produced="{{ produced }}">
+         data-dashboard-url="{{ turn.dashboard_url }}" data-produced="{{ produced }}"
+         aria-labelledby="turn-heading-{{ turn.turn_id }}">
+  {#- The transcript had no heading structure at all: one flat run of `<div>`s a screen reader
+      could not jump between, inside an unnamed region (UX W5, accessibility-and-responsive-16).
+      Each turn is now a named section, and its name is the question that opened it — the same
+      words the reader can see, so the outline and the page agree. -#}
+  <h2 class="visually-hidden" id="turn-heading-{{ turn.turn_id }}">{{ question or 'Mosaic replied' }}</h2>
   {% if question %}
   <div class="message message-user"><p>{{ question }}</p></div>
   {% endif %}
@@ -125,8 +131,12 @@
     {% endif %}
 
     {% if turn.confirmation %}
+    {#- The card is the next thing the reader has to act on, so it is where focus goes when the
+        turn lands — `hx-disabled-elt` blurs the pressed button to `<body>` and htmx restores
+        nothing, so without a target the decision was reachable only by hunting for it
+        (accessibility-and-responsive-4). `chat.html` focuses this heading. -#}
     <form class="confirm-card" hx-post="/chat/confirm" hx-target="#turn-{{ turn.turn_id }}" hx-swap="outerHTML">
-      <h3>Confirm before anything is written</h3>
+      <h3 class="confirm-heading" tabindex="-1">Confirm before anything is written</h3>
       <dl class="confirm-details">
         {% for field in confirm_fields %}
         <div class="confirm-field"><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>

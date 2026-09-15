@@ -101,7 +101,26 @@
 
 <section class="panel">
   <h3>Turns per hour — the last 24 hours</h3>
-  <canvas id="chart-turns-per-hour" height="90" aria-label="Turns per hour, the last 24 hours, UTC"></canvas>
+  {# A canvas is a bitmap: an `aria-label` said what the picture was *of* and nothing about what it
+     showed (UX W5, accessibility-and-responsive-19). The canvas is decorative and the figures it
+     plots are the table below it, visually hidden, through the same filters the rest of the page
+     uses — so what is spoken and what is printed are one convention (P10). #}
+  <figure class="chart-figure">
+    <canvas id="chart-turns-per-hour" height="90" aria-hidden="true"></canvas>
+    <figcaption class="visually-hidden">
+      <table>
+        <caption>Turns per hour, the last 24 hours (UTC)</caption>
+        <thead><tr><th scope="col">Hour (UTC)</th><th scope="col">Turns</th></tr></thead>
+        <tbody>
+          {% for bucket in view.turns_per_hour %}
+          {#- The same `HH:MM` the chart's own axis prints (`b.hour.slice(11, 16)`), not the raw
+              ISO instant: the two are one picture and the page has one date convention (P10). -#}
+          <tr><td>{{ bucket.hour[11:16] }}</td><td>{{ bucket.turns|num }}</td></tr>
+          {% else %}<tr><td colspan="2">No turn has been recorded in the last 24 hours.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </figcaption>
+  </figure>
   <script id="chart-turns-per-hour-data" type="application/json">{{ view.turns_per_hour|tojson }}</script>
   <p class="note" id="chart-turns-per-hour-flat" hidden>Nothing has been asked in the last 24 hours,
     so every hour is zero.</p>
