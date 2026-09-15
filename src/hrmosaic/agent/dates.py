@@ -107,40 +107,74 @@ def minus_days(anchor: date, count: int, *, business: bool) -> date:
     return moment
 
 
+def _repair(match: re.Match[str]) -> str | None:
+    """What one parenthetical should become: `None` to leave the model's words exactly as they are,
+    `""` to drop the claim, or the corrected deadline plus its working."""
+    stated_text = match.group("stated")
+    anchor_text = match.group("anchor")
+    count = int(match.group("n"))
+    business = bool(_BUSINESS.search(match.group(0)[: match.start("anchor") - match.start()]))
+
+    stated = parse_date(stated_text) if stated_text else None
+    anchor = parse_date(anchor_text, default_year=stated.year if stated else None)
+    if anchor is None:
+        # The anchor is not a date at all ("before departure"), or neither side carries a year:
+        # there is no arithmetic to redo, so the model's sentence stands.
+        return None
+    if stated_text and stated is None:
+        # "by 1 January (21 days before 3 November 2026)" — the year the deadline left out is
+        # the one the anchor carries, which is the only year in the sentence.
+        stated = parse_date(stated_text, default_year=anchor.year)
+        if stated is None:
+            return None
+
+    if stated_text is None:
+        # A parenthetical with no deadline in front of it states a relation the reader cannot
+        # check and this step cannot correct. The claim goes; the sentence stays.
+        return ""
+
+    expected = minus_days(anchor, count, business=business)
+    if stated == expected:
+        return None
+    working = match.group(0)[match.start("stated") - match.start() + len(stated_text) :]
+    return f"{human_date(expected)}{working}"
+
+
 def correct(text: str) -> str:
-    """One sentence with its arithmetic redone. Returns it unchanged when there is nothing to check."""
+    r"""One passage with its arithmetic redone. Returns it unchanged when there is nothing to check.
 
-    def repair(match: re.Match[str]) -> str:
-        stated_text = match.group("stated")
-        anchor_text = match.group("anchor")
-        count = int(match.group("n"))
-        business = bool(_BUSINESS.search(match.group(0)[: match.start("anchor") - match.start()]))
+    **Only the span a parenthetical occupies is rewritten.** The step used to finish by running
+    `\s{2,}` → `" "` and `" ."` → `"."` over the *whole* string whenever anything in it changed —
+    and `\s` matches a newline, so one corrected deadline in a multi-paragraph block flattened the
+    block: paragraph breaks became spaces and every unrelated `" ."` in it was rewritten. That text
+    is what is stored in `turns.final_answer` and `answer_blocks_json` and what `/chat` returns, so
+    the record was rewritten too (UX W6, the fix round of the re-audit). Everything outside the
+    spans below — line breaks included — now comes back byte for byte.
+    """
+    pieces: list[str] = []
+    cursor = 0
+    for match in PARENTHETICAL.finditer(text):
+        replacement = _repair(match)
+        if replacement is None:
+            continue
+        prefix = text[cursor : match.start()]
+        if replacement == "":
+            # Dropping the claim drops the space that introduced it — spaces and tabs only, because
+            # a newline is structure this step has no business touching. A space is put back when
+            # the removal would otherwise weld two words together.
+            trimmed = prefix.rstrip(" \t")
+            if trimmed != prefix and text[match.end() : match.end() + 1].isalnum():
+                trimmed += " "
+            pieces.append(trimmed)
+        else:
+            pieces.append(prefix)
+            pieces.append(replacement)
+        cursor = match.end()
 
-        stated = parse_date(stated_text) if stated_text else None
-        anchor = parse_date(anchor_text, default_year=stated.year if stated else None)
-        if anchor is None:
-            # The anchor is not a date at all ("before departure"), or neither side carries a year:
-            # there is no arithmetic to redo, so the model's sentence stands.
-            return match.group(0)
-        if stated_text and stated is None:
-            # "by 1 January (21 days before 3 November 2026)" — the year the deadline left out is
-            # the one the anchor carries, which is the only year in the sentence.
-            stated = parse_date(stated_text, default_year=anchor.year)
-            if stated is None:
-                return match.group(0)
-
-        expected = minus_days(anchor, count, business=business)
-        working = match.group(0)[match.start("stated") - match.start() + len(stated_text) :] if stated_text else None
-        if stated_text is None:
-            # A parenthetical with no deadline in front of it states a relation the reader cannot
-            # check and this step cannot correct. The claim goes; the sentence stays.
-            return ""
-        if stated == expected:
-            return match.group(0)
-        return f"{human_date(expected)}{working}"
-
-    repaired = PARENTHETICAL.sub(repair, text)
-    return re.sub(r"\s{2,}", " ", repaired).replace(" .", ".").strip() if repaired != text else text
+    if not pieces:
+        return text
+    pieces.append(text[cursor:])
+    return "".join(pieces)
 
 
 @dataclass

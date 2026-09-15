@@ -58,6 +58,13 @@ CASES = (
 #: scores, chunk ids and raw JSON — each of these was on the chat page before UX W2, and each of
 #: them is a thing only a grader reading a trace can use.
 MARKUP_FORBIDDEN = (
+    # **The employee id.** The re-audit found `E1007` fifteen times on one answered turn, in prose
+    # about a person — *"your director (Dana, E1007)"*. `api.without_employee_ids()`, the `no_ids`
+    # filter and `synthesize.j2` rule 6c are the mechanism that keeps it off the page; this is the
+    # invariant, and it is what makes the regression fail something (UX W6, npo2-02). The rule runs
+    # over the markup, not the text, because an id can arrive as an attribute as easily as a
+    # sentence — and the demo panel, whose persona control names ids on purpose, is already cut.
+    r"\bE1[0-9]{3}\b",
     r"data-chunk-id",
     r"\bc_[0-9a-f]{8}",
     r"stub:stub",

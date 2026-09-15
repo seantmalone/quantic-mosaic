@@ -903,6 +903,35 @@ _ID_ASIDE = re.compile(r"\s*,\s*E1\d{3}\b")
 _ID_PARENTHESIS = re.compile(r"\s*[(\[]\s*E1\d{3}\s*[)\]]")
 
 
+def _without(pattern: re.Pattern[str], text: str) -> str:
+    r"""`text` with every match of `pattern` removed, tidying **only the gap each one leaves**.
+
+    The tidy-up used to be a pass over the whole string — `\s{2,}` → `" "`, then `" ."` → `"."` —
+    which is a different function on a block than it is on a sentence: `\s` matches a newline, so
+    removing one id from a two-paragraph block also flattened the paragraph break and rewrote every
+    unrelated `" ."` in it (UX W6, the fix round of the re-audit). Here the space that introduced a
+    removed id goes with it, spaces and tabs only, and every other character survives untouched.
+    """
+    pieces: list[str] = []
+    cursor = 0
+    for match in pattern.finditer(text):
+        prefix = text[cursor : match.start()]
+        trimmed = prefix.rstrip(" \t")
+        cursor = match.end()
+        if not any(piece.strip() for piece in pieces) and not trimmed.strip():
+            # The removal opened the string: the space it left behind is leading whitespace.
+            cursor += len(text[cursor:]) - len(text[cursor:].lstrip(" \t"))
+        elif trimmed != prefix and text[cursor : cursor + 1].isalnum():
+            # Two words would otherwise be welded together where the id stood between them.
+            trimmed += " "
+        pieces.append(trimmed)
+
+    if not pieces:
+        return text
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
 def without_employee_ids(text: str) -> str:
     """Chat prose with every `E1xxx` taken out of it, and the punctuation around it tidied.
 
@@ -910,10 +939,9 @@ def without_employee_ids(text: str) -> str:
     (Dana)"*. The id is not lost — it is on the `tool_call` span, in `mock_writes` and in
     `/api/*` (P15); it is simply not something a person is shown in a sentence about their manager.
     """
-    body = _ID_PARENTHESIS.sub("", text)
-    body = _ID_ASIDE.sub("", body)
-    body = EMPLOYEE_ID.sub("", body)
-    return re.sub(r"\s{2,}", " ", body).replace(" .", ".").replace(" ,", ",").strip()
+    body = _without(_ID_PARENTHESIS, text)
+    body = _without(_ID_ASIDE, body)
+    return _without(EMPLOYEE_ID, body)
 
 
 def rendered_next_steps(response: ChatResponse) -> list[str]:
@@ -986,11 +1014,21 @@ def policy_markup(text: str) -> Markup:
             blocks.append(f"<{tag}>" + "".join(f"<li>{item}</li>" for item in items) + f"</{tag}>")
             items = []
 
-    paragraph: list[str] = []
+    #: One entry per source line of the paragraph being built: its markup, and whether the line
+    #: asked for a hard break. The corpus is hard-wrapped at ~150 characters, so a source newline is
+    #: a typographic accident and not an instruction: joining on `<br>` reprinted every one of them
+    #: as a forced break mid-sentence, at every viewport (UX W6, the fix round of the re-audit).
+    #: Markdown's own rule is the one applied here — a soft wrap is a space, and only a line ending
+    #: in two spaces is a break the author asked for.
+    paragraph: list[tuple[str, bool]] = []
 
     def flush_paragraph() -> None:
         if paragraph:
-            blocks.append("<p>" + "<br>".join(paragraph) + "</p>")
+            body = paragraph[0][0]
+            for index, (line_markup, _) in enumerate(paragraph[1:], start=1):
+                body += "<br>" if paragraph[index - 1][1] else " "
+                body += line_markup
+            blocks.append(f"<p>{body}</p>")
             paragraph.clear()
 
     for line in str(text).splitlines():
@@ -1008,7 +1046,7 @@ def policy_markup(text: str) -> Markup:
         if not line.strip():
             flush_paragraph()
             continue
-        paragraph.append(_inline_markup(line.strip()))
+        paragraph.append((_inline_markup(line.strip()), line.endswith("  ")))
     flush()
     flush_paragraph()
     return Markup("".join(blocks))  # noqa: S704 — every character above was escaped by `_inline_markup`

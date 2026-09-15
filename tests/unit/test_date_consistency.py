@@ -100,3 +100,30 @@ def test_an_answer_with_no_arithmetic_in_it_is_untouched():
     outcome = dates.apply([{"type": "policy_fact", "text": "You have 13.5 days left.", "citations": ["c_1"]}])
     assert not outcome.changed
     assert outcome.corrected == 0
+
+
+MULTI_LINE_BLOCK = (
+    "File the work-from-another-country request in MosaicOne by 13 September 2026 "
+    "(21 days before 3 November).\n\n"
+    "Approval is recorded on the employee record . Keep the confirmation.\n"
+    "Your manager is notified automatically."
+)
+
+
+def test_correcting_one_parenthetical_rewrites_that_span_and_nothing_else():
+    """The step used to finish with `re.sub(r"\\s{2,}", " ", …).replace(" .", ".").strip()` over the
+    **whole** string whenever anything in it changed. `\\s` matches a newline, so a single corrected
+    parenthetical flattened every paragraph break in the block and rewrote every unrelated `" ."` in
+    it — and that text is what is stored in `turns.final_answer` / `answer_blocks_json` and what
+    `/chat` returns, so the record was rewritten too. Only the span being repaired may change."""
+    corrected = dates.correct(MULTI_LINE_BLOCK)
+
+    assert corrected == MULTI_LINE_BLOCK.replace("13 September 2026", "13 October 2026")
+    assert "\n\n" in corrected, "the paragraph break survives the repair"
+    assert corrected.count("\n") == MULTI_LINE_BLOCK.count("\n"), "no line break is collapsed"
+    assert "employee record . Keep" in corrected, "an unrelated ' .' is not the step's business"
+
+
+def test_removing_an_uncorrectable_claim_from_a_block_leaves_the_rest_of_the_block_alone():
+    text = "Apply as soon as you can (21 days before 3 November 2026).\n\nA second paragraph . Here."
+    assert dates.correct(text) == "Apply as soon as you can.\n\nA second paragraph . Here."

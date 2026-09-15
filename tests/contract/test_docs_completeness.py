@@ -809,13 +809,20 @@ NUMBER_DOCS = ("README.md", "ai-tooling.md", "design-and-evaluation.md", "docs/r
 #: `1,958 tests` / `7,285 statements` — four digits or more, so `26 items` and `9 tools` are not
 #: candidates and a bare year cannot match either.
 TESTS_STATED = re.compile(r"([\d][\d,]{3,}) tests\b")
+
+#: The **browser** subset of that suite — the `ux`-marked tests `make test` deselects and `make ux`
+#: runs. It needs a rule of its own because `TESTS_STATED` cannot see it: the figure is three digits
+#: and the sentence does not say "tests". README carried *"Seventy-one of those"* through a wave
+#: that took the suite to 203, spelled out in words, and no guard could fail (UX W6 fix round,
+#: R1.3). Digits, therefore, and the phrase the documents actually use.
+UX_TESTS_STATED = re.compile(r"([\d][\d,]*) of (?:those|them) are the browser-based UX")
 STATEMENTS_STATED = re.compile(r"([\d][\d,]{3,}) statements\b")
 PERCENTS_STATED = re.compile(r"(\d+)% of statements and (\d+)% of branches")
 
 COVERAGE_XML = REPO_ROOT / "coverage.xml"
 
 
-def _collected_test_count() -> int:
+def _collected_test_count(marker: str = "") -> int:
     """What `pytest --collect-only -q` reports, from a real collection in a child process.
 
     A child process rather than an in-process count: this test has to know the size of the **whole**
@@ -824,15 +831,16 @@ def _collected_test_count() -> int:
     """
     # `-m ""` clears the `-m "not ux"` in `addopts`, so the child counts the WHOLE suite. Without
     # it the browser suite is deselected, pytest prints `N/M tests collected (K deselected)` and
-    # the number a document should state would drift with whether a browser is installed.
+    # the number a document should state would drift with whether a browser is installed. `-m ux`
+    # is the same override the other way round, and prints that deselecting form on purpose.
     completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "-m", ""],
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "-m", marker],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
     )
     assert completed.returncode == 0, completed.stdout[-2000:] + completed.stderr[-2000:]
-    match = re.search(r"^(\d+) tests? collected", completed.stdout, re.M)
+    match = re.search(r"^(\d+)(?:/\d+)? tests? collected", completed.stdout, re.M)
     assert match, f"could not read a collected count from:\n{completed.stdout[-2000:]}"
     return int(match.group(1))
 
@@ -909,6 +917,19 @@ def test_every_document_that_states_the_suite_size_states_the_collected_one():
         assert stated, f"{name} no longer states the suite size; drop it from NUMBER_DOCS or put it back"
         wrong = [value for value in stated if value != expected]
         assert not wrong, f"{name} says {wrong} tests; `pytest --collect-only -q` collects {expected}"
+
+
+def test_every_document_that_states_the_browser_suite_size_states_the_collected_one():
+    """R1.3 over the other number in the same sentence. `make test` and `make ux` are two commands
+    and two figures, and only one of them had a guard: the suite grew from 71 browser tests to 203
+    and README still said seventy-one, in a wave whose own report claimed the figures were held to
+    the measurement (UX W6 fix round)."""
+    expected = f"{_collected_test_count('ux'):,}"
+    stated = {name: UX_TESTS_STATED.findall(_text(REPO_ROOT / name)) for name in NUMBER_DOCS}
+    assert any(stated.values()), "no document states the size of the browser suite any more"
+    for name, values in stated.items():
+        wrong = [value for value in values if value != expected]
+        assert not wrong, f"{name} says {wrong} browser tests; `pytest --collect-only -q -m ux` collects {expected}"
 
 
 def test_every_document_that_states_the_statement_count_states_the_measured_one():
