@@ -89,3 +89,76 @@ async def test_the_snapshot_date_is_stated_once_in_one_format(web):
 
     text = _visible_text(fragment)
     assert text.count("Based on employee data from 1 September 2026") == 1
+
+
+#: The quoted corpus passage under each citation. The policy library says what it says — *"at least
+#: 12 months of continuous service"* is the rule's own wording — and this guard judges what the app
+#: writes, not what it quotes. Same exclusion, same reason, as `DEMO_PANEL` in the jargon file.
+SOURCES = re.compile(r'<section class="sources">.*?</section>', re.S)
+
+#: The snapshot date, in every form the surface could state it in. The footer states it once, in
+#: the second form; a second occurrence — in any form — is the same fact twice on one screen.
+SNAPSHOT_FORMS = (
+    re.compile(r"\b2026-09-01\b"),
+    re.compile(r"\b1 September 2026\b"),
+    re.compile(r"\b1 Sept?\.? 2026\b"),
+)
+#: A tenure the reader has to divide to use: *"45 months of continuous service"*. The profile tool
+#: returns `tenure` in words — *"3 years 9 months"* — for exactly this reason.
+TENURE_IN_MONTHS = re.compile(r"\b\d{2,3} months\b")
+
+#: The two scripts that carry an employee-data snapshot into an answered turn. `demo_task_2`'s
+#: synthesis is on the far side of the confirmation gate, so its surface takes two requests.
+SNAPSHOT_SCRIPTS = (
+    ("demo_task_1.json", CASES[0][1], False),
+    ("demo_task_2.json", CASES[1][1], True),
+)
+
+
+async def _answered_surface(web, script: str, question: str, *, through_confirmation: bool) -> str:
+    """The rendered turn a reader ends up looking at, confirmation gate walked if there is one."""
+    async with web(script) as client:
+        fragment = await client.post("/chat", json={"message": question}, headers=HTMX)
+        if not through_confirmation:
+            return fragment.text
+        ids = re.search(r'data-session-id="([0-9a-f]+)" *\n? *data-turn-id="([0-9a-f]+)"', fragment.text)
+        assert ids, fragment.text[:400]
+        done = await client.post(
+            "/chat/confirm",
+            json={"session_id": ids.group(1), "turn_id": ids.group(2), "decision": "confirmed"},
+            headers=HTMX,
+        )
+    assert done.status_code == 200, done.text
+    return done.text
+
+
+@pytest.mark.parametrize(
+    "script,question,through_confirmation", SNAPSHOT_SCRIPTS, ids=[s for s, _, _ in SNAPSHOT_SCRIPTS]
+)
+async def test_the_answer_states_no_iso_date_no_second_snapshot_and_no_tenure_in_months(
+    web, script, question, through_confirmation
+):
+    """UX W6b — `npo2-08` / `npo2-13`, on the surface rather than in the prompt.
+
+    W6 forbade all three at source (`synthesize.j2` rules 6 and 6b), and the sibling above was the
+    guard that should have caught them reaching the page anyway. It could not: it counted the
+    **footer's** sentence, asserted it appeared exactly once, and said nothing at all about what the
+    answer above it said — so *"45 months of continuous service as of 2026-09-01"* sat six lines
+    over *"Based on employee data from 1 September 2026"* and the suite stayed green. It also ran
+    over one script, and `demo_task_2` carries the same defect past the confirmation gate.
+
+    This one judges the whole rendered turn minus the quoted sources, over both demo scripts:
+
+    a. no ISO date — chat speaks in `human_date()`'s words (`numbers-precision-overflow-12`);
+    b. the snapshot date exactly once, in any format, and that once is the footer;
+    c. no tenure in months — `lookup_employee_profile.tenure` is *"3 years 9 months"* for a reason.
+    """
+    page = SOURCES.sub("", await _answered_surface(web, script, question, through_confirmation=through_confirmation))
+    text = _visible_text(page)
+
+    assert not ISO_DATE.findall(text), f"{script}: the answer carries an ISO date — {ISO_DATE.findall(text)[:3]}"
+    stated = [found for form in SNAPSHOT_FORMS for found in form.findall(text)]
+    assert len(stated) == 1, f"{script}: the snapshot date is stated {len(stated)} times — {stated[:4]}"
+    assert text.count("Based on employee data from 1 September 2026") == 1, f"{script}: the footer is where"
+    months = TENURE_IN_MONTHS.findall(text)
+    assert not months, f"{script}: a duration the reader has to divide — {months[:3]}"
