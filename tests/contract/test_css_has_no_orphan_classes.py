@@ -35,7 +35,6 @@ UNSTYLED_BY_DESIGN = {
     "source",  # the `<li>` around a `.source-details`
     "source-link",  # "Open the full policy" — an ordinary link, deliberately
     "wordmark",  # the masthead lockup is sized by the `<img>` rules on `.masthead h1 img`
-    "crumbs-current",  # the breadcrumb leaf: same type, no decoration
     "tab-panel",  # the eval pages' panels; the tabs beside them are painted
     # JavaScript hooks.
     "demo-button",  # painted by `.button`; the class is what the busy switch queries

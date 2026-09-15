@@ -663,7 +663,13 @@ a .id-chip { color: var(--accent); }
 .span-payload pre { max-height: 22rem; overflow: auto; margin: 0.4rem 0 0.6rem; padding: 0.6rem;
   background: var(--sunk); border-radius: var(--radius-tile); font-size: 0.76rem;
   white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 70rem) { .span-row { grid-template-columns: 2rem 6rem 1fr; } .span-track, .span-duration { display: none; } }
+/* Below 70rem the track and the duration column are dropped, so the axis that measures them has
+   nothing left to label — and a six-column grid 46rem wide would scroll the whole document
+   sideways at 390px (P7). W5 owns bringing the duration back on a phone; the axis goes with it. */
+@media (max-width: 70rem) {
+  .span-row { grid-template-columns: 2rem 6rem 1fr; }
+  .span-track, .span-duration, .span-axis { display: none; }
+}
 
 /* -- pages 9 and 10 ------------------------------------------------------------------- */
 .tool-list, .chunk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }

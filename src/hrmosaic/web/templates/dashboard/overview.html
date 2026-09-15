@@ -22,7 +22,7 @@
     <div class="kpi" data-kpi="sessions_24h">
       <span class="kpi-value">{{ view.kpis.sessions_24h|num }}</span>
       <span class="kpi-label">Conversations (24 h)</span>
-      <span class="kpi-sub" data-kpi="sessions_total">{{ view.kpis.sessions_total|counted('all time', 'all time') }}</span>
+      <span class="kpi-sub" data-kpi="sessions_total">{{ view.kpis.sessions_total|num }} all time</span>
     </div>
     <div class="kpi" data-kpi="turns">
       <span class="kpi-value">{{ view.kpis.turns|num }}</span>
@@ -90,8 +90,12 @@
   </div>
 </section>
 
-<p class="note">Answers come from <strong>{{ view.health.llm_provider }}</strong>
-  ({{ view.health.llm_model }}). Every cost figure is an <strong>estimate</strong> from the
+{# Why every cost tile reads `$0.00`: the provider is a recorded script, so nothing was ever
+   billed. Without this line the zeros read as a broken meter (`dashboard-readability-14`). The
+   model is named only when it is not the provider's own name. #}
+<p class="note">Answers come from <strong>{{ view.health.llm_provider }}</strong>{% if
+  view.health.llm_model != view.health.llm_provider %} ({{ view.health.llm_model }}){% endif %}.
+  Every cost figure is an <strong>estimate</strong> from the
   per-call token counts and the committed price table (§9.8) — never a billed amount, and
   <strong>$0.00</strong> on a recorded-script run because no call was ever billed.</p>
 

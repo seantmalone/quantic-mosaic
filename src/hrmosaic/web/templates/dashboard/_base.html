@@ -34,9 +34,11 @@
 
 <main class="dash-main">
   {% if breadcrumbs %}
+  {#- The trail is the way back, and it ends where it arrives: the `<h2>` immediately below **is**
+      the current page. Printing the page title again as the trail's leaf put a whole question on
+      the screen twice on the session and eval-run pages (UX W4). -#}
   <nav class="crumbs" aria-label="Breadcrumb">
-    {% for label, href in breadcrumbs %}<a href="{{ href }}">{{ label }}</a><span aria-hidden="true">/</span>{% endfor %}
-    <span class="crumbs-current">{{ page_title }}</span>
+    {% for label, href in breadcrumbs %}<a href="{{ href }}">{{ label }}</a>{% if not loop.last %}<span aria-hidden="true">/</span>{% endif %}{% endfor %}
   </nav>
   {% endif %}
   <div class="dash-head">

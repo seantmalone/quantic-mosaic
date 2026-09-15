@@ -34,12 +34,16 @@
     <p class="verdict-line">{% if view.verdict.items_scored %}{{ view.verdict.items_passed|num }} of
       {{ view.verdict.items_scored|counted('item') }} passed ({{ view.verdict.pass_rate|pct }}){% else %}This run
       scored no items{% endif %}</p>
+    {# Both rates in full rather than one subtraction: the difference of two percentages is
+       percentage *points*, and a page that prints "up 17.3%" of a rate is inviting the reader to
+       read it as a relative change. The comparison is against the previous run of the **same**
+       variant, because a baseline and an ablation arm are not comparable numbers. #}
     <p class="verdict-delta">
-      {%- if view.verdict.previous_pass_rate is not none %}Previous <code>{{ view.run.variant }}</code> run
-      ({{ view.verdict.previous_created_at|ts }}) passed {{ view.verdict.previous_pass_rate|pct }} —
-      {% set delta = view.verdict.pass_rate - view.verdict.previous_pass_rate %}
-      {% if delta > 0 %}up{% elif delta < 0 %}down{% else %}unchanged at{% endif %}
-      {{ (delta if delta >= 0 else -delta)|pct }}.
+      {%- if view.verdict.previous_pass_rate is not none %}The previous
+      <code>{{ view.run.variant }}</code> run ({{ view.verdict.previous_created_at|ts }}) passed
+      {{ view.verdict.previous_pass_rate|pct }}; this one passes {{ view.verdict.pass_rate|pct }} —
+      {% if view.verdict.pass_rate > view.verdict.previous_pass_rate %}better{%
+        elif view.verdict.pass_rate < view.verdict.previous_pass_rate %}worse{% else %}unchanged{% endif %}.
       {%- else %}No earlier run of this variant to compare against.{% endif %}</p>
   </div>
   <dl class="facts">
@@ -59,7 +63,8 @@
   <div id="metric-block" class="metric-strip">
     {% for metric in headline_metrics + ('clarification_accuracy',) %}
     <div class="metric" data-metric="{{ metric }}">
-      <span class="metric-value" title="{{ view.metrics[metric] }}">
+      {# The unrounded figure stays one hover away, and is in Export JSON either way (P15). #}
+      <span class="metric-value"{% if view.metrics[metric] is not none %} title="{{ view.metrics[metric] }}"{% endif %}>
         {% if view.metrics[metric] is none %}
           {% if metric in judged_metrics %}<span class="not-judged">not judged on this variant</span>
           {% else %}<span class="muted">—</span>{% endif %}
@@ -75,8 +80,9 @@
 
   <h4>Escalation matrix</h4>
   <p class="note">What the run expected of each item against what the assistant did. The diagonal is
-    agreement. {{ view.metrics.escalation_n_excluded|num }} of the run's items are excluded: a
-    maintenance turn has no expected escalation to compare against.</p>
+    agreement. {% if view.metrics.escalation_n_excluded %}{{ view.metrics.escalation_n_excluded|counted('item') }}
+    of this run are excluded: a maintenance turn has no expected escalation to compare against.{%
+    else %}No item is excluded — every one of them had an expected escalation to compare against.{% endif %}</p>
   <div class="table-scroll">
     <table id="escalation-matrix" class="data-table">
       <thead><tr><th scope="col">gold ↓ / predicted →</th>
