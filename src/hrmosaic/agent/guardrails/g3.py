@@ -9,6 +9,10 @@ So the loop parses the model's JSON into **raw blocks**, runs G2 (which can stri
 then G3 (which relabels what is left uncited), and only then validates the repaired result into
 `AnswerSchema`. An uncited claim becomes a `recommendation`, which the UI badges *"Recommendation —
 not company policy"* (§7.3), rather than a policy statement nobody can check.
+
+`record` (UX W7, JX2-05) is treated exactly as `performed` is: a statement of what is so — the
+reader's own balance, tenure or notice arithmetic, read off a tool result — that is never a policy
+claim and needs no citation, so this rule never touches it. `agent/outcome.py` is what types one.
 """
 
 from __future__ import annotations
@@ -36,7 +40,11 @@ class Outcome:
 
 
 def apply(blocks: Sequence[Mapping[str, Any]]) -> Outcome:
-    """The pure rule: an uncited `policy_fact` becomes a `recommendation`. Mutates nothing."""
+    """The pure rule: an uncited `policy_fact` becomes a `recommendation`. Mutates nothing.
+
+    Every other type — `recommendation`, `escalation`, `performed`, `record` — passes through as
+    it came: none of them is a policy claim, so none of them owes a citation.
+    """
     relabelled: list[int] = []
     repaired: list[dict[str, Any]] = []
     for index, block in enumerate(blocks):

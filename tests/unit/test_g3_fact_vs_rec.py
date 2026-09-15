@@ -37,9 +37,17 @@ def test_a_cited_policy_fact_is_untouched():
     assert not outcome.repaired
 
 
-def test_the_other_two_block_types_are_untouched():
-    outcome = g3.apply([ADVICE, {"type": "escalation", "text": "People Ops.", "citations": []}])
-    assert [block["type"] for block in outcome.blocks] == ["recommendation", "escalation"]
+def test_the_other_block_types_are_untouched():
+    """`record` (UX W7, JX2-05) goes through as `performed` does: a statement of what is so that is
+    never a policy claim, so an uncited one owes nothing and is not relabelled."""
+    others = [
+        ADVICE,
+        {"type": "escalation", "text": "People Ops.", "citations": []},
+        {"type": "record", "text": "You have 13.5 days remaining.", "citations": []},
+        {"type": "performed", "text": "Done — reference MOCK-HR-000001.", "citations": []},
+    ]
+    outcome = g3.apply(others)
+    assert [block["type"] for block in outcome.blocks] == ["recommendation", "escalation", "record", "performed"]
     assert not outcome.repaired
 
 

@@ -16,6 +16,8 @@ This is **not** a guardrail: it emits no `guardrail` span and carries no G-numbe
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 from hrmosaic.agent import outcome
 from hrmosaic.agent.orchestrator import _ToolEnvelope
@@ -91,7 +93,10 @@ def test_a_created_ticket_is_stated_first_with_its_reference():
     assert first["type"] == "performed", "a write that happened is not advice"
     assert first["citations"] == [], "a tool result has no chunk_id to cite"
     # The queue's human name, through the same lookup the confirmation card uses (cpux-re-2).
-    assert first["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert first["text"] == (
+        "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002. "
+        "Your manager's written approval is the next step."
+    )
     assert "hr-timeoff" not in first["text"] and "priority" not in first["text"]
     assert result.blocks[1:] == [POLICY_BLOCK], "the model's own blocks follow, untouched"
 
@@ -119,7 +124,10 @@ def test_the_models_own_account_of_the_write_is_replaced_by_the_statement():
     result = outcome.apply([stated], envelopes(TICKET))
 
     assert [block["type"] for block in result.blocks] == ["performed"]
-    assert result.blocks[0]["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert result.blocks[0]["text"] == (
+        "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002. "
+        "Your manager's written approval is the next step."
+    )
     assert result.replaced == [0], "the model's own block index, before the statement is inserted"
     assert result.stated and result.changed
     assert "hr-timeoff" not in " ".join(block["text"] for block in result.blocks), "the slug left with it"
@@ -136,7 +144,10 @@ def test_an_escalation_denying_the_performed_write_is_dropped_under_the_statemen
     result = outcome.apply([POLICY_BLOCK, DENIAL_BLOCK], envelopes(TICKET))
 
     assert [block["type"] for block in result.blocks] == ["performed", "policy_fact"]
-    assert result.blocks[0]["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert result.blocks[0]["text"] == (
+        "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002. "
+        "Your manager's written approval is the next step."
+    )
     assert "cannot" not in " ".join(block["text"] for block in result.blocks).lower()
     assert result.replaced == [1], "the model's block index, before the outcome block is inserted"
 
@@ -159,7 +170,10 @@ def test_a_model_block_typed_performed_that_names_the_id_is_replaced_not_duplica
     result = outcome.apply([claimed, POLICY_BLOCK], envelopes(TICKET))
 
     assert [block["type"] for block in result.blocks] == ["performed", "policy_fact"]
-    assert result.blocks[0]["text"] == "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002."
+    assert result.blocks[0]["text"] == (
+        "Done — your request is with the HR Time Off team. Reference MOCK-HR-000002. "
+        "Your manager's written approval is the next step."
+    )
     assert "I have opened" not in " ".join(block["text"] for block in result.blocks)
     assert result.replaced == [0]
 
@@ -440,15 +454,227 @@ def test_the_live_turn_reports_the_write_in_the_performed_block_and_not_as_advic
     write printed under *"What I suggest you do"* and footnoted *"Suggestions are guidance, not
     company policy"*, with no `performed` block anywhere in the turn (JX-R1 = cpux-re-1).
     """
-    result = outcome.apply(LIVE_BLOCKS, envelopes(LIVE_TICKET), next_steps=LIVE_STEPS)
+    balance = _ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5, "as_of": "2026-09-01"}')
+    result = outcome.apply(LIVE_BLOCKS, [*envelopes(LIVE_TICKET), balance], next_steps=LIVE_STEPS)
 
     assert result.blocks[0] == {
         "type": "performed",
-        "text": "Done — your request is with the HR Time Off team. Reference MOCK-HR-000007.",
+        "text": (
+            "Done — your request is with the HR Time Off team. Reference MOCK-HR-000007. "
+            "Your manager's written approval is the next step."
+        ),
         "citations": [],
     }
-    assert result.blocks[1:] == LIVE_BLOCKS[:5], "the other five survive, in order and untouched"
+    assert result.blocks[1:5] == LIVE_BLOCKS[:4], "the four policy facts survive, in order and untouched"
+    # Since UX W7 (Addendum 3, JX2-05) the fifth block loses its one directive sentence — *"Submit
+    # the request in MosaicOne for Dana's written approval."* — and what is left, the reader's own
+    # balance and notice, is typed as their record rather than filed as advice.
+    assert result.blocks[5] == {
+        "type": "record",
+        "text": (
+            "Your PTO balance as of 1 September 2026 is 13.5 days remaining, which covers your "
+            "three-day request. You have 8 business days of notice, which exceeds the 5-day requirement."
+        ),
+        "citations": [],
+    }
+    assert result.trimmed == [(4, "Submit the request in MosaicOne for Dana's written approval.")]
+    assert result.retyped == [4] and result.emptied == []
     assert "has been created" not in " ".join(block["text"] for block in result.blocks[1:])
     assert [block["type"] for block in result.blocks].count("performed") == 1
     assert result.replaced == [5] and result.stated
     assert result.next_steps == LIVE_STEPS and result.dropped == []
+
+
+# --------------------------------------------------------------------------------------
+# UX W7, Addendum 3 — no *sentence* tells the reader to file the request the write filed
+# --------------------------------------------------------------------------------------
+
+#: The exact resumed turn the owner saw live on 2026-09-15 at 20:04Z, verbatim: the six blocks the
+#: page painted and the three envelopes the synthesis carried (`tests/fixtures/live_turns/`).
+CONFIRMED = json.loads(
+    (Path(__file__).resolve().parents[1] / "fixtures" / "live_turns" / "demo2_confirm_2026-09-15.json").read_text(
+        encoding="utf-8"
+    )
+)
+CONFIRMED_BLOCKS: list[dict] = CONFIRMED["answer_blocks"]
+CONFIRMED_ENVELOPES = [_ToolEnvelope(name=e["name"], result_json=e["result_json"]) for e in CONFIRMED["envelopes"]]
+
+#: What the owner read: the lede says the request is filed; the suggestion says to file it.
+DIRECTIVE = re.compile(r"\b(submit|file|raise|log|open|enter)\b.{0,40}\brequest", re.IGNORECASE)
+
+
+def test_the_live_confirmed_turn_keeps_no_sentence_that_tells_the_reader_to_file_the_request():
+    """*"Done — your request is with the HR Time Off team. Reference MOCK-HR-000009."* and then,
+    under *"What I suggest you do"*: *"… Submit the request in MosaicOne so your manager can approve
+    it in writing."* The step dropped a next STEP that directed the reader and never looked inside a
+    block. It looks now: the directive sentence goes, the balance and notice sentences stay and are
+    the reader's record, and the statement says what actually happens next."""
+    result = outcome.apply(CONFIRMED_BLOCKS, CONFIRMED_ENVELOPES)
+
+    assert result.blocks[0] == {
+        "type": "performed",
+        "text": (
+            "Done — your request is with the HR Time Off team. Reference MOCK-HR-000009. "
+            "Your manager's written approval is the next step."
+        ),
+        "citations": [],
+    }
+    assert result.blocks[1:5] == CONFIRMED_BLOCKS[1:5], "the four policy facts are untouched"
+    assert result.blocks[5] == {
+        "type": "record",
+        "text": "You have 13.5 days remaining. Your three-day request is covered by your balance.",
+        "citations": [],
+    }
+    assert len(result.blocks) == 6
+    assert result.trimmed == [(5, "Submit the request in MosaicOne so your manager can approve it in writing.")]
+    assert result.retyped == [5] and result.emptied == [] and result.replaced == [0]
+    assert result.changed
+    for block in result.blocks:
+        assert not outcome.directs(block["text"], "create_mock_hr_ticket"), block
+        assert not DIRECTIVE.search(block["text"]), block
+
+
+def test_the_step_is_idempotent_on_the_live_turn():
+    once = outcome.apply(CONFIRMED_BLOCKS, CONFIRMED_ENVELOPES)
+    twice = outcome.apply(once.blocks, CONFIRMED_ENVELOPES, next_steps=once.next_steps)
+    assert twice.blocks == once.blocks
+    assert twice.trimmed == [] and twice.emptied == [] and twice.retyped == []
+
+
+def test_a_recommendation_with_no_directive_in_it_is_untouched():
+    advice = {
+        "type": "recommendation",
+        "text": "Your manager will receive the request and must approve it in writing.",
+        "citations": [],
+    }
+    result = outcome.apply([advice], envelopes(TICKET))
+    assert result.blocks[1] == advice
+    assert result.trimmed == [] and result.retyped == []
+
+
+def test_a_directive_sentence_that_names_the_ticket_is_kept():
+    """It is talking about the request that exists, not asking for another."""
+    block = {
+        "type": "recommendation",
+        "text": "Quote MOCK-HR-000002 if you contact HR. Submit the request in MosaicOne so it is on file.",
+        "citations": [],
+    }
+    result = outcome.apply([block], envelopes(TICKET))
+    # The block names the id, so it is the model's own account of the write and is replaced
+    # whole (P29) — the id sentence is kept only in a block that is not that account.
+    assert result.replaced == [0]
+
+    quoting = {"type": "recommendation", "text": "Quote the reference if you contact HR.", "citations": []}
+    directing = {
+        "type": "recommendation",
+        "text": "Quote the reference if you contact HR. Submit the request in MosaicOne so it is on file.",
+        "citations": [],
+    }
+    result = outcome.apply([quoting, directing], envelopes(TICKET))
+    assert result.blocks[1] == quoting
+    assert result.blocks[2]["text"] == "Quote the reference if you contact HR."
+    assert result.trimmed == [(1, "Submit the request in MosaicOne so it is on file.")]
+    # "Quote …" opens with a directive verb, so what is left is still advice, not the record.
+    assert result.blocks[2]["type"] == "recommendation" and result.retyped == []
+
+
+def test_a_block_that_was_nothing_but_the_directive_is_dropped():
+    only = {"type": "recommendation", "text": "Enter the request in MosaicOne for approval.", "citations": []}
+    result = outcome.apply([POLICY_BLOCK, only], envelopes(TICKET))
+    assert result.blocks == [result.blocks[0], POLICY_BLOCK]
+    assert result.emptied == [1] and result.trimmed == [(1, "Enter the request in MosaicOne for approval.")]
+
+
+def test_a_modal_lead_in_does_not_hide_the_directive():
+    block = {
+        "type": "recommendation",
+        "text": "You have 13.5 days remaining. You could submit the request in MosaicOne today.",
+        "citations": [],
+    }
+    balance = _ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5}')
+    result = outcome.apply([block], [*envelopes(TICKET), balance])
+    assert result.blocks[1] == {"type": "record", "text": "You have 13.5 days remaining.", "citations": []}
+
+
+def test_the_next_event_is_said_only_for_a_pto_ticket():
+    benefits = {**TICKET, "queue": "hr-benefits", "ticket_id": "MOCK-HR-000003"}
+    result = outcome.apply([POLICY_BLOCK], envelopes(benefits))
+    assert result.blocks[0]["text"] == "Done — your request is with the HR Benefits team. Reference MOCK-HR-000003."
+
+
+def test_sentences_split_where_a_reader_hears_a_full_stop():
+    text = "You have 13.5 days left. See e.g. section 4. Submit the request in MosaicOne. Done!"
+    assert outcome.sentences(text) == [
+        "You have 13.5 days left.",
+        "See e.g. section 4.",
+        "Submit the request in MosaicOne.",
+        "Done!",
+    ]
+
+
+# --------------------------------------------------------------------------------------
+# UX W7, JX2-05 = cpux2-4 — the reader's own record is not advice, on any turn
+# --------------------------------------------------------------------------------------
+
+#: The demo-2 stub's own balance sentence, as `tests/fixtures/llm_scripts/demo_task_2.json` has it.
+STUB_BALANCE = {
+    "type": "recommendation",
+    "text": (
+        "You have 13.5 PTO days remaining, so a 3-day request is covered by your balance. Your request "
+        "for 15–17 September meets the 5-business-day notice requirement (8 business days' notice)."
+    ),
+    "citations": [],
+}
+BALANCE = _ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5, "as_of": "2026-09-01"}')
+
+
+def test_the_demo_2_balance_sentence_is_the_readers_record_not_advice():
+    """Printed under *"What I suggest you do"* and disclaimed *"not company policy"*: a reader told
+    their own balance is non-binding (JX2-05). No write on this turn; the rule is the number."""
+    result = outcome.apply([POLICY_BLOCK, STUB_BALANCE], [BALANCE])
+    assert result.blocks == [POLICY_BLOCK, {**STUB_BALANCE, "type": "record"}]
+    assert result.retyped == [1] and result.changed and not result.stated
+
+
+def test_a_genuine_recommendation_with_a_number_in_it_stays_advice():
+    advice = {"type": "recommendation", "text": "File the request at least 21 days before 3 November.", "citations": []}
+    notice = _ToolEnvelope(name="check_policy_compliance", result_json='{"computed": {"notice_days": 21}}')
+    result = outcome.apply([advice], [notice])
+    assert result.blocks == [advice] and result.retyped == []
+
+
+def test_a_number_the_tools_did_not_return_makes_no_record():
+    guess = {"type": "recommendation", "text": "Most people keep 5 days in reserve.", "citations": []}
+    assert outcome.apply([guess], [BALANCE]).blocks == [guess]
+
+
+def test_a_policy_claim_g3_demoted_is_never_retyped_as_the_record():
+    """An uncited `policy_fact` G3 relabelled `recommendation` is a policy claim wearing the wrong
+    label. It states the policy's number, which the compliance tool also returns."""
+    claim = {
+        "type": "recommendation",
+        "text": "PTO requests must be submitted at least 5 business days in advance.",
+        "citations": [],
+    }
+    rule = _ToolEnvelope(name="check_policy_compliance", result_json='{"policy": {"notice_days": 5}}')
+    assert outcome.apply([claim], [rule], policy_claims=[0]).blocks == [claim]
+    assert outcome.apply([claim], [rule]).blocks == [{**claim, "type": "record"}], (
+        "…and without the exemption it would be"
+    )
+
+
+def test_a_search_envelope_and_a_boolean_are_not_the_readers_numbers():
+    one = {"type": "recommendation", "text": "Only 1 approval is needed for this.", "citations": []}
+    search = _ToolEnvelope(name="search_policy_documents", result_json='{"hits": [{"rank": 1, "dense_score": 0.7}]}')
+    flag = _ToolEnvelope(name="check_policy_compliance", result_json='{"requirements": [{"met": true}]}')
+    assert outcome.apply([one], [search, flag]).blocks == [one]
+    assert outcome.envelope_numbers([search, flag]) == set()
+
+
+def test_envelope_numbers_are_read_however_deep_they_sit():
+    nested = _ToolEnvelope(
+        name="lookup_employee_profile",
+        result_json='{"tenure_months_at_as_of": 45, "history": [{"months": 12}], "as_of": "2026-09-01"}',
+    )
+    assert outcome.envelope_numbers([nested]) == {45.0, 12.0}
+    assert outcome.numbers_in("45 months, 3-day, 13.5 days, v2.1, by 2026.") == {45.0, 3.0, 13.5, 2026.0}

@@ -58,6 +58,7 @@
     <div class="answer-body">
     {% set performed = turn.answer_blocks | selectattr('type', 'equalto', 'performed') | list %}
     {% set facts = turn.answer_blocks | selectattr('type', 'equalto', 'policy_fact') | list %}
+    {% set records = turn.answer_blocks | selectattr('type', 'equalto', 'record') | list %}
     {% set suggestions = turn.answer_blocks | selectattr('type', 'equalto', 'recommendation') | list %}
     {% set escalations = turn.answer_blocks | selectattr('type', 'equalto', 'escalation') | list %}
 
@@ -84,6 +85,24 @@
       {% endif %}
     </div>
     {% endfor %}
+
+    {#- The reader's own record — a balance, a tenure, notice arithmetic, a compliance verdict, read
+        off a tool result — is a plain statement under its own small heading and NOTHING else: not
+        under "What I suggest you do", and not over "Suggestions are guidance, not company policy",
+        which is where a reader's own balance had been filed and disclaimed (UX W7, JX2-05 =
+        cpux2-4, Addendum 3). `agent/outcome.py` types it; the prompt's rule 6b asks for it. -#}
+    {% if records %}
+      {% if labelled %}
+      <section class="answer-block answer-block-record">
+        <h3 class="answer-block-heading">{{ block_headings.record }}</h3>
+        {% for block in records %}<p class="answer-text">{{ block.text|no_ids }}</p>{% endfor %}
+      </section>
+      {% else %}
+      {% for block in records %}
+      <div class="answer-block answer-block-record"><p class="answer-text">{{ block.text|no_ids }}</p></div>
+      {% endfor %}
+      {% endif %}
+    {% endif %}
 
     {#- `labelled` is `turn.outcome in (answered, escalated, partial)`. On every other outcome —
         refused, clarify, awaiting_confirmation, error — these blocks ARE the answer, and heading

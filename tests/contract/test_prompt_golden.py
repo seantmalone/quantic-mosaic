@@ -319,9 +319,12 @@ def test_a_tool_result_value_is_stated_without_a_citation():
     """R2: `pto-002` lost its balance to G2 — the number was cited, the citation stripped, the
     block dropped. Rule 6b says where a tool value belongs, immediately after the as_of rule."""
     system, _ = prompts.render("synthesize.j2", **context("synthesize.j2"))
-    rule = system[system.index("6b.") : system.index("6c.")]
+    rule = " ".join(system[system.index("6b.") : system.index("6c.")].split())
 
-    assert "employee data, not company policy" in rule
+    # Since UX W7 (JX2-05) the rule names the block type too: the reader's own data is a `record`,
+    # neither policy nor advice — which is what keeps a balance out from under "not company policy".
+    assert "the reader's own employee data — not company policy, and not advice" in rule
+    assert "State it as a `record` block" in rule
     assert "attach NO citation" in rule
     assert system.index("6. NEVER restate a tool result's `as_of` date") < system.index("6b.")
 
@@ -404,3 +407,26 @@ def test_the_synthesis_output_is_capped_where_capping_costs_nothing():
     from hrmosaic.agent.router import MAX_RATIONALE_CHARS
 
     assert MAX_RATIONALE_CHARS == 200
+
+
+def test_the_prompt_says_the_request_is_filed_only_on_a_turn_that_performed_a_write():
+    """UX W7, Addendum 3. The owner saw a confirmed ticket answered with *"Submit the request in
+    MosaicOne"*. The prompt's per-turn half now says the request is already filed when the turn
+    carries a `created`/`drafted` envelope — advisory; `agent/outcome.py` is the guard — and it
+    says it in the **user** half only, so the cached system prefix is the same bytes either way."""
+    from hrmosaic.agent import outcome
+
+    base = context("synthesize.j2")
+    system_without, user_without = prompts.render("synthesize.j2", **base)
+    write = outcome.PerformedWrite(
+        tool_name="create_mock_hr_ticket", write_id="MOCK-HR-000009", body={"queue": "hr-timeoff"}
+    )
+    system_with, user_with = prompts.render("synthesize.j2", **base, performed_write=write)
+
+    assert system_with == system_without, "the system half never moves for a per-turn fact"
+    assert "ALREADY FILED" not in user_without
+    flat = " ".join(user_with.split())  # the template wraps the rule; the model reads sentences
+    assert "ALREADY FILED: the create_mock_hr_ticket result above" in flat
+    assert "reference MOCK-HR-000009" in flat
+    assert "NEVER tell the reader to submit, file, raise, log, open or enter the request" in flat
+    assert user_with.endswith(user_without[user_without.index("CITATION COVERAGE") :]), "the rest is unchanged"

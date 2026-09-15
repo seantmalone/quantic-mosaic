@@ -809,6 +809,8 @@ def _publish_turn_completed(response: ChatResponse) -> None:
 #: which builds the plain-text `answer` the JSON contract and the eval harness read, and
 #: `SUGGESTION_FOOTNOTE` below, which states it once under the group instead of once per sentence.
 BLOCK_HEADINGS = {
+    # The reader's own data — never advice, never policy (UX W7, JX2-05 = cpux2-4).
+    "record": "From your HR record",
     "recommendation": "What I suggest you do",
     "escalation": "Who to contact",
 }

@@ -347,6 +347,8 @@
     // (chat-production-ux-8). `StreamedBlock` already carries `citations`, so it costs nothing.
     var SUGGESTION_FOOTNOTE = "Suggestions are guidance, not company policy.";
 
+    // A `record` block — the reader's own data (UX W7, JX2-05) — is a statement, not a suggestion,
+    // and earns no footnote here either.
     function isSuggestion(block) {
       var uncitedFact = block.type === "policy_fact" && (block.citations || []).length === 0;
       return block.type === "recommendation" || uncitedFact;

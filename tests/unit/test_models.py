@@ -105,6 +105,12 @@ def test_a_recommendation_block_may_stand_uncited():
     assert block.citations == []
 
 
+def test_a_record_block_needs_no_citation_because_a_tool_result_has_none():
+    """The reader's own balance, tenure or notice arithmetic (UX W7, JX2-05): not policy, not advice."""
+    block = AnswerBlock(type="record", text="You have 13.5 days remaining.", citations=[])
+    assert block.citations == []
+
+
 def test_an_answer_block_rejects_an_unknown_type_and_an_extra_field():
     with pytest.raises(ValidationError):
         AnswerBlock(type="opinion", text="…", citations=["c_1b7e"])

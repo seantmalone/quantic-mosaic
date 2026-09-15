@@ -31,6 +31,7 @@ UNSTYLED_BY_DESIGN = {
     "answer-block-policy_fact",
     "answer-block-recommendation",
     "answer-block-escalation",
+    "answer-block-record",  # the reader's own data (UX W7, JX2-05)
     # Structural hooks with no appearance of their own.
     "source",  # the `<li>` around a `.source-details`
     "source-link",  # "Open <the policy>" — an ordinary link, deliberately

@@ -383,10 +383,18 @@ def _f_metric_label(key: Any) -> str:
     return METRIC_LABELS.get(name, name.replace("_", " ").capitalize())
 
 
+#: The one answer-block type whose bare name would mislead on the session page: `record` is the
+#: reader's own HR data (UX W7, JX2-05), not a record in the dashboard's sense of the word.
+ANSWER_BLOCK_LABELS: dict[str, str] = {"record": "HR record"}
+
+
 def _f_kind_label(kind: Any) -> str:
-    """A span kind as a person reads it — the chip row used to be raw `llm_call` / `mcp_discovery`."""
+    """A span kind as a person reads it — the chip row used to be raw `llm_call` / `mcp_discovery`.
+
+    The session page's answer blocks come through here too (`data-block`), so a block type is
+    labelled the same way."""
     name = str(kind)
-    return SPAN_KIND_LABELS.get(name, name.replace("_", " ").capitalize())
+    return SPAN_KIND_LABELS.get(name) or ANSWER_BLOCK_LABELS.get(name) or name.replace("_", " ").capitalize()
 
 
 def _f_rule_label(rule_id: Any) -> str:

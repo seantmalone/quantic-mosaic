@@ -1,0 +1,58 @@
+{
+ "_note": "The exact resumed turn behind UX W7 Addendum 3 (owner-reported, 2026-09-15 20:04Z): the six answer_blocks the page painted after the confirmed write, and the three tool envelopes the synthesis carried. Copied verbatim from the live session record; only the spans that are not envelopes are omitted.",
+ "answer_blocks": [
+  {
+   "type": "performed",
+   "text": "Done — your request is with the HR Time Off team. Reference MOCK-HR-000009.",
+   "citations": []
+  },
+  {
+   "type": "policy_fact",
+   "text": "PTO requests must be submitted at least 5 business days in advance.",
+   "citations": [
+    "c_16186f87d12c1302"
+   ]
+  },
+  {
+   "type": "policy_fact",
+   "text": "Every PTO request requires written approval from your direct manager in MosaicOne.",
+   "citations": [
+    "c_d57a7964d974ba44"
+   ]
+  },
+  {
+   "type": "policy_fact",
+   "text": "PTO requests of any length are approved by the employee's direct manager.",
+   "citations": [
+    "c_9948839107acfaaf"
+   ]
+  },
+  {
+   "type": "policy_fact",
+   "text": "You accrue 1.50 days of PTO per month as a full-time employee with three or more years of service, earning 18.0 days annually.",
+   "citations": [
+    "c_e178629918c7cd96"
+   ]
+  },
+  {
+   "type": "recommendation",
+   "text": "You have 13.5 days remaining. Your three-day request is covered by your balance. Submit the request in MosaicOne so your manager can approve it in writing.",
+   "citations": []
+  }
+ ],
+ "next_steps": null,
+ "envelopes": [
+  {
+   "name": "check_pto_balance",
+   "result_json": "{\"employee_id\": \"E1042\", \"as_of\": \"2026-09-01\", \"computed_at\": \"2026-09-15T20:03:43Z\", \"accrual_rate_days_per_month\": 1.5, \"accrual_fact_key\": \"pto.accrual.ft_3y_plus\", \"accrued_ytd\": 13.5, \"used_ytd\": 0.0, \"pending_days\": 0.0, \"carryover_from_prior_year\": 0.0, \"carryover_unexpired\": 0.0, \"remaining_days\": 13.5, \"next_accrual_date\": \"2026-10-01\", \"blackout_dates\": [\"2026-12-22\", \"2026-12-23\"], \"policy_doc_id\": \"pto-and-holidays\", \"note\": \"Balances are a synthetic snapshot as of 2026-09-01.\"}"
+  },
+  {
+   "name": "check_policy_compliance",
+   "result_json": "{\"scenario\": \"pto_request\", \"verdict\": \"conditional\", \"as_of\": \"2026-09-01\", \"requirements\": [{\"id\": \"pto.request.notice\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"met\": true, \"reason\": \"computed.notice_business_days is 8; the policy value is 5 (gte).\", \"fact_key\": \"pto.notice.standard_days\", \"evidence\": {\"chunk_id\": \"c_16186f87d12c1302\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Requesting Time Off > Notice Requirements\", \"snippet\": \"PTO requests must be submitted at least 5 business days in advance. A request of six or more consecutive business days requires 15 business days of\\nadvance notice. Notice is counted in business days between the day the request is submitted in MosaicOne and the first day of the requested absence,\\nexc\"}}, {\"id\": \"pto.request.balance\", \"text\": \"The requested days must be covered by the balance accrued at the snapshot.\", \"met\": true, \"reason\": \"pto_balance.remaining_days is 13.5; the policy value is 3 (gte).\", \"fact_key\": \"pto.accrual.ft_3y_plus\", \"evidence\": {\"chunk_id\": \"c_e178629918c7cd96\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Accrual > Standard Accrual Rates\", \"snippet\": \"PTO accrues monthly and is posted to the employee's MosaicOne balance on the first calendar day of each month. Accrual is not pro-rated within a month:\\nan employee who is active on the posting date receives the full monthly posting for that month.\\n\\nFull-time employees with fewer than three years of\"}}, {\"id\": \"pto.request.blackout\", \"text\": \"Requests overlapping the 2026 year-end blackout need director approval.\", \"met\": true, \"reason\": \"computed.overlaps_blackout is false; the policy value is false (eq).\", \"fact_key\": \"pto.blackout.year_end_2026\", \"evidence\": {\"chunk_id\": \"c_44caf29b179f2fc8\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Requesting Time Off > Blackout Periods\", \"snippet\": \"A blackout period is a short, published window during which the company restricts discretionary time off because a delivery or business event depends\\non full staffing. Blackout periods are published in MosaicOne at least 60 calendar days before they begin, and no more than four business days of\\nblac\"}}, {\"id\": \"pto.request.manager_approval\", \"text\": \"Every PTO request needs written manager approval in MosaicOne.\", \"met\": false, \"reason\": \"Not verifiable from the synthetic record; confirm before proceeding.\", \"fact_key\": \"pto.approval.manager_required\", \"evidence\": {\"chunk_id\": \"c_d57a7964d974ba44\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Requesting Time Off > Approval Chain\", \"snippet\": \"Every PTO request requires written approval from the employee's direct manager in MosaicOne. Verbal agreement, a message in chat and an email thread\\nare all insufficient on their own: the approval must be recorded against the request so the audit trail is complete.\\n\\nA request that has been open for\"}}], \"unmet\": [\"pto.request.manager_approval\"], \"approvals_required\": [{\"role\": \"Direct manager\", \"reason\": \"PTO requests of any length are approved by the direct manager.\", \"doc_id\": \"manager-approval-matrix\", \"heading_path\": \"Time Off\"}], \"next_steps\": [\"Submit the request in MosaicOne so the manager can approve it in writing.\"], \"escalate_to\": \"People Operations — people-ops@mosaicrobotics.example\", \"citations\": [{\"chunk_id\": \"c_16186f87d12c1302\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Requesting Time Off > Notice Requirements\"}, {\"chunk_id\": \"c_e178629918c7cd96\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Accrual > Standard Accrual Rates\"}, {\"chunk_id\": \"c_44caf29b179f2fc8\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Requesting Time Off > Blackout Periods\"}, {\"chunk_id\": \"c_d57a7964d974ba44\", \"doc_id\": \"pto-and-holidays\", \"heading_path\": \"Requesting Time Off > Approval Chain\"}, {\"chunk_id\": \"c_9948839107acfaaf\", \"doc_id\": \"manager-approval-matrix\", \"heading_path\": \"Time Off\"}], \"rules_version\": \"2026.1\"}"
+  },
+  {
+   "name": "create_mock_hr_ticket",
+   "result_json": "{\"status\": \"created\", \"ticket_id\": \"MOCK-HR-000009\", \"queue\": \"hr-timeoff\", \"priority\": \"normal\", \"created_at\": \"2026-09-15T20:04:22Z\", \"employee_id\": \"E1042\", \"mock\": true, \"url\": \"/dashboard/safety#MOCK-HR-000009\"}"
+  }
+ ]
+}

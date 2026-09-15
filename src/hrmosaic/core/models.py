@@ -359,7 +359,15 @@ class AnswerBlock(BaseModel):
     #: group and outside its *"guidance, not company policy"* footnote (UX W6, JX-R1). A model that
     #: emits one is claiming the outcome of a call it has not been shown, and `outcome.apply()`
     #: demotes such a block to `recommendation` before it does anything else.
-    type: Literal["policy_fact", "recommendation", "escalation", "performed"]
+    #:
+    #: `record` is a statement of the reader's own HR record — a balance, a tenure, notice
+    #: arithmetic, a compliance verdict — read off a tool result (UX W7, JX2-05 = cpux2-4). It is
+    #: neither company policy nor advice: it needs no citation (a tool result has no chunk id), G3
+    #: never touches it, and `_turn.html` renders it under *"From your HR record"*, outside the
+    #: suggestions group and its footnote, which is where a reader's own balance had been filed and
+    #: disclaimed as *"not company policy"*. The model types it (`synthesize.j2` rule 6b);
+    #: `outcome.apply()` is the deterministic backstop for the one it types `recommendation`.
+    type: Literal["policy_fact", "recommendation", "escalation", "performed", "record"]
     text: str
     citations: list[str]
 

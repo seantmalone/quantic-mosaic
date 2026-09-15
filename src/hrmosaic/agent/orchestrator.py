@@ -529,8 +529,9 @@ def render_answer(blocks: Sequence[AnswerBlock], next_steps: Sequence[str]) -> s
         elif block.type == "escalation":
             parts.append(f"Escalation: {block.text}")
         else:
-            # `policy_fact` and `performed` are both statements of what is so — one of company
-            # policy, one of what this turn's tools did — and neither wears a label (UX W6).
+            # `policy_fact`, `performed` and `record` are all statements of what is so — of company
+            # policy, of what this turn's tools did, of the reader's own HR data — and none of
+            # them wears a label (UX W6; UX W7 for `record`).
             parts.append(block.text)
     if next_steps:
         parts.append(NEXT_STEPS_LEAD + "\n".join(f"- {step}" for step in next_steps))
@@ -823,10 +824,16 @@ class Orchestrator:
         # request" in the same answer (§7.4's outcome-consistency paragraph). `next_steps` goes
         # through the step for the same reason the blocks do: `render_answer` puts both in front
         # of the same reader.
+        # Since UX W7 the same step also trims any sentence that tells the reader to go and file
+        # the request the write has filed (Addendum 3), and types a statement of the reader's own
+        # record `record` rather than leaving it under "not company policy" (JX2-05); the blocks
+        # G3 demoted from an uncited `policy_fact` are handed over so a policy claim is never
+        # retyped as the reader's data.
         consistent = outcome_consistency.apply(
             relabelled.blocks,
             turn.envelopes,
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
+            policy_claims=relabelled.relabelled,
         )
 
         # -- 5d. date consistency (UX W6, npo2-02) — NOT a guardrail, and no G-number -------
@@ -1284,6 +1291,11 @@ class Orchestrator:
             chunks=turn.chunks(),
             tool_results=turn.envelopes,
             question=req.message,
+            # A write this turn performed: the prompt's per-turn half then says the request is
+            # filed and the reader is not to be sent to file it (UX W7, Addendum 3). Advisory —
+            # `outcome_consistency.apply` is the guard — and in the *user* half on purpose, so the
+            # cached system prefix is the same bytes on every turn (§9.8).
+            performed_write=outcome_consistency.performed_write(turn.envelopes),
         )
         return [Message(role="system", content=system), Message(role="user", content=user)]
 

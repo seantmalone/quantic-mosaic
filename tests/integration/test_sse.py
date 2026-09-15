@@ -277,7 +277,7 @@ async def test_the_answer_arrives_as_complete_blocks_before_the_turn_ends(web):
     assert [data["index"] for data in deltas] == list(range(len(deltas)))
     for data in deltas:
         assert set(data) == {"index", "type", "text", "citations"}
-        assert data["type"] in {"policy_fact", "recommendation", "escalation"}
+        assert data["type"] in {"policy_fact", "recommendation", "escalation", "record"}
         assert data["text"], "a block is delivered whole or not at all"
 
     script = json.loads((LLM_SCRIPTS / "rag_only.json").read_text(encoding="utf-8"))
