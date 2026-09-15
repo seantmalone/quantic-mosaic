@@ -135,24 +135,49 @@ def coverage() -> list[str]:
     return [document.doc_title for document in corpusread.list_documents()]
 
 
+#: How many of those titles the redirect actually names (UX W3, jargon-and-exposure-3).
+#:
+#: It used to name all fourteen, in one semicolon-separated sentence that ran four lines at 1440px
+#: and eight on a phone — the longest single string on the chat surface, under a refusal, which is
+#: the moment a reader is least inclined to read a list. Five is an example, not an inventory: the
+#: reader route `/policy` lists the library in full and the refusal links to it.
+EXAMPLE_TOPIC_COUNT = 5
+
+
+def example_topics(titles: Sequence[str] | None = None) -> list[str]:
+    """The first few covered titles, in the index's own order — a sample of the real library."""
+    return list(coverage() if titles is None else titles)[:EXAMPLE_TOPIC_COUNT]
+
+
+def _sentence(titles: Sequence[str]) -> str:
+    """`"A, B and C"` — an English list, so the redirect reads as a sentence and not as a dump."""
+    items = list(titles)
+    if len(items) < 2:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 def refusal(reason: str) -> AnswerSchema:
     """The refuse-and-redirect answer, built with no model call and no `tools/call`.
 
     It never states a policy — there is nothing to cite — so the redirect is a `recommendation`
-    block. The `next_steps` name the documents that do exist, which is the redirect §7.4 asks for,
-    and since UX W2 they are **rendered**: the web layer used to build them and drop them, which is
-    how the most useful half of a refusal never reached a reader (jargon-and-exposure-3).
+    block. The `next_steps` name a few of the documents that do exist, which is the redirect §7.4
+    asks for, and since UX W2 they are **rendered**: the web layer used to build them and drop them,
+    which is how the most useful half of a refusal never reached a reader (jargon-and-exposure-3).
+    Since UX W3 they name five example titles rather than all fourteen; the chat surface puts a
+    *"See the full policy library"* link to `/policy` beside them, which is where an inventory
+    belongs.
 
     `reason` is the span's diagnostic and reaches the reader nowhere: it goes to
     `rationale_summary`, which is the turn record. The tool-count clause — *"I can also look up your
     own HR data with 9 tools"* — is gone with it; a person counting the assistant's tools is a
     grader, and the dashboard counts them properly.
     """
-    covered = "; ".join(coverage())
+    covered = _sentence(example_topics())
     return AnswerSchema(
         blocks=[AnswerBlock(type="recommendation", text=USER_REFUSAL, citations=[])],
         next_steps=[
-            f"I can help with: {covered}.",
+            f"I can help with things like {covered}.",
             f"If this is urgent, contact People Operations at {PEOPLE_OPS}.",
         ],
         rationale_summary=f"Refused and redirected: {reason}."[:200],
@@ -160,6 +185,7 @@ def refusal(reason: str) -> AnswerSchema:
 
 
 __all__ = [
+    "EXAMPLE_TOPIC_COUNT",
     "NO_EVIDENCE",
     "OUT_OF_SCOPE",
     "USER_REFUSAL",
@@ -169,5 +195,6 @@ __all__ = [
     "check",
     "coverage",
     "evaluate",
+    "example_topics",
     "refusal",
 ]

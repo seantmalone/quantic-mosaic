@@ -472,6 +472,13 @@ body.dashboard { font-size: 1.0625rem; background: var(--paper); }
 .reader-section p { margin: 0; }
 .reader-section:target { background: var(--accent-soft); border-radius: 8px; padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
 
+.policy-library { margin: var(--space-3) 0 0; font: var(--text-small); }
+
+/* The library index (UX W3): where a refusal's "See the full policy library" goes. */
+.library { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.library-item { display: flex; flex-direction: column; gap: var(--space-1); }
+.library-meta { font: var(--text-meta); color: var(--ink-soft); }
+
 /* -- the themed refusal (UX W1) -------------------------------------------------------- */
 .refused-main { display: flex; justify-content: center; padding: 3rem 1.25rem; }
 /* The deep-link landing rule. `.anchor` itself survives — the eval-row trace links and

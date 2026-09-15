@@ -2325,6 +2325,27 @@ async def api_corpus_chunk(chunk_id: str) -> JSONResponse:
 # the wrong one to hand a person who clicked "Remote & Hybrid Work Policy · Eligibility".
 
 
+@router.get("/policy", response_class=HTMLResponse)
+async def page_policy_index(request: Request) -> Response:
+    """The library, listed once, where the refusal's *"See the full policy library"* link goes."""
+    return TEMPLATES.TemplateResponse(
+        request=request,
+        name="policy_index.html",
+        context={
+            "documents": [
+                {
+                    "doc_id": document.doc_id,
+                    "doc_title": document.doc_title,
+                    "version": document.version,
+                    "effective_date": document.effective_date,
+                }
+                for document in corpusread.list_documents()
+            ],
+            **api.shell_context(request, surface="chat"),
+        },
+    )
+
+
 @router.get("/policy/{doc_id}", response_class=HTMLResponse)
 async def page_policy_reader(request: Request, doc_id: str) -> Response:
     """One policy document, an anchor per chunk, gated by the access token and by nothing else."""

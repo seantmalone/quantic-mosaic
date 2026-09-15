@@ -87,6 +87,14 @@
       {% endif %}
     {% endif %}
 
+    {#- A refusal names five example policies and links the rest; before UX W3 it printed all
+        fourteen titles in one sentence, which is an inventory at the moment a reader is least
+        inclined to read one (jargon-and-exposure-3). A declined confirmation is also `refused`
+        and carries no steps — it is not a coverage question and gets no library link. -#}
+    {% if turn.outcome == 'refused' and turn.next_steps %}
+    <p class="policy-library"><a href="/policy">See the full policy library</a></p>
+    {% endif %}
+
     {% if escalations %}
       {% if labelled %}
       <section class="answer-block answer-block-escalation">

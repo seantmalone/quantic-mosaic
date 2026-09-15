@@ -103,7 +103,12 @@ def test_the_refusal_names_what_the_corpus_covers_from_the_real_index():
     assert [block.type for block in answer.blocks] == ["recommendation"], "a refusal cites nothing"
     assert answer.blocks[0].citations == []
     covered = " ".join(answer.next_steps)
-    assert titles and all(title in covered for title in titles)
+    # Five example titles, read from the index rather than hard-coded, and *not* all fourteen:
+    # the sentence that listed the whole library moved to `/policy`, which the turn links to
+    # (UX W3, jargon-and-exposure-3).
+    named = [title for title in titles if title in covered]
+    assert named == titles[: g1.EXAMPLE_TOPIC_COUNT]
+    assert len(titles) > len(named), "the library is bigger than the sample it is introduced by"
     # The reader is told the boundary; the clause that measured it stays on the span (UX W2,
     # numbers-precision-overflow-3, jargon-and-exposure-3).
     assert answer.blocks[0].text == g1.USER_REFUSAL

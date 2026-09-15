@@ -77,7 +77,8 @@ async def test_the_refusal_states_the_boundary_and_not_the_threshold_that_measur
     # …and the redirect it builds is now rendered rather than silently dropped
     # (jargon-and-exposure-3). The scores themselves are on the G1 span, which is the record.
     assert payload["next_steps"], "a refusal carries its redirect"
-    assert "I can help with:" in html_module.unescape(fragment.text)
+    assert "I can help with things like" in html_module.unescape(fragment.text)
+    assert "See the full policy library" in fragment.text, "the rest of the library is a link now"
 
 
 async def test_the_snapshot_date_is_stated_once_in_one_format(web):

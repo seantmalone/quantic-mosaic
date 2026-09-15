@@ -1,0 +1,44 @@
+{#
+  The policy library index (UX W3): where *"See the full policy library"* goes.
+
+  A refusal used to name all fourteen documents in one sentence inside the answer, which is an
+  inventory printed at the moment a reader is least inclined to read one (jargon-and-exposure-3).
+  The refusal now names five, and this page is the rest of the answer: every document the index
+  holds, each linking to the same reader route a citation links to.
+
+  Like `/policy/{doc_id}` it is gated by the access token and by nothing else, and it is not a
+  dashboard page — no chunk counts, no ids, no export.
+#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Policy library · Mosaic HR Copilot</title>
+  <link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app-chrome">
+{% include "_masthead.html" %}
+</div>
+
+<main class="reader">
+  <article class="reader-doc">
+    <h2 class="reader-title">Mosaic's policy library</h2>
+    <p class="reader-meta">Every policy I answer from. Open one to read it in full.</p>
+
+    <ul class="library">
+      {% for document in documents %}
+      <li class="library-item">
+        <a href="/policy/{{ document.doc_id }}">{{ document.doc_title }}</a>
+        <span class="library-meta">version {{ document.version }} · effective {{ document.effective_date }}</span>
+      </li>
+      {% else %}
+      <li class="library-item">The library is not loaded on this instance yet.</li>
+      {% endfor %}
+    </ul>
+  </article>
+</main>
+</body>
+</html>

@@ -50,8 +50,8 @@ async def test_the_turn_refuses_rather_than_answering_from_parametric_knowledge(
 
 async def test_the_refusal_redirects_to_what_the_corpus_does_cover(refused):
     """§7.4 G1: refuse **and** redirect, naming the library rather than leaving the reader nowhere."""
-    assert "I can help with:" in refused.answer
-    assert "Expenses & Reimbursement Policy" in refused.answer, "the library is named, read from the index"
+    assert "I can help with things like" in refused.answer
+    assert "Expenses & Reimbursement Policy" in refused.answer, "the library is sampled, read from the index"
     assert "people-ops@mosaicrobotics.example" in refused.answer, "and a human to ask instead"
 
 

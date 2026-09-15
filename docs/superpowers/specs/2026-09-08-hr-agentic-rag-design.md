@@ -2055,6 +2055,7 @@ otherwise. Amended at UX W1: reads carry no **admin** mark any more.
 | POST | `/api/mcp/rediscover` | Re-run discovery — gated + **admin** |
 | POST | `/api/dev/reset-sandbox` | Clear `mock_writes` — gated + **admin** |
 | GET | `/policy/{doc_id}#{chunk_id}` | The policy **reader** a citation links to: one document, an anchor per chunk — gated (UX W1) |
+| GET | `/policy` | The policy **library index**: every document, linking the reader route — where a refusal's *"See the full policy library"* goes (UX W3) |
 | ALL | `/mcp-server/mcp` | The mounted MCP Streamable HTTP endpoint — gated (bearer header) and per-IP limited |
 | GET | `/static/*` | Vendored htmx / Alpine / Chart.js / CSS — **never gated** |
 
