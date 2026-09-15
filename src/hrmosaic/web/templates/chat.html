@@ -4,69 +4,81 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mosaic HR Copilot</title>
+  <link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/vendor/htmx.min.js" defer></script>
 </head>
-<body>
+<body class="chat">
 <div class="app-chrome">
 {% include "_masthead.html" %}
 </div>
 
-<div id="cold-start-banner" class="banner" hidden>
-  <strong>Waking the free instance…</strong>
-  <span>This deployment spins down when idle; the first request takes a little while.</span>
-  <span id="cold-start-elapsed" class="elapsed">0 s</span>
-</div>
+{#- One calm line, and only while something is genuinely waiting. No elapsed ticker: a counter
+    mutating inside a live region every 100 ms was 46 announcements a turn and told nobody
+    anything (UX W2, chat-production-ux-28, accessibility-and-responsive-3). -#}
+<p id="cold-start-banner" class="banner" hidden>Just waking up — the first answer may take a little longer.</p>
 
 <main class="layout">
   <section class="conversation">
     {% if session_notice %}<p class="session-notice" role="status">{{ session_notice }}</p>{% endif %}
-    <div id="messages" class="messages">
-      {#- A conversation opened with `/?session=<id>`: the stored turns, replayed through the same
-          partial a live turn is rendered with (UX W1, navigation-and-ia-16). -#}
-      {% for item in transcript %}
-      {% with turn = item.turn, question = item.question, as_of = item.as_of, as_of_human = item.as_of_human,
-              citations_by_id = item.citations_by_id, arguments_preview = item.arguments_preview %}
-      {% include "_turn.html" %}
-      {% endwith %}
-      {% endfor %}
+
+    {#- The conversation scrolls inside this box; the document does not grow (P11). -#}
+    <div id="transcript" class="transcript">
+      <section id="empty-state" class="empty-state"{% if transcript %} hidden{% endif %}>
+        <h2>Hi {{ greeting_name }} — ask me anything about HR</h2>
+        <p class="empty-lede">I answer from Mosaic's policy documents and your own HR record, and I always
+          show you the policy I used.</p>
+        <ul class="starters">
+          {% for starter in starters %}
+          <li><button class="starter" type="button" data-prompt="{{ starter }}">{{ starter }}</button></li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <div id="messages" class="messages">
+        {#- A conversation opened with `/?session=<id>`: the stored turns, replayed through the same
+            partial a live turn is rendered with (UX W1, navigation-and-ia-16). -#}
+        {% for item in transcript %}
+        {% with turn = item.turn, question = item.question, as_of = item.as_of, as_of_human = item.as_of_human,
+                citations_by_id = item.citations_by_id, confirm_fields = item.confirm_fields,
+                decision_line = item.decision_line %}
+        {% include "_turn.html" %}
+        {% endwith %}
+        {% endfor %}
+      </div>
+
+      {#- The turn in flight: the question echoed the moment it is sent, then one status line, then
+          the answer as the model writes it. Replaced wholesale by the finished turn (§11.3). -#}
+      <article id="pending-turn" class="turn turn-pending" hidden>
+        <div class="message message-user"><p id="pending-question"></p></div>
+        <div id="provisional-answer" class="message message-agent turn-provisional" aria-hidden="true" hidden>
+          <div id="provisional-blocks"></div>
+        </div>
+      </article>
+
+      {#- The page's ONE live region: the current step while the turn runs, then one sentence when
+          the answer lands. Never a span kind, a name or a summary — `narration.label_for()` is the
+          only thing that writes here (jargon-and-exposure-1, -13). -#}
+      <p id="turn-status" class="turn-status" role="status"></p>
     </div>
 
-    <!-- The answer as the model writes it: complete blocks only, replaced wholesale by the
-         finished turn on `turn_completed` (§11.3, W2-E). -->
-    <article id="provisional-answer" class="turn turn-provisional" aria-live="polite" hidden>
-      <p class="provisional-note">Writing the answer… this preview is replaced by the checked
-        answer when the turn finishes.</p>
-      <div id="provisional-blocks" class="message"></div>
-    </article>
+    <button id="jump-latest" class="jump-latest" type="button" hidden>Jump to latest</button>
 
     <form id="chat-form" class="composer" hx-post="/chat" hx-target="#messages" hx-swap="beforeend"
           hx-disabled-elt="#send-button">
       <label class="visually-hidden" for="message">Your question</label>
-      <textarea id="message" name="message" rows="3" required
+      <textarea id="message" name="message" rows="1" required
                 placeholder="Ask about policy, your PTO balance, remote work…"></textarea>
       <input type="hidden" name="client_label" value="web">
       <input type="hidden" name="turn_id" id="turn-id">
       <input type="hidden" name="session_id" id="session-id" value="{{ session_id }}">
       <div class="composer-actions">
-        <button id="send-button" class="button button-send" type="submit">Ask</button>
-        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
-          Demo 1 — work from Berlin
-        </button>
-        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
-          Demo 2 — book three days of PTO
-        </button>
+        <p class="composer-hint">Enter to send · Shift+Enter for a new line</p>
+        <button id="send-button" class="button button-send" type="submit">Send</button>
+        <button id="stop-button" class="button button-stop" type="button" hidden>Stop</button>
       </div>
     </form>
   </section>
-
-  <aside class="rail">
-    <h2>Live agent activity</h2>
-    <p class="rail-note">Each step announces itself as it starts, then settles into the span it
-      recorded. If the stream drops, the finished answer still carries the same trace.</p>
-    <ol id="span-rail" class="span-rail" aria-live="polite"></ol>
-    <p class="rail-footer">Employee data snapshot: {{ data_as_of }}</p>
-  </aside>
 
   <!-- A temporary home for the persona control until W3 builds the real panel around it: it is a
        demo affordance, not a production one, so it is out of the masthead and labelled as what it
@@ -88,112 +100,178 @@
         <option value="admin" {% if actor == 'admin' %}selected{% endif %}>HR admin</option>
       </select>
     </form>
+    <div class="demo-actions">
+      <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}">
+        Demo 1 — work from Berlin
+      </button>
+      <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}">
+        Demo 2 — book three days of PTO
+      </button>
+    </div>
   </section>
 </main>
 
 <script>
   (function () {
     "use strict";
-    var rail = document.getElementById("span-rail");
     var form = document.getElementById("chat-form");
     var messageBox = document.getElementById("message");
     var turnField = document.getElementById("turn-id");
     var sessionField = document.getElementById("session-id");
+    var transcript = document.getElementById("transcript");
+    var emptyState = document.getElementById("empty-state");
+    var pendingTurn = document.getElementById("pending-turn");
+    var pendingQuestion = document.getElementById("pending-question");
     var provisional = document.getElementById("provisional-answer");
     var provisionalBlocks = document.getElementById("provisional-blocks");
+    var status = document.getElementById("turn-status");
+    var sendButton = document.getElementById("send-button");
+    var stopButton = document.getElementById("stop-button");
+    var jumpButton = document.getElementById("jump-latest");
     var stream = null;
-    var ticker = null;
 
     function newId() {
       return (crypto.randomUUID ? crypto.randomUUID() : "").replace(/-/g, "");
     }
 
-    function railEntry(text, kind, status) {
-      var item = document.createElement("li");
-      item.className = "span-item span-" + kind + (status === "error" ? " span-error" : "");
-      item.textContent = text;
-      rail.appendChild(item);
-      rail.scrollTop = rail.scrollHeight;
-    }
-
-    // -- the in-progress line: the plain-language label, a spinner and a live elapsed counter ----
-    function stepStarted(step) {
-      var item = document.createElement("li");
-      item.className = "span-item span-" + step.kind + " span-running";
-      item.dataset.spanId = step.span_id;
-      item.dataset.began = String(Date.now());
-      var spinner = document.createElement("span");
-      spinner.className = "span-spinner";
-      spinner.setAttribute("aria-hidden", "true");
-      var label = document.createElement("span");
-      label.className = "span-label";
-      label.textContent = step.label;
-      var elapsed = document.createElement("span");
-      elapsed.className = "span-elapsed";
-      elapsed.textContent = "0.0 s";
-      item.append(spinner, label, elapsed);
-      rail.appendChild(item);
-      rail.scrollTop = rail.scrollHeight;
-    }
-
-    function tick() {
-      var now = Date.now();
-      rail.querySelectorAll(".span-running").forEach(function (item) {
-        var counter = item.querySelector(".span-elapsed");
-        if (counter) { counter.textContent = ((now - Number(item.dataset.began)) / 1000).toFixed(1) + " s"; }
-      });
-    }
-
-    // The closed span REPLACES its own in-progress line: the friendly label leads, and the
-    // technical detail the rail has always shown follows it.
-    function spanClosed(span) {
-      var running = rail.querySelector('[data-span-id="' + span.span_id + '"]');
-      var item = running || document.createElement("li");
-      // `tone`, not `status`: the recorded status of the gated write attempt is `error` — the MCP
-      // result is `isError` — and the rail must not paint the safety moment scarlet one beat
-      // before "Waiting for your confirmation…". `web/narration.py` owns the mapping.
-      var tone = span.tone || (span.status === "error" ? "error" : "ok");
-      item.className = "span-item span-" + span.kind + (tone === "ok" ? "" : " span-" + tone);
-      item.dataset.spanId = span.span_id;
-      item.replaceChildren();
-      var label = document.createElement("span");
-      label.className = "span-label";
-      label.textContent = span.label;
-      var detail = document.createElement("span");
-      detail.className = "span-detail";
-      detail.textContent = span.kind + " · " + span.name + " — " + span.summary;
-      item.append(label, detail);
-      if (!running) { rail.appendChild(item); }
-      rail.scrollTop = rail.scrollHeight;
-    }
-
-    // The JS mirror of `orchestrator.render_answer()`. A recommendation carries its prefix, which
-    // is why only COMPLETE blocks are ever streamed: a half-written one would read as policy.
+    // -- the status line ------------------------------------------------------------------
     //
-    // It mirrors G3's relabel rule too: a `policy_fact` with no citations is what G3 turns into a
-    // `recommendation` in the final answer (and what G2 drops when its citations do not resolve).
-    // `turn_completed` hard-replaces the preview a moment later, but §11.3 records 2 of 17 answered
-    // turns being revised after the last token — so without this an unverified claim reads as
-    // company policy for those seconds. `StreamedBlock` already carries `citations`, so the rule
-    // needs nothing new on the wire.
-    function renderBlock(block) {
-      var uncitedFact = block.type === "policy_fact" && (block.citations || []).length === 0;
-      if (block.type === "recommendation" || uncitedFact) {
-        return "Recommendation — not company policy: " + block.text;
+    // ONE sentence, from `narration.label_for()` and nothing else, replaced as the step changes.
+    // Throttled to `STATUS_MIN_MS` because a turn opens ~28 spans: unthrottled, the same label
+    // ("Verifying every claim…") re-announced six times is what made the old rail an `aria-live`
+    // firehose. The latest label always wins — a throttle that dropped the last one would leave
+    // the line describing a step that is over.
+    var STATUS_MIN_MS = 2000;
+    var statusPending = null;
+    var statusTimer = null;
+    var statusShownAt = 0;
+
+    function paintStatus(text) {
+      statusShownAt = Date.now();
+      statusPending = null;
+      if (status.textContent !== text) { status.textContent = text; }
+      stickToBottom();
+    }
+
+    function setStatus(text) {
+      if (!text) { return; }
+      var wait = STATUS_MIN_MS - (Date.now() - statusShownAt);
+      if (wait <= 0) { paintStatus(text); return; }
+      statusPending = text;
+      if (statusTimer === null) {
+        statusTimer = setTimeout(function () {
+          statusTimer = null;
+          if (statusPending !== null) { paintStatus(statusPending); }
+        }, wait);
       }
-      if (block.type === "escalation") { return "Escalation: " + block.text; }
+    }
+
+    function clearStatus() {
+      if (statusTimer !== null) { clearTimeout(statusTimer); statusTimer = null; }
+      statusPending = null;
+      statusShownAt = 0;
+      status.textContent = "";
+    }
+
+    // -- scrolling ------------------------------------------------------------------------
+    //
+    // The newest message is what a conversation is for, so the box follows it — unless the reader
+    // has scrolled up to re-read something, in which case it stays put and offers a way back.
+    var STICK_SLACK_PX = 48;
+
+    function atBottom() {
+      return transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight <= STICK_SLACK_PX;
+    }
+
+    function stickToBottom(force) {
+      if (force || atBottom()) {
+        transcript.scrollTop = transcript.scrollHeight;
+        jumpButton.hidden = true;
+      } else {
+        jumpButton.hidden = false;
+      }
+    }
+
+    transcript.addEventListener("scroll", function () { jumpButton.hidden = atBottom(); });
+    jumpButton.addEventListener("click", function () { stickToBottom(true); messageBox.focus(); });
+
+    // -- the composer ---------------------------------------------------------------------
+    function autogrow() {
+      messageBox.style.height = "auto";
+      messageBox.style.height = Math.min(messageBox.scrollHeight, 200) + "px";
+    }
+    messageBox.addEventListener("input", autogrow);
+
+    // Enter sends, Shift+Enter (and Alt+Enter) writes a new line. Without this the only way to
+    // send was the button, and Enter silently grew the box (chat-production-ux-3).
+    messageBox.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.isComposing) { return; }
+      event.preventDefault();
+      if (!messageBox.disabled && messageBox.value.trim()) { form.requestSubmit(); }
+    });
+
+    // -- busy ------------------------------------------------------------------------------
+    //
+    // A turn holds the POST open for its whole length, so without this a second question is typed
+    // into a live composer, queued by htmx and dropped (chat-production-ux-19).
+    function setBusy(busy) {
+      messageBox.disabled = busy;
+      sendButton.hidden = busy;
+      stopButton.hidden = !busy;
+      document.querySelectorAll(".demo-button, .starter").forEach(function (button) { button.disabled = busy; });
+      var actor = document.getElementById("actor-select");
+      if (actor) { actor.disabled = busy; }
+    }
+
+    function showPending(question) {
+      if (emptyState) { emptyState.hidden = true; }
+      pendingQuestion.textContent = question;
+      pendingTurn.hidden = false;
+      stickToBottom(true);
+    }
+
+    function clearPending() {
+      pendingTurn.hidden = true;
+      pendingQuestion.textContent = "";
+      clearProvisional();
+    }
+
+    // The JS mirror of `orchestrator.render_answer()` — complete blocks only, because a
+    // half-written one would read as policy. It mirrors G3's relabel rule too: a `policy_fact`
+    // with no citations is what G3 turns into a `recommendation` in the final answer (and what G2
+    // drops when its citations do not resolve). `turn_completed` hard-replaces the preview a moment
+    // later, but §11.3 records 2 of 17 answered turns being revised after the last token — so
+    // without this an unverified claim reads as company policy for those seconds.
+    //
+    // Since UX W2 the label it carries is the finished answer's, not a per-sentence badge: the
+    // footnote below the preview says once what five uppercase chips used to say five times
+    // (chat-production-ux-8). `StreamedBlock` already carries `citations`, so it costs nothing.
+    var SUGGESTION_FOOTNOTE = "Suggestions are guidance, not company policy.";
+
+    function isSuggestion(block) {
+      var uncitedFact = block.type === "policy_fact" && (block.citations || []).length === 0;
+      return block.type === "recommendation" || uncitedFact;
+    }
+
+    function renderBlock(block) {
       return block.text;
     }
 
     // Blocks arrive complete and in order, so each one is appended rather than the preview being
-    // re-rendered: an `aria-live` region that rewrites itself would re-announce the whole answer
-    // on every frame.
+    // re-rendered.
     function answerDelta(block) {
       provisional.hidden = false;
       var paragraph = document.createElement("p");
       paragraph.className = "answer-text";
       paragraph.textContent = renderBlock(block);
       provisionalBlocks.appendChild(paragraph);
+      if (isSuggestion(block) && !provisionalBlocks.querySelector(".answer-footnote")) {
+        var note = document.createElement("p");
+        note.className = "answer-footnote";
+        note.textContent = SUGGESTION_FOOTNOTE;
+        provisionalBlocks.appendChild(note);
+      }
+      stickToBottom();
     }
 
     function clearProvisional() {
@@ -203,42 +281,34 @@
 
     function stopStream() {
       if (stream) { stream.close(); stream = null; }
-      if (ticker) { clearInterval(ticker); ticker = null; }
     }
 
-    // `reset` is false only on the resumed half of a confirmation-gated turn (§10.3 step 4): the
-    // rail keeps the lines it drew before the gate and the resumed spans append under them, so the
-    // waterfall reads as one turn rather than restarting at the mock write.
+    // `reset` is false only on the resumed half of a confirmation-gated turn (§10.3 step 4).
     function openStream(turnId, reset) {
       stopStream();
-      if (reset !== false) { rail.replaceChildren(); }
+      if (reset !== false) { clearStatus(); }
       clearProvisional();
-      ticker = setInterval(tick, 100);
       stream = new EventSource("/chat/stream?turn_id=" + encodeURIComponent(turnId));
-      stream.addEventListener("turn_started", function () { railEntry("turn started", "meta", "ok"); });
-      stream.addEventListener("step_started", function (event) { stepStarted(JSON.parse(event.data)); });
-      stream.addEventListener("span", function (event) { spanClosed(JSON.parse(event.data)); });
+      stream.addEventListener("step_started", function (event) { setStatus(JSON.parse(event.data).label); });
+      stream.addEventListener("span", function (event) { setStatus(JSON.parse(event.data).label); });
       stream.addEventListener("answer_delta", function (event) { answerDelta(JSON.parse(event.data)); });
-      stream.addEventListener("turn_completed", function (event) {
-        var done = JSON.parse(event.data);
-        // A step whose span never closed (the transport failed under it) would otherwise spin
-        // forever; the turn is over, so nothing on the rail is still running.
-        rail.querySelectorAll(".span-running").forEach(function (item) {
-          item.classList.remove("span-running");
-          var counter = item.querySelector(".span-elapsed");
-          if (counter) { counter.remove(); }
-        });
-        railEntry("turn completed · " + done.outcome, "meta", "ok");
+      stream.addEventListener("turn_completed", function () {
         // The hard replace: the finished answer is the one the guardrails passed, and it is what
-        // htmx swaps into `#messages` a moment later.
+        // htmx swaps into `#messages` a moment later. The one announcement of the turn goes out
+        // here, in plain language and with nothing technical in it.
+        paintStatus(ANSWER_READY);
         clearProvisional();
         stopStream();
       });
       stream.onerror = function () { stopStream(); };
     }
 
+    var ANSWER_READY = "Answer ready.";
+    var STOPPED = "Stopped. The full record is still in the dashboard.";
+
     // The UI generates `turn_id` and subscribes FIRST, then fires the POST — the POST does not
-    // return until the turn is over, so its body can never carry the id the rail needs (§11.1).
+    // return until the turn is over, so its body can never carry the id the status line needs
+    // (§11.1).
     //
     // `/chat/confirm` needs the same subscribe-then-POST, and it is the half that performs the
     // mock write: `POST /chat` publishes `turn_completed` even when the outcome is
@@ -253,22 +323,50 @@
         var turnId = newId();
         event.detail.parameters.turn_id = turnId;
         turnField.value = turnId;
+        setBusy(true);
+        showPending(String(event.detail.parameters.message || ""));
         openStream(turnId, true);
         return;
       }
       if (event.detail.path === "/chat/confirm") {
         var resumed = event.detail.parameters.turn_id;
+        setBusy(true);
         if (resumed) { openStream(resumed, false); }
       }
     });
 
-    document.body.addEventListener("htmx:afterSwap", function () {
+    // Stop is client-side: the turn itself is already running on the server and its record is
+    // written either way, which is exactly what the line says.
+    stopButton.addEventListener("click", function () {
+      htmx.trigger(form, "htmx:abort");
+      stopStream();
+      clearPending();
+      setBusy(false);
+      paintStatus(STOPPED);
+      messageBox.focus();
+    });
+
+    document.body.addEventListener("htmx:afterSwap", function (event) {
       var turns = document.querySelectorAll("#messages .turn");
       if (turns.length) { sessionField.value = turns[turns.length - 1].dataset.sessionId || ""; }
-      messageBox.value = "";
-      // The other half of the hard replace: the finished turn is on the page, so the preview goes
-      // even if the stream dropped before `turn_completed` could clear it.
-      clearProvisional();
+      if (event.detail.requestConfig && event.detail.requestConfig.path === "/chat") { messageBox.value = ""; }
+      autogrow();
+      if (emptyState) { emptyState.hidden = true; }
+      clearPending();
+      setBusy(false);
+      stickToBottom(true);
+      messageBox.focus();
+    });
+
+    document.body.addEventListener("htmx:responseError", function () { setBusy(false); clearPending(); });
+    document.body.addEventListener("htmx:sendError", function () { setBusy(false); clearPending(); });
+
+    document.querySelectorAll(".starter").forEach(function (button) {
+      button.addEventListener("click", function () {
+        messageBox.value = button.dataset.prompt;
+        autogrow();
+        messageBox.focus();
+      });
     });
 
     document.querySelectorAll(".demo-button").forEach(function (button) {
@@ -278,31 +376,21 @@
       });
     });
 
-    // The cold-start banner: a `/health` preflight with an elapsed counter (§11.5).
+    stickToBottom(true);
+
+    // The cold-start notice: a `/health` preflight (§11.5).
     //
     // It describes exactly one state — a request that is actually waiting — and this page was
     // itself served by the instance, so on a warm one the preflight answers in milliseconds and
-    // the banner is never shown at all. The reveal is therefore deferred by a grace period and
-    // cancelled the moment `/health` settles; only a genuinely slow preflight ever paints it, and
-    // then the counter runs from when the request was made, not from when the strip appeared.
+    // the line is never shown at all. The reveal is therefore deferred by a grace period and
+    // cancelled the moment `/health` settles.
     (function coldStartPreflight() {
       var COLD_START_BANNER_DELAY_MS = 1200;
       var banner = document.getElementById("cold-start-banner");
-      var elapsed = document.getElementById("cold-start-elapsed");
-      var began = Date.now();
-      var ticker = null;
-      function show() {
-        elapsed.textContent = Math.round((Date.now() - began) / 1000) + " s";
-      }
-      var reveal = setTimeout(function () {
-        banner.hidden = false;
-        show();
-        ticker = setInterval(show, 1000);
-      }, COLD_START_BANNER_DELAY_MS);
+      var reveal = setTimeout(function () { banner.hidden = false; }, COLD_START_BANNER_DELAY_MS);
       fetch("/health").then(function (response) { return response.json(); }).catch(function () { return null; })
         .then(function () {
           clearTimeout(reveal);
-          if (ticker) { clearInterval(ticker); }
           banner.hidden = true;
         });
     })();

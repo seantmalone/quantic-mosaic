@@ -1,15 +1,21 @@
-"""Plain-language labels for the live span rail (spec §11.3).
+"""Plain-language labels for the chat page's progress line (spec §11.3, §11.5).
 
-The rail used to list a step only after it closed, in the shape the audit record wants:
-`tool_call · search_policy_documents — 5 hits`. That is the right line to keep — the observability
-story is half the point — but it is not what a person watching a 13-second turn needs while it is
-running. `open_span()` announces each step as it begins, and this module is the **one** mapping
-from a span to the forward-looking sentence the rail shows in the meantime.
+The technical record wants `tool_call · search_policy_documents — 5 hits`, and keeps it: the
+observability story is half the point, and `/dashboard/sessions/{id}` is where that line is read.
+It is not what a person watching a 13-second turn needs while it is running. `open_span()`
+announces each step as it begins, and this module is the **one** mapping from a span to the
+forward-looking sentence the page shows in the meantime.
+
+Until UX W2 those sentences shared the chat page with a 22rem rail that printed the closed-span
+record underneath each one, `stub:stub` and token deltas included (jargon-and-exposure-1). The rail
+is gone; the labels are what is left, on **one** `role="status"` line that replaces itself as the
+step changes.
 
 **One mapping, keyed on kind plus what identifies the step within that kind** — the tool's name for
 a `tool_call`, the call's `purpose` for an `llm_call` (the span's own name is `provider:model`,
-which cannot tell the router from the synthesis). Anything unmapped is `WORKING`, never a raw span
-name: a rail line is prose for a person, and a person is not helped by `mcp_discovery`.
+which cannot tell the router from the synthesis), and the kind alone for the three that need no
+further distinction. Anything unmapped is `WORKING`, never a raw span name: this line is prose for
+a person, and a person is not helped by `mcp_discovery`.
 
 **A label never carries an argument value or a word of employee data.** The single exception is a
 document *title*, and it is read from the committed index by `doc_id` rather than echoed from the
@@ -20,8 +26,8 @@ contains a value from the arguments it was given.
 **It also decides the line's tone** (`tone_for`), which is presentation and nothing else. The span's
 recorded `status` stays exactly what the trace contract says: the gated `create_mock_hr_ticket`
 attempt really is an `isError` result and really is stored as `error` (§10.1), but it is the
-confirmation gate doing its job — so the rail paints it amber and reads "Needs your confirmation"
-instead of painting the safety moment scarlet one beat before "Waiting for your confirmation…".
+confirmation gate doing its job — so the line reads "Needs your confirmation" instead of painting
+the safety moment scarlet one beat before "Waiting for your confirmation…".
 """
 
 from __future__ import annotations
@@ -74,6 +80,17 @@ PURPOSE_LABELS: dict[str, str] = {
 GUARDRAIL_LABEL = "Verifying every claim against the policy text…"
 CONFIRMATION_LABEL = "Waiting for your confirmation…"
 
+#: The three remaining span kinds, mapped at UX W2. The rail these labels were written for is gone;
+#: what shows them now is the single status line under the question, so every kind a turn can open
+#: has to have a sentence or the line falls back to `WORKING` six times a turn
+#: (chat-production-ux-5, jargon-and-exposure-13). `retrieval` and `plan` are the two that ran on
+#: every turn; `mcp_discovery` runs on the first turn after a cold start.
+KIND_LABELS: dict[str, str] = {
+    "retrieval": "Searching the policy library…",
+    "plan": "Working out what to check…",
+    "mcp_discovery": "Getting ready…",
+}
+
 #: The closed line for the gated write attempt — the one whose result is §8.4 tool 8's five-key
 #: `CONFIRMATION_REQUIRED` rejection. Not forward-looking, because that step is over: what it
 #: produced is a card waiting for a human, and "Waiting for your confirmation…" follows it.
@@ -92,7 +109,7 @@ CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
 
 
 def label_for(kind: str, name: str, detail: Mapping[str, Any] | None = None) -> str:
-    """The rail's line for one span. Never raises, never empty, never echoes an argument."""
+    """The status line for one span. Never raises, never empty, never echoes an argument."""
     values = detail or {}
     if kind == "llm_call":
         return PURPOSE_LABELS.get(str(values.get("purpose") or ""), WORKING)
@@ -106,11 +123,11 @@ def label_for(kind: str, name: str, detail: Mapping[str, Any] | None = None) -> 
         return GUARDRAIL_LABEL
     if kind == "confirmation":
         return CONFIRMATION_LABEL
-    return WORKING
+    return KIND_LABELS.get(kind, WORKING)
 
 
 def tone_for(kind: str, status: str, detail: Mapping[str, Any] | None = None) -> str:
-    """How the rail should paint one closed span: `ok`, `pending` or `error`.
+    """How one closed span should be painted: `ok`, `pending` or `error`.
 
     The one special case is the gated write attempt. Everything else follows the recorded status,
     so a genuine tool failure is still red and the record itself is untouched either way.
@@ -149,6 +166,7 @@ __all__ = [
     "CONFIRMATION_REQUIRED",
     "ERROR",
     "GUARDRAIL_LABEL",
+    "KIND_LABELS",
     "NEEDS_CONFIRMATION_LABEL",
     "OK",
     "PENDING",

@@ -15,12 +15,14 @@ MosaicOne…"* — and never mentioned the ticket. The write had happened; the a
 Two moves, both read from the tool result rather than from model output:
 
 1. **The outcome block goes first.** A `recommendation`, because it is tool data and not a
-   statement of company policy (§7.3), carrying the id verbatim. It is skipped when the model's
-   own answer already states that id — the point is that the reader is told once, not twice.
-2. **An escalation that denies the performed action is replaced** by a line pointing at what was
-   created. Only that kind of escalation: G5's sensitive-topic block names a People Operations
-   contact and would be collateral damage, so the check is denial *plus* a word for the action the
-   performed tool performs, and nothing else is touched.
+   statement of company policy (§7.3), carrying the id verbatim. It is skipped when the answer
+   already states that id — the point is that the reader is told once, not twice, and since UX W2
+   the check reads the **repaired** blocks so that nothing this step itself writes can be
+   duplicated by the statement above it.
+2. **An escalation that denies the performed action is replaced** by one line saying there is
+   nothing left to do. Only that kind of escalation: G5's sensitive-topic block names a People
+   Operations contact and would be collateral damage, so the check is denial *plus* a word for the
+   action the performed tool performs, and nothing else is touched.
 3. **A next step that sends the reader off to do it themselves is dropped.** `next_steps` is
    rendered into the same answer as the blocks, so the same contradiction reads the same way: the
    demo-2 answer stated the ticket and then closed with *"Log into MosaicOne and submit your PTO
@@ -117,37 +119,36 @@ class PerformedWrite:
 
     @property
     def statement(self) -> str:
-        """The block that opens the answer: what happened, with the id, and that it is a mock."""
+        """The block that opens the answer: one sentence, what happened, and the reference.
+
+        **Rewritten at UX W2** (chat-production-ux-11, demo-and-grader-controls-15). It used to
+        read *"Done: HR ticket MOCK-HR-000002 was opened in queue hr-timeoff (priority normal) —
+        this is a mock ticket, nothing was sent outside this app."*: a routing slug, an enum and a
+        disclosure about the demo, all inside the one sentence that tells a person their request
+        went through. The slug and the priority are still on the `tool_call` span and in
+        `mock_writes`, and the *"writes are simulated"* disclosure belongs to the demo panel,
+        stated once for the whole session instead of inside every answer.
+        """
         if self.tool_name == "draft_hr_email":
             recipient = self.body.get("to_name") or self.body.get("to_role")
             for_whom = f" for {recipient}" if recipient else ""
-            return (
-                f"Done: HR email draft {self.write_id} was prepared{for_whom} — this is a mock "
-                "draft, nothing was sent outside this app."
-            )
-        queue = self.body.get("queue")
-        priority = self.body.get("priority")
-        where = f" in queue {queue}" if queue else ""
-        how = f" (priority {priority})" if priority else ""
-        return (
-            f"Done: HR ticket {self.write_id} was opened{where}{how} — this is a mock ticket, "
-            "nothing was sent outside this app."
-        )
+            return f"Done — the email draft is ready{for_whom}. Reference {self.write_id}."
+        return f"Done — your request is with HR. Reference {self.write_id}."
 
     @property
     def pointer(self) -> str:
-        """What replaces an escalation that denied this action: where the thing already is."""
+        """What replaces an escalation that denied this action: one reassuring line, not a rebuttal.
+
+        It used to be a second account of the write — *"The ticket already exists: MOCK-HR-000002
+        was opened in queue hr-timeoff on this turn after you confirmed it. There is nothing
+        further for you to file."* — printed directly under the `statement` that had just said the
+        same thing, so the answer argued with itself over a request that had simply gone through
+        (chat-production-ux-11). `statement` reports the write, once, at the top; this says the one
+        thing the denial was in the way of.
+        """
         if self.tool_name == "draft_hr_email":
-            return (
-                f"The draft already exists: {self.write_id}, prepared on this turn after you "
-                "confirmed it. Review it before anything is sent for real."
-            )
-        queue = self.body.get("queue")
-        where = f" in queue {queue}" if queue else ""
-        return (
-            f"The ticket already exists: {self.write_id} was opened{where} on this turn after you "
-            "confirmed it. There is nothing further for you to file."
-        )
+            return "That is already taken care of — the draft is ready for you to review."
+        return "That is already taken care of — there is nothing further for you to file."
 
 
 @dataclass
@@ -254,7 +255,11 @@ def apply(
         else:
             dropped.append(index)
 
-    if any(write.write_id in str(block.get("text") or "") for block in blocks):
+    # The de-dup guard reads the **repaired** blocks, not the model's own. Reading `blocks` was the
+    # bug behind chat-production-ux-11: a `pointer` that had just replaced a denying escalation
+    # states the id, but the model's original text did not, so the statement was prepended anyway
+    # and the answer said the same thing twice in two voices.
+    if any(write.write_id in str(block.get("text") or "") for block in body):
         return Outcome(blocks=body, next_steps=kept, replaced=replaced, dropped=dropped)
     statement = {"type": "recommendation", "text": write.statement, "citations": []}
     return Outcome(blocks=[statement, *body], next_steps=kept, stated=True, replaced=replaced, dropped=dropped)

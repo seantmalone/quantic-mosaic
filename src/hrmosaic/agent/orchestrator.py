@@ -143,6 +143,17 @@ BUDGET_STOPS = ("max_steps", "max_tool_calls", "timeout")
 #: assistant message the request replays, and an unanswered `tool_use` is a 400 on the pinned model.
 NOT_RUN_YET = json.dumps({"status": "not_run", "hint": "an earlier call in this step was rejected"})
 
+#: The single question a clarification asks, per workflow (UX W2, §3.5 of the UX plan). One
+#: question, never the slot list: `WorkflowSpec.required_slots` documents the completion predicate
+#: for the dashboard, and reading it aloud was the defect jargon-and-exposure-4 recorded.
+CLARIFY_QUESTIONS: dict[str, str] = {
+    "pto_request": "Happy to check — which dates are you thinking of?",
+    "remote_work_eligibility": "Happy to check — where would you be working from, and for how long?",
+}
+
+#: When the router named no workflow. Still one question, still in the first person.
+CLARIFY_FALLBACK = "Happy to help — could you tell me a little more about what you are after?"
+
 #: The write a confirmed resume re-issued came back `isError`: the token validated, the write did
 #: not. §9.4's graceful partial, not a silent success.
 WRITE_FAILED_NOTE = (
@@ -326,6 +337,11 @@ class ChatResponse(BaseModel):
     outcome: TurnOutcome
     answer: str
     answer_blocks: list[AnswerBlock]
+    #: The "what to do next" list `AnswerSchema` already built. It is inside `answer` (§7.3's
+    #: `render_answer` joins it on), but the page renders the blocks, not the joined string — so
+    #: until UX W2 the refusal's redirect, which is the most useful half of a refusal, was
+    #: generated on every refused turn and silently dropped by the web layer (jargon-and-exposure-3).
+    next_steps: list[str] = Field(default_factory=list)
     citations: list[Citation]
     trace: list[TraceEntry]
     confirmation: ConfirmationCard | None = None
@@ -1478,14 +1494,16 @@ class Orchestrator:
     # ----------------------------------------------------------------------------------
 
     def _clarification_text(self, turn: _Turn) -> str:
-        decision = turn.decision
+        """One question, in the workflow's own words (UX W2, jargon-and-exposure-4).
+
+        It used to read the router's `rationale_summary` aloud and then recite
+        `WorkflowSpec.required_slots` — *"I need: employee profile, PTO balance, requested days,
+        policy evidence on notice and approval, a compliance verdict, (optional, gated) a created
+        ticket."* — and close by asking for an employee id the app already knows. Those slots are
+        the predicate's documentation; they belong to the dashboard, and they are still there.
+        """
         workflow = turn.workflow
-        missing = decision.rationale_summary if decision is not None else ""
-        slots = f" I need: {', '.join(workflow.required_slots)}." if workflow is not None else ""
-        return (
-            f"I need one more detail before I can answer. {missing}{slots} "
-            "Employee ids look like E1042, and dates are clearest as an explicit day and month."
-        )
+        return CLARIFY_QUESTIONS.get(workflow.name if workflow is not None else "", CLARIFY_FALLBACK)
 
     def _clarify(self, turn: _Turn, question: str, *, cold_start: bool) -> ChatResponse:
         """`outcome="clarify"`, and the question names the missing slot (§9.6)."""
@@ -1497,10 +1515,9 @@ class Orchestrator:
         return self._finish(turn, answer, outcome="clarify", stop_reason="clarify", cold_start=cold_start)
 
     def _refuse(self, turn: _Turn, reason: str, *, cold_start: bool) -> ChatResponse:
-        names = turn.catalog.names if turn.catalog is not None else ()
         return self._finish(
             turn,
-            g1.refusal(reason, tool_names=names),
+            g1.refusal(reason),
             outcome="refused",
             stop_reason="refused",
             cold_start=cold_start,
@@ -1514,14 +1531,16 @@ class Orchestrator:
             blocks=[
                 AnswerBlock(
                     type="recommendation",
-                    text=(
-                        f"{card.human_summary} Nothing has been created yet — confirm and I will do it, "
-                        "or cancel and I will not."
-                    ),
+                    # The card below states what is about to happen, field by field. Repeating
+                    # `human_summary` here made the same sentence appear three times on one screen
+                    # (UX W2, chat-production-ux-9); this lead says what the card is for.
+                    text="Nothing has been created yet. Review this, then confirm or cancel.",
                     citations=[],
                 )
             ],
-            next_steps=["Review the details on the confirmation card, then choose Confirm or Cancel."],
+            # The card below carries the decision and both buttons by name; a next step repeating it
+            # was the third copy of the same sentence on one screen (UX W2, chat-production-ux-9).
+            next_steps=[],
             rationale_summary="Paused for human confirmation before an irreversible action.",
         )
         return self._finish(
@@ -1641,6 +1660,7 @@ class Orchestrator:
             outcome=outcome,
             answer=rendered,
             answer_blocks=list(answer.blocks),
+            next_steps=list(answer.next_steps),
             citations=list(citations),
             trace=project(turn.buffer.turn_id, session_id=turn.buffer.session_id),
             confirmation=confirmation,

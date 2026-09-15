@@ -1,87 +1,149 @@
 {#
-  One finished turn, server-rendered (spec §11.5).
+  One finished turn, server-rendered (spec §11.5, amended UX W2).
 
   `POST /chat` and `POST /chat/confirm` return this fragment to an htmx request and the same
-  `ChatResponse` as JSON to everyone else, so the badges and the citation chips
-  `tests/contract/test_chat_page_renders.py` asserts on are the ones the grader sees.
+  `ChatResponse` as JSON to everyone else — one endpoint, two representations.
+
+  **What W2 took out of it**, and where each thing went:
+  * the `▸ Agent activity — 28 steps · 7 tool calls · 6 model calls` disclosure and its 28 rows of
+    span kinds, guardrail ids, raw tool JSON and `0 ms` timings — the dashboard is the single home
+    for the technical record, and every value is still there, unrounded (jargon-and-exposure-2, P15);
+  * the five uppercase `POLICY FACT` chips and the `Recommendation — not company policy` badge
+    stamped over refusals, clarifications, confirmation cards and crashes alike — a fact is prose
+    and its source carries the authority, a suggestion is grouped once under one heading with one
+    footnote, and a turn that is not an answer wears no label at all (chat-production-ux-8, -6,
+    jargon-and-exposure-5, -14);
+  * the confirmation card's raw arguments JSON, clipped mid-value at 390px — now a `<dl>` of the
+    fields a person needs, with the queue's human name (jargon-and-exposure-6);
+  * `data-chunk-id`, the `A > B` heading path and the dead `Quarantined by G4` branch — G2 filters
+    quarantined chunks out before any of them reach a citation (demo-and-grader-controls-7,
+    chat-production-ux-27).
+
+  Context: `turn`, `question`, `as_of`/`as_of_human`, `citations_by_id`, `confirm_fields`,
+  `decision_line`, `labelled`, `block_headings`, `suggestion_footnote` — all from
+  `web/api.py::_render_turn()`.
 #}
 <article class="turn" id="turn-{{ turn.turn_id }}" data-session-id="{{ turn.session_id }}"
-         data-turn-id="{{ turn.turn_id }}" data-outcome="{{ turn.outcome }}">
+         data-turn-id="{{ turn.turn_id }}" data-outcome="{{ turn.outcome }}"
+         data-dashboard-url="{{ turn.dashboard_url }}">
   {% if question %}
   <div class="message message-user"><p>{{ question }}</p></div>
   {% endif %}
 
   <div class="message message-agent">
-    {% for block in turn.answer_blocks %}
-    <section class="answer-block answer-block-{{ block.type }}">
-      <span class="badge badge-{{ block.type }}">{{ badge_text[block.type] }}</span>
+    <p class="speaker"><span class="speaker-mark" aria-hidden="true">M</span>Mosaic</p>
+
+    {% if decision_line %}<p class="confirm-resolved">{{ decision_line }}</p>{% endif %}
+
+    {% set facts = turn.answer_blocks | selectattr('type', 'equalto', 'policy_fact') | list %}
+    {% set suggestions = turn.answer_blocks | selectattr('type', 'equalto', 'recommendation') | list %}
+    {% set escalations = turn.answer_blocks | selectattr('type', 'equalto', 'escalation') | list %}
+
+    {#- A cited fact is prose. The reference under it is the authority, and it is a friendly one:
+        document title and section, never a chunk id. -#}
+    {% for block in facts %}
+    <div class="answer-block answer-block-policy_fact">
       <p class="answer-text">{{ block.text }}</p>
       {% if block.citations %}
-      <ul class="citation-chips">
-        {% for chunk_id in block.citations %}{% set citation = citations_by_id.get(chunk_id) %}{% if citation %}
-        <li>
-          <a class="citation-chip" href="{{ citation.source_url }}" data-chunk-id="{{ citation.chunk_id }}"
-             data-snippet="{{ citation.snippet }}" title="{{ citation.snippet }}">
-            {{ citation.doc_title }} · {{ citation.section }}
-          </a>
-        </li>
-        {% endif %}{% endfor %}
-      </ul>
+      <p class="answer-refs">
+        {%- for chunk_id in block.citations %}{% set citation = citations_by_id.get(chunk_id) %}{% if citation -%}
+        <span class="source-ref">{{ citation.doc_title }} · {{ citation.section }}</span>
+        {%- endif %}{% endfor -%}
+      </p>
       {% endif %}
-    </section>
+    </div>
     {% endfor %}
 
+    {#- `labelled` is `turn.outcome in (answered, escalated, partial)`. On every other outcome —
+        refused, clarify, awaiting_confirmation, error — these blocks ARE the answer, and heading
+        them "What I suggest you do" is the badge defect in another font. -#}
+    {% if suggestions or turn.next_steps %}
+      {% if labelled %}
+      <section class="answer-block answer-block-recommendation">
+        <h3 class="answer-block-heading">{{ block_headings.recommendation }}</h3>
+        <ul class="answer-list">
+          {% for block in suggestions %}<li>{{ block.text }}</li>{% endfor %}
+          {% for step in turn.next_steps %}<li>{{ step }}</li>{% endfor %}
+        </ul>
+        <p class="answer-footnote">{{ suggestion_footnote }}</p>
+      </section>
+      {% else %}
+      {% for block in suggestions %}
+      <div class="answer-block answer-block-recommendation"><p class="answer-text">{{ block.text }}</p></div>
+      {% endfor %}
+      {% if turn.next_steps %}
+      <ul class="answer-list next-steps">
+        {% for step in turn.next_steps %}<li>{{ step }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% endif %}
+    {% endif %}
+
+    {% if escalations %}
+      {% if labelled %}
+      <section class="answer-block answer-block-escalation">
+        <h3 class="answer-block-heading">{{ block_headings.escalation }}</h3>
+        {% for block in escalations %}<p class="answer-text">{{ block.text }}</p>{% endfor %}
+      </section>
+      {% else %}
+      {% for block in escalations %}
+      <div class="answer-block answer-block-escalation"><p class="answer-text">{{ block.text }}</p></div>
+      {% endfor %}
+      {% endif %}
+    {% endif %}
+
     {% if as_of %}
-    <p class="snapshot-note">Employee data as of {{ as_of_human }}</p>
+    <p class="snapshot-note">Based on employee data from {{ as_of_human }}</p>
     {% endif %}
 
     {% if turn.confirmation %}
     <form class="confirm-card" hx-post="/chat/confirm" hx-target="#turn-{{ turn.turn_id }}" hx-swap="outerHTML">
       <h3>Confirm before anything is written</h3>
-      <p class="confirm-summary">{{ turn.confirmation.human_summary }}</p>
-      <pre class="arguments-preview">{{ arguments_preview }}</pre>
+      <dl class="confirm-details">
+        {% for field in confirm_fields %}
+        <div class="confirm-field"><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>
+        {% endfor %}
+      </dl>
+      <p class="confirm-note">Nothing is written until you choose.</p>
       <input type="hidden" name="session_id" value="{{ turn.session_id }}">
       <input type="hidden" name="turn_id" value="{{ turn.turn_id }}">
       <div class="confirm-actions">
-        <button class="button button-confirm" type="submit" name="decision" value="confirmed">Confirm</button>
-        <button class="button button-cancel" type="submit" name="decision" value="declined">Cancel</button>
+        <button class="button button-confirm" type="submit" name="decision" value="confirmed">Open the request</button>
+        <button class="button button-cancel" type="submit" name="decision" value="declined">Don't open it</button>
       </div>
     </form>
     {% endif %}
 
+    {#- Always visible, never a drawer that looked exactly like the trace panel under it. Each
+        source expands its own quoted passage in place and offers the reader route (UX W1's
+        `/policy/{doc_id}#{chunk_id}`), which is the promise a citation makes to a person. -#}
     {% if turn.citations %}
-    <details class="citation-drawer">
-      <summary>{{ turn.citations | length }} source{{ '' if turn.citations | length == 1 else 's' }}</summary>
-      <ol class="citation-list">
+    <section class="sources">
+      <h3 class="sources-heading">Sources ({{ turn.citations | length }})</h3>
+      <ul class="source-list">
         {% for citation in turn.citations %}
-        <li class="citation{% if citation.quarantined %} citation-quarantined{% endif %}">
-          <a class="citation-chip" href="{{ citation.source_url }}" data-chunk-id="{{ citation.chunk_id }}">
-            {{ citation.doc_title }} · {{ citation.heading_path }}
-          </a>
-          {% if citation.quarantined %}<span class="warning">Quarantined by G4 — not citable</span>{% endif %}
-          <blockquote>{{ citation.snippet }}</blockquote>
+        <li class="source">
+          <details class="source-details">
+            <summary>{{ citation.doc_title }} · {{ citation.section }}</summary>
+            <blockquote>{{ citation.snippet }}</blockquote>
+            <p class="source-more"><a class="source-link" href="{{ citation.source_url }}">Open the full policy</a></p>
+          </details>
         </li>
         {% endfor %}
-      </ol>
-    </details>
+      </ul>
+    </section>
     {% endif %}
 
-    <details class="trace-panel">
-      <summary>Agent activity — {{ turn.trace | length }} step{{ '' if turn.trace | length == 1 else 's' }}
-        · {{ turn.usage.tool_calls }} tool call{{ '' if turn.usage.tool_calls == 1 else 's' }}
-        · {{ turn.usage.llm_calls }} model call{{ '' if turn.usage.llm_calls == 1 else 's' }}</summary>
-      <ol class="trace-list">
-        {% for entry in turn.trace %}
-        <li class="trace-entry trace-{{ entry.kind }}" data-kind="{{ entry.kind }}" data-status="{{ entry.status }}">
-          <span class="trace-kind">{{ entry.kind }}</span>
-          <span class="trace-name">{{ entry.name }}</span>
-          <span class="trace-summary">{{ entry.summary }}</span>
-          {% if entry.args_preview %}<code class="trace-args">{{ entry.args_preview }}</code>{% endif %}
-          <span class="trace-duration">{{ entry.duration_ms or 0 }} ms</span>
-        </li>
-        {% endfor %}
-      </ol>
-      <p class="turn-links"><a href="{{ turn.dashboard_url }}">Full span waterfall</a></p>
-    </details>
+    {#- A failed turn carries the question that failed, so there is something to try again with
+        (chat-production-ux-20). It posts the same message; `htmx:configRequest` mints the turn id
+        the same way the composer's does. -#}
+    {% if turn.outcome == 'error' and question %}
+    <form class="retry-form" hx-post="/chat" hx-target="#messages" hx-swap="beforeend">
+      <input type="hidden" name="message" value="{{ question }}">
+      <input type="hidden" name="client_label" value="web">
+      <input type="hidden" name="session_id" value="{{ turn.session_id }}">
+      <button class="button button-retry" type="submit">Try again</button>
+    </form>
+    {% endif %}
   </div>
 </article>

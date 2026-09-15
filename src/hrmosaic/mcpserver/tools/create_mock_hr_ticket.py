@@ -32,6 +32,26 @@ ID_PREFIX = "MOCK-HR-"
 Queue = Literal["hr-general", "hr-timeoff", "hr-benefits", "hr-mobility", "hr-relations", "it-equipment"]
 Priority = Literal["low", "normal", "high"]
 
+#: The name each queue goes by in front of a person (UX W2, jargon-and-exposure-6). The slug is a
+#: routing key: it is stored on the mock write, it is what the dashboard and `/api/*` show, and it
+#: is never what the confirmation card or an answer says. `queue_label()` is the one translation.
+QUEUE_LABELS: dict[str, str] = {
+    "hr-general": "HR",
+    "hr-timeoff": "HR Time Off team",
+    "hr-benefits": "HR Benefits team",
+    "hr-mobility": "HR Mobility team",
+    "hr-relations": "Employee Relations team",
+    "it-equipment": "IT Equipment team",
+}
+
+#: What an unmapped queue is called. A slug never reaches a reader, not even an unknown one.
+QUEUE_FALLBACK = "HR"
+
+
+def queue_label(queue: str) -> str:
+    """`hr-timeoff` → `HR Time Off team`. Never returns the slug."""
+    return QUEUE_LABELS.get(queue, QUEUE_FALLBACK)
+
 
 class TicketOutput(BaseModel):
     """The §8.4 tool-8 result, or the five-key `CONFIRMATION_REQUIRED` rejection on `isError`."""
@@ -88,8 +108,13 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
         return result(body, is_error=body["status"] == "confirmation_required")
 
 
-def human_summary(employee_id: str, queue: str, summary: str) -> str:
-    return f'Open an HR ticket in {queue} for {employee_id}: "{summary}".'
+def human_summary(queue: str, summary: str) -> str:
+    """The sentence the confirmation card leads with — the queue's human name, never its slug.
+
+    The employee id it used to carry is gone with it (UX W2, jargon-and-exposure-6): the person
+    reading the card is the person the ticket is for, and the id is on the span either way.
+    """
+    return f'Open an HR ticket with the {queue_label(queue)}: "{summary}".'
 
 
 def _ticket(
@@ -117,7 +142,7 @@ def _ticket(
             payload=payload,
         )
     except confirm.ConfirmationRejected:
-        return confirm.rejection(TOOL_NAME, human_summary(employee_id, queue, summary), preview)
+        return confirm.rejection(TOOL_NAME, human_summary(queue, summary), preview)
     return TicketOutput(
         status="created",
         ticket_id=ticket_id,
@@ -130,4 +155,15 @@ def _ticket(
     ).model_dump(mode="json", exclude_none=True)
 
 
-__all__ = ["ID_PREFIX", "TOOL_NAME", "Priority", "Queue", "TicketOutput", "human_summary", "register"]
+__all__ = [
+    "ID_PREFIX",
+    "QUEUE_FALLBACK",
+    "QUEUE_LABELS",
+    "TOOL_NAME",
+    "Priority",
+    "Queue",
+    "TicketOutput",
+    "human_summary",
+    "queue_label",
+    "register",
+]

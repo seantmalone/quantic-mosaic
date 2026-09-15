@@ -44,6 +44,7 @@ import re
 import secrets
 import time
 from collections import deque
+from collections.abc import Mapping
 from html import escape
 from pathlib import Path
 from typing import Any, Literal
@@ -75,6 +76,7 @@ from hrmosaic.core.llm import count_calls_today
 from hrmosaic.core.models import AnswerBlock, Citation, ConfirmationPayload, ErrorPayload
 from hrmosaic.core.redact import redact_text
 from hrmosaic.mcpserver import confirm as confirm_gate
+from hrmosaic.mcpserver.tools.create_mock_hr_ticket import queue_label
 from hrmosaic.settings import Settings, secret_value
 from hrmosaic.web.sse import broker
 
@@ -233,6 +235,17 @@ def actor_display_name(request: Request, actor: str) -> str:
         if employee.get("employee_id") == actor:
             return str(employee.get("name") or actor)
     return actor
+
+
+def _greeting_name(request: Request, actor: str) -> str:
+    """Who the empty conversation says hello to: a first name, or nobody in particular.
+
+    The admin persona is a role rather than a person, and *"Hi HR admin"* is the interface talking
+    to its own configuration.
+    """
+    if actor == "admin":
+        return "there"
+    return actor_display_name(request, actor).split(" ")[0] or "there"
 
 
 def shell_context(request: Request, *, surface: Literal["chat", "dashboard"]) -> dict[str, Any]:
@@ -742,14 +755,74 @@ def _publish_turn_completed(response: ChatResponse) -> None:
     )
 
 
-#: The label each typed answer block wears (§11.5). The recommendation string is verbatim: the
-#: rubric asks that a recommendation never read as company policy, and `test_chat_page_renders`
-#: asserts on this exact text.
-BADGE_TEXT = {
-    "policy_fact": "Policy fact",
-    "recommendation": "Recommendation — not company policy",
-    "escalation": "Escalation",
+#: The heading each **non-fact** group of answer blocks is given (§11.5, amended UX W2).
+#:
+#: Until W2 every block wore an uppercase chip — `POLICY FACT` five times in one answer, and
+#: `RECOMMENDATION — NOT COMPANY POLICY` stamped over refusals, clarifications, confirmation cards
+#: and server errors alike (chat-production-ux-8, jargon-and-exposure-5/14). A `policy_fact` gets no
+#: label at all now: it is prose, and the source reference beneath it carries the authority. The
+#: other two are grouped once per turn under one of these headings.
+#:
+#: The labelling guarantee the rubric asks for — a recommendation must never read as company
+#: policy — is unchanged and lives in two places it always did: `orchestrator.render_answer()`,
+#: which builds the plain-text `answer` the JSON contract and the eval harness read, and
+#: `SUGGESTION_FOOTNOTE` below, which states it once under the group instead of once per sentence.
+BLOCK_HEADINGS = {
+    "recommendation": "What I suggest you do",
+    "escalation": "Who to contact",
 }
+
+#: One footnote per turn, under the suggestions.
+SUGGESTION_FOOTNOTE = "Suggestions are guidance, not company policy."
+
+#: The outcomes on which a heading is the right thing to wear. On every other one — a refusal, a
+#: clarifying question, a confirmation card, a crash — the blocks *are* the answer, and heading them
+#: "What I suggest you do" would be the badge defect in another font (jargon-and-exposure-5).
+LABELLED_OUTCOMES = frozenset({"answered", "escalated", "partial"})
+
+#: What the confirmation card calls each argument it shows, in the order it shows them. The card
+#: used to print the tool's raw arguments as JSON — `employee_id`, `queue: hr-timeoff`, `priority` —
+#: inside a `<pre>` that was clipped mid-value at 390px (jargon-and-exposure-6). Anything not named
+#: here is not shown: the full arguments are on the `tool_call` span and in `/api/traces/tools`.
+CONFIRM_FIELD_LABELS: dict[str, str] = {
+    "summary": "Request",
+    "queue": "Goes to",
+    "priority": "Priority",
+    "to_name": "Goes to",
+    "recipient_role": "Goes to",
+    "subject": "Subject",
+    "purpose": "About",
+}
+
+#: The priority that is not worth a row. Every ticket is `normal` unless the turn said otherwise.
+DEFAULT_PRIORITY = "normal"
+
+
+def _confirm_fields(preview: Mapping[str, Any]) -> list[dict[str, str]]:
+    """The confirmation card's `<dl>`: label/value pairs, in reading order, human words only.
+
+    `queue` is translated through the tool server's own `QUEUE_LABELS`, so the card says
+    *"HR Time Off team"* where the routing key says `hr-timeoff`; `employee_id` is dropped (the
+    person reading the card is the person the request is for); and a `normal` priority is dropped
+    because it is the default and says nothing.
+    """
+    rows: list[dict[str, str]] = []
+    for key, label in CONFIRM_FIELD_LABELS.items():
+        raw = preview.get(key)
+        if raw in (None, ""):
+            continue
+        value = str(raw)
+        if key == "queue":
+            value = queue_label(value)
+        elif key == "priority":
+            if value == DEFAULT_PRIORITY:
+                continue
+            value = value.capitalize()
+        if any(row["label"] == label for row in rows):
+            continue
+        rows.append({"label": label, "value": value})
+    return rows
+
 
 _MONTHS = (
     "January",
@@ -776,7 +849,23 @@ def human_date(value: str) -> str:
         return value
 
 
-def _render_turn(request: Request, response: ChatResponse, *, question: str | None = None) -> Response:
+#: The one line that replaces a resolved confirmation card, by the decision that resolved it.
+#: Before UX W2 the card simply vanished — `hx-swap="outerHTML"` over the whole turn, with no
+#: `question` on the resume path — so approving a write erased the question that asked for it and
+#: left no record on the page that a human had decided anything (chat-production-ux-10).
+DECISION_LINES = {
+    "confirmed": "You approved this — it went ahead.",
+    "declined": "You cancelled this — nothing was created.",
+}
+
+
+def _render_turn(
+    request: Request,
+    response: ChatResponse,
+    *,
+    question: str | None = None,
+    decision: str | None = None,
+) -> Response:
     """JSON is the contract (§11.1); the chat page asks for the same turn as an htmx fragment.
 
     One endpoint, two representations — never a second route, because §11.8's endpoint list is
@@ -795,9 +884,12 @@ def _render_turn(request: Request, response: ChatResponse, *, question: str | No
             "question": question,
             "as_of": as_of,
             "as_of_human": human_date(as_of) if as_of else None,
-            "badge_text": BADGE_TEXT,
+            "decision_line": DECISION_LINES.get(decision or ""),
+            "labelled": response.outcome in LABELLED_OUTCOMES,
+            "block_headings": BLOCK_HEADINGS,
+            "suggestion_footnote": SUGGESTION_FOOTNOTE,
             "citations_by_id": {citation.chunk_id: citation for citation in response.citations},
-            "arguments_preview": json.dumps(preview, indent=2, ensure_ascii=False),
+            "confirm_fields": _confirm_fields(preview),
         },
     )
 
@@ -808,10 +900,12 @@ def _render_turn(request: Request, response: ChatResponse, *, question: str | No
 
 #: What the caller is told when something the design does not model went wrong. Never the
 #: exception, never a stack trace (§12.3) — the detail lives on the `error` span instead.
-INTERNAL_ERROR_TEXT = (
-    "Something went wrong inside the copilot and this request could not be completed. Nothing was created or changed."
-)
-INTERNAL_ESCALATION_TEXT = f"Please ask People Operations directly at {g5.PEOPLE_OPS} and try again shortly."
+#:
+#: Rewritten at UX W2 (jargon-and-exposure-16): it used to say *"inside the copilot"*, which is the
+#: assistant talking about itself in the third person, in a sentence whose job is to reassure
+#: someone whose request just failed.
+INTERNAL_ERROR_TEXT = "Something went wrong and I could not finish that. Nothing was created or changed."
+INTERNAL_ESCALATION_TEXT = f"Please try again, or contact People Operations at {g5.PEOPLE_OPS}."
 
 
 def _open_buffer(turn_id: Any) -> trace_module.TurnBuffer | None:
@@ -860,7 +954,9 @@ def unhandled_error_response(request: Request, exc: BaseException) -> Response:
     """
     message = f"{type(exc).__name__}: {exc}"
     logger.error("unhandled error on %s %s: %s", request.method, request.url.path, message, exc_info=exc)
-    buffer = _open_buffer(request.scope.get("state", {}).get("turn_id"))
+    state = request.scope.get("state", {})
+    question = state.get("message") if isinstance(state.get("message"), str) else None
+    buffer = _open_buffer(state.get("turn_id"))
     blocks = [
         AnswerBlock(type="recommendation", text=INTERNAL_ERROR_TEXT, citations=[]),
         AnswerBlock(type="escalation", text=INTERNAL_ESCALATION_TEXT, citations=[]),
@@ -909,7 +1005,7 @@ def unhandled_error_response(request: Request, exc: BaseException) -> Response:
             dashboard_url=f"/dashboard/sessions/{buffer.session_id}#turn-{buffer.seq}",
         )
         _publish_turn_completed(response)
-        return _render_turn(request, response)
+        return _render_turn(request, response, question=question)
     except Exception:
         logger.exception("recording the unmodelled failure failed too; answering without a trace")
         return _internal_error_json(answer)
@@ -1030,7 +1126,11 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
                 "as_of": as_of,
                 "as_of_human": human_date(as_of) if as_of else None,
                 "citations_by_id": {citation.chunk_id: citation for citation in citations},
-                "arguments_preview": "{}",
+                # A replay never rebuilds a card (§11.5) and never re-states a decision: it is the
+                # transcript of what happened, not an offer to do it again.
+                "confirm_fields": [],
+                "decision_line": None,
+                "labelled": turn.outcome in LABELLED_OUTCOMES,
             }
         )
     return replayed
@@ -1063,9 +1163,11 @@ async def chat_page(request: Request) -> Response:
         name="chat.html",
         context={
             "employees": request.app.state.employees,
+            "greeting_name": _greeting_name(request, identity.actor),
             "demo_prompts": DEMO_PROMPTS,
-            "data_as_of": request.app.state.data_as_of,
-            "badge_text": BADGE_TEXT,
+            "starters": STARTER_PROMPTS,
+            "block_headings": BLOCK_HEADINGS,
+            "suggestion_footnote": SUGGESTION_FOOTNOTE,
             "transcript": transcript,
             "session_id": session_id,
             "session_notice": notice,
@@ -1088,8 +1190,12 @@ async def chat(request: Request) -> Response:
         raise HTTPException(status_code=409, detail={"code": "TURN_ID_IN_USE", "turn_id": turn_id})
     turn_id = turn_id or new_turn_id()
     # The seam `UnhandledErrorMiddleware` reads: if an unmodelled exception escapes `run_turn`,
-    # this is the turn it has to close before answering (§12.3).
-    request.scope.setdefault("state", {})["turn_id"] = turn_id
+    # this is the turn it has to close before answering (§12.3). The message rides along with it:
+    # a failed turn used to arrive on the page with no copy of the question that failed, which is
+    # half of why it had nothing to retry (chat-production-ux-20).
+    state = request.scope.setdefault("state", {})
+    state["turn_id"] = turn_id
+    state["message"] = body.message
 
     chat_request = ChatRequest(
         message=body.message,
@@ -1122,7 +1228,7 @@ async def chat_confirm(request: Request) -> Response:
     """
     body = await _parse_body(request, ConfirmBody)
     store = _store(request)
-    turn = store.execute("SELECT id, session_id, seq FROM turns WHERE id = ?", (body.turn_id,)).one()
+    turn = store.execute("SELECT id, session_id, seq, user_message FROM turns WHERE id = ?", (body.turn_id,)).one()
     if turn is None or turn["session_id"] != body.session_id:
         raise HTTPException(status_code=404, detail={"code": "UNKNOWN_TURN", "turn_id": body.turn_id})
 
@@ -1173,7 +1279,9 @@ async def chat_confirm(request: Request) -> Response:
     else:
         response = _record_decline(store, buffer, pending)
     _publish_turn_completed(response)
-    return _render_turn(request, response)
+    # The question the card belonged to is re-rendered with the resolved turn: the fragment replaces
+    # the whole `article.turn`, so without it the transcript loses the half the reader wrote.
+    return _render_turn(request, response, question=turn["user_message"], decision=body.decision)
 
 
 def _record_decline(store: Store, buffer: trace_module.TurnBuffer, pending: dict[str, Any]) -> ChatResponse:
@@ -1504,6 +1612,17 @@ def _last_llm_call(store: Store | None, provider: str) -> tuple[str | None, int 
     return row["status"], row["duration_ms"]
 
 
+#: The four questions the empty conversation offers (UX plan §3.1). They prefill the composer and
+#: submit nothing: they are examples of what this assistant is for, which is what the page had
+#: instead of a greeting — an unlabelled textarea and two buttons named "Demo" (chat-production-ux-1).
+#: Not demo controls: the two scripted demo prompts of §18 keep their own place in the demo panel.
+STARTER_PROMPTS = (
+    "How much PTO do I have left?",
+    "Can I work from another country?",
+    "How much notice do I need to book time off?",
+    "What does my benefits status cover?",
+)
+
 #: The two one-click demo prompts of §18, shared by the UI buttons and `scripts/demo_task_*.sh`.
 DEMO_PROMPTS = {
     "demo_1": "I want to work from Berlin from 3 November to 14 December 2026 — can I?",
@@ -1518,9 +1637,12 @@ __all__ = [
     "ACTOR_COOKIE",
     "ADMIN_ROUTES",
     "APP_VERSION",
-    "BADGE_TEXT",
+    "BLOCK_HEADINGS",
     "DEGRADATIONS",
     "DEMO_PROMPTS",
+    "LABELLED_OUTCOMES",
+    "STARTER_PROMPTS",
+    "SUGGESTION_FOOTNOTE",
     "AccessGateMiddleware",
     "ChatBody",
     "ConfirmBody",

@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from hrmosaic.agent.guardrails import emit
+from hrmosaic.agent.guardrails.g5 import PEOPLE_OPS
 from hrmosaic.core import corpusread
 from hrmosaic.core.models import AnswerBlock, AnswerSchema
 from hrmosaic.settings import settings as default_settings
@@ -55,9 +56,20 @@ class Verdict:
 
 
 #: How the redirect is worded when nothing was retrieved at all versus when it was all too weak.
+#: **These are the span's words, not the reader's** (UX W2, numbers-precision-overflow-3): they
+#: carry the clause that fired and the arithmetic behind it, they are what `Verdict.reason` and the
+#: G1 span record, and the dashboard is where they are read. What the reader is told is
+#: `USER_REFUSAL`, which states the boundary and nothing about how it was measured.
 NO_EVIDENCE = "no policy evidence was retrieved for this question"
 WEAK_EVIDENCE = "the retrieved policy evidence is below the evidence threshold"
 OUT_OF_SCOPE = "the question is not about Mosaic Robotics HR policy or your own HR data"
+
+#: The refusal a person reads. One admission, one boundary — no score, no threshold, no tool count.
+#: The redirect that follows it is `next_steps`, built from the real index by `coverage()`.
+USER_REFUSAL = (
+    "I could not find anything in Mosaic's policy library that answers this, so I would rather not "
+    "guess. I only answer from Mosaic policy and your own HR record."
+)
 
 
 def evaluate(
@@ -123,25 +135,26 @@ def coverage() -> list[str]:
     return [document.doc_title for document in corpusread.list_documents()]
 
 
-def refusal(reason: str, *, tool_names: Sequence[str] = ()) -> AnswerSchema:
+def refusal(reason: str) -> AnswerSchema:
     """The refuse-and-redirect answer, built with no model call and no `tools/call`.
 
     It never states a policy — there is nothing to cite — so the redirect is a `recommendation`
-    block, which the UI badges *"Recommendation — not company policy"*. The `next_steps` name the
-    documents that do exist, which is the redirect §7.4 asks for.
+    block. The `next_steps` name the documents that do exist, which is the redirect §7.4 asks for,
+    and since UX W2 they are **rendered**: the web layer used to build them and drop them, which is
+    how the most useful half of a refusal never reached a reader (jargon-and-exposure-3).
+
+    `reason` is the span's diagnostic and reaches the reader nowhere: it goes to
+    `rationale_summary`, which is the turn record. The tool-count clause — *"I can also look up your
+    own HR data with 9 tools"* — is gone with it; a person counting the assistant's tools is a
+    grader, and the dashboard counts them properly.
     """
-    titles = coverage()
-    covered = "; ".join(titles)
-    capability = f" I can also look up your own HR data with {len(tool_names)} tools." if tool_names else ""
-    text = (
-        f"I cannot answer that: {reason}. I answer only from the Mosaic Robotics policy corpus and "
-        f"your own HR data, and I do not answer from general knowledge."
-        f"{capability}"
-    )
+    covered = "; ".join(coverage())
     return AnswerSchema(
-        blocks=[AnswerBlock(type="recommendation", text=text, citations=[])],
-        next_steps=[f"The corpus covers: {covered}."]
-        + ["Ask about one of those policies, or contact People Operations at people-ops@mosaicrobotics.example."],
+        blocks=[AnswerBlock(type="recommendation", text=USER_REFUSAL, citations=[])],
+        next_steps=[
+            f"I can help with: {covered}.",
+            f"If this is urgent, contact People Operations at {PEOPLE_OPS}.",
+        ],
         rationale_summary=f"Refused and redirected: {reason}."[:200],
     )
 
@@ -149,6 +162,7 @@ def refusal(reason: str, *, tool_names: Sequence[str] = ()) -> AnswerSchema:
 __all__ = [
     "NO_EVIDENCE",
     "OUT_OF_SCOPE",
+    "USER_REFUSAL",
     "WEAK_EVIDENCE",
     "Scored",
     "Verdict",

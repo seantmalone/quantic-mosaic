@@ -18,7 +18,13 @@
   `web/api.py::shell_context()`.
 #}
 <header class="masthead">
-  <h1 class="wordmark">Mosaic HR Copilot</h1>
+  {#- The lockup is the h1's content on both surfaces (docs/brand.md §2). It is an `<img>`, not an
+      inline SVG, so the masthead stays byte-identical across the two surfaces and the file carries
+      its own light/dark fallback; the accessible name is the alt text, which is the product name
+      the h1 used to hold as literal characters. -#}
+  <h1 class="wordmark">
+    <img class="wordmark-lockup" src="/static/brand/wordmark.svg" alt="Mosaic HR Copilot" width="219" height="30">
+  </h1>
   <nav class="masthead-nav" aria-label="Primary">
     <div class="nav-switch">
       <a class="nav-switch-link" id="chat-link" href="/"{% if surface == 'chat' %} aria-current="page"{% endif %}>Chat</a>
