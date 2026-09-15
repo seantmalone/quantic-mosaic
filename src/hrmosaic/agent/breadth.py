@@ -34,6 +34,7 @@ Four things keep the cost bounded and the answer honest:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
@@ -54,6 +55,59 @@ INSTRUCTION = (
     "wrote and its wording, cite no id that is not listed in CITATION COVERAGE, and invent nothing. "
     "Reply with the COMPLETE answer JSON, not a fragment."
 )
+
+
+#: Words that carry no claim, dropped before two `policy_fact` blocks are compared (W8, C26).
+#: A restatement differs in its articles and its connectives, not in what it asserts.
+STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "any",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "but",
+        "by",
+        "can",
+        "for",
+        "from",
+        "has",
+        "have",
+        "in",
+        "is",
+        "it",
+        "its",
+        "may",
+        "must",
+        "not",
+        "of",
+        "on",
+        "or",
+        "own",
+        "s",
+        "than",
+        "that",
+        "the",
+        "their",
+        "they",
+        "this",
+        "to",
+        "was",
+        "were",
+        "will",
+        "with",
+        "you",
+        "your",
+    }
+)
+
+#: The minimum distinct documents a multi-document answer is expected to cite. Read off the
+#: workflow where there is one; this is the floor for a `multi_doc` turn with none.
+MIN_DISTINCT_DOCS = 2
 
 
 class Decision(Protocol):
@@ -105,6 +159,59 @@ def uncited_documents(blocks: Sequence[Mapping[str, Any]], chunks: Sequence[Chun
     return missing
 
 
+def claim_key(text: str) -> str:
+    """The claim a `policy_fact` makes, with the wording taken out (W8, C26).
+
+    Two blocks that assert the same rule in different words — which is how the model answered the
+    breadth instruction: a second block rather than a second citation — normalise to one key, and
+    their citations are merged onto one block instead of telling the reader the same thing twice
+    from two sources.
+    """
+    words = re.findall(r"[a-z0-9.]+", text.lower())
+    return " ".join(sorted({word.strip(".") for word in words if word.strip(".") and word not in STOPWORDS}))
+
+
+def merge(blocks: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[int]]:
+    """`(the blocks with duplicate claims merged, the indexes that were merged away)`.
+
+    Only `policy_fact` blocks merge, and only into the first block that made the claim: its
+    wording is the one the reader sees, and the later block's citations join it in order.
+    """
+    seen: dict[str, int] = {}
+    kept: list[dict[str, Any]] = []
+    merged: list[int] = []
+    for index, block in enumerate(blocks):
+        item = dict(block)
+        if item.get("type") != "policy_fact":
+            kept.append(item)
+            continue
+        key = claim_key(str(item.get("text") or ""))
+        if key in seen:
+            target = kept[seen[key]]
+            citations = list(target.get("citations") or [])
+            for citation in item.get("citations") or []:
+                if citation not in citations:
+                    citations.append(citation)
+            target["citations"] = citations
+            merged.append(index)
+            continue
+        seen[key] = len(kept)
+        kept.append(item)
+    return kept, merged
+
+
+def distinct_docs_shortfall(blocks: Sequence[Mapping[str, Any]], chunks: Sequence[Chunk], *, minimum: int) -> int:
+    """How many distinct documents short of `minimum` the served answer is (W8, C26).
+
+    Zero when the answer meets the floor **or** when the turn never retrieved that many documents
+    to begin with: a shortfall is an answer narrower than its own evidence, not a corpus that did
+    not have more to say.
+    """
+    available = len({chunk.doc_id for chunk in citable(chunks)})
+    target = min(minimum, available)
+    return max(0, target - len(cited_documents(blocks, chunks)))
+
+
 def instruction(missing: Sequence[str], chunks: Sequence[Chunk]) -> str:
     """The repair message: the uncited documents, their passage ids, and the two ways out."""
     lines: list[str] = []
@@ -132,13 +239,18 @@ def accepted(
 
 __all__ = [
     "INSTRUCTION",
+    "MIN_DISTINCT_DOCS",
     "STEP_NAME",
+    "STOPWORDS",
     "Chunk",
     "Decision",
     "accepted",
     "applies",
     "citable",
     "cited_documents",
+    "claim_key",
+    "distinct_docs_shortfall",
     "instruction",
+    "merge",
     "uncited_documents",
 ]

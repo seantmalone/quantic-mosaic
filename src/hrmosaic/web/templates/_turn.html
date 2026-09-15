@@ -56,11 +56,23 @@
     {% if decision_line %}<p class="confirm-resolved">{{ decision_line }}</p>{% endif %}
 
     <div class="answer-body">
+    {% set notices = turn.answer_blocks | selectattr('type', 'equalto', 'notice') | list %}
     {% set performed = turn.answer_blocks | selectattr('type', 'equalto', 'performed') | list %}
     {% set facts = turn.answer_blocks | selectattr('type', 'equalto', 'policy_fact') | list %}
     {% set records = turn.answer_blocks | selectattr('type', 'equalto', 'record') | list %}
     {% set suggestions = turn.answer_blocks | selectattr('type', 'equalto', 'recommendation') | list %}
     {% set escalations = turn.answer_blocks | selectattr('type', 'equalto', 'escalation') | list %}
+
+    {#- The product's own voice comes first and wears nothing (UX W8, C17). A budget stop, a
+        clarifying question, a refusal, a cancellation receipt and the reason a write was not
+        proposed are all things Mosaic is saying about itself — none of them advice — and all of
+        them were being typed `recommendation`, so the live budget-stop turn printed
+        "Recommendation — not company policy: I reached my tool-call limit…" after six facts and
+        three suggestions, under "Suggestions are guidance, not company policy". No heading, no
+        prefix, no footnote, and the lede slot. -#}
+    {% for block in notices %}
+    <p class="answer-notice">{{ block.text|no_ids }}</p>
+    {% endfor %}
 
     {#- A write that has happened is the first thing the reader is told, in its own voice: not a
         policy statement, not a suggestion, and emphatically not under "What I suggest you do" with

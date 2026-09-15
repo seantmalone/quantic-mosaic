@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from hrmosaic.agent.guardrails import emit
 from hrmosaic.agent.guardrails.g5 import PEOPLE_OPS
-from hrmosaic.core.models import AnswerBlock, AnswerSchema
+from hrmosaic.core.models import NOTICE, AnswerBlock, AnswerSchema
 from hrmosaic.settings import settings as default_settings
 
 if TYPE_CHECKING:
@@ -63,12 +63,39 @@ NO_EVIDENCE = "no policy evidence was retrieved for this question"
 WEAK_EVIDENCE = "the retrieved policy evidence is below the evidence threshold"
 OUT_OF_SCOPE = "the question is not about Mosaic Robotics HR policy or your own HR data"
 
-#: The refusal a person reads. One admission, one boundary — no score, no threshold, no tool count.
-#: The redirect that follows it is `next_steps`, built from the real index by `coverage()`.
+#: The refusal a person reads **when the turn actually searched**. One admission, one boundary —
+#: no score, no threshold, no tool count. The redirect that follows it is `next_steps`, built from
+#: the real index by `coverage()`.
 USER_REFUSAL = (
     "I could not find anything in Mosaic's policy library that answers this, so I would rather not "
     "guess. I only answer from Mosaic policy and your own HR record."
 )
+
+#: …and the refusal for a turn that searched **nothing** (W8, C19). `OUT_OF_SCOPE` is decided at
+#: the router or by the §9.1 step-0 pre-filter, before a single retrieval: the live tuition turn
+#: recorded `{"tool_calls": 0, "retrievals": 0}` and no G1 span, and told the reader a search of
+#: the policy library had come back empty. It had not been asked to search anything. The boundary
+#: is the truthful thing to state, and it is all this says.
+OUT_OF_SCOPE_REFUSAL = (
+    "That is outside what I can help with here — I only answer from Mosaic policy and your own HR record."
+)
+
+#: Which sentence each reason gets. The reason is the span's diagnostic; this is the reader's.
+REFUSAL_COPY: dict[str, str] = {
+    NO_EVIDENCE: USER_REFUSAL,
+    WEAK_EVIDENCE: USER_REFUSAL,
+    OUT_OF_SCOPE: OUT_OF_SCOPE_REFUSAL,
+}
+
+
+def refusal_text(reason: str) -> str:
+    """The sentence a reader is shown for this refusal reason (W8, C19).
+
+    `reason` carries its diagnostic tail — *"…: evidence-gate score 0.42 < 0.60"* — so the match is
+    on the prefix. An unrecognised reason keeps the searched-the-library wording, because every
+    reason that reaches here other than `OUT_OF_SCOPE` is a verdict about retrieved evidence.
+    """
+    return next((copy for prefix, copy in REFUSAL_COPY.items() if reason.startswith(prefix)), USER_REFUSAL)
 
 
 def evaluate(
@@ -198,7 +225,9 @@ def refusal(reason: str) -> AnswerSchema:
     """
     covered = _sentence(example_topics())
     return AnswerSchema(
-        blocks=[AnswerBlock(type="recommendation", text=USER_REFUSAL, citations=[])],
+        # The product's own voice, not advice (W8, C17): rendered bare, with no heading and no
+        # *"Suggestions are guidance, not company policy"* under it.
+        blocks=[AnswerBlock(type=NOTICE, text=refusal_text(reason), citations=[])],
         next_steps=[
             f"I can help with things like {covered}.",
             f"If this is urgent, contact People Operations at {PEOPLE_OPS}.",
@@ -212,8 +241,11 @@ __all__ = [
     "EXAMPLE_TOPIC_COUNT",
     "NO_EVIDENCE",
     "OUT_OF_SCOPE",
+    "OUT_OF_SCOPE_REFUSAL",
+    "REFUSAL_COPY",
     "USER_REFUSAL",
     "WEAK_EVIDENCE",
+    "refusal_text",
     "Scored",
     "Verdict",
     "check",

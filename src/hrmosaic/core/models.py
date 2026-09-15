@@ -352,6 +352,14 @@ class Citation(BaseModel):
     source_url: str
 
 
+#: The block type the **product** speaks in (W8, C17). Minted at five sites and by nothing else:
+#: a §9.4 budget stop, a clarifying question, a refusal, a cancelled confirmation, and the
+#: explanation for a write the verdict would not allow. `agent/outcome.py` owns `performed` and
+#: `record` the same way; between them, `recommendation` is left meaning what it says — advice the
+#: model wrote.
+NOTICE = "notice"
+
+
 class AnswerBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     #: `performed` is written by `agent/outcome.py` and by nothing else: it reports a write the
@@ -367,7 +375,14 @@ class AnswerBlock(BaseModel):
     #: suggestions group and its footnote, which is where a reader's own balance had been filed and
     #: disclaimed as *"not company policy"*. The model types it (`synthesize.j2` rule 6b);
     #: `outcome.apply()` is the deterministic backstop for the one it types `recommendation`.
-    type: Literal["policy_fact", "recommendation", "escalation", "performed", "record"]
+    #: `notice` is copy the **product** mints in its own voice (W8, C17): a budget stop, a
+    #: clarifying question, a refusal, a cancellation receipt, the explanation for a write that was
+    #: not proposed. None of it is advice, and all of it was being typed `recommendation` — so the
+    #: live budget-stop turn printed *"Recommendation — not company policy: I reached my tool-call
+    #: limit…"* **after** six facts and three suggestions, under the suggestions footnote. A
+    #: `notice` is rendered bare, first, with no heading and no footnote, and `recommendation`
+    #: blocks now originate only from the model.
+    type: Literal["policy_fact", "recommendation", "escalation", "performed", "record", "notice"]
     text: str
     citations: list[str]
 

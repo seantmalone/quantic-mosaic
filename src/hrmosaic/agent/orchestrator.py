@@ -68,6 +68,7 @@ from hrmosaic.core.llm import build_agent_model
 from hrmosaic.core.llm.base import ChatModel, Message, MissingCredentialError, ProviderError, ToolCall
 from hrmosaic.core.llm.limiter import DailyCapExceeded
 from hrmosaic.core.models import (
+    NOTICE,
     AnswerBlock,
     AnswerSchema,
     Citation,
@@ -535,9 +536,11 @@ def render_answer(blocks: Sequence[AnswerBlock], next_steps: Sequence[str]) -> s
         elif block.type == "escalation":
             parts.append(f"Escalation: {block.text}")
         else:
-            # `policy_fact`, `performed` and `record` are all statements of what is so — of company
-            # policy, of what this turn's tools did, of the reader's own HR data — and none of
-            # them wears a label (UX W6; UX W7 for `record`).
+            # `policy_fact`, `performed`, `record` and `notice` are all statements of what is so —
+            # of company policy, of what this turn's tools did, of the reader's own HR data, of
+            # what the product itself is doing — and none of them wears a label (UX W6; UX W7 for
+            # `record`; W8 C17 for `notice`, which was wearing *"not company policy"* over the
+            # product's own voice).
             parts.append(block.text)
     if next_steps:
         parts.append(NEXT_STEPS_LEAD + "\n".join(f"- {step}" for step in next_steps))
@@ -871,7 +874,7 @@ class Orchestrator:
             answer = answer.model_copy(
                 update={
                     "blocks": [
-                        AnswerBlock(type="recommendation", text=WRITE_FAILED_NOTE, citations=[]),
+                        AnswerBlock(type=NOTICE, text=WRITE_FAILED_NOTE, citations=[]),
                         *answer.blocks,
                     ]
                 }
@@ -890,7 +893,7 @@ class Orchestrator:
             answer = answer.model_copy(
                 update={
                     "blocks": [
-                        AnswerBlock(type="recommendation", text=BUDGET_NOTE[turn.stop_reason], citations=[]),
+                        AnswerBlock(type=NOTICE, text=BUDGET_NOTE[turn.stop_reason], citations=[]),
                         *answer.blocks,
                     ]
                 }
@@ -1617,7 +1620,7 @@ class Orchestrator:
     def _clarify(self, turn: _Turn, question: str, *, cold_start: bool) -> ChatResponse:
         """`outcome="clarify"`, and the question names the missing slot (§9.6)."""
         answer = AnswerSchema(
-            blocks=[AnswerBlock(type="recommendation", text=question, citations=[])],
+            blocks=[AnswerBlock(type=NOTICE, text=question, citations=[])],
             next_steps=["Reply with the missing detail and I will pick this up."],
             rationale_summary="Clarification requested: a required detail is missing.",
         )
@@ -1647,7 +1650,7 @@ class Orchestrator:
         answer = AnswerSchema(
             blocks=[
                 AnswerBlock(
-                    type="recommendation",
+                    type=NOTICE,
                     # The card below states what is about to happen, field by field. Repeating
                     # `human_summary` here made the same sentence appear three times on one screen
                     # (UX W2, chat-production-ux-9); this lead says what the card is for.
@@ -1689,7 +1692,7 @@ class Orchestrator:
         self._error(turn, kind, reason, component=component, retryable=kind == "tool_unavailable")
         answer = AnswerSchema(
             blocks=[
-                AnswerBlock(type="recommendation", text=caveat, citations=[]),
+                AnswerBlock(type=NOTICE, text=caveat, citations=[]),
                 AnswerBlock(
                     type="escalation",
                     text=(
@@ -1710,7 +1713,7 @@ class Orchestrator:
         """§12.3: a missing key degrades the surface that needs it, and never at boot."""
         self._error(turn, "configuration_required", str(exc), component="llm")
         answer = AnswerSchema(
-            blocks=[AnswerBlock(type="recommendation", text=str(exc), citations=[])],
+            blocks=[AnswerBlock(type=NOTICE, text=str(exc), citations=[])],
             next_steps=[f"Set {exc.variable} and try again."],
             rationale_summary="No model credential is configured.",
         )
@@ -1729,7 +1732,7 @@ class Orchestrator:
         answer = AnswerSchema(
             blocks=[
                 AnswerBlock(
-                    type="recommendation",
+                    type=NOTICE,
                     text="The daily model budget for this deployment is exhausted. Please try again tomorrow.",
                     citations=[],
                 )

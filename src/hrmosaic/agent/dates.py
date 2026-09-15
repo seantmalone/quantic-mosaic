@@ -57,6 +57,9 @@ MONTHS = (
 
 _MONTH_NUMBER = {name.lower(): number for number, name in enumerate(MONTHS, start=1)}
 
+#: The weekdays, in `date.weekday()` order, so a stated one can be checked against the day it names.
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
 #: `13 September 2026`, `3 November`, `1st January 2027` — the vocabulary `web/api.py::human_date()`
 #: writes and the one the models in this app have been observed to write back.
 _DATE = r"\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+(?:\s+\d{4})?"
@@ -73,6 +76,14 @@ PARENTHETICAL = re.compile(
 #: `(21 business days before …)` — the `business`/`working` qualifier can sit either side of the
 #: count's noun depending on how the sentence was written, so both positions are read.
 _BUSINESS = re.compile(r"\b(?:business|working)\b", re.IGNORECASE)
+
+#: *"Tuesday 15 September 2026"* — a weekday stated in front of the day it claims to be (W8, C08).
+#: One of the reviewed answers named a Sunday as a Friday; a reader who trusts it books the wrong
+#: day. The year is required: without it there is no single day to check the name against.
+WEEKDAY_DATE = re.compile(
+    rf"\b(?P<weekday>{'|'.join(WEEKDAYS)})(?P<gap>,?\s+)(?P<date>\d{{1,2}}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{{4}})",
+    re.IGNORECASE,
+)
 
 
 def human_date(value: date) -> str:
@@ -140,6 +151,25 @@ def _repair(match: re.Match[str]) -> str | None:
     return f"{human_date(expected)}{working}"
 
 
+def weekdays(text: str) -> str:
+    """One passage with every `<weekday> <date>` pair checked against the calendar (W8, C08).
+
+    The date is the fact — a reader asked for *"15 September"* — so the **weekday** is the half
+    that moves. A pair this cannot parse is left exactly as written.
+    """
+
+    def repair(match: re.Match[str]) -> str:
+        parsed = parse_date(match["date"])
+        if parsed is None:
+            return match.group(0)
+        stated = WEEKDAYS[parsed.weekday()]
+        if match["weekday"].lower() == stated.lower():
+            return match.group(0)
+        return f"{stated}{match['gap']}{match['date']}"
+
+    return WEEKDAY_DATE.sub(repair, text)
+
+
 def correct(text: str) -> str:
     r"""One passage with its arithmetic redone. Returns it unchanged when there is nothing to check.
 
@@ -172,9 +202,9 @@ def correct(text: str) -> str:
         cursor = match.end()
 
     if not pieces:
-        return text
+        return weekdays(text)
     pieces.append(text[cursor:])
-    return "".join(pieces)
+    return weekdays("".join(pieces))
 
 
 @dataclass
@@ -217,10 +247,13 @@ __all__ = [
     "MONTHS",
     "PARENTHETICAL",
     "STEP_NAME",
+    "WEEKDAYS",
+    "WEEKDAY_DATE",
     "Outcome",
     "apply",
     "correct",
     "human_date",
     "minus_days",
     "parse_date",
+    "weekdays",
 ]

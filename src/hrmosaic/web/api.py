@@ -78,7 +78,7 @@ from hrmosaic.core.corpusread import IndexModelMismatch
 from hrmosaic.core.db import Store, TursoHTTPStore, get_store, now_micros
 from hrmosaic.core.ids import new_session_id, new_turn_id, user_agent_hash
 from hrmosaic.core.llm import count_calls_today
-from hrmosaic.core.models import AnswerBlock, Citation, ConfirmationPayload, ErrorPayload
+from hrmosaic.core.models import NOTICE, AnswerBlock, Citation, ConfirmationPayload, ErrorPayload
 from hrmosaic.core.redact import redact_text
 from hrmosaic.mcpserver import confirm as confirm_gate
 from hrmosaic.mcpserver.tools.create_mock_hr_ticket import queue_label
@@ -1775,8 +1775,11 @@ def _record_decline(store: Store, buffer: trace_module.TurnBuffer, pending: dict
         ),
     )
     blocks = [
+        # The product's own receipt for a decision the reader made, not advice (W8, C17). It had
+        # been printing under *"Recommendation — not company policy"*, which reads as though
+        # cancelling were a suggestion the reader might ignore.
         AnswerBlock(
-            type="recommendation",
+            type=NOTICE,
             text="Cancelled — nothing was created. Ask again whenever you would like me to open it.",
             citations=[],
         )

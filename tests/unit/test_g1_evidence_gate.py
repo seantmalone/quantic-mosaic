@@ -101,7 +101,9 @@ def test_the_refusal_names_what_the_corpus_covers_in_plain_topics():
     answer = g1.refusal(g1.OUT_OF_SCOPE)
     titles = [document.doc_title for document in corpusread.list_documents()]
 
-    assert [block.type for block in answer.blocks] == ["recommendation"], "a refusal cites nothing"
+    # The product's own voice, not advice (W8, C17): rendered bare, with no heading over it and no
+    # "Suggestions are guidance, not company policy" under it.
+    assert [block.type for block in answer.blocks] == ["notice"], "a refusal cites nothing"
     assert answer.blocks[0].citations == []
     covered = " ".join(answer.next_steps)
     # Five topics, not five titles, and not all fourteen. The title slice this replaced came off a
@@ -113,7 +115,9 @@ def test_the_refusal_names_what_the_corpus_covers_in_plain_topics():
     assert len(titles) > g1.EXAMPLE_TOPIC_COUNT, "the library is bigger than the sample it is introduced by"
     # The reader is told the boundary; the clause that measured it stays on the span (UX W2,
     # numbers-precision-overflow-3, jargon-and-exposure-3).
-    assert answer.blocks[0].text == g1.USER_REFUSAL
+    # …and the copy matches the reason (W8, C19): an out-of-scope turn searched nothing, so it
+    # makes no claim to have searched. `test_refusal_copy_states_the_reason_it_had` pins the pair.
+    assert answer.blocks[0].text == g1.OUT_OF_SCOPE_REFUSAL
     assert g1.OUT_OF_SCOPE not in answer.blocks[0].text
     assert g1.OUT_OF_SCOPE in answer.rationale_summary
     assert "tools" not in answer.blocks[0].text, "a reader counting the assistant's tools is a grader"
@@ -150,3 +154,18 @@ def writer_session():
     from hrmosaic.core.trace import SessionSpec
 
     return SessionSpec(client_label="api")
+
+
+def test_refusal_copy_states_the_reason_it_had():
+    """W8, C19: `fresh:f2250fa0…:1` recorded `{"tool_calls": 0, "retrievals": 0}` and no G1 span,
+    and told the reader a search of the policy library had come back empty. It had not searched."""
+    searched = g1.refusal(g1.NO_EVIDENCE).blocks[0].text
+    weak = g1.refusal(f"{g1.WEAK_EVIDENCE}: evidence-gate score 0.42 < 0.60").blocks[0].text
+    out_of_scope = g1.refusal(g1.OUT_OF_SCOPE).blocks[0].text
+
+    assert "policy library" in searched and "policy library" in weak
+    assert "policy library" not in out_of_scope
+    assert "could not find" not in out_of_scope, "a turn that searched nothing claims no search"
+    assert out_of_scope == g1.OUT_OF_SCOPE_REFUSAL
+    # The diagnostic never reaches the reader, whichever branch was taken.
+    assert "0.42" not in weak and "0.60" not in weak

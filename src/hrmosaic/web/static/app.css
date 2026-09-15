@@ -404,6 +404,15 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   font-weight: 600;
   border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-tile);
 }
+/* The product's own voice — a budget stop, a clarifying question, a refusal, a cancellation
+   receipt, the reason a write was not proposed (W8, C17). Plain prose in the lede slot: no
+   heading, no label, no footnote. Quieter than `.answer-performed`, because nothing irreversible
+   happened; it is Mosaic saying what it is doing. */
+.answer-notice {
+  margin: 0 0 var(--space-3);
+  color: var(--ink);
+}
+
 /* The reader's way back to the conversation that sent it there (UX W6, nav-reaudit-1). */
 .back-to-chat { color: var(--accent); }
 

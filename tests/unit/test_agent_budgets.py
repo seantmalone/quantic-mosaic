@@ -39,9 +39,12 @@ async def test_the_step_budget_stops_the_loop_and_says_so(run_agent, spans, monk
     assert [payload["error_kind"] for payload in errors] == ["max_steps"]
     assert errors[0]["component"] == "agent_loop"
 
-    assert response.answer_blocks[0].type == "recommendation"
+    # The product's own voice, and the first thing on the page (W8, C17). The live budget-stop
+    # turn printed this after six facts and three suggestions, under "not company policy".
+    assert response.answer_blocks[0].type == "notice"
     assert response.answer_blocks[0].text == BUDGET_NOTE["max_steps"]
-    assert response.answer.startswith("Recommendation — not company policy: I reached my step limit")
+    # …and it is rendered bare: the label was over the product's own account of itself.
+    assert response.answer.startswith("I reached my step limit")
 
 
 async def test_the_tool_call_budget_stops_the_loop_and_says_so(run_agent, spans, monkeypatch):

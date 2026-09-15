@@ -1,0 +1,349 @@
+"""Compliance restatement — the answer may not contradict the engine (spec §7.4; W8, C03).
+
+**Not a guardrail.** No `guardrail` span, no G-number, no change to the six rules of §7.4. One
+deterministic step after synthesis, beside `outcome.py` and `dates.py`, reading nothing but the
+turn's own `check_policy_compliance` envelope.
+
+**The failure it exists for**, live on 2026-09-15, demo 2, persona E1042:
+
+    engine   pto.request.notice — met: true — "computed.notice_business_days is 8;
+                                              the policy value is 5 (gte)."
+    answer   "Your request for 15–17 September does not meet the 5 business day notice
+              requirement (only 8 calendar days from today, 15 September)."
+
+The same eight the engine used to *satisfy* the rule, relabelled as calendar days, against an
+anchor date the sentence's own words refute, to reach the opposite verdict — and then the reader
+was sent to chase a waiver she did not need. The deterministic layer had already decided; nothing
+made the written answer agree with it.
+
+So for every requirement the engine evaluated, any sentence of any block or step that is **about
+that requirement's subject** and whose **polarity opposes the row** is replaced by the row's own
+result, in the reader's voice. Three rules and nothing else:
+
+* `met` — a sentence that denies it is replaced;
+* `unmet` — a sentence that asserts it is replaced;
+* `not_stated` — a sentence that concludes **either way** is replaced by "I could not check …",
+  because a requirement nobody evaluated has no verdict to state (W8, C05).
+
+**When it is unsure it leaves the sentence alone and says so.** A sentence carrying both polarities
+("meets the notice rule but does not meet the balance rule") is one this step cannot cut safely, so
+it is recorded in `unverified` and shipped untouched. A repair that is not certain is worse than
+the prose it replaces.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any
+
+from hrmosaic.agent.outcome import sentences
+
+#: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
+#: Deliberately not a `G<n>`: the six guardrails are a closed set.
+STEP_NAME = "compliance_restatement"
+
+#: The tool whose result this step reads, and the only one.
+COMPLIANCE_TOOL = "check_policy_compliance"
+
+#: The subjects a requirement can be *about*, matched against its id and its text. A sentence has
+#: to name one of them to be a sentence about that requirement — which is what keeps the step off
+#: every other sentence in the answer. Ordered, because the first match names the row for a reader.
+SUBJECT_WORDS: tuple[str, ...] = (
+    "notice",
+    "balance",
+    "blackout",
+    "tenure",
+    "destination",
+    "duration",
+    "device",
+    "approval",
+    "receipt",
+    "deadline",
+    "eligibility",
+    "waiting period",
+    "accrual",
+    "country",
+    "limit",
+    "threshold",
+)
+
+#: A sentence denies its subject when it carries one of these and no assertion.
+NEGATIVE: tuple[str, ...] = (
+    "does not",
+    "doesn't",
+    "do not",
+    "don't",
+    "not met",
+    "unmet",
+    "is not",
+    "isn't",
+    "are not",
+    "aren't",
+    "fails",
+    "fail to",
+    "falls short",
+    "short of",
+    "insufficient",
+    "not sufficient",
+    "not enough",
+    "cannot",
+    "can't",
+    "lacks",
+    "below the",
+    "under the required",
+)
+
+#: …and asserts it when it carries one of these and no denial.
+POSITIVE: tuple[str, ...] = (
+    "meets",
+    "is met",
+    "are met",
+    "satisfies",
+    "satisfied",
+    "complies",
+    "is compliant",
+    "sufficient",
+    "is covered",
+    "covers",
+    "exceeds",
+    "in line with",
+    "clears",
+    "qualifies",
+)
+
+#: How an operator reads to a person. The engine's `reason` is machine prose — *"the policy value
+#: is 5 (gte)"* — and a reader is owed the relation in words.
+RELATIONS: dict[str, str] = {
+    "gte": "at least",
+    "gt": "more than",
+    "lte": "no more than",
+    "lt": "fewer than",
+    "eq": "exactly",
+    "in": "one of",
+    "date_gte": "on or after",
+    "date_lte": "on or before",
+}
+
+#: Subject names whose last path segment does not read as English on its own.
+SUBJECT_LABELS: dict[str, str] = {
+    "amount_usd": "claim",
+    "tenure_days": "length of service, in days",
+    "overlaps_blackout": "overlap with the blackout",
+    "remaining_days": "balance, in days",
+    "days_since_eligibility": "time since your benefits eligibility began",
+}
+
+#: The shape `rules.py::_evaluate_requirement` writes a decided reason in.
+REASON = re.compile(r"^(?P<subject>[\w.]+) is (?P<value>.+?); the policy value is (?P<expected>.+?) \((?P<op>\w+)\)\.$")
+
+
+@dataclass(frozen=True)
+class Row:
+    """One evaluated requirement, as this step needs it."""
+
+    id: str
+    text: str
+    status: str
+    reason: str
+
+    @property
+    def subjects(self) -> tuple[str, ...]:
+        """The subject words this requirement is about, from its id and its text."""
+        haystack = f"{self.id.replace('.', ' ').replace('_', ' ')} {self.text}".lower()
+        return tuple(word for word in SUBJECT_WORDS if word in haystack)
+
+    @property
+    def topic(self) -> str:
+        """What to call this requirement in a sentence addressed to the reader."""
+        found = self.subjects
+        return found[0] if found else "this requirement"
+
+
+@dataclass
+class Outcome:
+    """The blocks and next steps after the step, and what it did to them."""
+
+    blocks: list[dict[str, Any]]
+    next_steps: list[str] = field(default_factory=list)
+    #: `(index into the blocks, requirement id)` for every sentence rewritten.
+    restated: list[tuple[int, str]] = field(default_factory=list)
+    #: `(index into the steps, requirement id)` for the same, among the next steps.
+    restated_steps: list[tuple[int, str]] = field(default_factory=list)
+    #: `(index, requirement id)` for a sentence that opposes a row and could not be cut safely.
+    unverified: list[tuple[int, str]] = field(default_factory=list)
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.restated or self.restated_steps)
+
+
+def rows(envelopes: Iterable[Any]) -> list[Row]:
+    """Every requirement the turn's compliance envelopes evaluated, latest verdict per id.
+
+    A body that will not parse contributes nothing rather than raising: like every step after
+    synthesis, this one must never be the reason an answer fails to reach the reader.
+    """
+    found: dict[str, Row] = {}
+    for envelope in envelopes:
+        if getattr(envelope, "name", "") != COMPLIANCE_TOOL:
+            continue
+        try:
+            body = json.loads(getattr(envelope, "result_json", "") or "")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(body, dict):
+            continue
+        for requirement in body.get("requirements") or []:
+            if not isinstance(requirement, dict) or not requirement.get("id"):
+                continue
+            status = str(requirement.get("status") or ("met" if requirement.get("met") else "unmet"))
+            found[str(requirement["id"])] = Row(
+                id=str(requirement["id"]),
+                text=str(requirement.get("text") or ""),
+                status=status,
+                reason=str(requirement.get("reason") or ""),
+            )
+    return list(found.values())
+
+
+def _carries(text: str, phrases: Sequence[str]) -> bool:
+    """Whole words only. *"insufficient"* ends in *"sufficient"* and is its opposite."""
+    return any(re.search(rf"\b{re.escape(phrase)}", text) for phrase in phrases)
+
+
+def polarity(text: str) -> str | None:
+    """`"asserts"`, `"denies"`, or `None` when the sentence carries both or neither."""
+    lowered = text.lower()
+    denies = _carries(lowered, NEGATIVE)
+    asserts = _carries(lowered, POSITIVE)
+    if denies == asserts:
+        return None
+    return "denies" if denies else "asserts"
+
+
+def _label(subject: str) -> str:
+    leaf = subject.rsplit(".", 1)[-1]
+    return SUBJECT_LABELS.get(leaf, leaf.replace("_", " "))
+
+
+def reader_sentence(row: Row) -> str:
+    """The row's own result, in the second person, with no machine vocabulary in it.
+
+    `"computed.notice_business_days is 8; the policy value is 5 (gte)."` becomes *"Your notice
+    business days is 8, and the policy asks for at least 5."* — the engine's own numbers, the
+    engine's own verdict, and nothing the reader has to decode. A reason the engine wrote in some
+    other shape falls back to naming the requirement, which is still truthful.
+    """
+    if row.status == "not_stated":
+        return f"I could not check the {row.topic} requirement."
+    match = REASON.match(row.reason)
+    verdict = "meets" if row.status == "met" else "does not meet"
+    if match is None:
+        return f"Your request {verdict} the {row.topic} requirement."
+    relation = RELATIONS.get(match["op"], "")
+    asked = f"{relation} {match['expected']}".strip()
+    return f"Your {_label(match['subject'])} is {match['value']}, and the policy asks for {asked}."
+
+
+def relation(sentence: str, row: Row) -> str | None:
+    """How this sentence stands to that requirement: `"opposes"`, `"agrees"`, `"unsure"`, or
+    `None` when the sentence is not about the requirement's subject at all."""
+    lowered = sentence.lower()
+    if not any(word in lowered for word in row.subjects):
+        return None
+    stated = polarity(sentence)
+    if stated is None:
+        # It names the subject and states no verdict this step can read — a description, or a
+        # sentence carrying both polarities at once. Either way it is not one to cut blind.
+        return "unsure"
+    if row.status == "met":
+        return "opposes" if stated == "denies" else "agrees"
+    if row.status == "unmet":
+        return "opposes" if stated == "asserts" else "agrees"
+    # `not_stated`: any conclusion is one the engine did not reach (W8, C05).
+    return "opposes"
+
+
+def correct(text: str, rows_: Sequence[Row]) -> tuple[str, list[str], list[str]]:
+    """`(the repaired text, the requirement ids restated, the ids left unverified)`.
+
+    Unchanged bytes when nothing opposes: the join only happens where a sentence was replaced.
+    """
+    if not rows_:
+        return text, [], []
+    restated: list[str] = []
+    unverified: list[str] = []
+    parts = sentences(text)
+    repaired: list[str] = []
+    for sentence in parts:
+        stood = {row.id: relation(sentence, row) for row in rows_}
+        opposed = [row for row in rows_ if stood[row.id] == "opposes"]
+        unsure = [row for row in rows_ if stood[row.id] == "unsure"]
+        if len(opposed) == 1:
+            repaired.append(reader_sentence(opposed[0]))
+            restated.append(opposed[0].id)
+            continue
+        # Nothing certain to say: two rows contradicted by one sentence would lose a verdict if
+        # either were cut, and a sentence with no readable polarity is not one to rewrite at all.
+        unverified.extend(row.id for row in (opposed or unsure))
+        repaired.append(sentence)
+    if not restated:
+        return text, [], unverified
+    return " ".join(part.strip() for part in repaired), restated, unverified
+
+
+def apply(
+    blocks: Sequence[Mapping[str, Any]],
+    envelopes: Iterable[Any],
+    *,
+    next_steps: Sequence[str] = (),
+) -> Outcome:
+    """The pure rule, over everything `render_answer()` puts in front of one reader. Mutates nothing."""
+    evaluated = rows(envelopes)
+    body: list[dict[str, Any]] = []
+    restated: list[tuple[int, str]] = []
+    unverified: list[tuple[int, str]] = []
+    for index, block in enumerate(blocks):
+        item = dict(block)
+        text, changed, unsure = correct(str(item.get("text") or ""), evaluated)
+        item["text"] = text
+        restated.extend((index, requirement_id) for requirement_id in changed)
+        unverified.extend((index, requirement_id) for requirement_id in unsure)
+        body.append(item)
+
+    steps: list[str] = []
+    restated_steps: list[tuple[int, str]] = []
+    for index, step in enumerate(next_steps):
+        text, changed, unsure = correct(str(step), evaluated)
+        steps.append(text)
+        restated_steps.extend((index, requirement_id) for requirement_id in changed)
+        unverified.extend((index, requirement_id) for requirement_id in unsure)
+    return Outcome(
+        blocks=body,
+        next_steps=steps,
+        restated=restated,
+        restated_steps=restated_steps,
+        unverified=unverified,
+    )
+
+
+__all__ = [
+    "COMPLIANCE_TOOL",
+    "NEGATIVE",
+    "POSITIVE",
+    "REASON",
+    "RELATIONS",
+    "STEP_NAME",
+    "SUBJECT_LABELS",
+    "SUBJECT_WORDS",
+    "Outcome",
+    "Row",
+    "apply",
+    "correct",
+    "polarity",
+    "reader_sentence",
+    "rows",
+]

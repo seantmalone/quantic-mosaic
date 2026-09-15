@@ -164,14 +164,25 @@ def test_a_tenure_under_the_floor_is_already_how_a_person_says_it():
 
 
 def test_a_tenure_that_is_not_a_number_is_ignored_rather_than_raising():
-    for broken in ({**PROFILE, "tenure_months_at_as_of": "45"}, {**PROFILE, "tenure": ""}, {"as_of": "2026-09-01"}):
+    for broken in ({**PROFILE, "tenure_months_at_as_of": "45"}, {"as_of": "2026-09-01"}):
         assert snapshot.tenures(envelopes(broken)) == []
 
 
-def test_only_the_profile_tool_reports_a_tenure():
-    """`check_pto_balance` carries an `as_of` and no tenure; the two rules read different tools."""
-    assert snapshot.tenures(envelopes(PROFILE, tool="check_pto_balance")) == []
+def test_the_words_are_computed_when_an_envelope_reports_the_count_alone():
+    """W8, C22: the count is the record; the words are how a person says it, from one place."""
+    assert snapshot.tenures(envelopes({**PROFILE, "tenure": ""})) == [(45, "3 years 9 months")]
+
+
+def test_any_envelope_that_reports_a_tenure_reports_it():
+    """W8, C22: *"45 months of continuous service"* shipped whenever the model happened not to
+    call the profile tool — the same persona, the same build, a different unit."""
     assert snapshot.tenures(envelopes(PROFILE)) == [(45, "3 years 9 months")]
+    # The compliance engine reports the same count inside `computed`, and the rewrite follows it.
+    verdict = {"scenario": "pto_request", "computed": {"tenure_months_at_as_of": 45}}
+    assert snapshot.tenures(envelopes(verdict, tool="check_policy_compliance")) == [(45, "3 years 9 months")]
+    text = "You have 45 months of continuous service."
+    repaired = snapshot.apply([block(text)], envelopes(verdict, tool="check_policy_compliance"))
+    assert repaired.blocks[0]["text"] == "You have 3 years 9 months of continuous service."
 
 
 # --------------------------------------------------------------------------------------

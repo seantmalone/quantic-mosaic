@@ -50,16 +50,23 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+from hrmosaic.core.tenure import human_tenure
 
 #: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
 STEP_NAME = "snapshot_consistency"
 
-#: The tool whose result carries an employee's tenure in both forms (§8.4 tool 2).
+#: The tool whose result carries an employee's tenure in both forms (§8.4 tool 2). Kept as the name
+#: of the canonical source; since W8 (C22) the pair is read from **any** envelope that reports it.
 PROFILE_TOOL = "lookup_employee_profile"
+
+#: The field that carries a tenure in months, wherever an envelope puts it — top level on the
+#: profile result, inside `computed` on a compliance verdict.
+TENURE_MONTHS_FIELD = "tenure_months_at_as_of"
 
 #: Below this, months *are* the human unit: *"9 months of continuous service"* needs no translation
 #: and `tenure` would say the same thing back. At and above it the reader is doing division.
@@ -156,17 +163,41 @@ def snapshot_dates(envelopes: Iterable[Any]) -> list[str]:
     return found
 
 
-def tenures(envelopes: Iterable[Any]) -> list[tuple[int, str]]:
-    """`(45, "3 years 9 months")` for every profile envelope that reported both, without repeats."""
-    found: list[tuple[int, str]] = []
-    for body in _bodies(envelopes, tool=PROFILE_TOOL):
-        months, words = body.get("tenure_months_at_as_of"), body.get("tenure")
+def _months_reported(node: Any) -> Iterator[int]:
+    """Every `tenure_months_at_as_of` an envelope body carries, however deeply nested (W8, C22)."""
+    if isinstance(node, dict):
+        value = node.get(TENURE_MONTHS_FIELD)
         # `bool` is an `int` in Python and `True` is not a tenure.
-        if isinstance(months, bool) or not isinstance(months, int) or not isinstance(words, str) or not words.strip():
-            continue
-        pair = (months, words.strip())
-        if pair not in found:
-            found.append(pair)
+        if isinstance(value, int) and not isinstance(value, bool):
+            yield value
+        for child in node.values():
+            yield from _months_reported(child)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _months_reported(child)
+
+
+def tenures(envelopes: Iterable[Any]) -> list[tuple[int, str]]:
+    """`(45, "3 years 9 months")` for every envelope that reported a tenure, without repeats.
+
+    **Any envelope, not only the profile tool's** (W8, C22). Whether the reader's tenure arrived as
+    words or as a raw month count depended only on whether the model happened to call
+    `lookup_employee_profile`: a turn that established tenure through the compliance engine had no
+    profile envelope, so nothing rewrote *"45 months of continuous service"* — the same persona, on
+    the same build, got *"3 years 9 months"* on the turn that did call it. The engine now reports
+    `computed.tenure_months_at_as_of`, and where an envelope carries the count without the words
+    the words are computed from it by the one implementation both layers share.
+    """
+    found: list[tuple[int, str]] = []
+    for body in _bodies(envelopes):
+        stated = body.get("tenure")
+        for months in _months_reported(body):
+            words = stated.strip() if isinstance(stated, str) and stated.strip() else human_tenure(months)
+            if not words:
+                continue
+            pair = (months, words)
+            if pair not in found:
+                found.append(pair)
     return found
 
 
@@ -321,6 +352,7 @@ def apply(
 __all__ = [
     "ISO",
     "PROFILE_TOOL",
+    "TENURE_MONTHS_FIELD",
     "STEP_NAME",
     "TENURE_FLOOR",
     "THRESHOLD_WINDOW",
