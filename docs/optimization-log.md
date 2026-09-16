@@ -474,9 +474,146 @@ contrast checks, dark-theme captures, tenure in words at the tool boundary.
 Each wave shipped with before/after screens (`docs/evidence/ux-w1` … `ux-w5`, `ux-final`). The
 independent re-audit's score is appended below when it lands.
 
+## 2026-09-15 — After the independent re-audit: the residual wave, and a budget that had become marginal
+
+The 48-agent re-audit of the five waves (`docs/evidence/ux-reaudit-2026-09-15.md`) verified 138 of
+the 155 inventory findings fixed and the demo-panel and dashboard goals met, and failed its own
+gate on four Criticals — three of them regressions the waves had introduced: every dashboard chart
+collapsed to about a quarter of its panel; a completed HR ticket rendered under "What I suggest you
+do" with the "not company policy" footnote beneath it; the model's own `next_steps` painted with a
+deadline computed a month early and an employee id; and following a citation left the reader with
+no way back to the conversation. W6 fixed each at its cause rather than at the screen — a sized
+chart container; a `performed` block type that only the outcome step may write, with a model-emitted
+one demoted before anything else runs; `next_steps` rendered only on outcomes that group nothing;
+a date-consistency step that recomputes or removes "(N days before <date>)" arithmetic; the chat URL
+carrying the session so Back and reload replay the transcript — and widened the browser test surface
+from 3 routes to 18 on one session-scoped server, with a contract that asks the store and the page
+the same question and requires one answer. The recorded demo fixtures (verbatim 2026-09-10
+recordings against the old prompt) were then amended so the chat surface no longer restates the
+data snapshot date or gives tenure in months, with a contract test that fails on the old text.
+
+A live run of the flagship demo prompt on the W6 build surfaced something the evaluation had not:
+the model made eight tool calls — profile, compliance, a section read and one breadth search per
+relevant document — and asked for a ninth, so the turn stopped at `AGENT_MAX_TOOL_CALLS=8`, was
+labelled partial with the "tool-call limit" preface on top of a complete nine-block answer, and
+skipped the breadth repair (two documents cited, the third retrieved but unused). The 2026-09-11 run
+of the same prompt needed seven. P24's breadth rules had made a cap of 8 marginal for a
+four-document question; the cap is now 12 (P28), with the six-step and 90 s bounds unchanged.
+Evidence: `docs/evidence/demo-task-1-live-2026-09-15-cap8-partial.txt` and the re-run after P28.
+
+| Measure | After W5 | After W6 + P28 |
+|---|---|---|
+| Tests | 2,186 + 71 browser | 3,040 + 299 browser (final) |
+| Browser routes under test | 3 | 18 |
+| Re-audit: inventory items verified fixed | 138 / 155 | 150 / 155 (re-audit #2), then four further audits on new residuals |
+| Re-audit: principles passing | 6 / 15 | 9 / 15 (re-audit #4) |
+| Re-audit: Critical residuals | 4 | 1 (a nav-height regression, fixed in W9) |
+| Owner goals met | (b), (c) | (b), (c); (a) still gated on residuals each audit finds in the previous wave |
+| Demo-1 live: outcome / documents cited | partial / 2 (cap 8) | answered / 4 (cap 12) |
+| Demo-2 live: the confirmed write's account | a recommendation under "What I suggest you do" | the `performed` lede, first |
+
+**What the stubs could not show.** Re-running both demo tasks live on the P28 build (both answered;
+demo 1 made nine tool calls and cited four documents) exposed two defects that only a real model
+produces. First, after the confirmed ticket write the model itself wrote "HR ticket MOCK-HR-000007
+has been created" — as a *recommendation*. The outcome step's one-account guard saw the id in the
+model's block, kept that block as the account, and so the "Done" lede never appeared: the re-audit's
+Critical was back on the live path, under "What I suggest you do", with the not-company-policy footnote.
+Second, the snapshot-date rule in the synthesis prompt held in one run ("3 years 9 months", no date)
+and not in the next ("45 months of continuous service as of 1 September 2026"). P29 made both
+deterministic: a model block that names the write id is removed and the statement built from the
+tool result always leads; a snapshot step strips any restatement of a tool result's `as_of` date in
+any format and rewrites a month-count tenure to the tool's own words, and records what it changed.
+Evidence: `docs/evidence/demo-task-{1,2}-live-2026-09-15*.txt/.json` (before) and `…-p29.txt` (after): demo 1 now
+reads "3 years 9 months of continuous service" with no date; demo 2 leads with "Done: your request is with the
+HR Time Off team. Reference MOCK-HR-000008."
+
+**The second re-audit, W7, and the logic review.** Re-audit #2 (45 agents) failed its gate on one
+Critical — a W6 regression where a phone never scrolled to the newest answer — while passing 8 of 15
+principles (was 6; human precision, no internal identifiers and no dead links passed for the first
+time) and both the demo-panel and dashboard goals. W7 closed it with 31 Importants: the chat picks its
+scroller at runtime and re-measures on resize, the reader's own record is a `record` block rather than
+disclaimed advice, the demo panel is always expanded (owner decision), the dashboard menu's group labels
+are eyebrows and its page links pills (owner decision), run labels and enum cells are humanised once,
+eval tabs are real tabs reachable by URL, and the capture loads every viewport fresh. The owner's own
+screenshot — "Done — your request is with the HR Time Off team" followed by "Submit the request in
+MosaicOne" — became a sentence-level guard: after a performed write no sentence may direct the reader
+to file what was filed.
+
+That screenshot also prompted a deeper question: are the demo paths logically right? An adversarial
+review (two collectors over 512 captured turns plus 16 fresh persona scenarios, seven lenses, one
+refuter per triaged class) confirmed 22 defect classes, 11 Critical, and found 11 of the 16 scenarios
+logically wrong for their persona. The pattern was one: the deterministic layer and the written answer
+were never reconciled — the engine scored the notice requirement met and the answer called it unmet;
+a non-compliant request was still filed and then denied; a director was told to get her director's
+approval; notice arithmetic was anchored on the data snapshot rather than the submission date; the
+follow-up turn remembered nothing; a confirmation could be replayed. W8 is the logic wave: verdicts,
+arithmetic, dates, approvers, ids and the account of a write are owned by the deterministic layer, and
+the model's prose is reconciled against it or replaced. Its measure is the re-run of the judged
+evaluation and of the 16-scenario matrix after deploy (appended below).
+
+**Measured after W8 (interim, not published).** The judged 28-item run on the W8 build gave groundedness
+1.000 (was 0.984), document recall 0.961 and workflow completion 0.893 unchanged, and strict pass 0.821
+(was 0.893): two regressions — an out-of-corpus question answered with an escalation instead of a
+refusal, and a multi-document answer that lost one of its three documents to a post-synthesis step —
+plus the three pre-existing near-misses. The 16-scenario re-check went from 5 to 8 logically right;
+the remaining defects were deterministic gaps the first pass had not reached (the model was allowed to
+supply the submission date; a missing `days` argument made the balance rule "not stated" and a request
+the engine could not clear was still filed; approver names grafted into quoted policy text; a schema
+bug in the repair call). Re-audit #4 of the interface reached 9 of 15 principles (from 6 at the start).
+W9 fixed the evaluation regressions and the interface residuals; W10 closes the demo-path gaps; the
+published numbers below are from the run after both.
+
+**Published measurements (run `r_1789555212_baseline`, build `bd4ac93`, 2026-09-16).**
+
+| Measure | Published 2026-09-11 (`r_1789166880`) | Final (`r_1789555212`) |
+|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.893 (25/28) | 0.893 (25/28) |
+| Groundedness (judge) | 0.984 | 0.975 |
+| Citation accuracy | 0.905 | 0.883 |
+| Document recall | 0.961 | 0.921 |
+| Tool selection | 0.993 | 0.981 |
+| Workflow completion | 0.893 | 0.964 |
+| Over-refusal / missed-refusal | 0 / 0 | 0 / 0 |
+| Action safety | 1.00 | 1.00 |
+| Judge agreement, blind seed subset (n = 8) | 0.875 | 1.000 |
+| Judge agreement, hard subset (n = 8) | 0.875 | 0.875 |
+| Latency p50 / p95 | 19.1 s / 38.7 s | 19.2 s / 35.7 s |
+| Estimated cost per run | $0.73 | $0.72 |
+| Tests (unit/contract/integration + browser) | 2,002 + 0 | 3,040 + 299 |
+| Coverage (statements / branches) | 94% | 95% / 87% |
+| UX principles passing (independent re-audit) | 6 / 15 (first audit) | 9 / 15 (fourth audit) |
+| Demo scenarios logically right (16 persona paths) | 5 / 16 (before W8) | 13 / 16 (final) |
+
+The evaluation's headline held at the target while the product underneath it changed shape: the
+deterministic layer now owns every verdict, date, approver, id and balance figure the answer states,
+which is why workflow completion rose and why the two judge-validation subsets moved apart in the
+right direction. The three items still failing are the same three long-standing near-misses (two tool
+recalls where the model skips a lookup on a policy question; one judge score of 0.80). What we did not
+get: the UX gate itself, which still fails on residuals each audit finds in the previous wave's fixes —
+diminishing but non-zero — and 100% of the persona scenarios; both are listed as follow-ups.
+
+
+**Follow-ups recorded, not scheduled.** From the final scenario re-check: compliance arguments validated
+against the scenario's schema (a `days` that disagrees with the dates is an argument error); the verdict
+stated first on yes/no workflow questions; blocks typed by provenance (an engine next step is policy, not
+advice); approver names substituted at render for every role the engine resolved; the balance decomposition
+rendered only from the envelope with its as-of date; quick replies generated from the router's unfilled
+slots; one retrieval before any out-of-scope refusal. From the fourth UX audit: the P9/P10/P14 spellings
+and denominators, keyboard reach of scroll containers, the `projected_forfeit_on_31_dec` field naming, and
+the eval fixture's own denominators. One prose glitch visible on the live Berlin answer ("alongside your
+manager Dana approval") belongs to the approver-substitution item.
+
 ---
 
 ## Demo talking points (to be finalised)
+
+- The interface story: three independent audits of rendered screens, each one finding residuals in the
+  previous wave's fixes; principles passing went 6 → 8 → 7 → 9 of 15, and every regression class now has
+  a browser guard that fails on the build that had it.
+- The logic story: one screenshot ("Done — your request is with HR" next to "Submit the request") led to a
+  review of 512 captured turns and 16 fresh persona scenarios, 22 confirmed defect classes, and three waves
+  that moved the deterministic layer in front of the prose — 5 → 8 → 13 of 16 scenarios logically right,
+  with the evaluation's strict pass held at 0.893 and workflow completion up from 0.893 to 0.964.
 
 - Every optimization claim in this project is traceable to a run id and a span query; the
   dashboard shows the same traces the analysis used.
