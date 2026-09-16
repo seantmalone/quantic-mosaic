@@ -253,3 +253,35 @@ async def test_no_response_body_of_the_whole_lifecycle_contains_a_token(lifecycl
 
     payloads = json.dumps([row["payload_json"] for row in store.execute("SELECT payload_json FROM spans").dicts()])
     assert all(token not in payloads for token in tokens)
+
+
+async def test_a_lapsed_proposal_is_written_expired_and_the_turn_is_closed(web, store):
+    """W8, C11. §8.6 gives a proposal ten minutes. Nobody ever wrote what happened when the ten
+    minutes passed: three turns on the deployed build were still `awaiting_confirmation`, the span
+    still said `pending`, and a reader who came back to the tab was told nothing at all."""
+    async with web("confirm_lifecycle.json") as client:
+        parked = await _ask(client)
+        store.execute(
+            "UPDATE spans SET payload_json = json_set(payload_json, '$.expires_at', 1) "
+            "WHERE turn_id = ? AND kind = 'confirmation'",
+            (parked["turn_id"],),
+        )
+        lapsed = await client.post(
+            "/chat/confirm",
+            json={"session_id": parked["session_id"], "turn_id": parked["turn_id"], "decision": "confirmed"},
+        )
+
+    assert lapsed.status_code == 200, lapsed.text
+    body = lapsed.json()
+    assert body["outcome"] == "refused"
+    assert [block["type"] for block in body["answer_blocks"]] == ["notice"]
+    assert "expired before it was confirmed" in body["answer"]
+
+    confirmations = _spans(store, parked["turn_id"], "confirmation")
+    assert [span["payload"]["user_response"] for span in confirmations] == ["expired"]
+    assert confirmations[0]["payload"]["resolved_at"] is not None
+
+    row = store.execute("SELECT outcome, stop_reason FROM turns WHERE id = ?", (parked["turn_id"],)).one()
+    assert (row["outcome"], row["stop_reason"]) == ("refused", "expired")
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
+    assert store.execute("SELECT COUNT(*) AS n FROM confirmations").scalar() == 0, "no token was minted"

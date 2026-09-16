@@ -105,3 +105,46 @@ async def test_the_json_contract_carries_the_record_type(web):
     record = next(block for block in body["answer_blocks"] if block["type"] == "record")
     assert "13.5" in record["text"] and record["citations"] == []
     assert not DIRECTIVE.search(body["answer"]), body["answer"]
+
+
+# -- W8, C17: the product's own voice, rendered bare in the lede slot --------------------
+
+NOTICE = re.compile(r'<p class="answer-notice">(.*?)</p>', re.S)
+
+
+async def test_a_clarifying_question_is_the_products_voice_and_wears_nothing(web):
+    """`live:62536ccd…:1` — *"Recommendation — not company policy: I reached my tool-call limit…"*,
+    printed after six facts and three suggestions, under "Suggestions are guidance, not company
+    policy". A budget stop, a clarifying question, a refusal, a cancellation receipt and the reason
+    a write was not proposed are all Mosaic talking about itself, and none of them is advice."""
+    async with web("fault_ambiguous.json") as client:
+        page = await client.post("/chat", json={"message": "Can you look up the balance?"}, headers=HTMX)
+
+    assert page.status_code == 200, page.text
+    notice = NOTICE.search(page.text)
+    assert notice, "the clarification renders as a notice"
+    assert _text(notice.group(0)).strip(), "and it says something"
+    body = ANSWER_BODY.search(page.text) or re.search(r'<div class="answer-body">.*?</div>', page.text, re.S)
+    assert body
+    rendered = body.group(0)
+    assert "not company policy" not in rendered, "the product's own voice is not disclaimed"
+    assert "What I suggest you do" not in rendered, "and wears no heading"
+    assert rendered.index("answer-notice") < len(rendered), "it is in the lede slot"
+
+
+async def test_the_cancellation_receipt_is_a_notice_above_the_answer_it_kept(web):
+    """W8, C11 and C17 in one screen: the receipt leads, the earned answer follows it."""
+    async with web("demo_task_2.json") as client:
+        card = await client.post("/chat", json={"message": DEMO_2}, headers=HTMX)
+        ids = re.search(r'data-session-id="([0-9a-f]+)" *\n? *data-turn-id="([0-9a-f]+)"', card.text)
+        assert ids, card.text[:400]
+        declined = await client.post(
+            "/chat/confirm",
+            json={"session_id": ids.group(1), "turn_id": ids.group(2), "decision": "declined"},
+            headers=HTMX,
+        )
+
+    notice = NOTICE.search(declined.text)
+    assert notice and "Cancelled — nothing was created." in _text(notice.group(0))
+    assert "answer-block-policy_fact" in declined.text, "the answer the turn earned is still there"
+    assert declined.text.index("answer-notice") < declined.text.index("answer-block-policy_fact")

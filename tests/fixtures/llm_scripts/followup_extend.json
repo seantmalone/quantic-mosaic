@@ -1,0 +1,147 @@
+{
+  "scenario": "followup_extend",
+  "_note": "W8, C12: two turns of one session, the second a delta of the first. `fresh:40ad6a43…:2` — one turn after a confirmed write, \"What if I extend it to five days instead?\" produced a generic clarifying question, because neither prompt carried a byte of the conversation. Written for this wave rather than recorded: what it has to reproduce is a SECOND turn, and the recordings are all single-turn. Entries 1-4 are turn one (route, two act steps, synthesis); each synthesis is followed by the breadth round's `repair`, which re-sends the same answer and is therefore not accepted (it is not broader), so the first answer stands; entries 6-9 are turn two, whose router does not clarify and whose act step re-scores the same span at five days. Drives tests/unit/test_followup_inherits_the_session.py. Turn two re-reads the record and the balance: §9.3's completion predicate is per-turn and a new turn's LoopState starts empty, so the session context tells the model what was settled while the predicate still requires this turn to have read it.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\"], \"rationale_summary\": \"PTO request for E1042, 15-17 September.\"}",
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the record and the balance.",
+      "tool_calls": [
+        {
+          "id": "toolu_fx_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_fx_2",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Now the policy and the verdict.",
+      "tool_calls": [
+        {
+          "id": "toolu_fx_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO notice requirement business days advance",
+            "topic": "pto",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_fx_4",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO manager approval requirement MosaicOne",
+            "topic": "approvals",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_fx_5",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1042",
+            "parameters": {
+              "start_date": "2026-09-22",
+              "end_date": "2026-09-24",
+              "days": 3
+            }
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Three days, cited.\"}",
+      "finish_reason": "stop"
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Three days, cited.\"}",
+      "finish_reason": "stop"
+    },
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\"], \"rationale_summary\": \"Delta follow-up: the same span at five days.\"}",
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Re-scoring the same request at five days.",
+      "tool_calls": [
+        {
+          "id": "toolu_fx_5b",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_fx_5c",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_fx_6",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO notice six or more consecutive business days",
+            "topic": "pto",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_fx_7",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO manager approval requirement MosaicOne",
+            "topic": "approvals",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_fx_8",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1042",
+            "parameters": {
+              "start_date": "2026-09-22",
+              "end_date": "2026-09-28",
+              "days": 5
+            }
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Five days over the same span, cited.\"}",
+      "finish_reason": "stop"
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Five days over the same span, cited.\"}",
+      "finish_reason": "stop"
+    }
+  ]
+}
