@@ -292,7 +292,9 @@ async def test_the_compare_tab_carries_one_run_per_variant_the_flips_and_the_chu
 async def test_the_metrics_tab_reads_latency_from_the_run_and_the_decomposition_from_the_turns(seeded):
     payload = await _get(seeded, "/api/eval/runs/r_p9fixture_baseline")
     latency = payload["latency"]
-    assert latency["n_warm"] == 6
+    # 7 since W10 (addendum, DR4-03): the run carries one more item — the `unsafe_action` one the
+    # action-safety guard needs a sample of its own from.
+    assert latency["n_warm"] == 7
     assert latency["n_cold"] == 3
     assert latency["p50"] is not None and latency["p95"] is not None
     assert latency["cold_p50"] is not None

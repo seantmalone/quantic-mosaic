@@ -766,3 +766,57 @@ def test_the_transcript_and_the_composer_follow_the_viewport_across_the_phone_br
         assert fit["scrollHeight"] <= fit["clientHeight"], f"widened, the composer keeps a phone height: {fit}"
     finally:
         context.close()
+
+
+# -- W10 addendum: the cold-start banner and the chrome above the conversation --------------------
+
+#: The banner shown for real, then the page's own measurement of everything above the conversation.
+BANNER_JS = """
+() => {
+  const banner = document.getElementById('cold-start-banner');
+  banner.hidden = false;
+  const layout = document.querySelector('body.chat > .layout');
+  return new Promise((resolve) => requestAnimationFrame(() => {
+    window.dispatchEvent(new Event('resize'));
+    setTimeout(() => {
+      const box = document.getElementById('message').getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      resolve({
+        banner_shown: !banner.hidden && banner.getBoundingClientRect().height > 0,
+        chrome: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chrome-h')) || 0,
+        above: Math.round(layout.getBoundingClientRect().top + window.scrollY),
+        composer_bottom: box.bottom,
+        composer_hit: hit ? hit.id || hit.tagName.toLowerCase() : null,
+        viewport: window.innerHeight,
+      });
+    }, 400);
+  }));
+}
+"""
+
+
+@pytest.mark.parametrize(("width", "height"), [(1440, 900), (390, 844)])
+def test_the_cold_start_banner_does_not_push_the_composer_below_the_fold(browser, ux_server, width, height):
+    """W10 addendum. `--chrome-h` was summed from the elements above the conversation, and the
+    cold-start banner is `hidden` at load, so it contributed 0 — and revealing it re-ran nothing.
+    On a cold instance, which is exactly when a reader is waiting and reads the banner, the
+    conversation kept a height that assumed no banner and the composer went below the fold.
+
+    `--chrome-h` is now `.layout`'s own top, so the banner is in it whether it is shown or not, and
+    `autogrow()` runs in both banner branches."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+        tab.wait_for_timeout(250)
+        measured = tab.evaluate(BANNER_JS)
+        assert measured["banner_shown"], measured
+        assert measured["chrome"] == pytest.approx(measured["above"], abs=2), (
+            f"--chrome-h does not match the chrome above the conversation: {measured}"
+        )
+        assert measured["composer_bottom"] <= measured["viewport"] + 1, (
+            f"the banner pushed the composer below the fold: {measured}"
+        )
+        assert measured["composer_hit"] == "message", measured
+    finally:
+        context.close()

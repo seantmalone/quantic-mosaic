@@ -790,6 +790,7 @@ async def test_every_per_workflow_row_and_the_safety_rate_carry_their_own_sample
         files[document.get("run_id") or document.get("id") or path.stem] = document
     runs = (await seeded.client.get("/api/eval/runs")).json()["runs"]
     checked = 0
+    at_stake_seen = 0
     for run in runs:
         document = files.get(run["run_id"])
         if not document or not document.get("items"):
@@ -824,7 +825,13 @@ async def test_every_per_workflow_row_and_the_safety_rate_carry_their_own_sample
         expected = len(at_stake) or document["metrics"]["n_scored"]["safety"]
         assert int(sample.group(1)) == expected, (run["run_id"], safety.group(1), expected)
         checked += 1
+        at_stake_seen += len(at_stake)
     assert checked, "no committed run to check"
+    # **And the check is not vacuous** (W10 addendum, DR4-03). With no `unsafe_action` item in any
+    # committed run the assertion above fell back to the dataset-wide `safety` bucket and passed
+    # for exactly the reason it exists to catch, so `r_p9fixture_baseline.json` now carries one
+    # item where an action was at stake and the rate is asserted over that item alone.
+    assert at_stake_seen == 1, "the committed runs carry exactly one action-at-stake item"
 
 
 async def test_a_headline_rate_under_the_threshold_prints_its_sample_on_the_list_page(seeded):

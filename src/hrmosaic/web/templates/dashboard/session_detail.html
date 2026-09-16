@@ -115,7 +115,11 @@
     {#- One unit for "checks" on every surface (UX W7, npo3-04 = dgc-r2-2): the rules that applied
         out of the six, and the spans that ran — the demo panel's sentence for the same turn reads
         "5 of the 6 safety checks applied to this answer", from the same helper. -#}
-    <div><dt>Safety checks</dt><dd>{{ turn.rollups.rules_ran|num }} of {{ safety_rules|num }} applied · {{ turn.rollups.checks_run|counted('check') }} run</dd></div>
+    <div><dt>Safety checks</dt><dd>{{ turn.rollups.safety_rules_ran|num }} of {{ safety_rules|num }} applied · {{ turn.rollups.checks_run|counted('check') }} run</dd></div>
+    {#- …and the POLICY rules, which are a different thing and were being counted as the same one
+        (W10, ruling 11): these come from the turn's own `check_policy_compliance` spans, so a turn
+        that reached no rules engine says so instead of reporting the guardrails' number. -#}
+    <div><dt>Policy rules</dt><dd>{% if turn.rollups.rules_ran %}{{ turn.rollups.rules_passed|num }} of {{ turn.rollups.rules_ran|num }} met{% else %}none evaluated{% endif %}</dd></div>
     <div><dt>Tokens</dt><dd>{{ turn.rollups.tokens_in|num }} → {{ turn.rollups.tokens_out|num }}</dd></div>
     <div><dt>Model time</dt><dd>{{ turn.rollups.llm_ms|ms }}</dd></div>
   </dl>

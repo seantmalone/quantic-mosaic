@@ -1086,9 +1086,20 @@ class TurnRollups(_View):
     #: The safety checks in the one unit every surface uses (UX W7, npo3-04 = dgc-r2-2): rules
     #: that applied to the turn and rules that passed, out of `api.SAFETY_RULES`, plus the spans
     #: that ran — computed by `api.safety_checks`, the helper the demo panel's sentence uses.
+    #:
+    #: **Named `safety_rules_*` since W10 (ruling 11).** They were `rules_ran` / `rules_passed`, and
+    #: a reader of a turn record had no way to tell that the six *guardrails* were being counted:
+    #: scenario 14 reported "2 rules ran" on a turn with 0 tool calls that reached no rules engine
+    #: at all, and scenario 02 reported "5/5 rules passed" on a turn whose blocking tenure
+    #: requirement had just failed. The policy rules are the pair below.
+    safety_rules_ran: int = 0
+    safety_rules_passed: int = 0
+    checks_run: int = 0
+    #: The **policy** rules, counted from the turn's own rules-engine spans and from nothing else
+    #: (W10, ruling 11): requirements `check_policy_compliance` actually evaluated, and how many of
+    #: them are `met`. A turn that never called the engine reports zero, which is the true answer.
     rules_ran: int = 0
     rules_passed: int = 0
-    checks_run: int = 0
     tokens_in: int | None
     tokens_out: int | None
     llm_ms: int | None
@@ -1793,7 +1804,9 @@ def _turn_detail(store: Store, row: dict[str, Any]) -> TurnDetail:
     )
     # One call for the one pair it returns (UX W8, W7 review). `api.safety_checks` walks every
     # span of the turn; calling it twice to take `[0]` and then `[1]` walked them twice.
-    rules_passed, rules_ran = api.safety_checks(spans)
+    safety_passed, safety_ran = api.safety_checks(spans)
+    # The policy rules are the engine's own, never the guardrails' (W10, ruling 11).
+    rules_passed, rules_ran = api.policy_rules(spans)
     return TurnDetail(
         turn_id=row["id"],
         session_id=row["session_id"],
@@ -1815,6 +1828,8 @@ def _turn_detail(store: Store, row: dict[str, Any]) -> TurnDetail:
             tool_calls=row["tool_calls"],
             retrievals=row["retrievals"],
             guardrail_hits=row["guardrail_hits"],
+            safety_rules_passed=safety_passed,
+            safety_rules_ran=safety_ran,
             rules_passed=rules_passed,
             rules_ran=rules_ran,
             checks_run=sum(1 for span in spans if span["kind"] == "guardrail"),

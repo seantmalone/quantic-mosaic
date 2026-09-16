@@ -360,6 +360,21 @@ UNSAFE_REFUSAL = (
     "request one level higher automatically."
 )
 
+#: Where `UNSAFE_REFUSAL`'s second sentence comes from (W10, ruling 10, scenario 14). The refusal
+#: quotes `corpus/manager-approval-matrix.md` and carried no citation at all, so the one policy
+#: sentence on the page was unreachable from it. Resolved through the committed index at call time
+#: — a chunk id is a content hash and can never be written here — and `_finish` fails closed on a
+#: stale one exactly as it does on the model's.
+UNSAFE_DOC_ID = "manager-approval-matrix"
+UNSAFE_HEADING = "How to Read This Matrix"
+
+
+def matrix_citation() -> list[str]:
+    """The chunk that carries the no-self-approval sentence, or `[]` when nothing resolves."""
+    matches = [chunk for chunk in corpusread.list_chunks(UNSAFE_DOC_ID) if chunk.heading_path == UNSAFE_HEADING]
+    return [min(matches, key=lambda chunk: chunk.char_start).chunk_id] if matches else []
+
+
 #: …and what there is to do instead.
 UNSAFE_NEXT_STEPS: tuple[str, ...] = (
     "Send the request through MosaicOne and let it route to the right approver.",
@@ -525,13 +540,31 @@ class ToolCallRepair(BaseModel):
     repaired call fails too, the turn degrades: there is never a second repair.
 
     Strict at every level, like every other constrained-JSON model: no defaults (§7.3).
+
+    **`arguments` travels as JSON text** (W10, ruling 12). It was `dict[str, Any]`, which pydantic
+    renders as `{"type": "object", "additionalProperties": true}` — a level strict mode rejects, and
+    a level `_assert_strict` walked straight past because it carries no `properties` of its own. So
+    every repair call the pinned provider was offered came back **400**: the one round trip §9.1
+    mandates could not be made at all, the turn spent the budget on a call that produced nothing,
+    and scenario 15 closed `partial` under "I reached my step limit" over a complete answer. A tool
+    argument map is open by construction — it is a different shape per tool — so the only strict
+    form is a string, parsed here.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     tool_name: str
-    arguments: dict[str, Any]
+    arguments_json: str
     rationale_summary: str
+
+    @property
+    def arguments(self) -> dict[str, Any]:
+        """The repaired arguments, or `{}` when the model sent something that is not an object."""
+        try:
+            parsed = json.loads(self.arguments_json or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
 
 
 # --------------------------------------------------------------------------------------
@@ -1294,6 +1327,14 @@ class Orchestrator:
             # The receipt for what the reader decided (W8, C11, C17); the answer they already
             # earned follows it.
             ledes.append({"type": NOTICE, "text": CANCELLED_NOTICE, "citations": []})
+        verdict_lede = self._verdict_lede(turn)
+        if verdict_lede is not None:
+            # **A refusal leads** (W10, ruling 14, scenario 02). E1108 was told, correctly, that he
+            # does not have the twelve months of service an international stay needs — in the
+            # *fourth* block, after three paragraphs that read as though the trip were on. The
+            # answer to "can I?" is the first thing on the page, and where the engine derived the
+            # day he becomes eligible, it is in the same breath.
+            ledes.append({"type": outcome_consistency.RECORD, "text": verdict_lede, "citations": []})
 
         # One sentence, once per turn (UX W9, CPUX4-02): the refusal's lede and the record block
         # had each written the failing row's clause. **Before the citation carry** (W10 addendum):
@@ -1342,11 +1383,6 @@ class Orchestrator:
             answer,
             outcome=outcome,
             stop_reason=turn.stop_reason,
-            # **The citations the served blocks actually carry** (W10 addendum, Critical). They used
-            # to be G2's, taken at step 5b — before nine steps that add, drop and re-home a
-            # citation — so `/chat`, the turn record and the chat page reported a set the blocks
-            # beside them did not have, and `min_distinct_docs` was scored on the wrong one.
-            citations=self._served_citations(turn, answer.blocks, repaired.citations),
             cold_start=cold_start,
         )
 
@@ -1655,6 +1691,31 @@ class Orchestrator:
             return False
         return any(phrase in str(block.get("text") or "").lower() for block in blocks for phrase in NO_EVIDENCE_PHRASES)
 
+    def _verdict_lede(self, turn: _Turn) -> str | None:
+        """The one sentence a refused request opens with, or `None` (W10, ruling 14, scenario 02).
+
+        Only on a `non_compliant` verdict the turn is not already leading with — a blocked write
+        says it in its own notice, and a performed one is not a refusal at all. The failing row is
+        the engine's, in the reader's voice, and `computed.tenure_eligible_on` — the day a tenure
+        requirement starts being met — follows it where the engine derived one, because that is the
+        half of "can I?" the answer kept leaving out.
+        """
+        if turn.write_blocked or turn.declined or any(name in turn.state.results for name in WRITE_TOOLS):
+            return None
+        body = turn.state.latest(COMPLIANCE_TOOL)
+        if not body or body.get("verdict") != "non_compliant":
+            return None
+        envelope = _ToolEnvelope(name=COMPLIANCE_TOOL, result_json=json.dumps(body, ensure_ascii=False))
+        failing = next((row for row in compliance_restatement.rows([envelope]) if row.status == "unmet"), None)
+        if failing is None:
+            return None
+        sentence = compliance_restatement.reader_sentence(failing)
+        eligible = (body.get("computed") or {}).get("tenure_eligible_on")
+        if isinstance(eligible, str) and ISO_DATE.fullmatch(eligible):
+            human = date_consistency.human_date(date.fromisoformat(eligible))
+            sentence = f"{sentence} You meet that requirement on {human}."
+        return sentence
+
     @staticmethod
     def _cited_facts(blocks: Sequence[Mapping[str, Any]]) -> bool:
         """Did the model's own answer carry a cited `policy_fact` before the steps ran?"""
@@ -1677,37 +1738,36 @@ class Orchestrator:
             return False
         return any(block.get("type") in SUBSTANTIVE_BLOCKS for block in blocks)
 
-    def _served_citations(
-        self, turn: _Turn, blocks: Sequence[AnswerBlock], fallback: Sequence[Citation]
-    ) -> list[Citation]:
-        """The citations the **served** blocks carry, in first-appearance order (W10 addendum).
+    def _served(self, turn: _Turn, answer: AnswerSchema) -> tuple[AnswerSchema, list[Citation]]:
+        """`(the answer as it is served, the citations it actually carries)` — fail closed (W10).
 
-        `_finish` used to be handed G2's citations, taken at step 5b — before nine deterministic
-        steps that merge blocks, drop sentences, re-home a citation and add cited facts of their
-        own. So `/chat`, the turn record and the chat page published a set the blocks beside them
-        did not have, and `min_distinct_docs` was scored on the wrong one. Resolution goes through
-        G2's own rule, so nothing reaches the reader that G2 would have stripped; a citation the
-        index cannot resolve is simply absent, which is the same fail-closed behaviour.
+        Two defects, one rule (ruling 10; W10 addendum, Critical):
+
+        * `_finish` used to be handed G2's citations, taken at step 5b — before nine deterministic
+          steps that merge blocks, drop sentences, re-home a citation and add cited facts of their
+          own. So `/chat`, the turn record and the chat page published a set the blocks beside them
+          did not have, and `min_distinct_docs` was scored on the wrong one.
+        * a **dangling** block citation reached the reader on every path that did not go through
+          step 5b at all: scenario 11's escalation cited `c_d5386f2efd5183f6` under a top-level
+          `citations: []`, so the one source the answer named was unreachable from the page.
+
+        So G2's own pure cascade runs once more over the blocks that are actually served — no
+        `guardrail` span, because the verdict on this answer is already recorded and this is the
+        same rule asked at the send boundary. An id the index will not resolve is stripped and a
+        `policy_fact` that loses all of its citations goes with it: a policy sentence with no
+        citation is not served.
         """
-        resolved = {citation.chunk_id: citation for citation in fallback}
-        served: list[Citation] = []
-        seen: set[str] = set()
-        for block in blocks:
-            for chunk_id in block.citations:
-                if chunk_id in seen:
-                    continue
-                seen.add(chunk_id)
-                citation = resolved.get(chunk_id)
-                if citation is None:
-                    outcome = g2.resolve(
-                        chunk_id,
-                        displayed=turn.evidence.get(chunk_id),
-                        quarantined=chunk_id in turn.quarantined,
-                    )
-                    citation = outcome.citation
-                if citation is not None:
-                    served.append(citation)
-        return served
+        outcome = g2.apply(
+            [block.model_dump() for block in answer.blocks],
+            evidence=turn.evidence,
+            quarantined=turn.quarantined,
+        )
+        if not outcome.repaired and outcome.dropped_blocks == 0:
+            return answer, outcome.citations
+        return (
+            answer.model_copy(update={"blocks": [AnswerBlock.model_validate(block) for block in outcome.blocks]}),
+            outcome.citations,
+        )
 
     def _profile_outstanding(self, turn: _Turn) -> bool:
         """A verdict or a balance computed for the acting employee with the profile never read."""
@@ -1925,15 +1985,37 @@ class Orchestrator:
             turn.step_summaries.append(f"step {turn.steps_taken}: the requested action was still unproposed")
             return True
         searches = self._searches(turn)
-        if "search_breadth" not in turn.nudges and searches <= 1 and any(name in permitted for name in EVIDENCE_TOOLS):
+        # **Breadth is measured in documents, not in queries** (W10, ruling 14, scenario 13). The
+        # Spain-and-equipment turn searched twice, reached one document twice, and answered the
+        # equipment half of the question without ever retrieving an equipment passage. A second
+        # query that lands in the same document has not widened anything, so the debt is reported
+        # while the evidence spans fewer documents than the answer will be judged on — still at
+        # most once per turn, so a nudged turn still costs one extra act step.
+        documents = self._distinct_docs(turn)
+        narrow = searches <= 1 or (documents > 0 and documents < self._minimum_docs(turn))
+        if "search_breadth" not in turn.nudges and narrow and any(name in permitted for name in EVIDENCE_TOOLS):
             turn.nudges.append("search_breadth")
             reminder = SEARCH_BREADTH if searches == 1 else SEARCH_BREADTH_UNSEARCHED
             turn.messages.append(Message(role="user", content=reminder))
             turn.step_summaries.append(
-                f"step {turn.steps_taken}: {searches} corpus search(es), and the question may span more"
+                f"step {turn.steps_taken}: {searches} corpus search(es) over "
+                f"{documents} document(s), and the question may span more"
             )
             return True
         return False
+
+    @staticmethod
+    def _distinct_docs(turn: _Turn) -> int:
+        """How many documents the turn's citable evidence actually spans."""
+        return len({chunk.doc_id for chunk in turn.citable()})
+
+    @staticmethod
+    def _minimum_docs(turn: _Turn) -> int:
+        """How many the answer will be judged on — the workflow's, or the `multi_doc` floor."""
+        if turn.workflow is not None:
+            return turn.workflow.min_distinct_docs
+        decision = turn.decision
+        return breadth.MIN_DISTINCT_DOCS if decision is not None and decision.multi_doc else 1
 
     def _searches(self, turn: _Turn) -> int:
         """How many corpus searches this turn has already made.
@@ -2028,7 +2110,8 @@ class Orchestrator:
                 role="user",
                 content=(
                     f"The call to {call.name} was rejected. Reply with the corrected arguments for "
-                    f"that same tool, matching its published input schema."
+                    f"that same tool, matching its published input schema. Put them in "
+                    f"`arguments_json` as a JSON object encoded in a string."
                 ),
             ),
         ]
@@ -2580,9 +2663,13 @@ class Orchestrator:
         )
 
     def _refuse_unsafe(self, turn: _Turn, *, cold_start: bool) -> ChatResponse:
-        """`outcome="refused"`, naming what will not be done and what the matrix does instead."""
+        """`outcome="refused"`, naming what will not be done and what the matrix does instead.
+
+        It **cites the matrix** (W10, ruling 10): the refusal quotes a policy sentence, and
+        scenario 14 served it with no citation anywhere on the page.
+        """
         answer = AnswerSchema(
-            blocks=[AnswerBlock(type=NOTICE, text=UNSAFE_REFUSAL, citations=[])],
+            blocks=[AnswerBlock(type=NOTICE, text=UNSAFE_REFUSAL, citations=matrix_citation())],
             next_steps=list(UNSAFE_NEXT_STEPS),
             rationale_summary="Refused: self-approval or a bypass of the approval chain.",
         )
@@ -2711,8 +2798,15 @@ class Orchestrator:
         cold_start: bool = False,
         quick_replies: Sequence[str] = (),
     ) -> ChatResponse:
-        """Step 6: the closing UPDATE, then the response built from the very spans that were written."""
+        """Step 6: the closing UPDATE, then the response built from the very spans that were written.
+
+        **The citations are the served blocks' own** (W10, ruling 10). Every path ends here — the
+        answer, the refusal, the escalation, the clarification, the degraded turn — so this is the
+        one place a block citation and the top-level array can be made to agree, and the one place
+        a dangling one can be made to fail closed.
+        """
         decision = turn.decision
+        answer, citations = self._served(turn, answer)
         rendered = render_answer(answer.blocks, answer.next_steps)
         # G6 gives the redaction sweep a name and a record; `core/trace.py` runs it again on the
         # closing UPDATE, and `redact()` is idempotent (§7.4, §10.4).

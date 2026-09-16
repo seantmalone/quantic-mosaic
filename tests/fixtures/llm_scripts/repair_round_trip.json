@@ -1,6 +1,6 @@
 {
   "scenario": "repair_round_trip",
-  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. The fourth and fifth act entries are prose: the second is the model declining the breadth reminder of §9.1 step 2. Used by tests/integration/test_repair_round_trip.py. W9 addendum (ruling 3): the balance was read with the profile unread, so the profile debt fires once before synthesis — the two act entries before the synthesis are the reminder's tool call and its close.",
+  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. The fourth and fifth act entries are prose: the second is the model declining the breadth reminder of §9.1 step 2. Used by tests/integration/test_repair_round_trip.py. W9 addendum (ruling 3): the balance was read with the profile unread, so the profile debt fires once before synthesis — the two act entries before the synthesis are the reminder's tool call and its close. W10 (ruling 12): the repair entry now carries `arguments_json` — a JSON object encoded in a string — because `arguments: dict[str, Any]` rendered as an open `additionalProperties: true` object level, which the pinned provider rejects with a 400, so no repair call ever succeeded against a live model.",
   "completions": [
     {
       "purpose": "route",
@@ -34,7 +34,7 @@
     },
     {
       "purpose": "repair",
-      "response_text": "{\"tool_name\": \"check_pto_balance\", \"arguments\": {\"employee_id\": \"E1042\"}, \"rationale_summary\": \"employee_id must be the E1xxx form, not a pronoun.\"}",
+      "response_text": "{\"tool_name\": \"check_pto_balance\", \"arguments_json\": \"{\\\"employee_id\\\": \\\"E1042\\\"}\", \"rationale_summary\": \"employee_id must be the E1xxx form, not a pronoun.\"}",
       "finish_reason": "stop",
       "prompt_tokens": 1290,
       "completion_tokens": 40

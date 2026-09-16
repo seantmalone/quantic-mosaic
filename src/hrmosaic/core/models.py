@@ -436,13 +436,19 @@ def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:
 
 def _assert_strict(node: Any, path: str = "$") -> None:
     if isinstance(node, dict):
+        if node.get("type") == "object":
+            # **Every object level, with or without `properties`** (W10, ruling 12). A free-form
+            # `dict[str, Any]` field renders as `{"type": "object", "additionalProperties": true}`
+            # and carries no `properties`, so the original test walked past it — and the repair
+            # call's schema shipped with an open level the pinned provider rejects with a 400,
+            # which is why the one repair round trip §9.1 mandates could never be made.
+            if node.get("additionalProperties") is not False:
+                raise ValueError(f"{path}: additionalProperties must be false")
         if node.get("type") == "object" and "properties" in node:
             properties = list(node["properties"])
             required = node.get("required", [])
             if required != properties:
                 raise ValueError(f"{path}: required {required} != properties {properties}")
-            if node.get("additionalProperties") is not False:
-                raise ValueError(f"{path}: additionalProperties must be false")
         for key, value in node.items():
             _assert_strict(value, f"{path}.{key}")
     elif isinstance(node, list):

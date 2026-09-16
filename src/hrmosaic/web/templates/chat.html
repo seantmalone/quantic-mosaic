@@ -314,10 +314,15 @@
       // whatever the box above just became — measured, not guessed, the way `_chrome_height.html`
       // measures the masthead (UX W7, cpux2-1).
       document.documentElement.style.setProperty("--composer-h", form.offsetHeight + "px");
-      // …and the masthead's, which `.conversation`'s desktop height is the viewport minus
-      // (UX W9, CPUX4-01). Measured, like the composer, never assumed.
-      var above = 0;
-      document.querySelectorAll("body.chat > .app-chrome, body.chat > .banner").forEach(function (el) { above += el.offsetHeight; });
+      // …and everything above the conversation, which `.conversation`'s desktop height is the
+      // viewport minus (UX W9, CPUX4-01). Measured from `.layout`'s **own top** rather than by
+      // summing the elements this page happens to put above it (W10 addendum): the cold-start
+      // banner is `hidden` at load and contributes 0 to that sum, so on a cold instance the
+      // conversation kept a height that assumed no banner and pushed the composer below the fold.
+      // The rect includes every margin and every element above it, banner or no banner, and it is
+      // right whatever the page grows next.
+      var layout = document.querySelector("body.chat > .layout");
+      var above = layout ? Math.round(layout.getBoundingClientRect().top + window.scrollY) : 0;
       if (above) { document.documentElement.style.setProperty("--chrome-h", above + "px"); }
     }
     messageBox.addEventListener("input", autogrow);
@@ -647,11 +652,20 @@
     (function coldStartPreflight() {
       var COLD_START_BANNER_DELAY_MS = 1200;
       var banner = document.getElementById("cold-start-banner");
-      var reveal = setTimeout(function () { banner.hidden = false; }, COLD_START_BANNER_DELAY_MS);
+      // **Both branches re-measure** (W10 addendum): the banner changes how much chrome sits above
+      // the conversation, and `--chrome-h` is what the conversation's desktop height is the
+      // viewport minus. Revealing it without re-running `autogrow()` left the composer below the
+      // fold on exactly the instance — a cold one — where the reader is most likely to be waiting.
+      var reveal = setTimeout(function () {
+        banner.hidden = false;
+        autogrow();
+      }, COLD_START_BANNER_DELAY_MS);
       fetch("/health").then(function (response) { return response.json(); }).catch(function () { return null; })
         .then(function () {
           clearTimeout(reveal);
+          var wasShown = !banner.hidden;
           banner.hidden = true;
+          if (wasShown) { autogrow(); }
         });
     })();
   })();

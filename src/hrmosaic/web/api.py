@@ -1161,6 +1161,35 @@ def safety_checks(spans: list[dict[str, Any]]) -> tuple[int, int]:
     return len(ran) - len(blocked), len(ran)
 
 
+#: The tool whose result carries the policy rules — the rules engine's, and the only source of them.
+RULES_ENGINE_TOOL = "check_policy_compliance"
+
+
+def policy_rules(spans: list[dict[str, Any]]) -> tuple[int, int]:
+    """`(passed, ran)` — the **policy** rules this turn evaluated (W10, ruling 11).
+
+    Counted from the turn's own `check_policy_compliance` spans and from nowhere else. The turn
+    record's `rules_ran` / `rules_passed` used to be the guardrail count under a name that says
+    "policy": scenario 14 published *"2 rules ran"* on a turn that made no tool call at all and
+    reached no rules engine, and scenario 02 published *"5/5 rules passed"* on a turn whose
+    blocking tenure requirement had just failed. A requirement counts as **run** when the engine
+    reached a verdict on it — `met` or `unmet`; a `not_stated` row is the one the status vocabulary
+    exists to keep out of both numbers (W8, C05). The latest span per requirement id wins, so a
+    turn that re-scored a request does not count the same rule twice.
+    """
+    rows: dict[str, str] = {}
+    for span in spans:
+        payload = span.get("payload") or {}
+        if span.get("kind") != "tool_call" or payload.get("tool_name") != RULES_ENGINE_TOOL:
+            continue
+        body = payload.get("structured_content") or {}
+        for requirement in body.get("requirements") or []:
+            if isinstance(requirement, dict) and requirement.get("id"):
+                rows[str(requirement["id"])] = str(requirement.get("status") or "")
+    evaluated = [status for status in rows.values() if status in ("met", "unmet")]
+    return sum(1 for status in evaluated if status == "met"), len(evaluated)
+
+
 def guardrail_verdicts(spans: list[dict[str, Any]]) -> tuple[int, int]:
     """`(checks run, blocked)` — counted in **verdicts**, the unit the dashboard's tiles use.
 
