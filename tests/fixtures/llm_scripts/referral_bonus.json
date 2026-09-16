@@ -1,0 +1,68 @@
+{
+  "_note": "W9 addendum, ruling 1 — oos-005's exact shape. The router said policy_qa (out_of_scope false: the corpus has an annual bonus plan), the loop searched the annual-bonus passages, G1 allowed them, and the synthesis emitted ONE escalation block saying the evidence does not cover the question. That is not an answer: the orchestrator closes it as `refused` with G1's copy and a G1 verdict of `refuse`, reason `no_supported_claims`.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": null, \"selected_tools\": [\"search_policy_documents\"], \"rationale_summary\": \"A bonus question; the corpus has an annual bonus plan.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1800,
+      "completion_tokens": 70
+    },
+    {
+      "purpose": "act",
+      "response_text": "Let me look for the referral bonus terms.",
+      "tool_calls": [
+        {
+          "id": "toolu_ref_1",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "employee referral bonus amount and when it is paid",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_ref_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "bonus plan payout timing and eligibility",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4100,
+      "completion_tokens": 90
+    },
+    {
+      "purpose": "act",
+      "response_text": "The passages describe the annual bonus plan; I will search once more for referrals.",
+      "tool_calls": [
+        {
+          "id": "toolu_ref_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "referral programme reward for recommending a candidate",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 6200,
+      "completion_tokens": 60
+    },
+    {
+      "purpose": "act",
+      "response_text": "Nothing on referral bonuses; the annual bonus plan is the nearest topic.",
+      "finish_reason": "stop",
+      "prompt_tokens": 7400,
+      "completion_tokens": 30
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"escalation\", \"text\": \"The evidence does not cover employee referral bonuses. Contact People Operations to ask whether a referral programme exists and how it pays out.\", \"citations\": []}], \"next_steps\": [], \"rationale_summary\": \"The retrieved passages describe the annual bonus plan, not referrals.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 120
+    }
+  ]
+}

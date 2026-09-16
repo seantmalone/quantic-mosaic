@@ -237,10 +237,44 @@ def accepted(
     return len(cited_documents(after, chunks)) > len(cited_documents(before, chunks))
 
 
+def carry_citations(
+    reference: Sequence[Mapping[str, Any]], blocks: Sequence[Mapping[str, Any]]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """`(blocks with every citation of `reference` still on one of them, the chunk ids carried)`.
+
+    **No post-synthesis step may drop a citation from a surviving policy fact** (W9 addendum,
+    ruling 2): `remote-002` reached the breadth repair with three documents and was served with
+    two, because a later step — the record backstop, the restatement, the sentence surgery — took
+    a sentence or a block and its citations went with it. A citation that `reference` carried and
+    `blocks` no longer does is put back on the nearest surviving `policy_fact` — the block that
+    stood closest to the one it came from — so the served answer cites at least what the repair
+    produced. A step that removed *every* policy fact has nothing to carry to, and that answer is
+    the outcome step's to refuse.
+    """
+    kept: list[dict[str, Any]] = [dict(block) for block in blocks]
+    present = {citation for block in kept for citation in block.get("citations") or []}
+    facts = [index for index, block in enumerate(kept) if block.get("type") == "policy_fact"]
+    if not facts:
+        return kept, []
+    carried: list[str] = []
+    for position, block in enumerate(reference):
+        lost = [citation for citation in block.get("citations") or [] if citation not in present]
+        if not lost:
+            continue
+        # The surviving fact nearest the block's original position, ties to the earlier one.
+        scaled = round(position * (len(kept) - 1) / max(len(reference) - 1, 1))
+        target = min(facts, key=lambda index: (abs(index - scaled), index))
+        kept[target]["citations"] = [*kept[target].get("citations", []), *lost]
+        present.update(lost)
+        carried.extend(lost)
+    return kept, carried
+
+
 __all__ = [
     "INSTRUCTION",
     "MIN_DISTINCT_DOCS",
     "STEP_NAME",
+    "carry_citations",
     "STOPWORDS",
     "Chunk",
     "Decision",

@@ -1,0 +1,81 @@
+{
+  "_note": "W9 addendum, ruling 3 — the profile debt. The model reads the balance and searches, never the profile; the reminder fires once before synthesis and the model reads the profile on the extra step.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\", \"lookup_employee_profile\", \"search_policy_documents\"], \"rationale_summary\": \"The reader's own balance, with the accrual rule behind it.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1800,
+      "completion_tokens": 70
+    },
+    {
+      "purpose": "act",
+      "response_text": "Checking your balance and the accrual rule.",
+      "tool_calls": [
+        {
+          "id": "toolu_pd_1",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_pd_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO accrual rate for full-time employees per month",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_pd_2b",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO carryover and accrual cap",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4100,
+      "completion_tokens": 90
+    },
+    {
+      "purpose": "act",
+      "response_text": "I have the balance and the accrual table.",
+      "finish_reason": "stop",
+      "prompt_tokens": 5200,
+      "completion_tokens": 20
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the profile before I conclude.",
+      "tool_calls": [
+        {
+          "id": "toolu_pd_3",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 5400,
+      "completion_tokens": 40
+    },
+    {
+      "purpose": "act",
+      "response_text": "The profile is in the record now; concluding.",
+      "finish_reason": "stop",
+      "prompt_tokens": 5700,
+      "completion_tokens": 16
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Full-time PTO accrues monthly on a service-based scale set out in the accrual table of the PTO & Holidays Policy.\", \"citations\": [\"c_e178629918c7cd96\"]}, {\"type\": \"record\", \"text\": \"Your balance is on your record as of the snapshot date.\", \"citations\": []}], \"next_steps\": [], \"rationale_summary\": \"Balance from the record, rule from the accrual table.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 120
+    }
+  ]
+}

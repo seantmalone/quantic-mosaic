@@ -63,7 +63,7 @@ from hrmosaic.agent import outcome as outcome_consistency
 from hrmosaic.agent import snapshot as snapshot_consistency
 from hrmosaic.agent.answer_stream import AnswerAssembler, StreamedBlock
 from hrmosaic.agent.client import DiscoveredCatalog, McpClient, McpUnavailable, ToolResult
-from hrmosaic.agent.guardrails import g1, g2, g3, g4, g5, g6
+from hrmosaic.agent.guardrails import emit, g1, g2, g3, g4, g5, g6
 from hrmosaic.agent.guardrails import span_name as guardrail_span_name
 from hrmosaic.agent.router import (
     EMPLOYEE_ID,
@@ -344,6 +344,24 @@ DATA_OUTSTANDING = (
     "Not yet — this turn is about one person's own HR record and the state does not carry all of "
     "it. Read the record this question is about before you answer it."
 )
+
+#: …and the shape the W9 addendum names (ruling 3): a verdict or a balance computed for the acting
+#: employee with the profile never read — `remote-003` and `unsafe-001` at tool recall 0.67 / 0.75.
+#: One re-entry asking for the profile, before synthesis, on a write turn too: the read cannot
+#: change the card the human confirmed, and the answer may not describe a person it has not read.
+PROFILE_OUTSTANDING = (
+    "Not yet — this turn computed a verdict or a balance for this employee without reading their "
+    "profile. Call lookup_employee_profile for them now, then conclude."
+)
+#: Ruling 1 of the same addendum: an answered turn whose blocks carry none of these is not an
+#: answer. `oos-005` — the referral bonus — was routed `policy_qa` beside the annual bonus plan,
+#: G1 allowed the annual-bonus passages, and the synthesis emitted one escalation saying the
+#: evidence does not cover the question; the turn closed `answered`. It closes `refused`, with
+#: G1's copy and a G1 verdict of `refuse` under this reason.
+NO_SUPPORTED_CLAIMS = "no_supported_claims"
+SUBSTANTIVE_BLOCKS = ("policy_fact", "record", "performed")
+PROFILE_TOOL = "lookup_employee_profile"
+PROFILE_FIRST_TOOLS = ("check_policy_compliance", "check_pto_balance")
 
 #: The structured-data tools an `employee_data` turn reads its record through (§8.4 tools 5–7).
 #: An `employee_data` turn has no workflow to list them, so the data debt reads this instead.
@@ -1149,10 +1167,28 @@ class Orchestrator:
                 component=step_entailment.STEP_NAME,
             )
 
+        # -- 5l. the repair's citations survive the steps (W9 addendum, ruling 2) ---------------
+        # A step that took a sentence or a block took its citations with it, and `remote-002` was
+        # served two documents of the three the breadth repair had produced. A citation the
+        # post-breadth blocks carried and the served blocks do not goes back on the nearest
+        # surviving policy fact.
+        served, _carried = breadth.carry_citations(marked, snapshotted.blocks)
+
+        # -- 5m. an answer with no supported claim is not an answer (W9 addendum, ruling 1) -----
+        if self._unsupported(turn, served):
+            emit(
+                turn.buffer,
+                "G1",
+                verdict="refuse",
+                reason=f"{NO_SUPPORTED_CLAIMS}: the answer carried no policy fact, record or performed block",
+                details={"block_types": [str(block.get("type")) for block in served]},
+            )
+            return self._refuse(turn, NO_SUPPORTED_CLAIMS, cold_start=cold_start)
+
         answer = AnswerSchema(
             blocks=[
                 AnswerBlock.model_validate({k: v for k, v in block.items() if k != outcome_consistency.POLICY_CLAIM})
-                for block in snapshotted.blocks
+                for block in served
             ],
             next_steps=entailed.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
@@ -1179,6 +1215,11 @@ class Orchestrator:
                     ]
                 }
             )
+        # One sentence, once per turn (UX W9, CPUX4-02): the refusal's lede and the record block
+        # had each written the failing row's clause. Run after every lede is in place.
+        deduped, repeated = outcome_consistency.dedupe_sentences([block.model_dump() for block in answer.blocks])
+        if repeated:
+            answer = answer.model_copy(update={"blocks": [AnswerBlock.model_validate(block) for block in deduped]})
         if turn.write_failed:
             # §9.4's graceful partial for the other way a turn falls short of what it was asked to
             # do: the action was authorised and did not happen. The note goes first, and states no
@@ -1385,16 +1426,40 @@ class Orchestrator:
         # exactly as the breadth step does: no re-entry and no deterministic call on its account.
         if turn.stop_reason in BUDGET_STOPS or turn.elapsed_s >= self.settings.agent_wall_clock_s:
             return None
-        if self._data_outstanding(turn) and "data_outstanding" not in turn.nudges:
+        if (
+            self._data_outstanding(turn)
+            and "data_outstanding" not in turn.nudges
+            and turn.steps_taken < self.settings.agent_max_steps
+        ):
+            profile_owed = self._profile_outstanding(turn)
             turn.nudges.append("data_outstanding")
-            turn.messages.append(Message(role="user", content=DATA_OUTSTANDING))
-            turn.step_summaries.append(f"step {turn.steps_taken}: the reader's own record was still unread")
+            turn.messages.append(
+                Message(role="user", content=PROFILE_OUTSTANDING if profile_owed else DATA_OUTSTANDING)
+            )
+            turn.step_summaries.append(
+                f"step {turn.steps_taken}: "
+                + (
+                    "a verdict or balance was computed with the profile unread"
+                    if profile_owed
+                    else "the reader's own record was still unread"
+                )
+            )
             try:
                 await self._run_act(turn)
             except McpUnavailable as exc:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             if turn.pending is not None:
                 return self._park(turn, cold_start=cold_start)
+        if self._profile_outstanding(turn):
+            # Still unread — the step budget was spent (a confirmed write has spent its steps
+            # before it resumes), or the model did not read it when asked. One tool call, no model
+            # step: the profile is the acting employee's own, and the argument is the request's.
+            turn.nudges.append("profile_read_deterministically")
+            try:
+                await self._read_profile_deterministically(turn)
+            except McpUnavailable as exc:
+                return self._degraded(turn, str(exc), cold_start=cold_start)
+            self._plan(turn, step_index=turn.steps_taken)
         if self._verdict_outstanding(turn):
             turn.nudges.append("compliance_scored_deterministically")
             try:
@@ -1450,11 +1515,16 @@ class Orchestrator:
         """
         if turn.pending is not None or turn.decision is None:
             return False
-        # A resumed, declined or failed write is a turn whose reading moment has passed: the human
-        # answered a card built on what the turn had read, and re-entering the loop behind that
-        # answer would put a second act step between the confirmation and the answer.
-        if turn.declined or turn.write_failed or any(name in turn.state.results for name in WRITE_TOOLS):
+        if turn.declined or turn.write_failed:
             return False
+        # A resumed write is a turn whose reading moment has passed: the human answered a card
+        # built on what the turn had read, and re-entering the loop behind that answer would put a
+        # second act step between the confirmation and the answer. The profile debt (W9 addendum,
+        # ruling 3) is owed there too, and `_settle_data_debt` settles it without a model step.
+        if any(name in turn.state.results for name in WRITE_TOOLS):
+            return False
+        if self._profile_outstanding(turn):
+            return True
         permitted = self._permitted(turn)
         workflow = turn.workflow
         if workflow is not None:
@@ -1468,6 +1538,34 @@ class Orchestrator:
             return False
         reachable = [name for name in RECORD_TOOLS if name in permitted]
         return bool(reachable) and not any(turn.state.has(name) for name in reachable)
+
+    def _unsupported(self, turn: _Turn, blocks: Sequence[Mapping[str, Any]]) -> bool:
+        """No policy fact, no record, no performed write — only an escalation or advice saying the
+        evidence does not cover the question (W9 addendum, ruling 1). A declined, blocked or failed
+        write is answered by its own notice and is not this shape."""
+        if turn.declined or turn.write_blocked or turn.write_failed:
+            return False
+        return not any(block.get("type") in SUBSTANTIVE_BLOCKS for block in blocks)
+
+    def _profile_outstanding(self, turn: _Turn) -> bool:
+        """A verdict or a balance computed for the acting employee with the profile never read."""
+        return (
+            PROFILE_TOOL in self._permitted(turn)
+            and not turn.state.has(PROFILE_TOOL)
+            and any(turn.state.has(name) for name in PROFILE_FIRST_TOOLS)
+            and turn.tool_calls_made < self.settings.agent_max_tool_calls
+            and bool(turn.request.employee_id and EMPLOYEE_ID.match(turn.request.employee_id))
+        )
+
+    async def _read_profile_deterministically(self, turn: _Turn) -> None:
+        """Read the acting employee's profile the turn computed a verdict or a balance without
+        (W9 addendum, ruling 3). The result enters state and the envelopes as a model-made call's
+        would, so the answer steps and the tool-recall metric read it the same way."""
+        result = await self._call(turn, PROFILE_TOOL, {"employee_id": turn.request.employee_id})
+        turn.tool_calls_made += 1
+        if not result.is_error:
+            self._scan(turn, await self._absorb_async(turn, result))
+            turn.step_summaries.append("the assistant read the profile the verdict or balance was computed without")
 
     def _verdict_outstanding(self, turn: _Turn) -> bool:
         """An `expense_claim` at synthesis with no verdict on an amount the turn knows (W7-review I2)."""
