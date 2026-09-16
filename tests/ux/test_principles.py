@@ -258,9 +258,13 @@ def test_p11_the_composer_stays_reachable_and_the_newest_message_stays_in_view(f
         )
         assert geometry["composer_hit"] == "message", f"{width}: the composer is not hittable: {geometry}"
         assert geometry["transcript_focusable"], f"{width}: the scrolling transcript is not keyboard-reachable"
-
-    send = fresh_page.eval_on_selector("#send-button", "e => e.getBoundingClientRect().toJSON()")
-    assert send["top"] >= 0 and send["bottom"] <= 900 + 1, f"the send control is off screen: {send}"
+        # **Inside the loop, against THIS viewport's height** (W10 addendum, Minor). It sat after
+        # the loop and compared against a hard-coded 900 while the page was left at 1280×800, so it
+        # asserted a 900px fold on an 800px viewport and could not fail for the second width.
+        send = fresh_page.eval_on_selector("#send-button", "e => e.getBoundingClientRect().toJSON()")
+        assert send["top"] >= 0 and send["bottom"] <= height + 1, (
+            f"{width}×{height}: the send control is off screen: {send}"
+        )
 
     stuck = fresh_page.eval_on_selector("#transcript", "e => e.scrollHeight - e.scrollTop - e.clientHeight <= 48")
     assert stuck, "the newest message is not in view"
@@ -818,5 +822,29 @@ def test_the_cold_start_banner_does_not_push_the_composer_below_the_fold(browser
             f"the banner pushed the composer below the fold: {measured}"
         )
         assert measured["composer_hit"] == "message", measured
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize(("width", "height"), [(844, 390), (740, 360)])
+def test_a_phone_held_sideways_keeps_the_composer_on_screen(browser, ux_server, width, height):
+    """W10 addendum, Minor. `.conversation`'s 24rem floor is taller than the whole column on a
+    landscape phone — 844×390 leaves about 300px once the masthead and the layout's padding are
+    out — so the floor won, the column overflowed the viewport and the composer went below the
+    fold on the one orientation a reader turns the phone to in order to type."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
+        tab.wait_for_timeout(400)
+        box = tab.eval_on_selector("#message", "e => e.getBoundingClientRect().toJSON()")
+        hit = tab.evaluate(
+            "() => { const b = document.getElementById('message').getBoundingClientRect();"
+            " const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);"
+            " return el ? el.id || el.tagName.toLowerCase() : null; }"
+        )
+        assert box["bottom"] <= height + 1, f"{width}×{height}: the composer is below the fold: {box}"
+        assert hit == "message", f"{width}×{height}: the composer is not hittable: {hit}"
+        assert not _document_scrolls_sideways(tab), f"{width}×{height}: the document scrolls sideways"
     finally:
         context.close()

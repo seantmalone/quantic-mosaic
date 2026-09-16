@@ -378,6 +378,17 @@ cited `next_steps[]` and `citations[]` whose `chunk_id`s resolve to real chunks 
 index. A deterministic verdict is what turns "the model said 42 days is too long" into "the rules
 engine says the 30-day threshold is exceeded, and here is the sentence".
 
+**What the model is not allowed to supply** (W10). `submitted_on` is no longer an input: notice is
+*how much warning a request gives*, so the server measures it from its own today (`MOCK_TODAY` for
+the recorded stubs) and echoes the walk it made as `computed.notice_span`. `days` is derived from
+`start_date` and `end_date` as business days inclusive of both ends with the employee's own observed
+holidays excluded — the same calendar notice walks — so the one *blocking* PTO requirement is
+evaluable whenever the dates are, and `computed.business_day_span` states the span in words. Every
+requirement row publishes the **effective** `blocking` flag the engine used, so a caller can refuse
+a write on a blocking row that is `unmet` **or** `not_stated` rather than only on the verdict; and
+`check_pto_balance` publishes `carryover_cap_days` and `projected_forfeit_on_31_dec`, so a
+forfeiture is printed rather than computed in prose.
+
 ### Error semantics
 
 - **Schema violation** → the SDK returns `isError: true` with JSON-RPC `-32602`. The orchestrator
@@ -523,7 +534,11 @@ string-matches. Three deliberate Anthropic-side choices, each with a reason:
   schemas instead.
 - **Constrained JSON uses `output_config.format`** for `route` / `synthesize` / `repair`, so no
   prompted-JSON fallback exists on the agent path. That fallback lives only in the
-  OpenAI-compatible adapter, where an endpoint may decline strict mode.
+  OpenAI-compatible adapter, where an endpoint may decline strict mode. The repair model's
+  arguments travel as **JSON text** (`arguments_json`) since W10: a free-form `dict[str, Any]`
+  renders as an open `additionalProperties: true` object level, which strict mode rejects with a
+  400, so §9.1's one repair round trip could not be made at all — `strict_json_schema` now checks
+  every object level rather than only the ones carrying `properties`.
 - **`extra_body={"temperature": 0}`.** The 1.x SDK removed the `temperature` keyword — passing it
   raises `TypeError` — while the API still honours it.
 
@@ -598,9 +613,9 @@ The other eight, by their required inputs and the shape they return:
 |---|---|---|
 | `get_policy_section` | `doc_id` (+ exactly one of `heading_path` / `chunk_id`) | `text`, `heading_path`, `char_start`/`char_end`, `chunk_ids`, `resolved_by`, `prev_section`, `next_section`, `sibling_sections` |
 | `list_policy_documents` | — (optional `topic`) | `documents[]`, `corpus_version`, `total_documents`, `total_pages`, `total_chunks` |
-| `check_policy_compliance` | `scenario`, `employee_id` | `verdict`, `requirements[]` (each with `met` and a citation), `unmet[]`, `approvals_required[]`, `next_steps[]`, `escalate_to`, `citations[]`, `rules_version` |
+| `check_policy_compliance` | `scenario`, `employee_id` (**never** `submitted_on` — the server's date, W10) | `verdict`, `requirements[]` (each with `met`, `status`, `blocking` and a citation), `unmet[]`, `approvals_required[]`, `approvers[]`, `next_steps[]`, `escalate_to`, `citations[]`, `computed{}` (incl. `notice_span`, `business_day_span`, `tenure_eligible_on`), `submitted_on`, `rules_version` |
 | `lookup_employee_profile` | `employee_id` | `title`, `department`, `employment_type`, `fte`, `hire_date`, `tenure_months_at_as_of`, `work_arrangement`, `work_country`, `office`, `manager`, `skip_level` |
-| `check_pto_balance` | `employee_id` | `accrual_rate_days_per_month`, `accrual_fact_key`, `accrued_ytd`, `used_ytd`, `pending_days`, `carryover_*`, `remaining_days`, `next_accrual_date`, `blackout_dates` |
+| `check_pto_balance` | `employee_id` | `accrual_rate_days_per_month`, `accrual_fact_key`, `accrued_ytd`, `used_ytd`, `pending_days`, `carryover_*`, `carryover_cap_days`, `projected_forfeit_on_31_dec`, `remaining_days`, `next_accrual_date`, `blackout_dates` |
 | `lookup_benefits_status` | `employee_id` | `eligible`, `eligibility_reason`, `waiting_period_ends`, `elections[]`, `dependents[]`, `open_enrollment_window` |
 | `create_mock_hr_ticket` ⚠ | `employee_id`, `queue`, `summary`, `details` | on success `ticket_id`, `queue`, `priority`, `mock: true`; ungated, `{status: "confirmation_required", code, action, human_summary, arguments_preview}` |
 | `draft_hr_email` ⚠ | `employee_id`, `recipient_role`, `purpose`, `key_points` | on success `draft_id`, `subject`, `body`, `sent: false`, `mock: true`; ungated, the same five-key rejection |
@@ -645,15 +660,22 @@ failure in which the deterministic layer and the written answer disagreed:
 
 | step | module | what it repairs |
 |---|---|---|
-| citation breadth + claim merge | `agent/breadth.py` | one repair call on an answer narrower than its evidence; duplicate claims fold into one block and union their citations, and a remaining shortfall is recorded |
-| compliance restatement | `agent/compliance.py` | a sentence whose polarity opposes a requirement's `status`; a conclusion on a `not_stated` row; a ceiling quoted below the amount the question carries |
-| outcome consistency | `agent/outcome.py` | the account of a performed write, and any sentence telling the reader to go and file it themselves |
+| citation breadth + claim merge | `agent/breadth.py` | one repair call on an answer narrower than its evidence; duplicate claims fold into one block and union their citations, and a remaining shortfall is recorded. A citation a later step took off a block goes back **on that block**, matched by an identity marker, and never onto a different claim (W10) |
+| compliance restatement | `agent/compliance.py` | a sentence whose polarity opposes a requirement's `status`; a conclusion on a `not_stated` row; a ceiling quoted below the amount the question carries. Since W10 it also **types** its output — a sentence it rewrote is the reader's `record`, an engine `next_step` is a cited `policy_fact` — and says every `not_stated` row explicitly rather than leaving it out |
+| outcome consistency | `agent/outcome.py` | the account of a performed write, and any sentence telling the reader to go and file it themselves. Since W10 a directive to file a request an **earlier turn of the same session** already filed becomes "amend `<reference>`" |
 | capability check | `agent/capability.py` | a first-person denial of what a permitted tool does; a profile attribute the reader's own envelope contradicts |
-| approver resolution | `agent/approvers.py` | a bare role where the envelope resolved a name; a reader sent to approve their own request |
-| arithmetic consistency | `agent/arithmetic.py` | a decomposition that does not sum to the total beside it |
+| approver resolution | `agent/approvers.py` | a bare role where the envelope resolved a name; a reader sent to approve their own request. Since W10 a **cited** `policy_fact` is never rewritten, and where no surviving block names the approver one `record` line states it from `approvers[]`, carrying the matrix's own routing sentence verbatim |
+| arithmetic consistency | `agent/arithmetic.py` | a decomposition that does not sum to the total beside it; since W10, a whole sentence whose stated balance total the envelope does not carry, an expiry date no field states, and the forfeiture the balance fields imply |
 | date consistency | `agent/dates.py` | a stated deadline whose own parenthetical working contradicts it; a weekday that is not the day it names |
 | snapshot consistency | `agent/snapshot.py` | the snapshot date restated in the answer; a tenure in machine units |
-| next-step entailment | `agent/entailment.py` | a step naming a date, a duration, an amount or a person the answer never established |
+| next-step entailment | `agent/entailment.py` | a step naming a date, a duration, an amount or a person the answer never established; since W10, also a step whose text the answer above it already prints |
+
+**What the turn publishes is what the blocks carry** (W10). The served citations used to be G2's
+set, taken before those nine steps ran, so `/chat`, the `turns` row and the chat page could report
+a set the blocks beside them did not have — and `min_distinct_docs` was scored on it. G2's pure
+cascade now runs once more at the send boundary over the blocks actually served, on **every** path:
+a dangling block citation resolves into the top-level array or is stripped, and a `policy_fact` that
+loses all of its citations is not served.
 
 **Confirmation is not a guardrail — it is a property of the MCP server**, which is precisely why
 action safety can be a plain test rather than a reported number. The one-time token lives in the
@@ -776,14 +798,14 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 3,257 tests as of 2026-09-15) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 3,310 tests as of 2026-09-16) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
 **The coverage gate is the same command locally and in CI.** `make coverage` and the `test` job
 both run `coverage run --branch --source=src/hrmosaic -m pytest -q`, write `coverage.xml` and then
-enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 88% of
-branches over 9,765 statements** on 2026-09-15 (94% combined, which is the number the gate reads),
+enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 87% of
+branches over 10,184 statements** on 2026-09-16 (94% combined, which is the number the gate reads),
 so the 90 floor is a regression guard rather than a target to grow into. No third-party coverage
 service and no badge token is involved — §15.2's claim that nothing CI holds is a credential stands
 unchanged.

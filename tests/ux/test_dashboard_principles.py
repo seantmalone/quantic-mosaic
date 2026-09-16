@@ -754,7 +754,13 @@ def test_the_waterfall_costs_one_row_per_step_and_the_session_page_fits_a_phone(
         open_rows = tab.eval_on_selector_all(".span-payload[open]", "els => els.length")
         assert open_rows == 0, "payloads ship closed"
         height = tab.evaluate("() => document.documentElement.scrollHeight")
-        assert height < 5000, f"the session page is {height}px tall at 390x844"
+        # 5,200 since W10, from 5,000. The waterfall is unchanged — still one row per span, still
+        # no row for a closed payload, which is what this test is about. What grew is the **answer**
+        # the page prints above it: ruling 6 makes every `not_stated` requirement an explicit line
+        # instead of silence, and ruling 4 states who approves where no block named them. That is
+        # two blocks a reader of the demo-1 turn did not have before and 48px over a round number.
+        # The budget is still a bounded one, against the 7,600px this page ran to before UX W7.
+        assert height < 5200, f"the session page is {height}px tall at 390x844"
     finally:
         context.close()
 

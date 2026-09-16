@@ -162,9 +162,20 @@ def record_line(resolved: Sequence[Approver]) -> str | None:
     """
     if not resolved:
         return None
-    line = RECORD_TEMPLATE.format(who=AND.join(entry.record_phrase for entry in resolved))
-    routed = [entry.reason for entry in resolved if entry.self_approval_routed and entry.reason]
-    return " ".join([line, *dict.fromkeys(routed)])
+    # **One person, said once** (W10). Two roles can resolve to the same manager — on demo 1 the
+    # direct manager and the director are both Dana — and naming her twice reads as two approvals
+    # where the matrix routes one. Roles are collected under the person who holds them.
+    people: dict[str, list[str]] = {}
+    routed: dict[str, str] = {}
+    for entry in resolved:
+        people.setdefault(entry.name, [])
+        if entry.self_approval_routed:
+            if entry.reason:
+                routed.setdefault(entry.reason, entry.reason)
+        elif entry.role not in people[entry.name]:
+            people[entry.name].append(entry.role)
+    named = [f"{name}, your {' and '.join(roles)}" if roles else name for name, roles in people.items()]
+    return " ".join([RECORD_TEMPLATE.format(who=AND.join(named)), *routed])
 
 
 def names_an_approver(text: str, resolved: Sequence[Approver]) -> bool:

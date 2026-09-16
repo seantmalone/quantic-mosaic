@@ -98,3 +98,20 @@ def test_nothing_is_stated_when_the_envelope_resolved_nobody():
     team = _Envelope("check_policy_compliance", {"approvers": [{"role": "Tax & Legal"}]})
     result = approver_resolution.apply([CITED_POLICY], [team])
     assert not result.stated and len(result.blocks) == 1
+
+
+def test_two_roles_held_by_one_person_are_named_once():
+    """Demo 1: E1042's direct manager and her director are both Dana, and the first version of the
+    line said *"Dana, your direct manager and Dana, your director"* — two approvals where the matrix
+    routes one."""
+    both = _Envelope(
+        "check_policy_compliance",
+        {
+            "approvers": [
+                {"role": "Direct manager", "name": "Dana", "employee_id": "E1007"},
+                {"role": "Director", "name": "Dana", "employee_id": "E1007"},
+            ]
+        },
+    )
+    result = approver_resolution.apply([CITED_POLICY], [both])
+    assert result.blocks[-1]["text"] == "Your request goes to Dana, your direct manager and director."

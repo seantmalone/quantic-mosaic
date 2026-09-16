@@ -170,3 +170,41 @@ async def test_a_self_approval_turn_is_refused_before_a_single_tool_call(run_age
     assert "will not" in response.answer and "one level higher" in response.answer
     assert response.usage.tool_calls == 0, "nothing was looked up to decide this"
     assert "skip-level" not in response.answer.lower()
+
+
+# -- W10 addendum, Minor: the neighbour-topic guard cuts one way only ----------------------------
+
+
+def test_the_corpus_paragraph_names_every_document_so_an_in_corpus_topic_is_visibly_in_scope():
+    """route.j2's guard — *"a topic that is not in the list is out of scope even when a
+    neighbouring topic is"* — is what makes `oos-005` (the referral bonus) a refusal. It must not
+    also make its neighbour one: the annual bonus plan **is** in the corpus, and the paragraph the
+    guard lives in is rendered from the index, so every title it covers is on the page above it.
+    """
+    from hrmosaic.agent import prompts
+
+    system, _ = prompts.render(
+        "route.j2",
+        persona=prompts.persona_block(employee_id="E1042", actor_source="explicit"),
+        question="How is the annual bonus plan calculated?",
+    )
+    titles = prompts.corpus_titles()
+    assert titles, "the index is the source of the list"
+    for title in titles:
+        assert title in system, title
+    assert "Performance & Compensation Policy" in system, "the annual bonus plan's own document"
+    assert "covers, and only covers" in system
+
+
+def test_an_in_corpus_neighbour_is_not_refused_by_the_cheap_pre_filter():
+    """§9.1 step 0 is the pre-filter in front of the router, and it must never take a question the
+    corpus answers. The eight phrases are things a Mosaic HR corpus can never carry."""
+    from hrmosaic.agent.orchestrator import OUT_OF_CORPUS_PHRASES
+
+    for question in (
+        "How is the annual bonus plan calculated?",
+        "What training does onboarding require?",
+        "How much is the employee referral bonus, and when is it paid?",
+    ):
+        lowered = question.lower()
+        assert not [phrase for phrase in OUT_OF_CORPUS_PHRASES if phrase in lowered], question

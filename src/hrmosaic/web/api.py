@@ -1233,13 +1233,18 @@ def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str
     # tile ("Safety checks: 5 of 6 applied · 7 checks run") and the Guardrails lede ("The six
     # safety checks…") by construction. `SAFETY_RULES` is the same six the tile divides by. Since
     # UX W9 (npo5-03) the verdict count is said too, so the panel and GUARDRAIL BLOCKS agree.
-    lead = PRODUCED_LEAD if response.outcome in LABELLED_OUTCOMES else HANDLED_LEAD
+    labelled = response.outcome in LABELLED_OUTCOMES
+    lead = PRODUCED_LEAD if labelled else HANDLED_LEAD
     blocked_clause = "none blocked" if not blocked else f"{blocked} blocked"
+    # *"applied to this answer"* only where there **is** an answer (W10 addendum, Minor). A refusal,
+    # a clarification and a parked confirmation are turns the same six rules were applied to; the
+    # noun that fits them is the turn, and the sentence above them already says `HANDLED_LEAD`.
+    subject = "this answer" if labelled else "this turn"
     return (
         f"{lead}: {_count(response.usage.tool_calls, 'tool')} used, "
         f"{_count(len(response.citations), 'policy section')} read, "
         f"in {human_duration(response.timings.total_ms)}. "
-        f"{ran} of the {SAFETY_RULES} safety checks applied to this answer; {_verdict_clause(passed, ran)} "
+        f"{ran} of the {SAFETY_RULES} safety checks applied to {subject}; {_verdict_clause(passed, ran)} "
         f"— {_count(runs, 'check')} run, {blocked_clause}."
     )
 

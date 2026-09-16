@@ -1091,15 +1091,22 @@ one (W8 fix round, JX3-01).
 `employee_eq:<field>:<value>`; a requirement whose guard is false is omitted from `requirements[]` entirely, and the same guard selects which
 `approvals_required` and `next_steps` entries the result carries.
 
-**Notice is anchored on the submission date** (W8, C04). `check_policy_compliance` takes a `submitted_on` parameter — the turn's own date, defaulting
-to today and pinned by the `MOCK_TODAY` setting for the recorded stubs — and `computed.notice_business_days` / `computed.notice_calendar_days` /
-`computed.claim_age_days` are measured from it. Balances, tenure and every other property of the record keep `as_of`; where a request is submitted
+**Notice is anchored on the submission date, and the submission date is the server's** (W8, C04; W10, ruling 1). `check_policy_compliance` publishes
+`submitted_on` as an **output** and accepts none: the server sets it to its own today, pinned by the `MOCK_TODAY` setting for the recorded stubs, and
+`computed.notice_business_days` / `computed.notice_calendar_days` / `computed.claim_age_days` are measured from it. Six of the sixteen recorded demo
+paths supplied one — three the request's own `start_date`, three the mock data's frozen `as_of` — and each was narrated back as the notice the request
+gave, so the parameter is no longer the model's to send. The result echoes the walk in the `computed{}` block's own `notice_span`. Balances, tenure and every other property of the record keep `as_of`; where a request is submitted
 *before* the snapshot it would be judged against, the snapshot-backed rows come back `not_stated` saying so. The engine also derives
-`parameters.duration_days` from `start_date` + `end_date`, walks the blackout span in the same business-day calendar `notice_business_days` uses, and
+`parameters.duration_days` **and `parameters.days`** from `start_date` + `end_date` (W10, ruling 2 — `days` as business days inclusive of both ends with
+the employee's own observed holidays excluded, the same calendar `notice_business_days` walks, so the one *blocking* PTO requirement is evaluable
+whenever the dates are), walks the blackout span in that calendar, and
 **rejects** an `end_date` before its `start_date` as an argument error rather than scoring the request anyway. The result carries `submitted_on` and a
-`computed{}` block of every derived value, so an answer quotes the engine's arithmetic instead of redoing it.
+`computed{}` block of every derived value — including `business_day_span` and `notice_span` in words, and `tenure_eligible_on`, the day an unmet tenure
+requirement starts being met — so an answer quotes the engine's arithmetic instead of redoing it.
 
-**Every requirement carries a `status`** (W8, C05): `met`, `unmet` or `not_stated`. `met` stays, and means exactly `status == "met"`.
+**Every requirement carries a `status`** (W8, C05): `met`, `unmet` or `not_stated`. `met` stays, and means exactly `status == "met"`. It also carries the
+**effective** `blocking` flag the engine used — `false` for a `manual` check whatever `rules.yml` says (W10, ruling 3) — so a caller that cannot read
+`rules.yml` can refuse a write on a blocking row that is `unmet` *or* `not_stated`, which is the question the verdict alone does not answer.
 
 **How the verdict is derived.** Two kinds of unmet requirement cannot prove a violation. A `manual` check is `status:not_stated` with a
 confirm-before-you-act reason and is **never** blocking, whatever its own `blocking` says; it is *evaluable* only beside a data-backed row, so a
@@ -1325,23 +1332,41 @@ POST /chat  (or /chat/confirm)
  ├─ 5d. compliance restatement (W8): a sentence whose polarity opposes a requirement's own `status`
  │       is replaced by that row's result, in the reader's voice; a `not_stated` row gets "I could
  │       not check …"; a ceiling below the amount the question carries is replaced by the tier that
- │       does apply
- ├─ 5e. outcome consistency (§7.4, P22): a confirmed write is reported as done, from the tool result
+ │       does apply. W10: the step TYPES its output — a sentence it rewrote is a `record`, an engine
+ │       `next_step` is a cited `policy_fact` — and every `not_stated` row renders as one explicit
+ │       line, "<label>: not verified from your record — confirm before you proceed."
+ ├─ 5e. outcome consistency (§7.4, P22): a confirmed write is reported as done, from the tool result;
+ │       W10: a directive to file what an EARLIER turn of this session filed becomes "amend <id>"
  ├─ 5f. capability check (W8): a sentence denying what a permitted tool does, or stating a profile
  │       attribute the reader's own envelope contradicts, is dropped
  ├─ 5g. approver resolution (W8): a bare role takes the name the envelope resolved; a role the
- │       reader holds themselves becomes the person one level up
+ │       reader holds themselves becomes the person one level up. W10: a CITED `policy_fact` is
+ │       never rewritten, and where no block names the approver one `record` line states it from
+ │       `approvers[]`, with `self_approval_routed.reason` verbatim
  ├─ 5h. arithmetic consistency (W8): a decomposition that does not sum to its stated total is
- │       replaced by the envelope's own, or removed; the tool's total is never touched
+ │       replaced by the envelope's own, or removed; the tool's total is never touched. W10: a whole
+ │       sentence whose stated balance total the envelope does not carry is replaced, an expiry date
+ │       no field states is swapped for the one that is, and the forfeiture the fields imply is said
  ├─ 5i. date consistency (UX W6) · snapshot consistency (P29) · next-step entailment (W8): a step
- │       naming a date, a duration, an amount or a person the answer never established is dropped
- ├─ 6. close the turn: rollups, latency decomposition, outcome, stop_reason
+ │       naming a date, a duration, an amount or a person the answer never established is dropped,
+ │       and (W10) so is a step whose text a block above it already prints
+ ├─ 5j. the ledes, then de-duplication, then the citation carry (W10): every notice the product says
+ │       in its own voice is assembled in reading order, one sentence is said once per turn (a
+ │       dropped duplicate's citations move to the block that kept it), and a citation a step took
+ │       off a block goes back ON THAT BLOCK, matched by an identity marker set before step 5c
+ ├─ 6. close the turn: rollups, latency decomposition, outcome, stop_reason. The citations published
+ │       are the SERVED blocks' own — G2's pure cascade runs once more at the boundary, so a dangling
+ │       block citation resolves into the top-level array or is stripped, and a `policy_fact` that
+ │       loses all of its citations is not served (W10)
  └─ 7. ONE batched flush of the turn's spans + llm_messages + the closing UPDATE
 ```
 
 **The confirmation gate is coupled to the verdict** (W8). A write whose scenario the same turn scored `non_compliant` is refused at the call boundary,
 recorded, and never turned into a card; the answer opens with a `notice` giving the failing row's own reason and the contact the scenario escalates to.
-`non_compliant` **is** the "a blocking requirement is unmet" condition (§8.4), so the verdict alone is the test. A proposal is answered once: its
+`non_compliant` **is** the "an *evaluable* blocking requirement is unmet" condition (§8.4) — but it is not the whole of it (W10, ruling 3): a blocking
+row nobody could evaluate is `not_stated`, reaches no `unmet[]` and leaves the verdict `conditional`, which is how a ticket was filed for a request
+against a balance the turn had never checked. **A request the engine could not clear is never filed**: any blocking row that is not `met` refuses the
+write. A proposal is answered once: its
 `confirmation` span is resolved in place (`confirmed` / `declined` / `expired`), a replayed confirm is a 409, and a proposal nobody comes back to is
 written `expired` and its turn closed with a stated outcome by the boot-and-periodic maintenance pass (`trace.sweep_expired_confirmations`), not only
 by a late `POST /chat/confirm`.
@@ -1349,8 +1374,8 @@ by a late `POST /chat/confirm`.
 **Four reminders, at most one per act step.** When the model stops calling tools while the turn still owes something, the loop appends one
 deterministic `user` message and takes another step: `workflow_incomplete` (§9.3's predicate is unmet), `action_outstanding` (the user asked for
 something to be created and nothing has been proposed), `data_outstanding` (added at W8: the turn is about one person's own record and has read none of
-it) and, added at P13, `search_breadth` — the turn has searched the federated corpus at most once
-while the question spans more of it than one query reaches, which is how the judged baseline lost `remote-002` and `expenses-002` with two cited
+it) and, added at P13, `search_breadth` — the turn has searched the federated corpus at most once, or (W10) its evidence spans fewer
+documents than the answer will be judged on, while the question spans more of it than one query reaches, which is how the judged baseline lost `remote-002` and `expenses-002` with two cited
 documents where three were required. Each is sent at most once per turn, only on a step where no other reminder fired, and only while a permitted tool
 could still settle it. `search_breadth` has **two forms of one debt**: it fires at *at most* one search, so its opening clause states the real count
 (none yet, or once) while the debt after it is a single shared string — a reminder whose job is to correct the model's picture of its own history may

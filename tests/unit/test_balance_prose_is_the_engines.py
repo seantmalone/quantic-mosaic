@@ -73,14 +73,22 @@ def test_an_expiry_date_no_field_states_is_replaced_by_the_one_that_is():
 
 def test_a_quoted_policy_sentence_about_expiry_is_left_alone():
     """*"Carried-over PTO expires on 31 March of the following plan year"* is the corpus speaking,
-    not a claim about this reader."""
-    quoted = {
-        "type": "policy_fact",
-        "text": "Carried-over PTO expires on 31 March of the following plan year.",
-        "citations": ["c_carryover"],
-    }
-    result = arithmetic_consistency.apply([quoted], [envelope()])
-    assert result.blocks[0]["text"] == quoted["text"]
+    not a claim about this reader — and a **cited** `policy_fact` is never rewritten at all, in this
+    step or in the approver step: its citation is how a reader checks it."""
+    for quoted in (
+        {
+            "type": "policy_fact",
+            "text": "Carried-over PTO expires on 31 March of the following plan year.",
+            "citations": ["c_carryover"],
+        },
+        {
+            "type": "policy_fact",
+            "text": "You may carry over a maximum of 5.0 days into the following plan year.",
+            "citations": ["c_carryover"],
+        },
+    ):
+        result = arithmetic_consistency.apply([quoted], [envelope()])
+        assert result.blocks[0]["text"] == quoted["text"]
 
 
 def test_the_forfeit_the_fields_imply_is_stated():
@@ -91,13 +99,22 @@ def test_the_forfeit_the_fields_imply_is_stated():
     assert result.blocks[-1]["type"] == arithmetic_consistency.RECORD
 
 
+def test_the_forfeit_is_stated_only_where_the_answer_is_about_expiry():
+    """The reader of demo 2 asked to book three days in September; a block about next New Year's
+    Eve is a fact nobody asked for, and it would be on every PTO answer for ever."""
+    booking = {"type": "record", "text": "You have 13.5 days remaining, which covers a 3-day request.", "citations": []}
+    result = arithmetic_consistency.apply([booking], [envelope()])
+    assert [block["text"] for block in result.blocks] == [booking["text"]]
+
+
 def test_no_forfeit_line_when_the_balance_is_under_the_cap():
     under = {**BALANCE, "remaining_days": 0.25, "projected_forfeit_on_31_dec": 0.0}
+    asked = "You have 0.25 days, and none of it expires this year."
     result = arithmetic_consistency.apply(
-        [{"type": "record", "text": "You have 0.25 days.", "citations": []}],
+        [{"type": "record", "text": asked, "citations": []}],
         [_Envelope("check_pto_balance", under)],
     )
-    assert [block["text"] for block in result.blocks] == ["You have 0.25 days."]
+    assert [block["text"] for block in result.blocks] == [asked]
 
 
 def test_an_answer_the_engine_agrees_with_is_returned_unchanged():

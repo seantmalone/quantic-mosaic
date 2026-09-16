@@ -1592,6 +1592,16 @@ class Orchestrator:
             except McpUnavailable as exc:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             self._plan(turn, step_index=turn.steps_taken)
+            # **…and the profile debt is re-tested after it** (W10 addendum, Minor). The verdict
+            # this step just scored is itself a verdict computed for the acting employee, so a turn
+            # that owed no profile before it owes one now — and the test above has already run.
+            if self._profile_outstanding(turn):
+                turn.nudges.append("profile_read_deterministically")
+                try:
+                    await self._read_profile_deterministically(turn)
+                except McpUnavailable as exc:
+                    return self._degraded(turn, str(exc), cold_start=cold_start)
+                self._plan(turn, step_index=turn.steps_taken)
         return None
 
     async def _settle_action_debt(self, turn: _Turn, *, cold_start: bool) -> ChatResponse | None:
@@ -1764,19 +1774,49 @@ class Orchestrator:
         )
         if not outcome.repaired and outcome.dropped_blocks == 0:
             return answer, outcome.citations
+        if not outcome.blocks:
+            # Failing closed must not mean failing silent: an answer the cascade emptied keeps its
+            # sentences with every citation stripped, so the reader is given the prose without a
+            # source rather than a blank page. `_unsupported` above is what refuses this shape when
+            # it is a refusal; this is the backstop for the one that is not.
+            # Only `policy_fact` blocks are ever dropped here, so an emptied answer was all policy
+            # facts — and an uncited policy claim is a `recommendation`, which is exactly what G3
+            # would have made of it.
+            return (
+                answer.model_copy(
+                    update={
+                        "blocks": [
+                            block.model_copy(update={"type": "recommendation", "citations": []})
+                            for block in answer.blocks
+                        ]
+                    }
+                ),
+                [],
+            )
         return (
             answer.model_copy(update={"blocks": [AnswerBlock.model_validate(block) for block in outcome.blocks]}),
             outcome.citations,
         )
 
     def _profile_outstanding(self, turn: _Turn) -> bool:
-        """A verdict or a balance computed for the acting employee with the profile never read."""
+        """A verdict or a balance computed **for the acting employee** with the profile never read.
+
+        The `employee_id` test is on the result body, not merely on the tool name (W10 addendum,
+        Minor): a turn that scored somebody else's request — an approver checking a report's claim
+        — owes nothing about the reader's own profile, and re-entering the loop for it would spend
+        an act step and a tool call on a record the answer is not about.
+        """
+        actor = turn.request.employee_id or ""
         return (
             PROFILE_TOOL in self._permitted(turn)
             and not turn.state.has(PROFILE_TOOL)
-            and any(turn.state.has(name) for name in PROFILE_FIRST_TOOLS)
+            and any(
+                str((body or {}).get("employee_id") or "") == actor
+                for name in PROFILE_FIRST_TOOLS
+                for body in turn.state.results.get(name, ())
+            )
             and turn.tool_calls_made < self.settings.agent_max_tool_calls
-            and bool(turn.request.employee_id and EMPLOYEE_ID.match(turn.request.employee_id))
+            and bool(actor and EMPLOYEE_ID.match(actor))
         )
 
     async def _read_profile_deterministically(self, turn: _Turn) -> None:

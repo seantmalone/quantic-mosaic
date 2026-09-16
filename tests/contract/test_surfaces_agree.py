@@ -208,3 +208,48 @@ async def test_the_chat_panel_and_the_dashboard_count_blocked_checks_the_same_wa
     blocked = int(produced.group("blocked") or 0)
     hits = store.execute("SELECT guardrail_hits FROM turns WHERE id = ?", (turn_id,)).scalar()
     assert blocked == int(hits or 0), f"the panel says {blocked} blocked; the turn's rollup says {hits}"
+
+
+# -- W10, ruling 11: a "rule" on a turn record is the rules engine's, never a guardrail ------------
+
+
+async def test_the_policy_rules_line_counts_the_engine_and_not_the_guardrails(web, store):
+    """Scenario 14 published *"2 rules ran"* on a turn that made no tool call and reached no rules
+    engine at all, and scenario 02 published *"5/5 rules passed"* on a turn whose blocking tenure
+    requirement had just failed — because the turn record's `rules_ran` / `rules_passed` were the
+    guardrail count under a name that says policy. They are the engine's rows now; the guardrail
+    pair kept its meaning under `safety_rules_*`."""
+    import json as _json
+
+    from hrmosaic.web import api as web_api
+
+    async with web("demo_task_1.json") as client:
+        turn = await client.post(
+            "/chat",
+            json={"message": "I want to work from Berlin from 3 November to 14 December 2026 — can I?"},
+            headers=HTMX,
+        )
+        assert turn.status_code == 200, turn.text
+        session_id = re.search(r'data-session-id="([0-9a-f]+)"', turn.text).group(1)
+        turn_id = re.search(r'data-turn-id="([0-9a-f]+)"', turn.text).group(1)
+        waterfall = (await client.get(f"/dashboard/sessions/{session_id}")).text
+        payload = (await client.get(f"/api/traces/sessions/{session_id}")).json()
+
+    rollups = next(row["rollups"] for row in payload["turns"] if row["turn_id"] == turn_id)
+    spans = [
+        {**row, "payload": _json.loads(row["payload_json"])}
+        for row in store.execute(
+            "SELECT kind, name, payload_json FROM spans WHERE turn_id = ? ORDER BY seq", (turn_id,)
+        ).dicts()
+    ]
+    passed, ran = web_api.policy_rules(spans)
+    assert ran > 0, "the Berlin turn scores the international-remote scenario"
+    assert (rollups["rules_passed"], rollups["rules_ran"]) == (passed, ran)
+
+    guardrails = [span for span in spans if span["kind"] == "guardrail"]
+    assert rollups["safety_rules_ran"] <= len(guardrails)
+    assert rollups["rules_ran"] != rollups["safety_rules_ran"] or ran == rollups["safety_rules_ran"]
+
+    tile = re.search(r"Policy rules</dt><dd>\s*(\d+) of (\d+) met", waterfall)
+    assert tile, "the session waterfall states the engine's own rules"
+    assert (int(tile.group(1)), int(tile.group(2))) == (passed, ran)

@@ -235,7 +235,12 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
   /* The first viewport, exactly: masthead (and any notice) above, the layout's top padding, and
      the rest is this column — transcript above, sticky composer at the viewport's bottom edge. */
   height: calc(100dvh - var(--chrome-h, 4.5rem) - var(--space-4));
-  min-height: 24rem;
+  /* **Clamped to the height above it** (W10 addendum, Minor). A bare `24rem` floor is taller than
+     the whole column on a phone held sideways — 844×390 leaves about 300px once the masthead and
+     the padding are out — so the floor won, the column overflowed the viewport and the composer
+     went under the fold on the one orientation a reader reaches for to type. `min()` keeps the
+     floor everywhere it fits and yields to the viewport where it does not. */
+  min-height: min(24rem, calc(100dvh - var(--chrome-h, 4.5rem) - var(--space-4)));
 }
 
 /* The transcript is the page's scroll container, and it says so. It had no affordance at all —

@@ -352,13 +352,24 @@ def apply(
     forfeiture nothing in the answer mentions — states it as one `record` line.
     """
     envelope = balance(envelopes)
+    # Whether this answer is **about** expiry at all, read off the blocks as the model wrote them —
+    # before this step rewrites them. The forfeiture is the answer to *"when do they expire?"*
+    # (scenario 16); on a turn that asked to book three days in September it is a fact about next
+    # New Year's Eve nobody asked for, and a block on every PTO answer for ever.
+    asked = " ".join(str(block.get("text") or "") for block in blocks).lower()
+    about_expiry = any(word in asked for word in EXPIRY_WORDS)
     corrected = 0
     body: list[dict[str, Any]] = []
     for block in blocks:
         item = dict(block)
         before = str(item.get("text") or "")
         after = correct(before, envelope)
-        after, replaced = restate(after, envelope)
+        # A **cited** `policy_fact` is quoted policy and is not rewritten: its citation is the
+        # reader's way of checking the sentence, and a sentence this step replaced would carry a
+        # source for something the document does not say (W10, rulings 4 and 10, the same rule the
+        # approver step follows).
+        cited_policy = item.get("type") == "policy_fact" and bool(item.get("citations"))
+        after, replaced = (after, 0) if cited_policy else restate(after, envelope)
         corrected += replaced
         if after != before:
             item["text"] = after
@@ -374,7 +385,7 @@ def apply(
         corrected += after != before
         steps.append(after)
 
-    forfeit = forfeit_note(envelope) if envelope is not None else None
+    forfeit = forfeit_note(envelope) if envelope is not None and about_expiry else None
     said = " ".join(str(block.get("text") or "") for block in body)
     if forfeit and "forfeit" not in said.lower():
         body.append({"type": RECORD, "text": forfeit, "citations": []})
