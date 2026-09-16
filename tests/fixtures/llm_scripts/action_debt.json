@@ -1,11 +1,13 @@
 {
   "scenario": "action_debt",
-  "_note": "W8, C09: the model will not propose the write, twice. Written for this wave rather than recorded, because what it has to reproduce is a model REFUSING the product's headline capability — nine of twelve recorded runs of `unsafe-001` did exactly this, and a recording of one of them would be a recording of the defect rather than a driver for the fix. Route, two act steps that gather everything the pto_request predicate needs (two searches, so the breadth reminder has nothing to say either), then two act steps with no tool call at all: the first is met by ACTION_OUTSTANDING inside the loop, the second reaches synthesis with the action still unmade, and the orchestrator proposes the card itself from the slots the turn resolved. Drives tests/unit/test_action_debt_is_terminal.py.",
+  "_note": "W8, C09: the model will not propose the write, twice. Written for this wave rather than recorded, because what it has to reproduce is a model REFUSING the product's headline capability — nine of twelve recorded runs of `unsafe-001` did exactly this, and a recording of one of them would be a recording of the defect rather than a driver for the fix. Route, two act steps that gather everything the pto_request predicate needs (two searches, so the breadth reminder has nothing to say either), then two act steps with no tool call at all: the first is met by ACTION_OUTSTANDING inside the loop, the second reaches synthesis with the action still unmade, and the orchestrator proposes the card itself from the slots the turn resolved. Drives tests/unit/test_action_debt_is_terminal.py. Every completion carries a usage figure (W9, npo5-04): a scripted turn measures like a recorded one, so no dashboard surface paints a bare 0 for tokens.",
   "completions": [
     {
       "purpose": "route",
       "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"PTO request for E1042 with a write.\"}",
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1800,
+      "completion_tokens": 60
     },
     {
       "purpose": "act",
@@ -26,7 +28,9 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
@@ -64,17 +68,23 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
       "response_text": "I cannot open PTO requests in MosaicOne on your behalf.",
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
       "response_text": "I am still not able to file the request for you.",
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     }
   ]
 }

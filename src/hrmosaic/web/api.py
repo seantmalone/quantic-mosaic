@@ -1161,6 +1161,30 @@ def safety_checks(spans: list[dict[str, Any]]) -> tuple[int, int]:
     return len(ran) - len(blocked), len(ran)
 
 
+def guardrail_verdicts(spans: list[dict[str, Any]]) -> tuple[int, int]:
+    """`(checks run, blocked)` — counted in **verdicts**, the unit the dashboard's tiles use.
+
+    Chat counted rules and every dashboard tile counted verdicts, so for one turn the panel said
+    one check failed and the Turns page said GUARDRAIL BLOCKS 2 (UX W9, npo5-03). Both units are
+    real — G2 runs twice on a repaired turn — so the panel now says both, in the words the session
+    tile already uses.
+    """
+    verdicts = [span for span in spans if span["kind"] == "guardrail"]
+    return len(verdicts), sum(1 for span in verdicts if span["payload"].get("verdict") != "allow")
+
+
+def _verdict_clause(passed: int, ran: int) -> str:
+    """The rules' verdict, with the grammar following the count (UX W9, CPUX4-05 = npo5-07):
+    "all 1 passed" is not a sentence and "all 2" is "both"."""
+    if ran == 0:
+        return "none applied"
+    if passed == ran:
+        return {1: "it passed", 2: "both passed"}.get(ran, f"all {ran} passed")
+    if ran == 1:
+        return "it did not pass"
+    return f"{passed} of the {ran} passed"
+
+
 def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str:
     """*"How this answer was produced"*, in four counts and no identifiers (plan §3.7).
 
@@ -1173,18 +1197,21 @@ def produced_summary(response: ChatResponse, spans: list[dict[str, Any]]) -> str
     check, and the denominator is printed so the figure agrees with the Guardrails page (UX W6).
     """
     passed, ran = safety_checks(spans)
+    runs, blocked = guardrail_verdicts(spans)
     # One meaning for "checks" (UX W7, npo3-04 = dgc-r2-2): the six rules are the system's, the
     # ones that *applied* to this answer are a subset, and both numbers are said — "5 of the 6
     # safety checks applied to this answer; all 5 passed" — so the panel agrees with the session
     # tile ("Safety checks: 5 of 6 applied · 7 checks run") and the Guardrails lede ("The six
-    # safety checks…") by construction. `SAFETY_RULES` is the same six the tile divides by.
+    # safety checks…") by construction. `SAFETY_RULES` is the same six the tile divides by. Since
+    # UX W9 (npo5-03) the verdict count is said too, so the panel and GUARDRAIL BLOCKS agree.
     lead = PRODUCED_LEAD if response.outcome in LABELLED_OUTCOMES else HANDLED_LEAD
-    verdict = f"all {ran} passed" if passed == ran else f"{passed} of the {ran} passed"
+    blocked_clause = "none blocked" if not blocked else f"{blocked} blocked"
     return (
         f"{lead}: {_count(response.usage.tool_calls, 'tool')} used, "
         f"{_count(len(response.citations), 'policy section')} read, "
         f"in {human_duration(response.timings.total_ms)}. "
-        f"{ran} of the {SAFETY_RULES} safety checks applied to this answer; {verdict}."
+        f"{ran} of the {SAFETY_RULES} safety checks applied to this answer; {_verdict_clause(passed, ran)} "
+        f"— {_count(runs, 'check')} run, {blocked_clause}."
     )
 
 

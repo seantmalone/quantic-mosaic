@@ -1,11 +1,13 @@
 {
   "scenario": "write_blocked",
-  "_note": "W8, C02: the engine scores the request `non_compliant` and the model proposes the write anyway. Written for this wave rather than recorded — `fresh:a771d87b…:1` is the recording, and what it records is the product filing MOCK-HR-000011 against 0.25 days of accrual, leading with \"Done\", and then telling E1108 he lacks the balance. Route, one act step for the record and the balance, one for the policy and the verdict, one that proposes the ticket (refused deterministically at the call boundary), then the synthesis. Drives tests/unit/test_write_is_coupled_to_the_verdict.py.",
+  "_note": "W8, C02: the engine scores the request `non_compliant` and the model proposes the write anyway. Written for this wave rather than recorded — `fresh:a771d87b…:1` is the recording, and what it records is the product filing MOCK-HR-000011 against 0.25 days of accrual, leading with \"Done\", and then telling E1108 he lacks the balance. Route, one act step for the record and the balance, one for the policy and the verdict, one that proposes the ticket (refused deterministically at the call boundary), then the synthesis. Drives tests/unit/test_write_is_coupled_to_the_verdict.py. Every completion carries a usage figure (W9, npo5-04): a scripted turn measures like a recorded one, so no dashboard surface paints a bare 0 for tokens.",
   "completions": [
     {
       "purpose": "route",
       "response_text": "{\"intent\": \"action\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1108\", \"selected_tools\": [\"check_pto_balance\", \"create_mock_hr_ticket\"], \"rationale_summary\": \"PTO request for E1108 with a write.\"}",
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1800,
+      "completion_tokens": 60
     },
     {
       "purpose": "act",
@@ -26,7 +28,9 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
@@ -64,7 +68,9 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
@@ -81,17 +87,23 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "synthesize",
       "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"recommendation\", \"text\": \"Your balance covers the three days you asked for.\", \"citations\": []}], \"next_steps\": [\"Contact People Operations if the dates cannot move.\"], \"rationale_summary\": \"Balance is short of the request; the ticket was not opened.\"}",
-      "finish_reason": "stop"
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     },
     {
       "purpose": "repair",
       "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Your balance covers the three days you asked for.\", \"citations\": []}], \"next_steps\": [\"Contact People Operations if the dates cannot move.\"], \"rationale_summary\": \"Balance is short of the request; the ticket was not opened.\"}",
-      "finish_reason": "stop"
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     }
   ]
 }

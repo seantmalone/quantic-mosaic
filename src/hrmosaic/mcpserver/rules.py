@@ -548,7 +548,11 @@ def _evaluate_requirement(requirement: Mapping[str, Any], context: Context) -> D
         reason = f"Not stated: {check.get('compare_to')} was not supplied."
         return Decision(entry=_settle(entry, "not_stated", reason), met=False, evaluable=False, blocking=blocking)
     met = _apply(operator, subject, expected)
-    reason = f"{subject_name} is {_render(subject)}; the policy value is {_render(expected)} ({operator})."
+    # Whose number the comparison value is (UX W9, npo5-02): a `compare_to: parameters.<name>` is
+    # the READER'S request, and the answer may not attribute it to the policy — "the policy asks
+    # for at least 3" was said of a figure the reader chose.
+    source = "request" if str(check.get("compare_to") or "fact").startswith("parameters.") else "policy"
+    reason = f"{subject_name} is {_render(subject)}; the {source} value is {_render(expected)} ({operator})."
     return Decision(entry=_settle(entry, "met" if met else "unmet", reason), met=met, evaluable=True, blocking=blocking)
 
 

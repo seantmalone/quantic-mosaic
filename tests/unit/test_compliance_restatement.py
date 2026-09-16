@@ -36,7 +36,7 @@ SCENARIO_4_VERDICT = {
             "label": "PTO balance, in days",
             "met": True,
             "status": "met",
-            "reason": "pto_balance.remaining_days is 13.5; the policy value is 3 (gte).",
+            "reason": "pto_balance.remaining_days is 13.5; the request value is 3 (gte).",
         },
         {
             "id": "pto.request.manager_approval",
@@ -60,7 +60,7 @@ SCENARIO_6_VERDICT = {
             "label": "PTO balance, in days",
             "met": False,
             "status": "unmet",
-            "reason": "pto_balance.remaining_days is 0.25; the policy value is 3 (gte).",
+            "reason": "pto_balance.remaining_days is 0.25; the request value is 3 (gte).",
         }
     ],
 }
@@ -143,7 +143,7 @@ def test_scenario_four_the_answer_stops_contradicting_a_met_requirement():
     result = compliance.apply([block(SCENARIO_4_SENTENCE)], [envelope(SCENARIO_4_VERDICT)])
 
     assert result.blocks[0]["text"] == (
-        "Your notice before the first day off, in business days, is 8; the policy asks for at least 5."
+        "Your notice before the first day off is 8 business days; the policy asks for at least 5 business days."
     )
     assert result.restated == [(0, "pto.request.notice")]
     assert result.changed
@@ -163,7 +163,7 @@ def test_asserting_a_requirement_the_engine_found_unmet_is_replaced():
         [block("Your balance covers the three days you asked for.")], [envelope(SCENARIO_6_VERDICT)]
     )
 
-    assert result.blocks[0]["text"] == "Your PTO balance, in days, is 0.25; the policy asks for at least 3."
+    assert result.blocks[0]["text"] == "Your PTO balance is 0.25 days; your request is for 3 days."
     assert result.restated == [(0, "pto.request.balance")]
 
 
@@ -208,7 +208,7 @@ def test_next_steps_are_repaired_the_way_the_blocks_are():
     )
 
     assert result.next_steps == [
-        "Your notice before the first day off, in business days, is 8; the policy asks for at least 5."
+        "Your notice before the first day off is 8 business days; the policy asks for at least 5 business days."
     ]
     assert result.restated_steps == [(0, "pto.request.notice")]
 
@@ -348,7 +348,7 @@ def test_the_reader_sentence_is_built_from_the_label_and_never_from_the_key():
     notice = compliance.rows([envelope(SCENARIO_4_VERDICT)])[0]
     sentence = compliance.reader_sentence(notice)
 
-    assert "notice before the first day off" in sentence
+    assert sentence.startswith("Your notice before the first day off is 8 business days")
     assert "notice_business_days" not in sentence and "notice business days" not in sentence
 
 
@@ -420,6 +420,16 @@ def test_a_plural_label_takes_are():
     assert compliance.reader_sentence(window) == (
         "Your days since the transaction are 12; the policy asks for no more than 45."
     )
+    # …and a request-backed comparison is the reader's, said as such, with the unit on both values
+    # (UX W9, npo5-02).
+    balance = compliance.Row(
+        id="pto.request.balance",
+        text="The requested days must be covered by the balance accrued at the snapshot.",
+        status="unmet",
+        reason="pto_balance.remaining_days is 0.25; the request value is 3 (gte).",
+        label="PTO balance, in days",
+    )
+    assert compliance.reader_sentence(balance) == "Your PTO balance is 0.25 days; your request is for 3 days."
     onsite = compliance.Row(
         id="remote.domestic.onsite_days",
         text="Hybrid employees work on site at least 3 days each week.",
@@ -448,6 +458,7 @@ def test_every_label_in_the_rules_file_renders_as_a_sentence_with_one_verb_and_n
                 label=requirement["label"],
             )
             sentence = compliance.reader_sentence(row)
-            assert not re.search(r",\s+(?:is|are)\s", sentence) or "," in requirement["label"], sentence
-            assert re.search(r"\b(?:is|are) 7;", sentence), sentence
+            assert not re.search(r",\s+(?:is|are)\s", sentence), sentence
+            assert re.search(r"\b(?:is|are) 7\b", sentence), sentence
+            assert "the policy asks for" in sentence or "your request is for" in sentence
             assert "_" not in sentence, sentence

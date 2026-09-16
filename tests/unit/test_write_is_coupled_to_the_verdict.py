@@ -80,4 +80,5 @@ async def test_the_answer_never_claims_the_balance_covers_the_request(blocked):
     response, _spans = blocked
 
     assert "covers the three days" not in response.answer
-    assert "0.25" in response.answer and "the policy asks for at least 3" in response.answer
+    assert "Your PTO balance is 0.25 days; your request is for 3 days." in response.answer
+    assert "the policy asks for at least 3" not in response.answer, "the 3 days are the reader's, not the policy's"

@@ -1,11 +1,13 @@
 {
   "scenario": "followup_extend",
-  "_note": "W8, C12: two turns of one session, the second a delta of the first. `fresh:40ad6a43…:2` — one turn after a confirmed write, \"What if I extend it to five days instead?\" produced a generic clarifying question, because neither prompt carried a byte of the conversation. Written for this wave rather than recorded: what it has to reproduce is a SECOND turn, and the recordings are all single-turn. Entries 1-4 are turn one (route, two act steps, synthesis); each synthesis is followed by the breadth round's `repair`, which re-sends the same answer and is therefore not accepted (it is not broader), so the first answer stands; entries 6-9 are turn two, whose router does not clarify and whose act step re-scores the same span at five days. Drives tests/unit/test_followup_inherits_the_session.py. Turn two re-reads the record and the balance: §9.3's completion predicate is per-turn and a new turn's LoopState starts empty, so the session context tells the model what was settled while the predicate still requires this turn to have read it. Since the fix round (W7-review I5) turn two's compliance call carries ONLY `days: 5`: the start date is inherited from turn one by the orchestrator's slot inheritance, and the end date is deliberately NOT inherited, because the model changed a member of that slot family.",
+  "_note": "W8, C12: two turns of one session, the second a delta of the first. `fresh:40ad6a43…:2` — one turn after a confirmed write, \"What if I extend it to five days instead?\" produced a generic clarifying question, because neither prompt carried a byte of the conversation. Written for this wave rather than recorded: what it has to reproduce is a SECOND turn, and the recordings are all single-turn. Entries 1-4 are turn one (route, two act steps, synthesis); each synthesis is followed by the breadth round's `repair`, which re-sends the same answer and is therefore not accepted (it is not broader), so the first answer stands; entries 6-9 are turn two, whose router does not clarify and whose act step re-scores the same span at five days. Drives tests/unit/test_followup_inherits_the_session.py. Turn two re-reads the record and the balance: §9.3's completion predicate is per-turn and a new turn's LoopState starts empty, so the session context tells the model what was settled while the predicate still requires this turn to have read it. Since the fix round (W7-review I5) turn two's compliance call carries ONLY `days: 5`: the start date is inherited from turn one by the orchestrator's slot inheritance, and the end date is deliberately NOT inherited, because the model changed a member of that slot family. Every completion carries a usage figure (W9, npo5-04): a scripted turn measures like a recorded one, so no dashboard surface paints a bare 0 for tokens.",
   "completions": [
     {
       "purpose": "route",
       "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\"], \"rationale_summary\": \"PTO request for E1042, 15-17 September.\"}",
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1800,
+      "completion_tokens": 60
     },
     {
       "purpose": "act",
@@ -26,7 +28,9 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
@@ -64,22 +68,30 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "synthesize",
       "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Three days, cited.\"}",
-      "finish_reason": "stop"
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     },
     {
       "purpose": "repair",
       "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Three days, cited.\"}",
-      "finish_reason": "stop"
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     },
     {
       "purpose": "route",
       "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\"], \"rationale_summary\": \"Delta follow-up: the same span at five days.\"}",
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1800,
+      "completion_tokens": 60
     },
     {
       "purpose": "act",
@@ -129,17 +141,23 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "synthesize",
       "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Five days over the same span, cited.\"}",
-      "finish_reason": "stop"
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     },
     {
       "purpose": "repair",
       "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Five days over the same span, cited.\"}",
-      "finish_reason": "stop"
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     }
   ]
 }

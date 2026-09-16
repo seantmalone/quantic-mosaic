@@ -197,13 +197,19 @@ async def test_the_panel_summarises_how_the_last_turn_was_produced(web):
         r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, "
         r"in (under a second|\d+\.\d+ (seconds|minutes))\. "
         r"(?P<ran>\d+) of the (?P<total>\d+) safety checks applied to this answer; "
-        r"(all (?P<all>\d+)|(?P<passed>\d+) of the (?P<of>\d+)) passed\."
+        r"(all (?P<all>\d+) passed|both passed|it passed|it did not pass|none applied"
+        r"|(?P<passed>\d+) of the (?P<of>\d+) passed) "
+        r"— (?P<runs>\d+) checks? run, (none blocked|(?P<blocked>\d+) blocked)\."
     )
     match = re.fullmatch(expected, summary)
     assert match, summary
     assert "(s)" not in summary, "the plural follows the count (P9)"
     assert int(match.group("total")) == len(RULE_LABELS) == 6, "the denominator is the six rules of §7.4"
     assert int(match.group("ran")) <= 6, "a check is one of the six rules, not one span"
-    passed = int(match.group("all") or match.group("passed"))
+    # The verdict clause agrees with its count (UX W9, CPUX4-05): "all N" only from three up.
+    if match.group("all"):
+        assert int(match.group("all")) >= 3 and int(match.group("all")) == int(match.group("ran")), summary
+    passed = int(match.group("all") or match.group("passed") or match.group("ran"))
     assert passed <= int(match.group("ran")), summary
+    assert int(match.group("runs")) >= int(match.group("ran")), "verdicts are at least as many as rules run"
     assert summary in _panel(reloaded), "and a replayed conversation shows the same sentence"

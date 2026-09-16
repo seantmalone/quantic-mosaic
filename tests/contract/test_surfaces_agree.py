@@ -129,13 +129,18 @@ async def test_the_panel_sentence_and_the_session_tile_count_the_same_safety_che
 
     produced = re.search(r'data-produced="([^"]+)"', turn.text).group(1)
     panel = re.search(
-        r"(\d+) of the (\d+) safety checks applied to this answer; (?:all (\d+)|(\d+) of the \d+) passed", produced
+        r"(\d+) of the (\d+) safety checks applied to this answer; "
+        r"(?:all \d+ passed|both passed|it passed|it did not pass|none applied|\d+ of the \d+ passed) "
+        r"— (\d+) checks? run, (?:none blocked|\d+ blocked)",
+        produced,
     )
     assert panel, produced
     tile = re.search(r"Safety checks</dt><dd>\s*(\d+) of (\d+) applied ·\s*(\d+) checks? run", waterfall)
     assert tile, "the session tile states the same two figures"
     assert (panel.group(1), panel.group(2)) == (tile.group(1), tile.group(2)) == (tile.group(1), "6")
     assert int(tile.group(3)) >= int(tile.group(1)), "spans run are at least the rules that applied"
+    # …and the third figure, the verdict count, is the same on both (UX W9, npo5-03).
+    assert panel.group(3) == tile.group(3), (produced, tile.group(0))
     assert "The six safety checks" in guardrails, "…and the Guardrails page names the same six"
 
 
@@ -180,3 +185,26 @@ async def test_the_citation_line_and_the_chat_sources_strip_do_not_count_two_thi
     assert "document" in unit, (
         f"the citation line counts {counted} of something the page does not name: {line.group(0)!r}"
     )
+
+
+# -- UX W9, npo5-03: the panel's blocked count is the dashboard's GUARDRAIL BLOCKS ------------------
+
+TUITION = (
+    "What is Mosaic's tuition reimbursement cap for a part-time master's degree, and how many "
+    "years of service do I need to qualify?"
+)
+
+
+async def test_the_chat_panel_and_the_dashboard_count_blocked_checks_the_same_way(web, store):
+    """For one refused turn chat said one safety check did not pass and the Turns page said
+    GUARDRAIL BLOCKS 2 — rules on one surface, verdicts on the other. The panel now says both,
+    and its verdict count is the number the dashboard's tiles read."""
+    async with web("out_of_corpus_tuition.json") as client:
+        page = (await client.post("/chat", json={"message": TUITION}, headers=HTMX)).text
+        turn_id = re.search(r'data-turn-id="([0-9a-f]+)"', page).group(1)
+
+    produced = re.search(r"(?P<runs>\d+) checks? run, (?:none blocked|(?P<blocked>\d+) blocked)\.", page)
+    assert produced, page[:400]
+    blocked = int(produced.group("blocked") or 0)
+    hits = store.execute("SELECT guardrail_hits FROM turns WHERE id = ?", (turn_id,)).scalar()
+    assert blocked == int(hits or 0), f"the panel says {blocked} blocked; the turn's rollup says {hits}"

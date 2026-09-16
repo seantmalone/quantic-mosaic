@@ -168,7 +168,15 @@ THIS_REQUEST = re.compile(
 )
 
 #: The shape `rules.py::_evaluate_requirement` writes a decided reason in.
-REASON = re.compile(r"^(?P<subject>[\w.]+) is (?P<value>.+?); the policy value is (?P<expected>.+?) \((?P<op>\w+)\)\.$")
+REASON = re.compile(
+    r"^(?P<subject>[\w.]+) is (?P<value>.+?); the (?P<source>policy|request) value is "
+    r"(?P<expected>.+?) \((?P<op>\w+)\)\.$"
+)
+
+#: A label's unit tail — ", in business days", ", in US dollars" — carried onto the values instead
+#: of left dangling as an appositive (UX W9, npo5-02 / CPUX4-03): *"Your PTO balance is 0.25 days;
+#: your request is for 3 days."*
+_UNIT_TAIL = re.compile(r",\s*in\s+(?P<unit>[^,]+)$")
 
 
 @dataclass(frozen=True)
@@ -288,13 +296,17 @@ def reader_sentence(row: Row) -> str:
         if row.status == "met":
             return f"Your {row.label}: {stated}, as the policy requires."
         return f"Your {row.label}: {stated}; the policy requires {wanted}."
+    # The unit leaves the label and joins the numbers: "Your PTO balance is 0.25 days" rather than
+    # "Your PTO balance, in days, is 0.25" (UX W9, npo5-02 / CPUX4-03).
+    unit_match = _UNIT_TAIL.search(row.label)
+    label = _UNIT_TAIL.sub("", row.label) if unit_match else row.label
+    unit = f" {unit_match['unit'].strip()}" if unit_match else ""
     relation = RELATIONS.get(match["op"], "")
-    asked = f"{relation} {expected}".strip()
-    # A label that ends in an appositive — "…, in business days" — closes it with a comma before
-    # the verb; a plain label takes none (NEW-1: "Your destination country, is DE" was a comma too
-    # many, and "Your days since the transaction is 12" a verb too few).
-    joiner = ", " if "," in row.label else " "
-    return f"Your {row.label}{joiner}{_verb(row.label)} {value}; the policy asks for {asked}."
+    if match["source"] == "request":
+        # The comparison value is the reader's own — their request — never "the policy".
+        return f"Your {label} {_verb(label)} {value}{unit}; your request is for {expected}{unit}."
+    asked = f"{relation} {expected}{unit}".strip()
+    return f"Your {label} {_verb(label)} {value}{unit}; the policy asks for {asked}."
 
 
 def relation(sentence: str, row: Row) -> str | None:

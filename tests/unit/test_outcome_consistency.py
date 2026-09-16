@@ -905,3 +905,35 @@ def test_still_beside_a_filing_verb_is_a_directive_only_when_aimed_at_the_reader
     assert outcome.directs("You must still submit the formal PTO request in MosaicOne.", "create_mock_hr_ticket")
     assert not outcome.directs("The ticket is still open.", "create_mock_hr_ticket")
     assert not outcome.directs("Your manager can still open the request to add notes.", "create_mock_hr_ticket")
+
+
+# -- UX W9, CPUX4-02: one sentence, once per turn --------------------------------------------------
+
+
+def test_a_sentence_the_lede_already_said_is_not_said_again_below_it():
+    lede = {
+        "type": "notice",
+        "text": (
+            "I have not opened the request: Your PTO balance is 0.25 days; your request is for 3 days. "
+            "Contact People Operations to discuss the options."
+        ),
+        "citations": [],
+    }
+    record = {"type": "record", "text": "Your PTO balance is 0.25 days; your request is for 3 days.", "citations": []}
+    advice = {"type": "recommendation", "text": "Ask about unpaid leave if the dates cannot move.", "citations": []}
+    blocks, removed = outcome.dedupe_sentences([lede, record, advice])
+
+    assert blocks == [lede, advice], "the record block was nothing but the repeat, so it goes"
+    assert removed == [(1, record["text"])]
+
+
+def test_distinct_sentences_are_untouched_byte_for_byte():
+    blocks = [
+        {
+            "type": "policy_fact",
+            "text": "PTO requests must be submitted at least 5 business days in advance.",
+            "citations": ["c1"],
+        },
+        {"type": "record", "text": "You have 13.5 days remaining.", "citations": []},
+    ]
+    assert outcome.dedupe_sentences(blocks) == (blocks, [])

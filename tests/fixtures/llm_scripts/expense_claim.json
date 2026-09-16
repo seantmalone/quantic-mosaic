@@ -1,11 +1,13 @@
 {
   "scenario": "expense_claim",
-  "_note": "W8 fix round, W7-review I2: `eval:expenses-002:1` — a USD 3,000 client trip, answered from the USD 2,500 manager row because the amount never reached the engine. The router here says policy_qa with no workflow, which `normalise` corrects to the expense_claim workflow; the model reads the profile and searches twice but NEVER calls check_policy_compliance — not after the workflow-incomplete reminder either — so the verdict is scored deterministically at synthesis from the amount the question carried. Drives tests/unit/test_expense_claim_is_scored.py. The breadth round's repair re-sends the same answer and is not accepted.",
+  "_note": "W8 fix round, W7-review I2: `eval:expenses-002:1` — a USD 3,000 client trip, answered from the USD 2,500 manager row because the amount never reached the engine. The router here says policy_qa with no workflow, which `normalise` corrects to the expense_claim workflow; the model reads the profile and searches twice but NEVER calls check_policy_compliance — not after the workflow-incomplete reminder either — so the verdict is scored deterministically at synthesis from the amount the question carried. Drives tests/unit/test_expense_claim_is_scored.py. The breadth round's repair re-sends the same answer and is not accepted. Every completion carries a usage figure (W9, npo5-04): a scripted turn measures like a recorded one, so no dashboard surface paints a bare 0 for tokens.",
   "completions": [
     {
       "purpose": "route",
       "finish_reason": "end_turn",
-      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"multi_doc\": false, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"Who approves a USD 3,000 expense claim.\"}"
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"multi_doc\": false, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"Who approves a USD 3,000 expense claim.\"}",
+      "prompt_tokens": 1800,
+      "completion_tokens": 60
     },
     {
       "purpose": "act",
@@ -37,29 +39,39 @@
           }
         }
       ],
-      "finish_reason": "tool_use"
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
       "response_text": "I have what I need.",
       "tool_calls": [],
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "act",
       "response_text": "I still have what I need.",
       "tool_calls": [],
-      "finish_reason": "end_turn"
+      "finish_reason": "end_turn",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
     },
     {
       "purpose": "synthesize",
       "finish_reason": "stop",
-      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Expense reports up to USD 2,500 are approved by the direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Submit the report to your manager, who may approve up to USD 2,500.\", \"citations\": []}], \"next_steps\": [\"Send the report to your manager for approval.\"], \"rationale_summary\": \"Answered from the manager row.\"}"
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Expense reports up to USD 2,500 are approved by the direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Submit the report to your manager, who may approve up to USD 2,500.\", \"citations\": []}], \"next_steps\": [\"Send the report to your manager for approval.\"], \"rationale_summary\": \"Answered from the manager row.\"}",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     },
     {
       "purpose": "repair",
       "finish_reason": "stop",
-      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Expense reports up to USD 2,500 are approved by the direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Submit the report to your manager, who may approve up to USD 2,500.\", \"citations\": []}], \"next_steps\": [\"Send the report to your manager for approval.\"], \"rationale_summary\": \"Answered from the manager row.\"}"
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Expense reports up to USD 2,500 are approved by the direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Submit the report to your manager, who may approve up to USD 2,500.\", \"citations\": []}], \"next_steps\": [\"Send the report to your manager for approval.\"], \"rationale_summary\": \"Answered from the manager row.\"}",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
     }
   ]
 }

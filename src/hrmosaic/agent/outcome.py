@@ -772,6 +772,42 @@ def _record_split(
     return dict(block), None, False
 
 
+def dedupe_sentences(blocks: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[tuple[int, str]]]:
+    """`(the blocks with every later verbatim repeat removed, the `(index, sentence)` pairs removed)`.
+
+    One sentence is said once per turn (UX W9, CPUX4-02). The refusal-to-write turn opened with
+    *"I have not opened the request: Your PTO balance is 0.25 days; …"* and then, under *"From
+    your HR record"*, printed the same clause again word for word — the restatement step and the
+    refusal's own lede had each written it. The first statement stands; a later block that
+    repeats it loses the sentence, and a block left with nothing goes.
+    """
+    seen: set[str] = set()
+    kept: list[dict[str, Any]] = []
+    removed: list[tuple[int, str]] = []
+    for index, block in enumerate(blocks):
+        item = dict(block)
+        text = str(item.get("text") or "")
+        parts = sentences(text)
+        keep: list[str] = []
+        for sentence in parts:
+            key = " ".join(sentence.lower().split()).rstrip(".:;")
+            core = key.split(": ", 1)[
+                -1
+            ]  # the lede's "I have not opened the request: …" carries the clause after the colon
+            if key in seen or core in seen:
+                removed.append((index, sentence))
+                continue
+            seen.add(key)
+            seen.add(core)
+            keep.append(sentence)
+        if not keep and parts:
+            continue
+        if len(keep) != len(parts):
+            item["text"] = " ".join(part.strip() for part in keep)
+        kept.append(item)
+    return kept, removed
+
+
 def apply(
     blocks: Sequence[Mapping[str, Any]],
     envelopes: Iterable[Any],
@@ -904,6 +940,7 @@ __all__ = [
     "about_the_reader",
     "apply",
     "claims_the_write",
+    "dedupe_sentences",
     "denies",
     "directs",
     "envelope_numbers",
