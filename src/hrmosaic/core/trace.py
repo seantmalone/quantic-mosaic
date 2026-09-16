@@ -969,6 +969,64 @@ class TraceWriter:
             > 0
         )
 
+    def lapsed_proposals(self, *, now: int | None = None) -> list[tuple[str, str]]:
+        """`(turn_id, span_id)` for every proposal still `pending` past its own `expires_at`."""
+        now = now if now is not None else now_micros()
+        rows = self.store.execute(
+            "SELECT s.turn_id AS turn_id, s.id AS span_id FROM spans s JOIN turns t ON t.id = s.turn_id "
+            "WHERE s.kind = 'confirmation' AND json_extract(s.payload_json, '$.user_response') = 'pending' "
+            "AND CAST(json_extract(s.payload_json, '$.expires_at') AS INTEGER) <= ? "
+            "AND t.outcome = 'awaiting_confirmation' ORDER BY s.seq",
+            (now,),
+        ).dicts()
+        return [(str(row["turn_id"]), str(row["span_id"])) for row in rows]
+
+    def expire_proposal(
+        self,
+        turn_id: str,
+        span_id: str,
+        *,
+        final_answer: str,
+        answer_blocks: Any,
+        next_steps: Any = (),
+    ) -> TurnBuffer | None:
+        """Write one lapsed proposal `expired` and close its turn with a stated outcome (W8, C11).
+
+        The span is resolved in place and the turn — reopened uncounted, because nothing resumed —
+        closes `refused` / `expired` with the answer the caller rendered, so a reader who comes
+        back to the tab is told, and the turn stops sitting `awaiting_confirmation` for ever.
+        Returns the closed buffer, or `None` when the span was no longer pending (a race with
+        `POST /chat/confirm`, which resolves the same span first).
+        """
+        if not self.resolve_confirmation(span_id, user_response="expired"):
+            return None
+        buffer = self.reopen_turn(turn_id, 0, resumed=False)
+        buffer.close(
+            outcome="refused",
+            stop_reason="expired",
+            final_answer=final_answer,
+            answer_blocks=answer_blocks,
+            next_steps=list(next_steps),
+        )
+        return buffer
+
+    def sweep_expired_confirmations(self, *, final_answer: str, answer_blocks: Any, now: int | None = None) -> int:
+        """Expire every lapsed proposal nobody came back to (W8 fix round, W7-review I6).
+
+        C11's exhibit was three turns parked `pending` for ever — turns nobody posted a decision
+        for — and a late `POST /chat/confirm` was the only path that wrote `expired`. This is the
+        other path: a boot and periodic pass over every pending span past its TTL. Returns how many
+        it closed.
+        """
+        closed = 0
+        for turn_id, span_id in self.lapsed_proposals(now=now):
+            try:
+                if self.expire_proposal(turn_id, span_id, final_answer=final_answer, answer_blocks=answer_blocks):
+                    closed += 1
+            except Exception:  # one bad row must not stop the sweep
+                logger.warning("could not expire proposal %s on turn %s", span_id, turn_id, exc_info=True)
+        return closed
+
     def sweep_stale_turns(self, older_than_s: int = STALE_TURN_SECONDS) -> int:
         """Close anything a hard kill left open. Runs at boot (§10.3)."""
         now = now_micros()
@@ -1024,6 +1082,17 @@ def reopen_turn(turn_id: str, awaiting_ms: int, *, resumed: bool = True) -> Turn
 
 def resolve_confirmation(span_id: str, *, user_response: str, resolved_at: int | None = None) -> bool:
     return get_writer().resolve_confirmation(span_id, user_response=user_response, resolved_at=resolved_at)
+
+
+def expire_proposal(turn_id: str, span_id: str, *, final_answer: str, answer_blocks: Any, next_steps: Any = ()):
+    return get_writer().expire_proposal(
+        turn_id, span_id, final_answer=final_answer, answer_blocks=answer_blocks, next_steps=next_steps
+    )
+
+
+def sweep_expired_confirmations(*, final_answer: str, answer_blocks: Any, store: Store | None = None) -> int:
+    writer = get_writer() if store is None else TraceWriter(store)
+    return writer.sweep_expired_confirmations(final_answer=final_answer, answer_blocks=answer_blocks)
 
 
 def open_turns() -> list[TurnBuffer]:

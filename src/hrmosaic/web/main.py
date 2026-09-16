@@ -139,13 +139,20 @@ async def _maintenance(settings: Settings) -> None:
 def _maintenance_pass(settings: Settings) -> None:
     store = get_store(settings)
     swept = trace_module.sweep_stale_turns(store=store)
+    # …and the proposals nobody answered: past their TTL they are written `expired` and their
+    # turns closed with a stated outcome, instead of sitting `awaiting_confirmation` for ever
+    # (W8, C11; the sweep is the fix round's W7-review I6).
+    answer, blocks = api.expired_answer()
+    expired = trace_module.sweep_expired_confirmations(final_answer=answer, answer_blocks=blocks, store=store)
     pruned = retention.sweep(store=store)
     # An absolute path: `import_state.path` is the primary key and is stored exactly as given, so
     # a relative one would re-import every file the first time the process ran from elsewhere.
     imported = archive.import_results(store=store, results_dir=(REPO_ROOT / "evaluation" / "results").resolve())
     logger.info(
-        "maintenance: %d stale turn(s) closed, %d session(s) pruned, %d eval run(s) imported",
+        "maintenance: %d stale turn(s) closed, %d lapsed proposal(s) expired, %d session(s) pruned, "
+        "%d eval run(s) imported",
         swept,
+        expired,
         pruned.sessions_deleted,
         len(imported.imported),
     )

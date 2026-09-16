@@ -1338,7 +1338,10 @@ POST /chat  (or /chat/confirm)
 
 **The confirmation gate is coupled to the verdict** (W8). A write whose scenario the same turn scored `non_compliant` is refused at the call boundary,
 recorded, and never turned into a card; the answer opens with a `notice` giving the failing row's own reason and the contact the scenario escalates to.
-`non_compliant` **is** the "a blocking requirement is unmet" condition (§8.4), so the verdict alone is the test.
+`non_compliant` **is** the "a blocking requirement is unmet" condition (§8.4), so the verdict alone is the test. A proposal is answered once: its
+`confirmation` span is resolved in place (`confirmed` / `declined` / `expired`), a replayed confirm is a 409, and a proposal nobody comes back to is
+written `expired` and its turn closed with a stated outcome by the boot-and-periodic maintenance pass (`trace.sweep_expired_confirmations`), not only
+by a late `POST /chat/confirm`.
 
 **Four reminders, at most one per act step.** When the model stops calling tools while the turn still owes something, the loop appends one
 deterministic `user` message and takes another step: `workflow_incomplete` (§9.3's predicate is unmet), `action_outstanding` (the user asked for

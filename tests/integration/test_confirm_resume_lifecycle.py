@@ -285,3 +285,32 @@ async def test_a_lapsed_proposal_is_written_expired_and_the_turn_is_closed(web, 
     assert (row["outcome"], row["stop_reason"]) == ("refused", "expired")
     assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
     assert store.execute("SELECT COUNT(*) AS n FROM confirmations").scalar() == 0, "no token was minted"
+
+
+async def test_the_maintenance_sweep_expires_a_proposal_nobody_came_back_to(web, store):
+    """W8 fix round, W7-review I6. C11's exhibit was three turns parked `pending` for ever — turns
+    nobody posted a decision for — and a late `POST /chat/confirm` was the only path that wrote
+    `expired`. The maintenance pass is the other path."""
+    from hrmosaic.core import trace as trace_module
+    from hrmosaic.web import api
+
+    async with web("confirm_lifecycle.json") as client:
+        parked = await _ask(client)
+        store.execute(
+            "UPDATE spans SET payload_json = json_set(payload_json, '$.expires_at', 1) "
+            "WHERE turn_id = ? AND kind = 'confirmation'",
+            (parked["turn_id"],),
+        )
+        answer, blocks = api.expired_answer()
+        closed = trace_module.sweep_expired_confirmations(final_answer=answer, answer_blocks=blocks, store=store)
+        again = trace_module.sweep_expired_confirmations(final_answer=answer, answer_blocks=blocks, store=store)
+
+    assert closed == 1 and again == 0, "one lapsed proposal, expired once"
+    confirmations = _spans(store, parked["turn_id"], "confirmation")
+    assert [span["payload"]["user_response"] for span in confirmations] == ["expired"]
+    row = store.execute(
+        "SELECT outcome, stop_reason, final_answer, resumed_count FROM turns WHERE id = ?", (parked["turn_id"],)
+    ).one()
+    assert (row["outcome"], row["stop_reason"], row["resumed_count"]) == ("refused", "expired", 0)
+    assert "expired before it was confirmed" in row["final_answer"]
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0

@@ -664,7 +664,9 @@ never holds a token: the orchestrator **strips any model-supplied `confirmation_
 every `tools/call`**, and the `CONFIRMATION_REQUIRED` rejection contains no token of any kind.
 Three unit tests are the whole gate — missing, mismatched arguments, reused — each returning
 `CONFIRMATION_REQUIRED` and writing **no** `mock_writes` row; one integration test covers decline
-→ re-ask → confirm ending with exactly one row on one reopened turn. A `mock_writes` row cannot
+→ re-ask → confirm ending with exactly one row on one reopened turn; a proposal is answered once — its span
+is resolved in place, a replayed confirm is a 409, and one nobody comes back to is expired and closed by the
+maintenance pass rather than left `awaiting_confirmation` for ever. A `mock_writes` row cannot
 exist without a `confirmations` token resolving to a confirmed, consumed row with matching
 arguments, and `tests/unit/test_action_safety.py` asserts that over both the fixture traces and
 the real evaluation traces.

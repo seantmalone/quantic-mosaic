@@ -1801,13 +1801,20 @@ EXPIRED_NOTICE = (
 )
 
 
-def _record_expiry(request: Request, store: Store, turn: Mapping[str, Any], pending: dict[str, Any]) -> Response:
-    """A lapsed TTL: the span says `expired`, the turn closes, and the reader is told (W8, C11)."""
-    trace_module.resolve_confirmation(pending["id"], user_response="expired")
-    buffer = trace_module.reopen_turn(str(turn["id"]), 0, resumed=False)
+def expired_answer() -> tuple[str, list[AnswerBlock]]:
+    """The answer a lapsed proposal closes with — one `notice`, rendered once for both callers."""
     blocks = [AnswerBlock(type=NOTICE, text=EXPIRED_NOTICE, citations=[])]
-    answer = render_answer(blocks, [])
-    buffer.close(outcome="refused", stop_reason="expired", final_answer=answer, answer_blocks=blocks, next_steps=[])
+    return render_answer(blocks, []), blocks
+
+
+def _record_expiry(request: Request, store: Store, turn: Mapping[str, Any], pending: dict[str, Any]) -> Response:
+    """A lapsed TTL, met at `POST /chat/confirm`: the span says `expired`, the turn closes, and the
+    reader is told (W8, C11). The same `expire_proposal` the maintenance sweep runs over the
+    proposals nobody came back to (W7-review I6)."""
+    answer, blocks = expired_answer()
+    buffer = trace_module.expire_proposal(
+        str(turn["id"]), pending["id"], final_answer=answer, answer_blocks=blocks
+    ) or trace_module.reopen_turn(str(turn["id"]), 0, resumed=False)
     usage, timings = _turn_rollups(store, buffer.turn_id)
     response = ChatResponse(
         session_id=buffer.session_id,
