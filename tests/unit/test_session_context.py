@@ -189,3 +189,116 @@ def test_a_session_with_no_history_renders_the_same_bytes_it_always_did():
     without = prompts.render("act.j2", persona=persona, question="Hello?")
 
     assert with_empty == without
+
+
+# -- W10, ruling 7: the session remembers its own writes ---------------------------------
+
+
+async def test_the_prior_write_carries_its_tool_and_the_summary_the_reader_confirmed(prior):
+    """`filed MOCK-HR-000013` told a later turn *that* something was filed and never *what*, so
+    scenario 09 answered "Submit the request in MosaicOne" one turn after filing it."""
+    write = session.performed_write(session.recent(prior))
+
+    assert write is not None
+    assert (write.tool, write.write_id) == ("create_mock_hr_ticket", "MOCK-HR-000010")
+
+
+async def test_the_rendered_block_names_the_tool_beside_the_reference(prior, writer):
+    block = session.render(session.recent(prior))
+    assert "filed MOCK-HR-000010 via create_mock_hr_ticket" in block
+
+
+async def test_a_session_that_filed_nothing_reports_no_write(writer):
+    _closed_turn(writer, "s_two", question="Anything?", workflow="pto_request", slots={"days": 1}, ticket=None)
+    assert session.performed_write(session.recent("s_two")) is None
+
+
+def test_a_directive_to_file_what_the_session_filed_becomes_an_amendment():
+    from hrmosaic.agent import outcome as outcome_consistency
+
+    write = session.Write(tool="create_mock_hr_ticket", write_id="MOCK-HR-000013", summary="PTO request")
+    result = outcome_consistency.apply(
+        [
+            {
+                "type": "recommendation",
+                "text": "Submit the request in MosaicOne so Dana can approve it.",
+                "citations": [],
+            }
+        ],
+        [],
+        next_steps=["Submit the request in MosaicOne."],
+        prior_write=write,
+    )
+
+    assert result.blocks[0]["text"] == "Amend MOCK-HR-000013 in MosaicOne rather than filing a second request."
+    assert result.next_steps == ["Amend MOCK-HR-000013 in MosaicOne rather than filing a second request."]
+    assert result.trimmed, "and the edit is recorded"
+
+
+def test_a_sentence_that_names_the_reference_is_left_alone():
+    from hrmosaic.agent import outcome as outcome_consistency
+
+    write = session.Write(tool="create_mock_hr_ticket", write_id="MOCK-HR-000013")
+    kept = {"type": "record", "text": "Dana approves MOCK-HR-000013 in MosaicOne.", "citations": []}
+    result = outcome_consistency.apply([kept], [], prior_write=write)
+    assert result.blocks[0]["text"] == kept["text"]
+
+
+def test_the_synthesis_prompt_carries_the_session_too():
+    """W10, ruling 7: `route.j2` and `act.j2` have carried it since W8; synthesis had not, so the
+    answer could still write "submit the request" over a ticket two turns old."""
+    from hrmosaic.agent import prompts
+
+    persona = prompts.persona_block(employee_id="E1042", actor_source="explicit")
+    block = session.render(
+        [
+            session.PriorTurn(
+                seq=1,
+                question=FIRST,
+                outcome="answered",
+                workflow="pto_request",
+                slots={"days": 3},
+                write_id="MOCK-HR-000013",
+                write_tool="create_mock_hr_ticket",
+            )
+        ]
+    )
+    system, user = prompts.render(
+        "synthesize.j2", persona=persona, chunks=[], tool_results=[], question="Extend it?", session_context=block
+    )
+    bare_system, _ = prompts.render("synthesize.j2", persona=persona, chunks=[], tool_results=[], question="Extend it?")
+    assert block in user and "amend <reference>" in user
+    assert system == bare_system, "the cached half never moves"
+
+
+# -- W10, ruling 9: the clarification names the slot and offers a reply the persona can send ------
+
+
+def test_the_identity_question_says_why_it_is_being_asked():
+    """Scenario 08: the admin turn was asked whose record to use and never told that the session
+    carries no record of its own."""
+    assert "not signed in as an employee" in CLARIFY_QUESTIONS["identity"]
+
+
+def test_a_persona_with_no_record_is_never_offered_a_lookup_it_cannot_have():
+    assert "Look it up for me" in clarify_chips("identity")
+    assert "Look it up for me" not in clarify_chips("identity", has_record=False)
+    assert clarify_chips("identity", has_record=False) == ("It is for E1042",)
+
+
+def test_every_question_names_the_slot_in_its_one_next_step():
+    from hrmosaic.agent.orchestrator import CLARIFY_FALLBACK_STEP, CLARIFY_NEXT_STEPS
+
+    assert set(CLARIFY_NEXT_STEPS) == set(CLARIFY_QUESTIONS)
+    assert all(step != CLARIFY_FALLBACK_STEP for step in CLARIFY_NEXT_STEPS.values())
+
+
+def test_the_routers_rationale_names_the_slot_when_no_workflow_does():
+    """Scenario 12 — *"Can I take leave?"* — carried no workflow, so the question fell back to one
+    that names nothing, while the router's own rationale had already said what was missing."""
+    from hrmosaic.agent.orchestrator import rationale_slot
+
+    assert rationale_slot("Leave type and dates are missing for this request.") == "start_date"
+    assert rationale_slot("No employee id was supplied.") == "identity"
+    assert rationale_slot("How much is the claim for?") == "amount_usd"
+    assert rationale_slot("Nothing recognisable here.") is None

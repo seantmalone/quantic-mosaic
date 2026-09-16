@@ -827,12 +827,46 @@ def dedupe_sentences(blocks: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str
     return kept, removed
 
 
+#: What a directive becomes when the **session** already filed the request (W10, ruling 7). The
+#: turn itself performed no write, so there is no `performed` statement to lead with; the reader is
+#: still not to be sent to file a second ticket for one absence.
+AMEND = "Amend {write_id} in MosaicOne rather than filing a second request."
+
+
+def amend(text: str, prior: Any) -> tuple[str, list[str]]:
+    """`(the text with each stale filing directive replaced, the sentences replaced)`.
+
+    Scenario 09: *"Submit the request in MosaicOne so Dana can approve it"*, one turn after the
+    same session filed `MOCK-HR-000013` for the same absence. The rule is the one `trim()` applies
+    to a write **this** turn performed, except that the sentence is replaced rather than removed —
+    there is still something for the reader to do, and it is not filing again.
+    """
+    write_id = getattr(prior, "write_id", "")
+    tool_name = getattr(prior, "tool", "") or getattr(prior, "tool_name", "")
+    if not write_id or not tool_name:
+        return text, []
+    replaced: list[str] = []
+    kept: list[str] = []
+    for sentence in sentences(text):
+        if write_id in sentence or not directs(sentence, tool_name):
+            kept.append(sentence)
+            continue
+        replaced.append(sentence)
+        line = AMEND.format(write_id=write_id)
+        if line not in kept:
+            kept.append(line)
+    if not replaced:
+        return text, []
+    return " ".join(part.strip() for part in kept), replaced
+
+
 def apply(
     blocks: Sequence[Mapping[str, Any]],
     envelopes: Iterable[Any],
     *,
     next_steps: Sequence[str] = (),
     policy_claims: Sequence[int] = (),
+    prior_write: Any = None,
 ) -> Outcome:
     """The pure rule: state the write first, drop what contradicts it, and type the reader's own
     record as such. Mutates nothing.
@@ -920,7 +954,26 @@ def apply(
 
     result = [block for _index, block in survivors]
     if write is None:
-        return Outcome(blocks=result, next_steps=kept_steps, retyped=retyped)
+        # **The session remembers its own writes** (W10, ruling 7). This turn performed none, but
+        # an earlier turn of the same session did, and a directive to file the request it already
+        # filed becomes an instruction to amend it.
+        if prior_write is not None:
+            amended: list[dict[str, Any]] = []
+            for index, block in enumerate(result):
+                text, replaced = amend(str(block.get("text") or ""), prior_write)
+                if replaced:
+                    trimmed.extend((index, sentence) for sentence in replaced)
+                    block = {**block, "text": text}
+                amended.append(block)
+            result = amended
+            steps_out: list[str] = []
+            for index, step in enumerate(kept_steps):
+                text, replaced = amend(step, prior_write)
+                if replaced:
+                    trimmed.extend((index, sentence) for sentence in replaced)
+                steps_out.append(text)
+            kept_steps = list(dict.fromkeys(steps_out))
+        return Outcome(blocks=result, next_steps=kept_steps, retyped=retyped, trimmed=trimmed)
     statement = {"type": PERFORMED, "text": write.statement, "citations": []}
     return Outcome(
         blocks=[statement, *result],
@@ -936,6 +989,7 @@ def apply(
 
 __all__ = [
     "ACTION_OBJECTS",
+    "AMEND",
     "ACTION_WORDS",
     "DENIALS",
     "DIRECTIVE_MODALS",
@@ -958,6 +1012,7 @@ __all__ = [
     "Outcome",
     "PerformedWrite",
     "about_the_reader",
+    "amend",
     "apply",
     "claims_the_write",
     "dedupe_sentences",

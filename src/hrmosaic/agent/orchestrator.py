@@ -196,14 +196,50 @@ NOT_RUN_YET = json.dumps({"status": "not_run", "hint": "an earlier call in this 
 #: *"which dates are you thinking of?"* by a message that had given the dates in full: what was
 #: missing was an employee record, because `admin` has none. A question is only worth asking about
 #: the slot that is actually empty.
+#: Since W10 (ruling 9) the identity question also says **why** it is being asked. Scenario 08
+#: served a persona with no employee record *"whose record should I look this up against?"* beside
+#: a quick reply — *"Look it up for me"* — that persona could never use, and never said that the
+#: session carries no record of its own.
 CLARIFY_QUESTIONS: dict[str, str] = {
-    "identity": "Happy to help — whose record should I look this up against?",
+    "identity": (
+        "This session is not signed in as an employee, so I have no record to read — "
+        "whose record should I look this up against?"
+    ),
     "start_date": "Happy to check — which dates are you thinking of?",
     "days": "Happy to check — how many days would that be?",
     "destination_country": "Happy to check — where would you be working from?",
     "duration_days": "Happy to check — how long would you be there?",
     "amount_usd": "Happy to check — how much is the claim for?",
 }
+
+#: What the one next step of a clarification says (W10, ruling 9). *"Reply with the missing detail
+#: and I will pick this up"* never said **which** detail, on a turn whose whole purpose was to name
+#: one. Keyed on the slot, like the question.
+CLARIFY_NEXT_STEPS: dict[str, str] = {
+    "identity": "Reply with the employee id and I will pick this up.",
+    "start_date": "Reply with the dates and I will pick this up.",
+    "days": "Reply with the number of days and I will pick this up.",
+    "destination_country": "Reply with the destination and I will pick this up.",
+    "duration_days": "Reply with how long you would be there and I will pick this up.",
+    "amount_usd": "Reply with the amount and I will pick this up.",
+}
+
+#: The fallback, for a clarification the router could not attach to a slot.
+CLARIFY_FALLBACK_STEP = "Reply with the missing detail and I will pick this up."
+
+#: Words the router's own `needs_clarification` rationale uses for each slot (W10, ruling 9).
+#: Scenario 12 — *"Can I take leave?"* — carried no workflow, so the question fell all the way back
+#: to *"could you tell me a little more about what you are after?"*, which names nothing; the
+#: router's rationale had already said what was missing. Read as **data**, never as an instruction:
+#: the only thing taken from it is which of six closed slots it mentions.
+RATIONALE_SLOT_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("identity", ("employee id", "employee record", "which employee", "whose record", "identity", "persona")),
+    ("start_date", ("date", "dates", "when", "start")),
+    ("days", ("how many days", "day count", "number of days", "duration of the leave", "length")),
+    ("destination_country", ("country", "destination", "where", "location")),
+    ("duration_days", ("how long", "weeks", "duration")),
+    ("amount_usd", ("amount", "how much", "cost", "spend")),
+)
 
 #: Which slot a workflow asks about first when it holds none of them. The order is the order a
 #: person would be asked in, not the order `required_slots` documents.
@@ -255,9 +291,35 @@ CLARIFY_FALLBACK_CHIPS: tuple[str, ...] = (
 )
 
 
-def clarify_chips(slot: str | None) -> tuple[str, ...]:
-    """The quick replies for a clarification, by the slot it asks about. Shared with the replay path."""
-    return CLARIFY_CHIPS.get(slot or "", CLARIFY_FALLBACK_CHIPS)
+#: A quick reply only a persona **with** a record can act on (W10, ruling 9). *"Look it up for me"*
+#: was offered to the one persona the product had nothing to look up for.
+NEEDS_A_RECORD: tuple[str, ...] = ("Look it up for me",)
+
+
+def clarify_chips(slot: str | None, *, has_record: bool = True) -> tuple[str, ...]:
+    """The quick replies for a clarification, by the slot it asks about. Shared with the replay path.
+
+    Filtered by whether this session has a record of its own (W10, ruling 9): a chip that asks the
+    product to look something up is a dead end for a persona whose record it does not have, and
+    scenario 08 offered exactly that on the one turn where the missing slot **was** the record.
+    """
+    chips = CLARIFY_CHIPS.get(slot or "", CLARIFY_FALLBACK_CHIPS)
+    if has_record:
+        return chips
+    return tuple(chip for chip in chips if chip not in NEEDS_A_RECORD)
+
+
+def rationale_slot(rationale: str) -> str | None:
+    """Which of the six slots the router's `needs_clarification` line names, or `None`.
+
+    The router is told to name **every** missing detail in `rationale_summary` because the question
+    the user is shown is built from it; until W10 nothing read it, so a turn the router could not
+    attach to a workflow was asked *"could you tell me a little more about what you are after?"*
+    The rationale is model prose and is read as data: the only thing taken from it is which closed
+    slot name it mentions first, in the order a person would be asked.
+    """
+    lowered = rationale.lower()
+    return next((slot for slot, words in RATIONALE_SLOT_WORDS if any(word in lowered for word in words)), None)
 
 
 def clarify_slot_of(question: str) -> str | None:
@@ -1148,6 +1210,9 @@ class Orchestrator:
             policy_claims=[
                 index for index, block in enumerate(restated.blocks) if block.get(outcome_consistency.POLICY_CLAIM)
             ],
+            # What this **session** already filed (W10, ruling 7). A directive to file a request an
+            # earlier turn filed becomes "amend <id>" rather than a second ticket for one absence.
+            prior_write=session.performed_write(turn.history),
         )
 
         # -- 5f. the capability check (W8, C09, C10) ---------------------------------------
@@ -2064,6 +2129,10 @@ class Orchestrator:
             # `outcome_consistency.apply` is the guard — and in the *user* half on purpose, so the
             # cached system prefix is the same bytes on every turn (§9.8).
             performed_write=outcome_consistency.performed_write(turn.envelopes),
+            # …and what the **session** already settled (W10, ruling 7). `route.j2` and `act.j2`
+            # have carried this since W8; synthesis had not, so the answer could still write
+            # "submit the request" over a ticket two turns old.
+            session_context=session.render(turn.history),
         )
         return [Message(role="system", content=system), Message(role="user", content=user)]
 
@@ -2476,18 +2545,29 @@ class Orchestrator:
         and the session's own history counts as filled (W8, C12).
         """
         workflow = turn.workflow
+        has_record = bool(EMPLOYEE_ID.match(turn.request.employee_id or ""))
         turn.clarify_slot = unfilled_slot(
             workflow.name if workflow is not None else None,
             known=session.known(turn.history),
-            has_record=bool(EMPLOYEE_ID.match(turn.request.employee_id or "")),
+            has_record=has_record,
         )
+        if turn.clarify_slot is None and turn.decision is not None:
+            # No workflow, so no slot order to walk — but the router was told to name every missing
+            # detail in its rationale, and until W10 nothing read it (ruling 9, scenario 12).
+            found = rationale_slot(turn.decision.rationale_summary or "")
+            turn.clarify_slot = found if found != "identity" or not has_record else None
         return CLARIFY_QUESTIONS.get(turn.clarify_slot or "", CLARIFY_FALLBACK)
 
     def _clarify(self, turn: _Turn, question: str, *, cold_start: bool) -> ChatResponse:
-        """`outcome="clarify"`, and the question names the missing slot (§9.6)."""
+        """`outcome="clarify"`, and the question names the missing slot (§9.6).
+
+        The step under it names the same slot, and the quick replies are filtered by whether this
+        session has a record of its own (W10, ruling 9).
+        """
+        has_record = bool(EMPLOYEE_ID.match(turn.request.employee_id or ""))
         answer = AnswerSchema(
             blocks=[AnswerBlock(type=NOTICE, text=question, citations=[])],
-            next_steps=["Reply with the missing detail and I will pick this up."],
+            next_steps=[CLARIFY_NEXT_STEPS.get(turn.clarify_slot or "", CLARIFY_FALLBACK_STEP)],
             rationale_summary="Clarification requested: a required detail is missing.",
         )
         return self._finish(
@@ -2496,7 +2576,7 @@ class Orchestrator:
             outcome="clarify",
             stop_reason="clarify",
             cold_start=cold_start,
-            quick_replies=clarify_chips(turn.clarify_slot),
+            quick_replies=clarify_chips(turn.clarify_slot, has_record=has_record),
         )
 
     def _refuse_unsafe(self, turn: _Turn, *, cold_start: bool) -> ChatResponse:
@@ -2984,6 +3064,7 @@ __all__ = [
     "Orchestrator",
     "clarify_chips",
     "clarify_slot_of",
+    "rationale_slot",
     "Timings",
     "ToolCallRepair",
     "Usage",

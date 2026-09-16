@@ -60,6 +60,11 @@ class PriorTurn:
     workflow: str | None = None
     slots: dict[str, Any] = field(default_factory=dict)
     write_id: str | None = None
+    #: The tool that made that write, and the one-line summary the reader confirmed (W10, ruling 7).
+    #: The id alone told a later turn *that* something was filed and never *what*, so the follow-up
+    #: asked the reader to file the request the same session had already filed.
+    write_tool: str | None = None
+    write_summary: str | None = None
 
     def line(self) -> str:
         """One line: what was asked, how it ended, what it settled."""
@@ -69,14 +74,28 @@ class PriorTurn:
         if self.slots:
             parts.append("slots: " + ", ".join(f"{key}={value}" for key, value in sorted(self.slots.items())))
         if self.write_id:
-            parts.append(f"filed {self.write_id}")
+            filed = f"filed {self.write_id}"
+            if self.write_tool:
+                filed += f" via {self.write_tool}"
+            if self.write_summary:
+                filed += f' — "{self.write_summary}"'
+            parts.append(filed)
         return " · ".join(parts)
 
 
-def _slots_and_write(store: Store, turn_id: str) -> tuple[dict[str, Any], str | None]:
+@dataclass(frozen=True)
+class Write:
+    """One write a turn performed, as a later turn needs it (W10, ruling 7)."""
+
+    tool: str
+    write_id: str
+    summary: str = ""
+
+
+def _slots_and_write(store: Store, turn_id: str) -> tuple[dict[str, Any], Write | None]:
     """The slots one turn resolved and the write it made, read off its own `tool_call` spans."""
     slots: dict[str, Any] = {}
-    write_id: str | None = None
+    write: Write | None = None
     rows = store.execute(
         "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq", (turn_id,)
     ).dicts()
@@ -89,8 +108,10 @@ def _slots_and_write(store: Store, turn_id: str) -> tuple[dict[str, Any], str | 
         candidates = {**arguments, **dict(arguments.get("parameters") or {})}
         slots.update({key: value for key, value in candidates.items() if key in SLOT_KEYS and value not in (None, "")})
         body = payload.get("structured_content") or {}
-        write_id = str(body.get("ticket_id") or body.get("draft_id") or "") or write_id
-    return slots, write_id
+        write_id = str(body.get("ticket_id") or body.get("draft_id") or "")
+        if write_id:
+            write = Write(tool=name, write_id=write_id, summary=str(arguments.get("summary") or "").strip())
+    return slots, write
 
 
 def recent(session_id: str, *, limit: int = MAX_TURNS, store: Store | None = None) -> list[PriorTurn]:
@@ -108,7 +129,7 @@ def recent(session_id: str, *, limit: int = MAX_TURNS, store: Store | None = Non
     ).dicts()
     found: list[PriorTurn] = []
     for row in reversed(list(rows)):
-        slots, write_id = _slots_and_write(store, row["id"])
+        slots, write = _slots_and_write(store, row["id"])
         found.append(
             PriorTurn(
                 seq=int(row["seq"]),
@@ -116,9 +137,29 @@ def recent(session_id: str, *, limit: int = MAX_TURNS, store: Store | None = Non
                 outcome=str(row["outcome"] or ""),
                 workflow=row["workflow"] or None,
                 slots=slots,
-                write_id=write_id,
+                write_id=write.write_id if write else None,
+                write_tool=write.tool if write else None,
+                write_summary=write.summary if write else None,
             )
         )
+    return found
+
+
+def performed_write(turns: Iterable[PriorTurn]) -> Write | None:
+    """The most recent write this session has already made, or `None` (W10, ruling 7).
+
+    Scenario 09: one turn after `MOCK-HR-000013` was confirmed, *"What if I extend it to five days
+    instead?"* was answered with *"Submit the request in MosaicOne"* — a second filing of a request
+    the same session had filed, and a reader with two tickets for one absence.
+    """
+    found: Write | None = None
+    for turn in turns:
+        if turn.write_id:
+            found = Write(
+                tool=turn.write_tool or "create_mock_hr_ticket",
+                write_id=turn.write_id,
+                summary=turn.write_summary or "",
+            )
     return found
 
 
@@ -148,8 +189,10 @@ __all__ = [
     "SLOT_KEYS",
     "SLOT_TOOLS",
     "PriorTurn",
+    "Write",
     "inherited_slots",
     "known",
+    "performed_write",
     "recent",
     "render",
 ]

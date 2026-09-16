@@ -1622,7 +1622,19 @@ def _rehydrate(request: Request, session_id: str) -> list[dict[str, Any]]:
             # question asked about, which `clarify_slot_of` recovers from the stored question text
             # — so a replayed clarification still offers the same two ways to answer it that the
             # live one did (chat-production-ux-7; W8, C18).
-            quick_replies=list(clarify_chips(_replayed_clarify_slot(row))) if outcome == "clarify" else [],
+            # …and since W10 (ruling 9) filtered the same way the live turn filtered them: the
+            # `identity` question is asked **only** of a session with no record of its own, so the
+            # slot itself is the exact answer to "did this persona have one".
+            quick_replies=(
+                list(
+                    clarify_chips(
+                        slot := _replayed_clarify_slot(row),
+                        has_record=slot != "identity",
+                    )
+                )
+                if outcome == "clarify"
+                else []
+            ),
             answer_blocks=[AnswerBlock.model_validate(item) for item in json.loads(row["answer_blocks_json"] or "[]")],
             citations=citations,
             trace=project(turn_id, session_id=session_id, store=store),
