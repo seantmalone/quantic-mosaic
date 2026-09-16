@@ -98,10 +98,15 @@ RECORD = "record"
 #: 3.0 of her 8.0 days are forfeited on 31 December.
 EXPIRY_WORDS = ("expire", "expires", "expired", "expiry", "forfeit", "forfeited", "forfeiture", "carry", "carried")
 
-#: A date as an answer writes one, in either vocabulary.
+#: A date as an answer writes one, in either vocabulary — and **with a year** (W10 fix round). A
+#: bare day-month is not a date somebody could have invented: it is how the corpus states a
+#: recurring deadline, and *"forfeited on 31 December"* — the sentence the engine's own
+#: `forfeit_note` writes — was being read as invented because no balance field carries a
+#: `2026-12-31`. The rule is for *"your carryover expires on 31 March 2027"*, which names a
+#: specific day of a specific year that no field states.
 _DATE = re.compile(
     r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|"
-    r"October|November|December)(?:\s+\d{4})?\b|\b\d{4}-\d{2}-\d{2}\b",
+    r"October|November|December)\s+\d{4}\b|\b\d{4}-\d{2}-\d{2}\b",
     re.IGNORECASE,
 )
 
@@ -271,6 +276,11 @@ def forfeit_note(envelope: Mapping[str, Any]) -> str | None:
     )
 
 
+def _numbers(text: str) -> set[float]:
+    """Every number this sentence states, as a value — the grain the balance tool publishes."""
+    return {float(token) for token in re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?!\w|\.\d)", text)}
+
+
 def envelope_dates(envelope: Mapping[str, Any]) -> set[str]:
     """Every date the balance carries, in both vocabularies — what a sentence may name."""
     found: set[str] = set()
@@ -317,10 +327,21 @@ def restate(text: str, envelope: Mapping[str, Any] | None) -> tuple[str, int]:
             continue
         replaced += 1
         replacement = engine if wrong_total else expired_note(envelope)
-        if replacement:
+        # **Once per block** (W10 fix round, Minor). Two wrong-total sentences appended the engine's
+        # statement twice; `dedupe_sentences` cannot see it, because the wordings differ.
+        if replacement and replacement not in kept:
             kept.append(replacement)
     if not replaced:
         return text, 0
+    if engine in kept and total is not None:
+        # …and the model's own surviving statement of the same total goes with it: the repaired
+        # block read *"You have 8.0 remaining PTO days. You have 8.0 days of PTO remaining: …"* —
+        # one fact, twice, in two wordings.
+        kept = [
+            sentence
+            for sentence in kept
+            if sentence == engine or not (about_the_reader(sentence) and _numbers(sentence) == {total})
+        ]
     return " ".join(part.strip() for part in kept), replaced
 
 

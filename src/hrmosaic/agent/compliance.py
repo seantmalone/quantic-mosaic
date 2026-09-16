@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -198,6 +198,39 @@ NOT_STATED_LINE = "{label}: not verified from your record — confirm before you
 #: What a row with no reader label is called in that line.
 UNLABELLED = "This requirement"
 
+#: Words that carry no claim, dropped before an engine `next_step` is matched to the requirement it
+#: restates (W10 fix round, Important 1). Deliberately the connectives and the words this product
+#: says in every sentence — never a policy noun, because a policy noun is exactly what decides the
+#: match.
+_STEP_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a", "an", "and", "any", "are", "as", "at", "be", "before", "by", "can", "do", "each",
+        "for", "from", "has", "have", "in", "is", "it", "its", "must", "no", "not", "of", "on",
+        "or", "own", "so", "that", "the", "their", "them", "they", "this", "to", "under", "up",
+        "was", "were", "when", "which", "while", "will", "with", "you", "your",
+    }
+)  # fmt: skip
+
+#: How many content words an engine `next_step` and a requirement row have to share before the step
+#: is read as a restatement of that row. **Three**, measured against every step `corpus/rules.yml`
+#: carries: each step that really does restate a row clears it comfortably — *"Submit the request in
+#: MosaicOne so the manager can approve it in writing"* shares `{request, manager, mosaicone}` with
+#: `pto.request.manager_approval`, and the Tax & Legal one shares eight with its row — while the
+#: steps that restate no single row stop at two: *"Raise the request in MosaicOne under 'Work from
+#: another country' …"* shares `{work, country}` with the **tenure** requirement, which is not what
+#: it is about. Two admitted that match; three does not. A step that clears nothing stays `record`,
+#: which is the half that cannot mislead.
+MIN_STEP_OVERLAP = 3
+
+
+def _content_words(text: str) -> frozenset[str]:
+    """The claim-carrying words of a sentence: lower-cased, punctuation split, stopwords dropped.
+
+    Hyphens split — *"company-managed"* is two words — because `rules.yml` and a model's prose
+    hyphenate differently and the match is about what is being talked about, not about typography.
+    """
+    return frozenset(word for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STEP_STOPWORDS)
+
 
 @dataclass(frozen=True)
 class Row:
@@ -213,6 +246,22 @@ class Row:
     #: de-underscored the key into prose ("Your notice business days is 0"), which reached the chat
     #: surface on every finished PTO turn. A key is never turned into English here; the label is.
     label: str = ""
+    #: Whether this row can stop the request on its own — the **effective** flag the engine used,
+    #: published on the wire by the same wave (W10, ruling 3). Ruling 6's line is for a blocking
+    #: row, so the step has to be able to ask.
+    blocking: bool = False
+    #: The chunk this row's own evidence resolves to. A step this module retypes to `policy_fact`
+    #: cites **this** and nothing else (W10 fix round, Important 1): the first version cited the
+    #: verdict's first evidence chunk, so a sentence about written manager approval was served
+    #: under a citation to the notice requirement — the defect the same wave's citation-carry
+    #: ruling calls worse than a missing one, on the surface whose whole promise is "here is the
+    #: policy I used".
+    chunk_id: str = ""
+
+    @property
+    def content(self) -> frozenset[str]:
+        """The claim-carrying words of this row's own policy text and reader label."""
+        return _content_words(f"{self.text} {self.label}")
 
     @property
     def subjects(self) -> tuple[str, ...]:
@@ -272,25 +321,27 @@ def rows(envelopes: Iterable[Any]) -> list[Row]:
             if not isinstance(requirement, dict) or not requirement.get("id"):
                 continue
             status = str(requirement.get("status") or ("met" if requirement.get("met") else "unmet"))
+            evidence = requirement.get("evidence")
             found[str(requirement["id"])] = Row(
                 id=str(requirement["id"]),
                 text=str(requirement.get("text") or ""),
                 status=status,
                 reason=str(requirement.get("reason") or ""),
                 label=str(requirement.get("label") or ""),
+                blocking=bool(requirement.get("blocking")),
+                chunk_id=str(evidence.get("chunk_id") or "") if isinstance(evidence, dict) else "",
             )
     return list(found.values())
 
 
-def engine_steps(envelopes: Iterable[Any]) -> tuple[list[str], list[dict[str, str]]]:
-    """`(the engine's own next_steps, the citations its verdict resolved)` (W10, ruling 5).
+def engine_steps(envelopes: Iterable[Any]) -> list[str]:
+    """The engine's own `next_steps`, in order, de-duplicated (W10, ruling 5).
 
     `rules.yml`'s `next_steps` are *requirements*: "Submit the request in MosaicOne so the manager
     can approve it in writing" is what the policy says happens, not something a model thought of.
     Three scenarios shipped them under *"Recommendation — not company policy"*.
     """
     steps: list[str] = []
-    citations: list[dict[str, str]] = []
     for envelope in envelopes:
         if getattr(envelope, "name", "") != COMPLIANCE_TOOL:
             continue
@@ -301,34 +352,53 @@ def engine_steps(envelopes: Iterable[Any]) -> tuple[list[str], list[dict[str, st
         if not isinstance(body, dict):
             continue
         steps.extend(str(step) for step in (body.get("next_steps") or []) if isinstance(step, str))
-        # The per-requirement evidence first: those are the ids `_engine_evidence` absorbs into the
-        # turn, so a citation taken from here resolves for G2 and reaches the top-level array
-        # (W10, ruling 10). The verdict's own `citations[]` follow as the fallback.
-        for source in (body.get("requirements") or [], body.get("citations") or []):
-            for entry in source:
-                if not isinstance(entry, dict):
-                    continue
-                citation = entry.get("evidence") if "evidence" in entry else entry
-                if isinstance(citation, dict) and citation.get("chunk_id"):
-                    citations.append({str(key): str(value) for key, value in citation.items() if key != "snippet"})
-    seen: set[str] = set()
-    unique: list[dict[str, str]] = []
-    for citation in citations:
-        if citation["chunk_id"] in seen:
-            continue
-        seen.add(citation["chunk_id"])
-        unique.append(citation)
-    return list(dict.fromkeys(steps)), unique
+    return list(dict.fromkeys(steps))
+
+
+def supporting_row(step: str, rows_: Sequence[Row]) -> Row | None:
+    """The requirement this engine step restates, or `None` (W10 fix round, Important 1).
+
+    A `policy_fact` is a promise that the citation beside it says the sentence. The first version
+    of this step cited `citations[0]` — the verdict's **first** evidence chunk, which on every
+    `pto_request` turn is the notice requirement — so a sentence about written manager approval was
+    served under a citation to a passage about five business days' notice. That is the defect this
+    wave's own citation-carry ruling calls worse than a missing citation, on the one surface whose
+    promise is *"here is the policy I used"*.
+
+    The match is content overlap against the row's own policy text and reader label: at least
+    `MIN_STEP_OVERLAP` claim-carrying words, and a single best row — a tie is not a match, because
+    a step this module cannot place is one it has no business citing. Only a row that actually
+    resolved evidence can win; a row whose chunk did not resolve cannot support anything.
+    """
+    words = _content_words(step)
+    scored = sorted(
+        ((len(words & row.content), row) for row in rows_ if row.chunk_id),
+        key=lambda pair: pair[0],
+        reverse=True,
+    )
+    if not scored or scored[0][0] < MIN_STEP_OVERLAP:
+        return None
+    if len(scored) > 1 and scored[1][0] == scored[0][0]:
+        return None
+    return scored[0][1]
 
 
 def not_stated_lines(rows_: Sequence[Row]) -> list[str]:
-    """One explicit line per `not_stated` row, in the engine's own order (W10, ruling 6)."""
+    """One explicit line per `not_stated` **blocking** row, in the engine's order (W10, ruling 6).
+
+    Blocking only, which is the ruling's own word (W10 fix round). The first version said every
+    `not_stated` row, and on `international_remote` that is the `manual` device row on every run —
+    a line on every answer, and the growth that pushed the session page past its pixel budget. A
+    row that cannot stop the request is not one a reader has to verify before proceeding; the
+    `manual` rows are still `not_stated` in the verdict and on the dashboard, and the restatement
+    above still refuses to conclude anything about them.
+    """
     # `.capitalize()` would lower-case the rest — "Written manager approval in mosaicone" — and the
     # labels carry product names.
     return [
         NOT_STATED_LINE.format(label=(label := (row.label or UNLABELLED).strip())[:1].upper() + label[1:])
         for row in rows_
-        if row.status == "not_stated"
+        if row.status == "not_stated" and row.blocking
     ]
 
 
@@ -443,27 +513,29 @@ def correct(text: str, rows_: Sequence[Row]) -> tuple[str, list[str], list[str]]
 def retype(
     block: Mapping[str, Any],
     restated: Sequence[str],
-    mandated: Collection[str],
-    citations: Sequence[Mapping[str, str]],
-) -> str | None:
-    """The type this block should carry, or `None` to leave it alone (W10, ruling 5).
+    mandated: Mapping[str, Row | None],
+) -> tuple[str, str] | None:
+    """`(the type this block should carry, the chunk it cites)`, or `None` to leave it alone.
 
-    Two moves, and only out of `recommendation` — the one type `_turn.html` disclaims:
+    Two moves, and only out of `recommendation` — the one type `_turn.html` disclaims (ruling 5):
 
     * a block this step rewrote is now carrying the **engine's own reason**, which is a statement
-      about the reader's request: `record`;
+      about the reader's request: `record`, uncited;
     * a block that restates one of the engine's own `next_steps` is `rules.yml` speaking, so it is
-      a `policy_fact` — provided the verdict resolved a citation for it to carry, because an
-      uncited policy claim is worse than an undisclaimed one.
+      a `policy_fact` — **cited to the requirement row that step restates**, and only when
+      `supporting_row` could place it. A step nothing supports stays `record` rather than minting a
+      policy citation to a passage about something else (W10 fix round, Important 1).
 
     Nothing already typed `policy_fact`, `record`, `performed`, `escalation` or `notice` is touched:
     this step only repairs the label the model reaches for when it has nothing better.
     """
     if str(block.get("type") or "") != "recommendation":
         return None
-    if _normalised(str(block.get("text") or "")) in mandated:
-        return POLICY_FACT if citations else RECORD
-    return RECORD if restated else None
+    key = _normalised(str(block.get("text") or ""))
+    if key in mandated:
+        row = mandated[key]
+        return (POLICY_FACT, row.chunk_id) if row is not None else (RECORD, "")
+    return (RECORD, "") if restated else None
 
 
 def stated_amount(rows_: Sequence[Row]) -> float | None:
@@ -533,15 +605,22 @@ def apply(
 
     **Typing travels with the sentence** (W10, ruling 5). A sentence this step replaces is now the
     engine's own reason, so its block is the reader's `record` rather than advice; a block that is
-    one of the engine's own `next_steps` is `rules.yml` speaking and is a cited `policy_fact`.
+    one of the engine's own `next_steps` is `rules.yml` speaking and is a `policy_fact` cited to
+    **the requirement row it restates** — never to the verdict's first chunk, and never at all when
+    no single row supports it (W10 fix round, Important 1).
 
-    **…and every `not_stated` row is said** (W10, ruling 6): one explicit line each, appended as a
-    `record` block, because a requirement nobody checked is a thing the reader has to check.
+    **…and every `not_stated` blocking row is said** (W10, ruling 6): one explicit line each,
+    appended as a `record` block, because a requirement that can stop the request and that nobody
+    could check is a thing the reader has to check.
     """
     evaluated = rows(envelopes)
     amount, covering = stated_amount(evaluated), covering_rule(envelopes)
-    engine_next_steps, engine_citations = engine_steps(envelopes)
-    mandated = {_normalised(step) for step in engine_next_steps}
+    # Each engine step, keyed by its normalised text, paired with the requirement row it restates
+    # — the row whose own evidence chunk it will cite. `None` where nothing places it (W10 fix
+    # round, Important 1).
+    mandated: dict[str, Row | None] = {
+        _normalised(step): supporting_row(step, evaluated) for step in engine_steps(envelopes)
+    }
     body: list[dict[str, Any]] = []
     restated: list[tuple[int, str]] = []
     unverified: list[tuple[int, str]] = []
@@ -556,11 +635,12 @@ def apply(
             # The block was nothing but a threshold the request had already outgrown.
             continue
         item["text"] = text
-        kind = retype(item, changed, mandated, engine_citations)
-        if kind is not None:
+        typed = retype(item, changed, mandated)
+        if typed is not None:
+            kind, chunk_id = typed
             item["type"] = kind
-            if kind == POLICY_FACT and not (item.get("citations") or []):
-                item["citations"] = [engine_citations[0]["chunk_id"]]
+            if kind == POLICY_FACT and chunk_id and not (item.get("citations") or []):
+                item["citations"] = [chunk_id]
             retyped.append((index, kind))
         restated.extend((index, requirement_id) for requirement_id in changed)
         unverified.extend((index, requirement_id) for requirement_id in unsure)
@@ -617,8 +697,10 @@ __all__ = [
     "correct",
     "correct_ceilings",
     "covering_rule",
+    "MIN_STEP_OVERLAP",
     "engine_steps",
     "not_stated_lines",
+    "supporting_row",
     "polarity",
     "reader_sentence",
     "retype",

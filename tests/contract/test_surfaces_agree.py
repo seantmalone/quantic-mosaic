@@ -246,9 +246,18 @@ async def test_the_policy_rules_line_counts_the_engine_and_not_the_guardrails(we
     assert ran > 0, "the Berlin turn scores the international-remote scenario"
     assert (rollups["rules_passed"], rollups["rules_ran"]) == (passed, ran)
 
-    guardrails = [span for span in spans if span["kind"] == "guardrail"]
-    assert rollups["safety_rules_ran"] <= len(guardrails)
-    assert rollups["rules_ran"] != rollups["safety_rules_ran"] or ran == rollups["safety_rules_ran"]
+    # …and the guardrail pair still comes from the guardrail spans, which is a different question
+    # asked of a different source (W10 fix round: the line here used to be a tautology — the left
+    # disjunct held whenever the two differed, and the right one restated the assertion above it).
+    assert (rollups["safety_rules_passed"], rollups["safety_rules_ran"]) == web_api.safety_checks(spans)
+    assert rollups["safety_rules_ran"] <= len([span for span in spans if span["kind"] == "guardrail"])
+    engine_rows = {
+        str(requirement["id"]): str(requirement.get("status") or "")
+        for span in spans
+        if span["kind"] == "tool_call" and (span["payload"].get("tool_name") == web_api.RULES_ENGINE_TOOL)
+        for requirement in (span["payload"].get("structured_content") or {}).get("requirements") or []
+    }
+    assert ran == sum(1 for status in engine_rows.values() if status in ("met", "unmet"))
 
     tile = re.search(r"Policy rules</dt><dd>\s*(\d+) of (\d+) met", waterfall)
     assert tile, "the session waterfall states the engine's own rules"

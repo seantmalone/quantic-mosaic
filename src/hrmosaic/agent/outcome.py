@@ -774,7 +774,21 @@ def _record_split(
         kept = {**block, "text": " ".join(part.strip() for part in rest)}
         return kept, {"type": RECORD, "text": " ".join(part.strip() for part in records), "citations": []}, True
     if not directives and is_record(text):
-        return {**block, "type": RECORD, "citations": []}, None, True
+        # **And it gives up its identity with its citations** (W10 fix round, Minor). W8 removes
+        # the citation on purpose — a statement of the reader's own record is not a policy claim —
+        # and `breadth.carry_citations` matches on `BLOCK_ID`, so a block that kept its id was
+        # handed the very citation this line had just taken off it, one step later, under *"From
+        # your HR record"*. A block that is no longer the model's policy block is no longer a
+        # target for the carry.
+        return (
+            {key: value for key, value in block.items() if key != BLOCK_ID}
+            | {
+                "type": RECORD,
+                "citations": [],
+            },
+            None,
+            True,
+        )
     return dict(block), None, False
 
 
@@ -960,6 +974,14 @@ def apply(
         if prior_write is not None:
             amended: list[dict[str, Any]] = []
             for index, block in enumerate(result):
+                # **A cited `policy_fact` is never rewritten** (W10 fix round, Important 2), exactly
+                # as the approver and arithmetic steps already refuse to: the citation beside it is
+                # the reader's way of checking the sentence, and the `policy_fact` the restatement
+                # step minted from the engine's own `next_steps` one position earlier is precisely
+                # the block this loop would otherwise overwrite.
+                if block.get("type") == "policy_fact" and (block.get("citations") or []):
+                    amended.append(block)
+                    continue
                 text, replaced = amend(str(block.get("text") or ""), prior_write)
                 if replaced:
                     trimmed.extend((index, sentence) for sentence in replaced)

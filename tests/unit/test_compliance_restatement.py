@@ -197,9 +197,11 @@ def test_a_policy_sentence_about_the_rule_itself_is_not_a_verdict():
 
     assert result.blocks[0]["text"] == fact["text"]
     assert not result.restated and not result.unverified and not result.retyped
-    # …the `not_stated` row is still said, in its own block (W10, ruling 6): the rule the model
-    # quoted is not the same thing as the row nobody could check.
-    assert [block["type"] for block in result.blocks] == ["policy_fact", compliance.RECORD]
+    # …and nothing is appended: the `not_stated` row here is `pto.request.manager_approval`, a
+    # `manual` check that publishes `blocking: false`, and ruling 6's line is for a row that can
+    # stop the request (W10 fix round).
+    assert [block["type"] for block in result.blocks] == ["policy_fact"]
+    assert result.unchecked == []
 
 
 def test_next_steps_are_repaired_the_way_the_blocks_are():

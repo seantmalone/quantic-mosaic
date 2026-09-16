@@ -231,10 +231,15 @@ async def test_every_record_sentence_is_the_readers_data_and_none_is_a_policy_ru
             assert _outcome.states_the_record(sentence, numbers, scalars), f"not the reader's data: {sentence}"
 
 
-async def test_the_demo_paths_say_the_rows_nobody_could_check(web, store):
-    """W10, ruling 6, against scenario 01: demo 1's `remote.intl.device` row is `manual`, so it is
-    `not_stated` on every run — and the recorded answer simply left it out, so a reader was told
-    the trip was in order on a requirement nobody had checked."""
+async def test_the_demo_paths_say_the_blocking_rows_nobody_could_check(web, store):
+    """W10, ruling 6, narrowed by the fix round to the ruling's own word: a `not_stated` **blocking**
+    row is one the reader has to verify before proceeding, and it renders as one explicit line.
+
+    Demo 1 carries two `manual` rows — the device requirement and the customer-facing one — which
+    are `not_stated` on every run and publish `blocking: false`, so nothing is said for them: a line
+    on every answer this product ever writes is noise, not disclosure. The assertion is therefore
+    two-sided, and neither side is vacuous: what `not_stated_lines` computes for this turn's own
+    verdict is exactly what the answer says, and the `manual` rows are not in it."""
     async with web("demo_task_1.json") as client:
         page = (
             await client.post(
@@ -248,7 +253,14 @@ async def test_the_demo_paths_say_the_rows_nobody_could_check(web, store):
         store.execute("SELECT answer_blocks_json FROM turns WHERE id = ?", (turn_id,)).scalar() or "[]"
     )
     said = " ".join(block["text"] for block in blocks)
-    expected = _compliance.not_stated_lines(_compliance.rows(_envelopes(store, turn_id)))
-    assert expected, "the international-remote scenario always carries a `manual` row"
-    for line in expected:
+    rows = _compliance.rows(_envelopes(store, turn_id))
+
+    unchecked = [row for row in rows if row.status == "not_stated"]
+    assert unchecked, "the international-remote scenario always carries a `manual` row"
+    assert any(not row.blocking for row in unchecked), "and those rows cannot stop the request"
+
+    for line in _compliance.not_stated_lines(rows):
         assert line in said, line
+    for row in unchecked:
+        if not row.blocking:
+            assert row.label not in said, f"a row that cannot stop the request is not a line: {row.id}"

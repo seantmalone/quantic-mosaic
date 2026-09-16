@@ -422,14 +422,6 @@ DATA_OUTSTANDING = (
     "it. Read the record this question is about before you answer it."
 )
 
-#: …and the shape the W9 addendum names (ruling 3): a verdict or a balance computed for the acting
-#: employee with the profile never read — `remote-003` and `unsafe-001` at tool recall 0.67 / 0.75.
-#: One re-entry asking for the profile, before synthesis, on a write turn too: the read cannot
-#: change the card the human confirmed, and the answer may not describe a person it has not read.
-PROFILE_OUTSTANDING = (
-    "Not yet — this turn computed a verdict or a balance for this employee without reading their "
-    "profile. Call lookup_employee_profile for them now, then conclude."
-)
 #: Ruling 1 of the same addendum: an answered turn whose blocks carry none of these is not an
 #: answer. `oos-005` — the referral bonus — was routed `policy_qa` beside the annual bonus plan,
 #: G1 allowed the annual-bonus passages, and the synthesis emitted one escalation saying the
@@ -507,6 +499,17 @@ _BREADTH_DEBT = (
 SEARCH_BREADTH = f"Not yet — you have searched the corpus once. {_BREADTH_DEBT}"
 
 SEARCH_BREADTH_UNSEARCHED = f"Not yet — you have not searched the corpus yet. {_BREADTH_DEBT}"
+
+#: …and the third form, for the turn the W10 fix round reaches: it has searched more than once and
+#: its evidence still spans fewer documents than the answer will be judged on. It needs its own
+#: opening clause for the same reason the other two do — telling a turn that has searched twice
+#: that it "has not searched the corpus yet" is a false statement about its own history, in the one
+#: message whose whole purpose is to correct that picture. No count of anything: the ledger's rule
+#: is the debt, never the tool and never how many documents.
+SEARCH_BREADTH_REPEATED = (
+    f"Not yet — you have searched more than once and your evidence still comes from fewer "
+    f"documents than the question spans. {_BREADTH_DEBT}"
+)
 
 #: The one message §9.2's G1 recovery step sends (P13 R4). The reopen used to append nothing, so
 #: the extra step was spent blind: the model saw the same conversation that had just produced an
@@ -1061,6 +1064,16 @@ class Orchestrator:
         except McpUnavailable as exc:
             return self._degraded(turn, str(exc), cold_start=cold_start)
 
+        # -- 2a. the profile debt, before anything can end the turn (W10 fix round) -------------
+        # `unsafe-001` proposed its card inside the act loop and ended `awaiting_confirmation`
+        # without ever reaching `_answer`, which is the only place the debt used to be settled — so
+        # the turn described a person it had never read, at tool recall 0.75. One `tools/call`, no
+        # model step, on every path out of the loop.
+        try:
+            await self._settle_profile_debt(turn)
+        except McpUnavailable as exc:
+            return self._degraded(turn, str(exc), cold_start=cold_start)
+
         if turn.pending is not None:
             return self._park(turn, cold_start=cold_start)
         if turn.clarification is not None:
@@ -1243,9 +1256,13 @@ class Orchestrator:
             policy_claims=[
                 index for index, block in enumerate(restated.blocks) if block.get(outcome_consistency.POLICY_CLAIM)
             ],
-            # What this **session** already filed (W10, ruling 7). A directive to file a request an
-            # earlier turn filed becomes "amend <id>" rather than a second ticket for one absence.
-            prior_write=session.performed_write(turn.history),
+            # What this **session** already filed, **when this turn is about it** (W10, ruling 7;
+            # fix round, Important 2). A directive to file a request an earlier turn filed becomes
+            # "amend <id>" rather than a second ticket for one absence — but only where the two are
+            # the same request, by workflow or by subject slot. A session that filed a PTO ticket
+            # and then asked about a conduct escalation had *"Open a case with People Operations"*
+            # rewritten into an amendment of the ticket.
+            prior_write=self._prior_write(turn),
         )
 
         # -- 5f. the capability check (W8, C09, C10) ---------------------------------------
@@ -1301,19 +1318,25 @@ class Orchestrator:
         # steps below — the de-duplication and the citation carry — see the answer a reader sees.
         # Reading order, top first: the budget note, the failed write, the refused write, the
         # cancelled card, then the answer the turn earned.
-        budget_limited = turn.stop_reason in BUDGET_STOPS and not self._complete(turn, snapshotted.blocks)
-        ledes: list[dict[str, Any]] = []
-        if budget_limited:
-            # §9.4: a budget stop is a graceful partial answer plus an `error` span naming the
-            # reason. **Only when the answer is actually short** (W10, ruling 12): scenario 15
-            # carried a complete answer under "I reached my step limit for this turn", because the
-            # repair leg 400'd on its own schema and spent the budget without losing anything.
+        stopped = turn.stop_reason in BUDGET_STOPS
+        if stopped:
+            # §9.4: **every** budget stop writes an `error` span naming the reason, whether or not
+            # the answer came out whole (W10 fix round, Minor). Narrowing the lede had narrowed
+            # this with it, so a turn that really did stop at `max_steps` closed with nothing but a
+            # `stop_reason` to show for it.
             self._error(
                 turn,
                 turn.stop_reason,
                 f"the turn stopped at its {turn.stop_reason} budget",
                 component="agent_loop",
             )
+        # …and the **lede** only where the answer is actually short (W10, ruling 12): scenario 15
+        # carried a complete four-block answer under "I reached my step limit for this turn",
+        # because the repair leg 400'd on its own schema and spent the budget without losing
+        # anything.
+        budget_limited = stopped and not self._complete(turn, snapshotted.blocks)
+        ledes: list[dict[str, Any]] = []
+        if budget_limited:
             ledes.append({"type": NOTICE, "text": BUDGET_NOTE[turn.stop_reason], "citations": []})
         if turn.write_failed:
             # §9.4's graceful partial for the other way a turn falls short of what it was asked to
@@ -1548,60 +1571,40 @@ class Orchestrator:
         engine's to apply, and the answer may not say who approves until it has.
         """
         # A turn already outside its budget keeps the partial the stop exists to produce (§9.4),
-        # exactly as the breadth step does: no re-entry and no deterministic call on its account.
-        if turn.stop_reason in BUDGET_STOPS or turn.elapsed_s >= self.settings.agent_wall_clock_s:
-            return None
+        # exactly as the breadth step does: no model re-entry on its account. The **profile** read
+        # at the foot of this method is not one of those — it is one `tools/call` the orchestrator
+        # makes itself, and it answers to `agent_max_tool_calls` and to nothing else.
+        spent = turn.stop_reason in BUDGET_STOPS or turn.elapsed_s >= self.settings.agent_wall_clock_s
         if (
-            self._data_outstanding(turn)
+            not spent
+            and self._data_outstanding(turn)
             and "data_outstanding" not in turn.nudges
             and turn.steps_taken < self.settings.agent_max_steps
         ):
-            profile_owed = self._profile_outstanding(turn)
             turn.nudges.append("data_outstanding")
-            turn.messages.append(
-                Message(role="user", content=PROFILE_OUTSTANDING if profile_owed else DATA_OUTSTANDING)
-            )
-            turn.step_summaries.append(
-                f"step {turn.steps_taken}: "
-                + (
-                    "a verdict or balance was computed with the profile unread"
-                    if profile_owed
-                    else "the reader's own record was still unread"
-                )
-            )
+            turn.messages.append(Message(role="user", content=DATA_OUTSTANDING))
+            turn.step_summaries.append(f"step {turn.steps_taken}: the reader's own record was still unread")
             try:
                 await self._run_act(turn)
             except McpUnavailable as exc:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             if turn.pending is not None:
                 return self._park(turn, cold_start=cold_start)
-        if self._profile_outstanding(turn):
-            # Still unread — the step budget was spent (a confirmed write has spent its steps
-            # before it resumes), or the model did not read it when asked. One tool call, no model
-            # step: the profile is the acting employee's own, and the argument is the request's.
-            turn.nudges.append("profile_read_deterministically")
-            try:
-                await self._read_profile_deterministically(turn)
-            except McpUnavailable as exc:
-                return self._degraded(turn, str(exc), cold_start=cold_start)
-            self._plan(turn, step_index=turn.steps_taken)
-        if self._verdict_outstanding(turn):
+        if not spent and self._verdict_outstanding(turn):
             turn.nudges.append("compliance_scored_deterministically")
             try:
                 await self._score_deterministically(turn)
             except McpUnavailable as exc:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             self._plan(turn, step_index=turn.steps_taken)
-            # **…and the profile debt is re-tested after it** (W10 addendum, Minor). The verdict
-            # this step just scored is itself a verdict computed for the acting employee, so a turn
-            # that owed no profile before it owes one now — and the test above has already run.
-            if self._profile_outstanding(turn):
-                turn.nudges.append("profile_read_deterministically")
-                try:
-                    await self._read_profile_deterministically(turn)
-                except McpUnavailable as exc:
-                    return self._degraded(turn, str(exc), cold_start=cold_start)
-                self._plan(turn, step_index=turn.steps_taken)
+        # **The profile debt, last and unconditionally** (W10 addendum, Minor; fix round). Last,
+        # because `_score_deterministically` above may have just minted the very verdict that
+        # creates the debt; unconditionally, because a budget stop is about model steps and this is
+        # one tool call the orchestrator makes itself.
+        try:
+            await self._settle_profile_debt(turn)
+        except McpUnavailable as exc:
+            return self._degraded(turn, str(exc), cold_start=cold_start)
         return None
 
     async def _settle_action_debt(self, turn: _Turn, *, cold_start: bool) -> ChatResponse | None:
@@ -1658,8 +1661,10 @@ class Orchestrator:
         # ruling 3) is owed there too, and `_settle_data_debt` settles it without a model step.
         if any(name in turn.state.results for name in WRITE_TOOLS):
             return False
-        if self._profile_outstanding(turn):
-            return True
+        # The **profile** shape is no longer one of these (W10 fix round): it is settled by
+        # `_settle_profile_debt`, deterministically, on every path out of the act loop — a model
+        # reminder could not reach it on a `policy_qa` turn, where §9.2's gate does not offer the
+        # tool, which is exactly how `remote-003` kept scoring 0.67.
         permitted = self._permitted(turn)
         workflow = turn.workflow
         if workflow is not None:
@@ -1726,6 +1731,12 @@ class Orchestrator:
             sentence = f"{sentence} You meet that requirement on {human}."
         return sentence
 
+    def _prior_write(self, turn: _Turn) -> session.Write | None:
+        """The write an earlier turn of this session made **about this request**, or `None`."""
+        write = session.performed_write(turn.history)
+        workflow = turn.workflow.name if turn.workflow is not None else None
+        return write if session.relates_to(write, workflow=workflow, slots=turn.resolved_slots) else None
+
     @staticmethod
     def _cited_facts(blocks: Sequence[Mapping[str, Any]]) -> bool:
         """Did the model's own answer carry a cited `policy_fact` before the steps ran?"""
@@ -1774,6 +1785,19 @@ class Orchestrator:
         )
         if not outcome.repaired and outcome.dropped_blocks == 0:
             return answer, outcome.citations
+        if outcome.stripped or outcome.dropped_blocks:
+            # **Failing closed leaves a trace** (W10 fix round, Minor). This is the one place the
+            # product drops a citation the reader was about to be shown, and it was the one place
+            # that left no record at all — no `error` span, nothing on the waterfall. An `error`
+            # rather than a second `guardrail` verdict: the tiles and `blocks_dropped_by_g2` sum
+            # every G2 span of the turn, and a second verdict here would double-count them.
+            self._error(
+                turn,
+                "citation_unresolvable_at_send",
+                "; ".join(f"{resolution.chunk_id}: {resolution.reason}" for resolution in outcome.stripped)
+                or f"{outcome.dropped_blocks} block(s) lost every citation",
+                component="g2",
+            )
         if not outcome.blocks:
             # Failing closed must not mean failing silent: an answer the cascade emptied keeps its
             # sentences with every citation stripped, so the reader is given the prose without a
@@ -1803,13 +1827,19 @@ class Orchestrator:
 
         The `employee_id` test is on the result body, not merely on the tool name (W10 addendum,
         Minor): a turn that scored somebody else's request — an approver checking a report's claim
-        — owes nothing about the reader's own profile, and re-entering the loop for it would spend
-        an act step and a tool call on a record the answer is not about.
+        — owes nothing about the reader's own profile, and reading it would spend a tool call on a
+        record the answer is not about.
+
+        **§9.2's router gate is deliberately not consulted** (W10 fix round, the live evaluation).
+        That gate exists to stop the *model* wandering into people data on a corpus-only question,
+        and `remote-003` is routed `policy_qa` — so the reminder could not ask for the profile and
+        the debt was never settled, at tool recall 0.67. The call below is the **orchestrator's**,
+        not the model's, and the turn has already put this employee's record in play by scoring a
+        verdict or a balance for them. The only budget it answers to is `agent_max_tool_calls`.
         """
         actor = turn.request.employee_id or ""
         return (
-            PROFILE_TOOL in self._permitted(turn)
-            and not turn.state.has(PROFILE_TOOL)
+            not turn.state.has(PROFILE_TOOL)
             and any(
                 str((body or {}).get("employee_id") or "") == actor
                 for name in PROFILE_FIRST_TOOLS
@@ -1818,6 +1848,22 @@ class Orchestrator:
             and turn.tool_calls_made < self.settings.agent_max_tool_calls
             and bool(actor and EMPLOYEE_ID.match(actor))
         )
+
+    async def _settle_profile_debt(self, turn: _Turn) -> None:
+        """Read the profile the turn owes, whatever else is happening (W10 fix round).
+
+        Called on **every** path that ends a turn's tool work: before the evidence gate, and before
+        a proposed write parks the turn at its confirmation card. `unsafe-001` proposed its card and
+        ended `awaiting_confirmation` without ever reaching `_answer`, so the profile debt — which
+        only `_settle_data_debt` settled — was never even asked about, and the item scored tool
+        recall 0.75 on an answer that described a person it had not read. No model re-entry, no act
+        step, no dependence on a remaining one: one `tools/call`, inside the tool budget.
+        """
+        if not self._profile_outstanding(turn):
+            return
+        turn.nudges.append("profile_read_deterministically")
+        await self._read_profile_deterministically(turn)
+        self._plan(turn, step_index=turn.steps_taken)
 
     async def _read_profile_deterministically(self, turn: _Turn) -> None:
         """Read the acting employee's profile the turn computed a verdict or a balance without
@@ -2035,7 +2081,13 @@ class Orchestrator:
         narrow = searches <= 1 or (documents > 0 and documents < self._minimum_docs(turn))
         if "search_breadth" not in turn.nudges and narrow and any(name in permitted for name in EVIDENCE_TOOLS):
             turn.nudges.append("search_breadth")
-            reminder = SEARCH_BREADTH if searches == 1 else SEARCH_BREADTH_UNSEARCHED
+            reminder = (
+                SEARCH_BREADTH_UNSEARCHED
+                if searches == 0
+                else SEARCH_BREADTH
+                if searches == 1
+                else SEARCH_BREADTH_REPEATED
+            )
             turn.messages.append(Message(role="user", content=reminder))
             turn.step_summaries.append(
                 f"step {turn.steps_taken}: {searches} corpus search(es) over "
@@ -2609,7 +2661,10 @@ class Orchestrator:
                 ),
             )
         )
-        turn.step_summaries.append(f"step {turn.steps_taken}: {call.name} refused — the verdict is non_compliant")
+        # The record says which of the two conditions refused it (W10 fix round): "the verdict is
+        # non_compliant" was printed for a blocking row nobody could evaluate, which is the case the
+        # verdict alone does not cover.
+        turn.step_summaries.append(f"step {turn.steps_taken}: {call.name} refused — {unclear_reason}")
         return True
 
     @staticmethod
@@ -2832,7 +2887,6 @@ class Orchestrator:
         *,
         outcome: TurnOutcome,
         stop_reason: str,
-        citations: Sequence[Citation] = (),
         confirmation: ConfirmationCard | None = None,
         error_kind: str | None = None,
         cold_start: bool = False,

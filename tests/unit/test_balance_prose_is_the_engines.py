@@ -55,8 +55,11 @@ def test_a_sentence_stating_a_total_the_balance_does_not_carry_is_replaced():
     result = arithmetic_consistency.apply([{"type": "record", "text": SCENARIO_16, "citations": []}], [envelope()])
     text = result.blocks[0]["text"]
     assert "5.5" not in text and "2.5 days carried over" not in text
-    assert "You have 8.0 days of PTO remaining: 13.5 accrued minus 4.0 used minus 1.5 pending." in text
-    assert text.startswith("You have 8.0 remaining PTO days."), "the total was the tool's and stays"
+    assert text == "You have 8.0 days of PTO remaining: 13.5 accrued minus 4.0 used minus 1.5 pending."
+    # **The total is said once** (W10 fix round, Minor). The model's own *"You have 8.0 remaining
+    # PTO days."* states the same fact in a different wording, so `dedupe_sentences` cannot see it;
+    # the engine's statement carries the same total and its working, and the model's goes.
+    assert text.count("8.0") == 1
 
 
 def test_an_expiry_date_no_field_states_is_replaced_by_the_one_that_is():
@@ -125,3 +128,23 @@ def test_an_answer_the_engine_agrees_with_is_returned_unchanged():
     }
     result = arithmetic_consistency.apply([agreed], [envelope()])
     assert result.blocks[0]["text"] == agreed["text"]
+
+
+def test_the_engines_own_forfeiture_sentence_is_not_read_as_invented():
+    """W10 fix round. `_DATE` matched a bare day-month, so *"forfeited on 31 December"* — the
+    sentence `forfeit_note` itself writes — was treated as a date no field states and deleted with
+    nothing in its place, because `expired_note` returns `None` for unexpired carryover."""
+    live = {**BALANCE, "carryover_from_prior_year": 0.0, "carryover_expires_on": None, "carryover_unexpired": 0.0}
+    block = {
+        "type": "record",
+        "text": "Your 3.0 days above the 5.0-day cap are forfeited on 31 December if unused.",
+        "citations": [],
+    }
+    result = arithmetic_consistency.apply([block], [_Envelope("check_pto_balance", live)])
+    assert result.blocks[0]["text"] == block["text"]
+
+
+def test_a_specific_year_the_balance_does_not_carry_is_still_invented():
+    block = {"type": "record", "text": "Your carryover expires on 31 March 2027.", "citations": []}
+    result = arithmetic_consistency.apply([block], [envelope()])
+    assert "2027" not in result.blocks[0]["text"]

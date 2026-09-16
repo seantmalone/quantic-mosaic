@@ -1,5 +1,5 @@
 {
-  "_note": "W9 addendum, ruling 3 — the profile debt. The model reads the balance and searches, never the profile; the reminder fires once before synthesis and the model reads the profile on the extra step.",
+  "_note": "W9 addendum, ruling 3 — the profile debt. The model reads the balance and searches, never the profile. Amended in the W10 fix round: the debt is settled DETERMINISTICALLY — the orchestrator makes the one `lookup_employee_profile` call itself, with no model re-entry and no act step — so the two entries that were the reminder's tool call and its close are gone and the sequence is route, act, act, synthesize. Nothing else changed; the model still never asks for the profile, which is the whole point of the fixture.",
   "completions": [
     {
       "purpose": "route",
@@ -46,29 +46,6 @@
       "finish_reason": "stop",
       "prompt_tokens": 5200,
       "completion_tokens": 20
-    },
-    {
-      "purpose": "act",
-      "response_text": "Reading the profile before I conclude.",
-      "tool_calls": [
-        {
-          "id": "toolu_pd_3",
-          "name": "lookup_employee_profile",
-          "args": {
-            "employee_id": "E1042"
-          }
-        }
-      ],
-      "finish_reason": "tool_use",
-      "prompt_tokens": 5400,
-      "completion_tokens": 40
-    },
-    {
-      "purpose": "act",
-      "response_text": "The profile is in the record now; concluding.",
-      "finish_reason": "stop",
-      "prompt_tokens": 5700,
-      "completion_tokens": 16
     },
     {
       "purpose": "synthesize",

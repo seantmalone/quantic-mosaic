@@ -167,8 +167,9 @@ class ComplianceOutput(BaseModel):
     scenario: str | None = None
     verdict: Literal["compliant", "conditional", "non_compliant", "insufficient_evidence"] | None = None
     as_of: str | None = None
-    #: The day the request is treated as submitted — what notice is measured from (W8, C04).
-    submitted_on: str | None = None
+    #: The day the request is treated as submitted — what notice is measured from (W8, C04), and
+    #: since W10 an **output only**: the server's own date, never the caller's.
+    submitted_on: Annotated[str | None, Field(description=SUBMITTED_ON_DESCRIPTION)] = None
     #: Every figure the engine derived — notice, duration, tenure, the blackout span, the benefits
     #: dates — so the answer quotes them instead of computing them again (W8, C13, C22, C30).
     computed: dict[str, Any] | None = None

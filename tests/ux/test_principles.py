@@ -774,29 +774,31 @@ def test_the_transcript_and_the_composer_follow_the_viewport_across_the_phone_br
 
 # -- W10 addendum: the cold-start banner and the chrome above the conversation --------------------
 
-#: The banner shown for real, then the page's own measurement of everything above the conversation.
+#: What the page measured for itself once its own reveal fired. Nothing is dispatched from here:
+#: the first version revealed the banner and then fired a `resize`, which `onViewportChange` answers
+#: by calling `autogrow()` — so the guard passed whether or not the banner branches call it, and
+#: only the `--chrome-h`-from-`.layout` half was actually pinned (W10 fix round, Minor).
 BANNER_JS = """
 () => {
   const banner = document.getElementById('cold-start-banner');
-  banner.hidden = false;
   const layout = document.querySelector('body.chat > .layout');
-  return new Promise((resolve) => requestAnimationFrame(() => {
-    window.dispatchEvent(new Event('resize'));
-    setTimeout(() => {
-      const box = document.getElementById('message').getBoundingClientRect();
-      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-      resolve({
-        banner_shown: !banner.hidden && banner.getBoundingClientRect().height > 0,
-        chrome: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chrome-h')) || 0,
-        above: Math.round(layout.getBoundingClientRect().top + window.scrollY),
-        composer_bottom: box.bottom,
-        composer_hit: hit ? hit.id || hit.tagName.toLowerCase() : null,
-        viewport: window.innerHeight,
-      });
-    }, 400);
-  }));
+  const box = document.getElementById('message').getBoundingClientRect();
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+  return {
+    banner_shown: !banner.hidden && banner.getBoundingClientRect().height > 0,
+    chrome: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chrome-h')) || 0,
+    above: Math.round(layout.getBoundingClientRect().top + window.scrollY),
+    composer_bottom: box.bottom,
+    composer_hit: hit ? hit.id || hit.tagName.toLowerCase() : null,
+    viewport: window.innerHeight,
+  };
 }
 """
+
+#: How long the page waits before it shows the banner (`chat.html`'s own constant), plus room for
+#: the reveal's `autogrow()` to land.
+BANNER_DELAY_MS = 1200
+BANNER_SETTLE_MS = 700
 
 
 @pytest.mark.parametrize(("width", "height"), [(1440, 900), (390, 844)])
@@ -810,9 +812,14 @@ def test_the_cold_start_banner_does_not_push_the_composer_below_the_fold(browser
     `autogrow()` runs in both banner branches."""
     context = browser.new_context(viewport={"width": width, "height": height})
     tab = context.new_page()
+    # The page's **own** reveal, on a cold instance's own terms: `fetch` never settles, so the
+    # preflight cannot clear the banner and the 1,200 ms timer fires — and the `autogrow()` inside
+    # that branch is the only thing that could re-measure. Nothing below dispatches an event, so a
+    # page that forgot to re-measure stays un-measured and these assertions fail.
+    tab.add_init_script("window.fetch = () => new Promise(() => {});")
     try:
         tab.goto(f"{ux_server}/?access={TOKEN}", wait_until="networkidle")
-        tab.wait_for_timeout(250)
+        tab.wait_for_timeout(BANNER_DELAY_MS + BANNER_SETTLE_MS)
         measured = tab.evaluate(BANNER_JS)
         assert measured["banner_shown"], measured
         assert measured["chrome"] == pytest.approx(measured["above"], abs=2), (

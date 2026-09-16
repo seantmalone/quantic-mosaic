@@ -302,3 +302,51 @@ def test_the_routers_rationale_names_the_slot_when_no_workflow_does():
     assert rationale_slot("No employee id was supplied.") == "identity"
     assert rationale_slot("How much is the claim for?") == "amount_usd"
     assert rationale_slot("Nothing recognisable here.") is None
+
+
+# -- W10 fix round, Important 2: the amend is scoped to the request, and spares quoted policy -----
+
+
+def test_a_prior_write_about_another_request_steers_nothing():
+    """A session that filed `MOCK-HR-000013` for PTO and then asks about a conduct escalation had
+    *"Open a case with People Operations"* replaced by *"Amend MOCK-HR-000013 …"* — `open` is a
+    filing verb and `case` is a filing object, and nothing asked whether the two were the same
+    request. The same-turn rule needs no such test; a session-wide one does."""
+    pto = session.Write(
+        tool="create_mock_hr_ticket",
+        write_id="MOCK-HR-000013",
+        workflow="pto_request",
+        slots={"start_date": "2026-09-15", "days": 3},
+    )
+
+    assert session.relates_to(pto, workflow="pto_request", slots={}) is True, "the same workflow"
+    assert session.relates_to(pto, workflow=None, slots={"start_date": "2026-09-15"}) is True, "the same dates"
+    assert session.relates_to(pto, workflow=None, slots={"start_date": "2026-11-03"}) is False
+    assert session.relates_to(pto, workflow="conduct_escalation", slots={}) is False
+    assert session.relates_to(None, workflow="pto_request", slots={}) is False
+
+
+def test_a_cited_policy_fact_is_never_overwritten_by_the_amendment():
+    """Ruling 4 says quoted policy text is not rewritten; ruling 7 was breaking it three positions
+    later — including on the `policy_fact` the restatement step had just minted from the engine's
+    own `next_steps`."""
+    from hrmosaic.agent import outcome as outcome_consistency
+
+    write = session.Write(tool="create_mock_hr_ticket", write_id="MOCK-HR-000013", workflow="pto_request")
+    quoted = {
+        "type": "policy_fact",
+        "text": "Submit the request in MosaicOne so the manager can approve it in writing.",
+        "citations": ["c_approval"],
+    }
+    result = outcome_consistency.apply([quoted], [], prior_write=write)
+
+    assert result.blocks[0]["text"] == quoted["text"]
+    assert result.blocks[0]["citations"] == ["c_approval"]
+    assert not result.trimmed
+
+
+def test_the_write_carries_the_workflow_and_slots_the_scope_test_reads(prior):
+    write = session.performed_write(session.recent(prior))
+    assert write is not None
+    assert write.workflow == "pto_request"
+    assert write.slots["start_date"] == "2026-09-15"

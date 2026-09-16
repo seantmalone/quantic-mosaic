@@ -40,6 +40,7 @@ from hrmosaic.agent.guardrails import g1
 from hrmosaic.agent.orchestrator import (
     ACTION_OUTSTANDING,
     SEARCH_BREADTH,
+    SEARCH_BREADTH_REPEATED,
     SEARCH_BREADTH_UNSEARCHED,
     WORKFLOW_INCOMPLETE,
     ChatOptions,
@@ -98,11 +99,11 @@ def catalog() -> DiscoveredCatalog:
     )
 
 
-def decision(intent: str, workflow: str | None) -> RouteDecision:
+def decision(intent: str, workflow: str | None, *, multi_doc: bool = False) -> RouteDecision:
     return RouteDecision(
         intent=intent,
         workflow=workflow,
-        multi_doc=False,
+        multi_doc=multi_doc,
         needs_employee_data=True,
         needs_clarification=False,
         out_of_scope=False,
@@ -113,7 +114,14 @@ def decision(intent: str, workflow: str | None) -> RouteDecision:
     )
 
 
-def a_turn(*, intent: str = "workflow", workflow=PTO, disabled: list[str] | None = None, searches: int = 2) -> _Turn:
+def a_turn(
+    *,
+    intent: str = "workflow",
+    workflow=PTO,
+    disabled: list[str] | None = None,
+    searches: int = 2,
+    multi_doc: bool = False,
+) -> _Turn:
     """A turn carrying only what `_nudge` and `_absorb` read.
 
     `buffer` is `None` on purpose: neither method touches it, and a reminder that ever reached the
@@ -133,7 +141,7 @@ def a_turn(*, intent: str = "workflow", workflow=PTO, disabled: list[str] | None
         buffer=None,
         catalog=catalog(),
         began=time.perf_counter(),
-        decision=decision(intent, workflow.name if workflow is not None else None),
+        decision=decision(intent, workflow.name if workflow is not None else None, multi_doc=multi_doc),
         workflow=workflow,
     )
     for _ in range(searches):
@@ -719,7 +727,7 @@ def test_the_breadth_reminder_is_silent_when_no_tool_may_be_called_at_all():
 
 def test_the_breadth_reminder_names_no_tool_and_no_document_count():
     """The ledger's non-negotiable: the debt, never the tool, and never how many documents."""
-    for text in (SEARCH_BREADTH, SEARCH_BREADTH_UNSEARCHED):
+    for text in (SEARCH_BREADTH, SEARCH_BREADTH_UNSEARCHED, SEARCH_BREADTH_REPEATED):
         for name in TOOL_NAMES:
             assert name not in text
         assert "three" not in text and "3 " not in text
@@ -747,6 +755,7 @@ def test_both_forms_of_the_breadth_reminder_state_the_same_debt():
     debt = SEARCH_BREADTH.split(". ", 1)[1]
 
     assert SEARCH_BREADTH_UNSEARCHED.endswith(debt)
+    assert SEARCH_BREADTH_REPEATED.endswith(debt)
     assert SEARCH_BREADTH.startswith("Not yet — you have searched the corpus once.")
     assert SEARCH_BREADTH_UNSEARCHED.startswith("Not yet — you have not searched the corpus yet.")
 
@@ -831,3 +840,64 @@ def test_the_refusal_reads_the_verdict_for_the_writes_own_scenario_not_the_lates
     assert Orchestrator._verdict_for_queue(turn, "")["scenario"] == "international_remote", (
         "an unmapped queue: the latest"
     )
+
+
+# -- W10 fix round, Important 3(d): breadth is measured in documents, not in queries ---------------
+
+
+def test_two_searches_that_reached_one_document_still_owe_the_breadth_debt():
+    """Scenario 13, *"Can I work from Spain, and what about my laptop?"*: the turn searched twice,
+    landed in one document both times, and answered the equipment half without ever retrieving an
+    equipment passage. A second query into the same document has widened nothing, so the debt is
+    measured in the documents the evidence spans against the number the answer will be judged on."""
+    turn = a_turn(intent="policy_qa", workflow=None, searches=2, multi_doc=True)
+    orchestrator()._absorb(
+        turn,
+        result(
+            "search_policy_documents",
+            {"chunks": []},
+            retrievals=[retrieval(("pto-and-holidays#0007", "pto-and-holidays"))],
+        ),
+    )
+
+    assert orchestrator()._nudge(turn) is True
+    assert turn.nudges == ["search_breadth"]
+    assert turn.messages[0].content == SEARCH_BREADTH_REPEATED, "and it is told the truth about its own history"
+    assert "over 1 document(s)" in turn.step_summaries[0], "and the record names what was narrow"
+
+
+def test_two_searches_that_reached_enough_documents_owe_nothing():
+    """The other half: breadth is reached, so the reminder is not sent — the reminder is about
+    breadth, not about searching more for ever."""
+    turn = a_turn(intent="policy_qa", workflow=None, searches=2, multi_doc=True)
+    orchestrator()._absorb(
+        turn,
+        result(
+            "search_policy_documents",
+            {"chunks": []},
+            retrievals=[
+                retrieval(
+                    ("pto-and-holidays#0007", "pto-and-holidays"),
+                    ("manager-approval-matrix#0002", "manager-approval-matrix"),
+                )
+            ],
+        ),
+    )
+
+    assert orchestrator()._nudge(turn) is False
+    assert turn.messages == [] and turn.nudges == []
+
+
+def test_a_single_document_turn_is_not_told_its_one_document_is_too_few():
+    """`multi_doc` false and no workflow: one document is the whole expectation."""
+    turn = a_turn(intent="policy_qa", workflow=None, searches=2)
+    orchestrator()._absorb(
+        turn,
+        result(
+            "search_policy_documents",
+            {"chunks": []},
+            retrievals=[retrieval(("pto-and-holidays#0007", "pto-and-holidays"))],
+        ),
+    )
+
+    assert orchestrator()._nudge(turn) is False

@@ -1,6 +1,6 @@
 {
   "scenario": "repair_round_trip",
-  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. The fourth and fifth act entries are prose: the second is the model declining the breadth reminder of §9.1 step 2. Used by tests/integration/test_repair_round_trip.py. W9 addendum (ruling 3): the balance was read with the profile unread, so the profile debt fires once before synthesis — the two act entries before the synthesis are the reminder's tool call and its close. W10 (ruling 12): the repair entry now carries `arguments_json` — a JSON object encoded in a string — because `arguments: dict[str, Any]` rendered as an open `additionalProperties: true` object level, which the pinned provider rejects with a 400, so no repair call ever succeeded against a live model.",
+  "_note": "§9.1's ONE repair round trip. The first act step asks for two tools and the first of them carries arguments the published schema rejects, so the loop is inside call 1 while call 2's `tool_use` is still unanswered — the exact state the repair request has to replay legally. The fourth and fifth act entries are prose: the second is the model declining the breadth reminder of §9.1 step 2. Used by tests/integration/test_repair_round_trip.py. W9 addendum (ruling 3): the balance is read with the profile unread, so the profile debt fires before synthesis. Amended in the W10 fix round: that debt is settled DETERMINISTICALLY — the orchestrator makes the `lookup_employee_profile` call itself, with no model re-entry — so the two act entries that were the reminder's tool call and its close are gone. W10 (ruling 12): the repair entry now carries `arguments_json` — a JSON object encoded in a string — because `arguments: dict[str, Any]` rendered as an open `additionalProperties: true` object level, which the pinned provider rejects with a 400, so no repair call ever succeeded against a live model.",
   "completions": [
     {
       "purpose": "route",
@@ -52,29 +52,6 @@
       "finish_reason": "stop",
       "prompt_tokens": 2560,
       "completion_tokens": 19
-    },
-    {
-      "purpose": "act",
-      "response_text": "Reading the profile before I conclude.",
-      "tool_calls": [
-        {
-          "id": "toolu_rrt_profile",
-          "name": "lookup_employee_profile",
-          "args": {
-            "employee_id": "E1042"
-          }
-        }
-      ],
-      "finish_reason": "tool_use",
-      "prompt_tokens": 4300,
-      "completion_tokens": 40
-    },
-    {
-      "purpose": "act",
-      "response_text": "The profile is in the record now; concluding.",
-      "finish_reason": "stop",
-      "prompt_tokens": 4600,
-      "completion_tokens": 16
     },
     {
       "purpose": "synthesize",

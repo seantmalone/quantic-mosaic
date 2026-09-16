@@ -20,7 +20,7 @@ the user's words and the model's, and neither is an instruction to this one.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -90,6 +90,37 @@ class Write:
     tool: str
     write_id: str
     summary: str = ""
+    #: What the turn that made it was about — its workflow and the slots it resolved. A later turn
+    #: is only steered to *amend* this write when it is about the same request (W10 fix round,
+    #: Important 2).
+    workflow: str | None = None
+    slots: dict[str, Any] = field(default_factory=dict)
+
+
+#: The slots that say two turns are about the same **subject** rather than merely the same kind of
+#: request: a date, a destination, an amount. `days` is deliberately absent — *"extend it to five
+#: days instead"* changes exactly that one, which is the follow-up ruling 7 exists for.
+SUBJECT_SLOTS: tuple[str, ...] = ("start_date", "end_date", "destination_country", "amount_usd")
+
+
+def relates_to(write: Write | None, *, workflow: str | None, slots: Mapping[str, Any]) -> bool:
+    """Is this turn about the request that write filed? (W10 fix round, Important 2)
+
+    The same-turn rule in `outcome.trim` needs no such test: a write **this** turn performed is by
+    construction the request the answer is about. A write an earlier turn performed has no such
+    guarantee, and the first version fired on any filing directive whenever the session had ever
+    written anything — so a session that filed `MOCK-HR-000013` for PTO and then asked about a
+    conduct escalation had *"Open a case with People Operations"* replaced by *"Amend
+    MOCK-HR-000013 …"*, because `open` is a filing verb and `case` is a filing object.
+
+    Two ways to be the same request, and the write has to satisfy one: the same workflow, or a
+    shared subject slot — the same dates, the same destination, the same amount.
+    """
+    if write is None:
+        return False
+    if write.workflow and workflow and write.workflow == workflow:
+        return True
+    return any(key in write.slots and key in slots and write.slots[key] == slots[key] for key in SUBJECT_SLOTS)
 
 
 def _slots_and_write(store: Store, turn_id: str) -> tuple[dict[str, Any], Write | None]:
@@ -159,6 +190,8 @@ def performed_write(turns: Iterable[PriorTurn]) -> Write | None:
                 tool=turn.write_tool or "create_mock_hr_ticket",
                 write_id=turn.write_id,
                 summary=turn.write_summary or "",
+                workflow=turn.workflow,
+                slots=dict(turn.slots),
             )
     return found
 
@@ -188,11 +221,13 @@ __all__ = [
     "MAX_TURNS",
     "SLOT_KEYS",
     "SLOT_TOOLS",
+    "SUBJECT_SLOTS",
     "PriorTurn",
     "Write",
     "inherited_slots",
     "known",
     "performed_write",
     "recent",
+    "relates_to",
     "render",
 ]

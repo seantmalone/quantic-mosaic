@@ -326,6 +326,7 @@
           }
         ],
         "default": null,
+        "description": "The date the request was submitted — the server's own date, never the caller's. Notice is measured from it, and `computed.notice_span` shows the business-day walk.",
         "title": "Submitted On"
       },
       "computed": {
