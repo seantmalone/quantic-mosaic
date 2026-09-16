@@ -109,6 +109,23 @@ NAV: tuple[tuple[str, tuple[tuple[int, str, str], ...]], ...] = (
     ("Reference", ((10, "Corpus & chunks", "/dashboard/corpus"),)),
 )
 
+#: Every nav destination by href, and the label the row of pills paints for it.
+NAV_LABELS: dict[str, str] = {href: label for _group, _items in NAV for _number, label, href in _items}
+
+
+def nav_label(href: str) -> str:
+    """What the nav calls a route — for every other surface that has to name the same route.
+
+    One name per destination (UX W8 fix round, nav-r3-4 = DR3-05 = re-audit #3 I4). The breadcrumb
+    on all fourteen `/dashboard/corpus/{doc}` pages read **"Policy library"** and pointed at
+    `/dashboard/corpus`, four lines under a nav pill reading "Corpus & chunks" that points at the
+    same place — while the real policy library is `/policy`, a different surface for a different
+    reader. A literal in a `breadcrumbs=` argument is how the two drifted; a lookup is how they
+    cannot. `tests/contract/test_dashboard_pages.py` asserts every crumb against this map.
+    """
+    return NAV_LABELS[href]
+
+
 #: What the three admin-gated write controls say to every other persona — one sentence, and a link
 #: that can be followed rather than a pointer that has to be described (UX W7, M09 = dgc-r2-9).
 #: Tool server and Evaluations said "set it in … at the foot of the chat page" and Guardrails said
@@ -347,12 +364,19 @@ def _f_pct(value: Any) -> str:
     return "—" if value is None else f"{float(value) * 100:.1f}%"
 
 
-def _f_rate(value: Any, n: Any = None, unit: str = "") -> str:
+def _f_rate(value: Any, n: Any = None, unit: str = "", always: bool = False) -> str:
     """**P14**: the same percentage, carrying its denominator while the sample is small.
 
     `50.0%` from one of two calls and `11.1%` from one of nine turns are not percentages a reader
     should read as rates, and the page is the only place that can say so — the JSON keeps the bare
     float either way (P15).
+
+    `always=True` drops the twenty-sample threshold (UX W8 fix round, npo4-02 = re-audit #3 I6).
+    On `/dashboard/evals/{run}` — a page whose entire subject is *how a figure was computed* — four
+    headline rates, the action-safety rate, the catalog rate and both workflow-completion rows
+    printed bare beside two that carried a denominator, and the threshold is what made that legal:
+    a rate over 28 items and a rate over 1 looked identical. Every rate on a statistics page states
+    its sample, whatever its size.
     """
     if value is None:
         return "—"
@@ -361,7 +385,7 @@ def _f_rate(value: Any, n: Any = None, unit: str = "") -> str:
         sample = int(n)
     except (TypeError, ValueError):
         return shown
-    if sample <= 0 or sample >= SMALL_SAMPLE:
+    if sample <= 0 or (sample >= SMALL_SAMPLE and not always):
         return shown
     numerator = round(float(value) * sample)
     tail = f"{sample:,} {_f_plural(sample, unit)}" if unit else f"{sample:,}"
@@ -529,6 +553,32 @@ def _f_enum_label(value: Any) -> str:
     return ENUM_LABELS.get(text, text.replace("_", " "))
 
 
+#: `_f_enum_label` read backwards: the words the page paints → the token the database stores. Two
+#: tokens can share one label (`end_turn` and `stop` are both "finished"); the first one declared
+#: wins, which is the one a filter over that column would want.
+_ENUM_TOKENS: dict[str, str] = {}
+for _token, _label in ENUM_LABELS.items():
+    _ENUM_TOKENS.setdefault(_label.casefold(), _token)
+
+
+def enum_token(value: str) -> str:
+    """The stored value a reader's words name (UX W8 fix round, DR3-04 = re-audit #3 I13).
+
+    DR2-09 humanised the Turns page — the Intent and Workflow cells, the filter chips **and the
+    free-text placeholders**, which now read `e.g. PTO request`. The filter itself is exact SQL
+    equality against the stored token, so the page invited a reader to type the one string that
+    matches nothing: `workflow='PTO request'` → 0 rows, `workflow='pto_request'` → 2. This is the
+    inverse, and it is deliberately narrow — the explicit vocabulary first, then the mechanical
+    undo of `leaf.replace("_", " ")`, and only where there is a space to undo, because a persona
+    id (`E1042`) and a model name go through filters of their own and are not enums at all.
+    """
+    text = value.strip()
+    token = _ENUM_TOKENS.get(text.casefold())
+    if token is not None:
+        return token
+    return text.casefold().replace(" ", "_") if " " in text else text
+
+
 def _f_server_location(url: Any) -> str:
     """Where the tool server runs, without publishing its address (UX W6, JX-R5)."""
     if not url:
@@ -583,8 +633,29 @@ def _f_span_summary(span: dict[str, Any]) -> str:
     # labelled value — `intent=workflow workflow=pto_request catalog_reopened=false` was the last
     # raw enum the capture's sidecars found (UX W7, JX2-01 = DR2-09, DR2-04).
     if span.get("kind") in {"plan", "llm_call", "guardrail"}:
-        return _said_pairs(summary)
+        return _said_source_unit(_said_pairs(summary))
     return summary
+
+
+#: `(3 sources)` at the end of the G2 line. The number counts the distinct **documents** behind the
+#: citations; the same turn's chat strip says `Sources (6)`, which counts passages.
+_G2_SOURCES = re.compile(r"\((\d+) sources?\)")
+
+
+def _said_source_unit(summary: str) -> str:
+    """Name the unit the citation line counts (UX W8 fix round, npo4-03 = re-audit #3 I7).
+
+    `8 of 8 citation links resolved (3 sources)` on the session page, `Sources (6)` in chat and
+    "6 policy sections read" in the demo panel were three numbers for one word, all within a click
+    of each other: links, documents and passages, none of them saying which. The links half already
+    names its unit; this names the other one. The raw `reason` is untouched in the span payload and
+    in `/api/*` (P15) — this is the *rendered* line.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        return f"(across {_f_counted(int(match.group(1)), 'document')})"
+
+    return _G2_SOURCES.sub(replace, summary)
 
 
 _PAIR = re.compile(r"(\s*)\b([a-z_]+)=([A-Za-z0-9_.:-]+)")
@@ -1765,8 +1836,10 @@ def _turn_filters(filters: Filters) -> tuple[str, list[Any]]:
         ("s.auth_mode", filters.auth_mode),
         ("s.actor_role", filters.actor_role),
         ("t.outcome", filters.outcome),
-        ("t.intent", filters.intent),
-        ("t.workflow", filters.workflow),
+        # The two free-text enum filters, normalised back to the token the column stores: the
+        # placeholders show the painted label and the comparison is exact (DR3-04 = I13).
+        ("t.intent", enum_token(filters.intent or "")),
+        ("t.workflow", enum_token(filters.workflow or "")),
     ):
         if value:
             where += f" AND {column} = ?"
@@ -2023,10 +2096,24 @@ _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ISO_DATETIME = re.compile(r"^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]00:?00)$")
 
 
+def _keyed_value(key: str, value: str) -> str | None:
+    """A value whose **key** decides what it is called — or `None` if the key says nothing.
+
+    One helper, read by the arguments side and the results side of the same table row (UX W8 fix
+    round, JX3-03 = re-audit #3 I9). `_argument_value` translated `queue` and `_scalar_value` —
+    which took no key at all — could not, so `/dashboard/tools` printed ARGUMENTS
+    `queue: HR Time Off team` and RESULT `queue: hr-timeoff` in one row, on all six tools screens.
+    A routing slug is never what a human-facing cell says (`core/queues.py`), whichever side of the
+    call it came back on.
+    """
+    return queue_label(value) if key == "queue" else None
+
+
 def _argument_value(key: str, value: str) -> str:
     """One string argument as a reader reads it."""
-    if key == "queue":
-        return queue_label(value)
+    named = _keyed_value(key, value)
+    if named is not None:
+        return named
     if key in _ENUM_ARGUMENTS:
         return _f_enum_label(value)
     dated = _human_moment(value)
@@ -2050,12 +2137,19 @@ def _human_moment(value: str) -> str | None:
     return None
 
 
-def _scalar_value(value: str | int | float | bool) -> str:
-    """One field of a tool result, as a reader reads it: a formatted number or a named enum."""
+def _scalar_value(key: str, value: str | int | float | bool) -> str:
+    """One field of a tool result, as a reader reads it: a formatted number or a named enum.
+
+    It takes the field's `key` (UX W8 fix round, JX3-03): the name of a field is half of what its
+    value means, and a queue slug that reaches this function without one is printed as the slug.
+    """
     if isinstance(value, bool):
         return "yes" if value else "no"
     if isinstance(value, (int, float)):
         return _f_num(value)
+    named = _keyed_value(key, str(value))
+    if named is not None:
+        return named
     dated = _human_moment(str(value))
     return dated if dated is not None else _f_enum_label(value)
 
@@ -2086,7 +2180,7 @@ def summarise_result(structured: Any, result_json: Any, *, error_code: str | Non
         # `verdict=conditional` is a field name, an equals sign and a raw enum on a page that has
         # spent two waves removing all three (UX W6, JX-R5 / JX-R4). The same facts, said.
         scalars = [
-            f"{_f_enum_label(key)}: {_scalar_value(value)}"
+            f"{_f_enum_label(key)}: {_scalar_value(key, value)}"
             for key, value in payload.items()
             if isinstance(value, (str, int, float, bool))
         ]
@@ -2518,7 +2612,21 @@ def _run_row(row: dict[str, Any]) -> EvalRunRow:
 RUN_COLUMNS = "id, created_at, git_sha, label, variant, target, n_items, metrics_json, judge_model, duration_s"
 
 #: Rate → the per-item score key whose presence says the item was scored for it (UX W7, npo3-07).
+#:
+#: Every rate the run page prints, not four of them (UX W8 fix round, npo4-02 = re-audit #3 I6).
+#: The runner names its buckets by short key — `arg_correctness`, `cit_resolve`, `tool_selection` —
+#: and the page looks each rate up by its own long name, so `n_scored.get("arg_correctness_rate")`
+#: was `None` and `Argument correctness 100.0%`, computed over **19** items, rendered with no
+#: denominator at all: under P14's own threshold, on P14's own page.
 RATE_DENOMINATORS: dict[str, str] = {
+    "groundedness_mean": "groundedness",
+    "citation_accuracy_mean": "citation_accuracy",
+    "cit_resolve_mean": "cit_resolve",
+    "tool_selection_accuracy": "tool_selection",
+    "arg_correctness_rate": "arg_correctness",
+    "partial_match_mean": "partial_match",
+    "clarification_accuracy": "clarification",
+    "strict_pass_rate": "outcome",
     "action_safety_pass_rate": "safety",
     "catalog_reopened_rate": "catalog_reopened",
     "recommendation_labeled_rate": "recommendation_labeled_rate",
@@ -2637,10 +2745,17 @@ def build_eval_run_detail(request: Request, run_id: str, filters: Filters) -> Ev
     # denominator of a rate is the number of scored items that reported it, counted here from
     # the items' own score rows; the runner's figure wins where it exists.
     for metric, score_key in RATE_DENOMINATORS.items():
-        if metric not in metrics.n_scored:
-            metrics.n_scored[metric] = sum(
-                1 for item in items if item.run_phase == "scored" and item.scores.get(score_key) is not None
-            )
+        if metric in metrics.n_scored:
+            continue
+        # The runner's own short-key bucket where it has one (`arg_correctness` for
+        # `arg_correctness_rate`), else counted off the items' own score rows. A bucket of zero is
+        # not published: the metric it would belong to is `null` on this run, and an exported
+        # `"groundedness_mean": 0` reads as a measurement rather than as an absence (I6).
+        counted = metrics.n_scored.get(score_key)
+        if counted is None:
+            counted = sum(1 for item in items if item.run_phase == "scored" and item.scores.get(score_key) is not None)
+        if counted:
+            metrics.n_scored[metric] = counted
     return EvalRunDetailView(
         run=_run_row(run),
         metrics=metrics,
@@ -2931,7 +3046,7 @@ async def page_session_detail(request: Request, session_id: str) -> Response:
     longest = max((turn.duration_ms or 0) for turn in view.turns) if view.turns else 0
     opening = view.turns[0].user_message if view.turns else ""
     title = opening if len(opening) <= SESSION_TITLE_CHARS else opening[:SESSION_TITLE_CHARS].rstrip() + "…"
-    trail = [("Sessions", "/dashboard/sessions")]
+    trail = [(nav_label("/dashboard/sessions"), "/dashboard/sessions")]
     if _opened_from_chat(request):
         trail.insert(0, ("Opened from chat", CHAT_PATH))
     return _page(
@@ -3233,7 +3348,7 @@ async def page_corpus_document(request: Request, doc_id: str) -> Response:
         page_number=10,
         title=view.document.doc_title,
         lede="Every passage of this document a citation can point at.",
-        breadcrumbs=[("Policy library", "/dashboard/corpus")],
+        breadcrumbs=[(nav_label("/dashboard/corpus"), "/dashboard/corpus")],
         api_url=f"/api/corpus/documents/{doc_id}",
     )
 
@@ -3334,7 +3449,7 @@ async def page_eval_detail(request: Request, run_id: str) -> Response:
         page_number=11,
         title=view.run.label or f"Run {view.run.variant}",
         lede=f"{_f_counted(view.run.n_items, 'item')} from the committed dataset, scored end to end.",
-        breadcrumbs=[("Evaluations", "/dashboard/evals")],
+        breadcrumbs=[(nav_label("/dashboard/evals"), "/dashboard/evals")],
         tab=_tab(request, ("metrics", "items", "system")),
         api_url=f"/api/eval/runs/{run_id}",
         filters=filters,
@@ -3342,6 +3457,9 @@ async def page_eval_detail(request: Request, run_id: str) -> Response:
         judged_metrics=JUDGED_METRICS,
         deterministic_metrics=DETERMINISTIC_METRICS,
         rate_metrics=RATE_METRICS,
+        # The page's own vocabulary for the "Items scored per metric" legend, so it names the
+        # metrics its tiles name (UX W8 fix round, M17 = DR3-08).
+        rate_denominators=tuple(RATE_DENOMINATORS),
     )
 
 

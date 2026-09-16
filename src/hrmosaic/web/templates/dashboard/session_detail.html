@@ -49,20 +49,30 @@
   <div class="toggle-row">
     {#- Each step kind carries its definition (UX W7, DR2-04 = dashboard-readability-5): this page
         is the densest jargon surface on the product and the chat deep link's destination, and it
-        declared no help at all. -#}
+        declared no help at all.
+
+        The definition hangs off the **checkbox**, not off a `<span>` (UX W8 fix round, DR3-07 =
+        I14): the pill is this control's own visible label, so a second focusable element beside it
+        would be a tab stop that does nothing, and the input is already focusable, already a 44px
+        tap target and already the thing a screen reader lands on. `aria-describedby` reads the
+        sentence out there; the bubble paints it on hover and on focus. -#}
     {% for kind in kinds %}
-    <label class="toggle"><input type="checkbox" class="kind-toggle" value="{{ kind }}" checked>
-      <span class="pill pill-{{ kind }} has-help" title="{{ kind_help.get(kind, '') }}">{{ kind|kind_label }}</span></label>
+    <label class="toggle"><input type="checkbox" class="kind-toggle" value="{{ kind }}" checked
+             aria-describedby="help-kind-{{ kind }}">
+      <span class="pill pill-{{ kind }} has-help">{{ kind|kind_label }}</span>
+      <span class="help-bubble" role="tooltip" id="help-kind-{{ kind }}">{{ kind_help.get(kind, '') }}</span></label>
     {% endfor %}
     {% if not kinds %}<span class="muted">This session recorded no steps.</span>{% endif %}
   </div>
 </section>
 
-{#- The vocabulary of the rows below, once, above them (UX W7, DR2-04). -#}
+{#- The vocabulary of the rows below, once, above them (UX W7, DR2-04). The two terms were also
+    wrapped in hover-only `title=` attributes repeating what the sentence around them already says
+    (UX W8 fix round, DR3-07 = I14): a definition a reader can see does not need a second one they
+    cannot reach, and two of the 27 unreachable definitions were simply redundant. -#}
 <p class="note" id="waterfall-legend">Each row is one recorded step of the turn, in order; a
-  <span class="has-help" title="One of the six rules, G1–G6, run over the turn.">safety check</span> is one of the six rules,
-  <span class="has-help" title="The router asked for the tool catalogue a second time during the turn.">catalogue reopened</span>
-  means the router re-read the tool list mid-turn.</p>
+  <strong>safety check</strong> is one of the six rules, G1–G6, run over the turn, and
+  <strong>catalogue reopened</strong> means the router re-read the tool list mid-turn.</p>
 <div id="span-waterfall">
 {% for turn in view.turns %}
 <article class="panel turn-card" id="turn-{{ turn.seq }}">

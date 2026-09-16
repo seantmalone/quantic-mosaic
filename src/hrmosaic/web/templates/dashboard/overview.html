@@ -143,7 +143,10 @@
     <div><dt>Conversation record</dt><dd>{{ view.health.store_backend|enum_label }}</dd></div>
     <div><dt>Build</dt><dd><code class="id-chip" title="{{ view.health.git_sha }}">{{ view.health.git_sha|id_chip }}</code></dd></div>
     <div><dt>Uptime</dt><dd>{{ view.health.uptime_ms|ms }}</dd></div>
-    <div><dt>Memory</dt><dd>{{ view.health.rss_mb|num }} MB</dd></div>
+    {#- Whole megabytes (W8 fix round, M4 = npo4-09): `147.20 MB` is five significant figures
+        and a fixed two decimal places on a number that is different on every load, printed
+        beside a column of integer counts. The unrounded value is in Export JSON (P15). -#}
+    <div><dt>Memory</dt><dd>{{ view.health.rss_mb|round|int|num }} MB</dd></div>
     <div><dt>Employee data as of</dt><dd>{{ view.health.data_as_of|human_date }}</dd></div>
   </dl>
 </section>

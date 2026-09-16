@@ -10,6 +10,19 @@
   at 390px, which is the same defect the dashboard had already measured its way out of
   (UX W6, nav-reaudit-2).
 
+  **Measured after layout, not during parse** (W8 fix round, nav-r3-2 = DR3-02 = re-audit #3 I2).
+  W7 published the height once, inline, and re-measured only on `resize`. Both are too early and
+  too rare: this script runs while the brand webfont is still loading, so at 1440 the nav still fit
+  one row (110px) at that moment and reflowed to two (147px) when the font arrived — without the
+  window ever resizing. The deep link then landed 25px behind a 147px chrome with "Turn 1" sliced.
+  Four triggers, because each one catches a case the others do not: the inline call (a fragment
+  that lands before anything else has run), `load` (images and the stylesheet settled),
+  `document.fonts.ready` (the webfont reflow) and a `ResizeObserver` on `#app-chrome` itself (any
+  reflow at all — a wrapped nav, a longer persona name, a banner appearing).
+
+  Re-landing matters as much as re-measuring: the browser has already scrolled to the fragment by
+  the time the height changes, so a measurement that moves the offset also re-aligns the target.
+
   The element measured is `#app-chrome`; a page without one simply publishes nothing and the CSS
   fallback in `.anchor, .turn-card, .chunk, [id^="turn-"]` applies.
 #}
@@ -18,10 +31,32 @@
     "use strict";
     var chrome = document.getElementById("app-chrome");
     if (!chrome) { return; }
+    var published = null;
     function measure() {
-      document.documentElement.style.setProperty("--dash-nav-h", chrome.offsetHeight + "px");
+      var height = chrome.offsetHeight;
+      if (height === published) { return; }
+      published = height;
+      document.documentElement.style.setProperty("--dash-nav-h", height + "px");
+      realign();
+    }
+    // The fragment was scrolled to under the OLD offset. Re-aligning it is what the reader
+    // actually asked for; `scrollIntoView` reads the target's fresh `scroll-margin-top`.
+    function realign() {
+      var id = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+      var target = id && document.getElementById(id);
+      if (!target) { return; }
+      if (getComputedStyle(target).visibility === "hidden") {
+        target = target.closest(".turn-card, .reader-section") || target.parentElement || target;
+      }
+      target.scrollIntoView({ block: "start" });
     }
     measure();
+    window.addEventListener("load", measure);
     window.addEventListener("resize", measure);
+    window.addEventListener("hashchange", measure);
+    if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+      document.fonts.ready.then(measure);
+    }
+    if (typeof ResizeObserver !== "undefined") { new ResizeObserver(measure).observe(chrome); }
   })();
 </script>

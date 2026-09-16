@@ -54,16 +54,21 @@
        'help': 'On a streamed call, when the first token arrived; on one that did not stream, the whole call.'},
       {'label': 'Streamed', 'key': 'streamed', 'kind': 'bool'},
       {'label': 'Finish', 'key': 'finish_reason', 'kind': 'enum'},
-      {'label': 'Retries', 'key': 'retry_count', 'kind': 'num', 'zero_dash': true},
-      {'label': 'Cached', 'key': 'cache_hit', 'kind': 'bool',
-       'help': 'The provider served this call from its prompt cache.'},
-      {'label': 'Rate-limit wait', 'key': 'limiter_wait_ms', 'kind': 'ms', 'zero_dash': true,
-       'help': 'How long the client held the call back to stay inside the daily call cap.'},
-      {'label': 'Failover', 'key': 'provider_failover', 'kind': 'bool'},
       {'label': 'Provider', 'key': 'provider', 'kind': 'enum'},
       {'label': 'Turn', 'key': 'turn_id', 'kind': 'id', 'link_key': 'dashboard_url'},
       {'label': 'Span', 'key': 'span_id', 'kind': 'id'}],
       view.rows, 'No model call matches these filters.',
       label='Recent model calls') }}
+  {#- Retries, Cached, Rate-limit wait and Failover left the rendered table (W8 fix round, M3 =
+      npo4-08, and half of npo4-01 = I5): fifteen columns took it to 1,497px inside a 1,359px
+      container, so SPAN was off-screen at 1440 — and those four are the transport's *exceptions*,
+      which is to say `—`, `no`, `—`, `no` on every row of a normal run. Four constant columns
+      pushed the three that move off the page. They are in the record, unabridged, one link below
+      (P15): the record is relocated, never destroyed. -#}
+  {#- Named, not linked: the only link out of a page into the raw API is the labelled export
+      control at the foot of it (UX W7, nav-r2-1), and `tests/ux` measures that. -#}
+  <p class="note">Retries, prompt-cache hits, rate-limit waits and provider failovers are recorded
+    on every call and come back with <strong>Export this page as JSON</strong> below; they are off
+    the table because they are the same value on every row until something goes wrong.</p>
 </section>
 {% endblock %}

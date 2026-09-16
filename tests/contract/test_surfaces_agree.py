@@ -137,3 +137,46 @@ async def test_the_panel_sentence_and_the_session_tile_count_the_same_safety_che
     assert (panel.group(1), panel.group(2)) == (tile.group(1), tile.group(2)) == (tile.group(1), "6")
     assert int(tile.group(3)) >= int(tile.group(1)), "spans run are at least the rules that applied"
     assert "The six safety checks" in guardrails, "…and the Guardrails page names the same six"
+
+
+#: `8 of 8 citation links resolved (across 3 documents)` on the session waterfall's G2 row.
+G2_LINE = re.compile(r"(\d+) of (\d+) citation links? resolved \(([^)]*)\)")
+#: …and `Sources (6)` on the chat surface, which counts the passages the answer cites.
+CHAT_SOURCES = re.compile(r"Sources \((\d+)\)")
+
+
+async def test_the_citation_line_and_the_chat_sources_strip_do_not_count_two_things_as_one(web):
+    """npo4-03 = re-audit #3's I7 — **P9** and **P10**, one word, one unit.
+
+    W7 renamed the G2 line and left its number alone, so one turn was summarised three ways within
+    a click of each other: `8 of 8 citation links resolved (3 sources)` on the session page,
+    `Sources (6)` in the chat strip and "6 policy sections read" in the demo panel — links,
+    documents and passages, three counts of one answer, none of them saying which. The links half
+    already names its unit. Either the parenthesis counts what chat counts, or it says what it
+    counts; it may not do neither.
+    """
+    async with web("demo_task_1.json") as client:
+        answered = await client.post(
+            "/chat",
+            json={"message": "I want to work from Berlin from 3 November to 14 December 2026 — can I?"},
+            headers=HTMX,
+        )
+        assert answered.status_code == 200, answered.text
+        session_id = re.search(r'data-session-id="([0-9a-f]+)"', answered.text).group(1)
+        waterfall = (await client.get(f"/dashboard/sessions/{session_id}")).text
+
+    # The record keeps the raw `reason` on the span payload (P15); the rendered row is the claim.
+    rows = re.sub(r"<pre\b.*?</pre>", "", waterfall, flags=re.S)
+    line = G2_LINE.search(" ".join(rows.split()))
+    assert line, f"the session page states the citation check's own count: {rows[:200]}"
+
+    chat_sources = CHAT_SOURCES.search(" ".join(answered.text.split()))
+    passages = int(chat_sources.group(1)) if chat_sources else None
+    counted, unit = line.group(3).split(" ", 1) if " " in line.group(3) else (line.group(3), "")
+
+    if passages is not None and counted.isdigit() and int(counted) == passages:
+        return  # It counts what chat counts, which is the other way the ruling allows.
+    assert unit.strip(), f"the parenthesis is a bare number beside a chat strip saying {passages}: {line.group(0)!r}"
+    assert "document" in unit, (
+        f"the citation line counts {counted} of something the page does not name: {line.group(0)!r}"
+    )

@@ -113,18 +113,53 @@
   {%- endif -%}
 {% endmacro %}
 
+{# One column's definition, as a control a keyboard and a thumb can both reach (UX W8 fix round,
+   DR3-07 = re-audit #3 I14). All 27 in-place definitions were a bare `title=` on a non-focusable
+   `<span>`: no tab stop, no `aria-describedby`, nothing on a touch screen, and nothing at all at
+   390px, where the card layout clips the whole `<thead>` that carried them. A `<dfn>` with
+   `tabindex="0"` is focusable and tappable; `aria-describedby` puts the sentence in the
+   accessibility tree whether or not the bubble is painted; the bubble itself is a `role="tooltip"`
+   shown on hover and on focus, in CSS, with no script.
+
+   `<dfn>`, not `<button>`: the filter bar's definitions sit inside the `<label>` that names the
+   control beside them, and a second labelable element in one `<label>` steals the association from
+   the input it exists to name. `<dfn>` is not labelable. #}
+{% macro help(term, text, anchor) %}
+{%- if text -%}
+<dfn class="has-help" tabindex="0" aria-describedby="help-{{ anchor }}">{{ term }}</dfn>
+<span class="help-bubble" role="tooltip" id="help-{{ anchor }}">{{ text }}</span>
+{%- else -%}{{ term }}{%- endif -%}
+{% endmacro %}
+
 {% macro table(id, columns, rows, empty='Nothing recorded yet.', label=none) %}
 {% set name = label or id.replace('-', ' ') %}
+{#- …and on a phone the definitions are printed, once, above the stack of cards the rows become
+    (I14): `<thead>` is clipped away there, so a definition that lives only in the header does not
+    exist on the viewport that has least room to guess. Hidden above 40rem, where the header
+    carries them. -#}
+{% set defined = columns|selectattr('help')|list %}
+{% if defined %}
+<dl class="table-legend" aria-label="What the columns of {{ name }} mean">
+  {% for column in defined %}
+  <div><dt>{{ column.label }}</dt><dd>{{ column.help }}</dd></div>
+  {% endfor %}
+</dl>
+{% endif %}
 {#- A landmark and a tab stop belong to a box a reader can actually scroll. Fourteen of the
     twenty-one tables fit their page and were still announced as regions and still took a tab stop
     (a11y-reaudit-2). `.table-scroll` keeps its paint either way; only the role travels. -#}
 <div class="table-scroll"{% if rows and columns|length > 4 %} tabindex="0" role="region" aria-label="{{ name }}"{% endif %}>
   <table id="{{ id }}" class="data-table">
     <thead>
+      {#- `help-flat` is the same label without the control, painted only where the control is not:
+          inside the clipped `<thead>` on a phone the `<dfn>` is a tab stop nobody can see and a tap
+          target nobody can hit, so it is `display: none` there and this plain copy keeps the
+          column's name in the table's own semantics (I14). -#}
       <tr>{% for column in columns %}<th data-col="{{ column.key }}" scope="col"
           data-mobile="{{ column.get('mobile', 'lead' if loop.index0 < LEAD_COLUMNS else 'detail') }}"
-          class="cell-{{ column.get('kind', 'text') }}">{% if column.get('help') %}<span
-          class="has-help" title="{{ column.help }}">{{ column.label }}</span>{% else %}{{ column.label }}{% endif %}</th>{% endfor %}
+          class="cell-{{ column.get('kind', 'text') }}">{% if column.get('help') %}{{
+          help(column.label, column.help, id ~ '-' ~ column.key) }}<span
+          class="help-flat">{{ column.label }}</span>{% else %}{{ column.label }}{% endif %}</th>{% endfor %}
         <th class="card-toggle" scope="col"><span class="visually-hidden">More</span></th></tr>
     </thead>
     <tbody>

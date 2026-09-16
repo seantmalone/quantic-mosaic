@@ -595,6 +595,15 @@ ENUM_COLUMNS = (
     "auth_mode",
     "actor_role",
     "client_label",
+    # The two summariser columns (UX W8 fix round, JX3-03 = re-audit #3 I9). They are not enum
+    # columns — they are sentences the dashboard composes out of a tool's arguments and its result —
+    # but every *value* inside them goes through the same vocabulary, and the one that did not was
+    # visible on all six tools screens: ARGUMENTS `queue: HR Time Off team` in the same row as
+    # RESULT `queue: hr-timeoff`, because `_argument_value` took the field's key and
+    # `_scalar_value` did not. A stored slug in a composed sentence is the same defect as a stored
+    # slug in a cell of its own.
+    "arguments_summary",
+    "result_summary",
 )
 SNAKE_CASE = re.compile(r"\b[a-z]+_[a-z_]+\b")
 ENUM_CELL = re.compile(r'<td data-col="(?P<col>[a-z_]+)"[^>]*>(?P<cell>.*?)</td>', re.S)
@@ -659,3 +668,95 @@ async def test_the_eval_tabs_are_real_tabs_driven_by_the_query_string(seeded):
     assert 'name="tab" value="items"' in items, "…and Apply carries the tab"
     metrics = re.search(r'<section[^>]*id="tab-metrics".*?</section>', page, re.S).group(0)
     assert 'id="filter-bar"' not in metrics
+
+
+# --------------------------------------------------------------------------------------
+# UX W8 fix round — one name per destination, and a filter that matches what it invites
+# --------------------------------------------------------------------------------------
+
+#: `<a href="/dashboard/corpus">Corpus &amp; chunks</a>` inside the breadcrumb trail.
+CRUMB = re.compile(r'<nav class="crumbs".*?</nav>', re.S)
+CRUMB_LINK = re.compile(r'<a href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+
+
+async def test_every_breadcrumb_calls_its_destination_what_the_nav_calls_it(seeded):
+    """nav-r3-4 = DR3-05 = re-audit #3's I4 — **P10**, one convention per concept.
+
+    All fourteen `/dashboard/corpus/{doc}` pages carried a breadcrumb reading **"Policy library"**
+    that pointed at `/dashboard/corpus` — four lines under a nav pill reading "Corpus & chunks" that
+    points at the same place, while the real policy library is `/policy`, a different surface for a
+    different reader. The crumb was a literal in a `breadcrumbs=` argument; it is a lookup now, and
+    this is what keeps it one. A crumb that names a surface outside the dashboard nav (chat, say) is
+    not in the map and is left to the page that wrote it.
+    """
+    from hrmosaic.web import dashboard as dash
+
+    offenders: dict[str, list[str]] = {}
+    for _number, url in seeded.pages():
+        body = (await seeded.client.get(url, headers=ADMIN)).text
+        trail = CRUMB.search(body)
+        if not trail:
+            continue
+        for href, label in CRUMB_LINK.findall(trail.group(0)):
+            expected = dash.NAV_LABELS.get(href)
+            painted = html.unescape(re.sub(r"<[^>]+>", "", label)).strip()
+            if expected and painted != expected:
+                offenders.setdefault(url, []).append(f"{href}: {painted!r} vs nav {expected!r}")
+    assert not offenders, f"these breadcrumbs rename the page they point at: {offenders}"
+
+
+async def test_the_policy_library_is_named_only_where_the_policy_library_is(seeded):
+    """The other half of I4: `/dashboard/corpus` is the chunk inspector, `/policy` is the library a
+    reader reads. One name, one surface — `grep -rn 'Policy library' src/` had three live uses and
+    two of them were right."""
+    for _number, url in seeded.pages():
+        body = (await seeded.client.get(url, headers=ADMIN)).text
+        assert "Policy library" not in body, f"{url} calls something the policy library"
+    reader = (await seeded.client.get("/policy/pto-and-holidays", headers=ADMIN)).text
+    assert "Policy library" in reader, "the reader still offers the library it belongs to"
+
+
+async def test_a_free_text_enum_filter_matches_the_words_its_placeholder_invites(seeded):
+    """DR3-04 = re-audit #3's I13 — **P9**, a summary that agrees with its detail.
+
+    DR2-09 humanised the Turns page down to the free-text placeholders, which read `e.g. PTO
+    request` — while the filter is exact SQL equality against the stored `pto_request`. The page
+    invited a reader to type the one string that could not match: 0 rows against the token's 2. The
+    painted label and the stored token must now name the same rows, and the token must go on
+    working, because a URL a grader pasted last week is a URL.
+    """
+    from hrmosaic.web import dashboard as dash
+
+    rows = re.compile(r'<td data-col="turn_id"')
+    for token in ("pto_request", "policy_qa"):
+        painted = dash._f_enum_label(token)
+        assert painted != token, f"{token} is not humanised, so this pair proves nothing"
+        stored = (await seeded.client.get(f"/dashboard/turns?workflow={token}", headers=ADMIN)).text
+        words = (await seeded.client.get(f"/dashboard/turns?workflow={painted}", headers=ADMIN)).text
+        assert len(rows.findall(words)) == len(rows.findall(stored)), (
+            f"workflow={painted!r} lists {len(rows.findall(words))} turns and "
+            f"workflow={token!r} lists {len(rows.findall(stored))}"
+        )
+    # …and the same for the Intent column, whose placeholder is a token either way.
+    assert dash.enum_token("PTO request") == "pto_request"
+
+
+async def test_no_queue_reaches_a_reader_as_its_routing_slug(seeded):
+    """JX3-03 = re-audit #3's I9 — **P10** and **P13**, one queue with one name.
+
+    `dashboard-tools__1440x900.txt:43`: ARGUMENTS `queue: HR Time Off team` and, in the same row,
+    RESULT `queue: hr-timeoff`. The snake_case guard above cannot see this class at all — a routing
+    slug is hyphenated — so the slug itself is what is looked for, everywhere a page paints. The
+    record keeps it: every `<pre>` disclosure holds the tool's own arguments and result unabridged,
+    and `/api/*` is untouched (**P15**), so the payloads are cut out before the search.
+    """
+    from hrmosaic.core.queues import QUEUE_LABELS
+
+    offenders: dict[str, list[str]] = {}
+    for _number, url in seeded.pages():
+        body = (await seeded.client.get(url, headers=ADMIN)).text
+        painted = re.sub(r"<pre\b.*?</pre>", "", body, flags=re.S)
+        found = [slug for slug in QUEUE_LABELS if slug in painted]
+        if found:
+            offenders[url] = found
+    assert not offenders, f"a queue's routing slug is painted here: {offenders}"

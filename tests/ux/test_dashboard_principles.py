@@ -289,6 +289,45 @@ def test_p14_a_percentile_over_fewer_than_five_samples_prints_its_n(dashboard):
             assert row["p95"].startswith("n="), f"a p95 over {row['calls']} calls printed as a figure: {row}"
 
 
+#: Every cell of the eval-run page that prints a rate, and the text it prints. The three blocks the
+#: W7 ruling named — the headline strip, the behaviour-and-safety list and the workflow rows — plus
+#: the run verdict, so a figure cannot escape by moving.
+EVAL_RATES_JS = """
+() => {
+  const cells = [
+    ...document.querySelectorAll("#metric-block .metric-value"),
+    ...document.querySelectorAll("#behaviour-metrics dd"),
+    ...document.querySelectorAll("#workflow-completion li"),
+  ];
+  return cells
+    .map((el) => ({ where: el.closest("[data-metric]")?.dataset.metric || el.textContent.trim().slice(0, 40),
+                    text: el.textContent.replace(/\\s+/g, " ").trim() }))
+    .filter((cell) => /\\d+(\\.\\d+)?%/.test(cell.text));
+}
+"""
+
+
+def test_p14_no_rate_on_the_eval_run_page_is_printed_without_its_sample(dashboard):
+    """npo4-02 = re-audit #3's I6, against a written W7 ruling ("every rate on the eval-run page
+    through `pct_of` with its denominator; n = 1 shown as 1 of 1").
+
+    What shipped was a footer legend three screens below the figures, not denominators in the cells:
+    `ACTION-SAFETY PASS RATE 100.0%` and `TOOL CATALOG REOPENED 0.0%` sat beside
+    `OVER-REFUSAL RATE 0.0% (0 of 18 items)`, `Argument correctness 100.0%` was computed over 19 —
+    under P14's own threshold — and both `Workflow completion` rows printed a bare `0.0%` over a
+    footer line that was not their denominator. This page's whole subject is how a figure was
+    computed, so the threshold does not apply to it: every rate states its sample, whatever its size.
+    """
+    run = next((route for route in dashboard.routes if "/dashboard/evals/" in route), None)
+    assert run, "the committed evaluation runs are imported at boot"
+    tab = dashboard.visit(run)
+    tab.wait_for_timeout(120)
+    rates = tab.evaluate(EVAL_RATES_JS)
+    assert rates, "the run page prints rates"
+    bare = [cell for cell in rates if " of " not in cell["text"]]
+    assert not bare, f"these rates carry no denominator: {bare}"
+
+
 def test_p14_the_overview_percentiles_say_what_they_were_computed_over(dashboard):
     tab = dashboard.visit("/dashboard")
     p95 = tab.eval_on_selector('[data-kpi="p95_ms"]', "e => e.textContent")
@@ -593,10 +632,28 @@ def test_no_link_inside_the_page_leads_into_the_raw_json_api(dashboard):
 
 # -- UX W7: tables keep their columns, the waterfall keeps its rows, the reader keeps its prose --
 
-#: Every element in `main` that is wider than its box without the scroll affordance, and every
-#: prose cell narrower than 6rem that holds a sentence.
+#: Tables the owner exempted from the width budget, by the `id` the macro stamps on them.
+#:
+#: **One entry, and it is a ruling, not a convenience** (W8 fix round, npo4-01 = DR3-06 = I5).
+#: `ux-W7-brief.md`: "numbers-precision-overflow-10 (evals table scrolls inside its container at
+#: 1440): BY RULING, stays — a column picker is a feature." `eval-items-table` is that table: 13
+#: columns, three of them prose and two of them the run's raw score and verdict objects, and the
+#: only thing that fits it in a viewport is the column picker the owner deferred. Every other table
+#: in the product, the evals *headline* table included, now fits its container at both desktop
+#: widths with nothing scrolling sideways at all.
+WIDTH_EXEMPT_TABLES = ("eval-items-table",)
+
+#: Every element in `main` that is wider than its box without the scroll affordance; every
+#: `.table-scroll` that has anything to scroll at all; and every cell of any class, narrower than
+#: 6rem, that holds a sentence.
+#:
+#: The last two are W8's (I5). W7's probe allowed anything inside `.table-scroll` — which is where
+#: every table lives — so four tables grew past their containers between the two captures with the
+#: guard green throughout; and it measured `narrowProse` over `.cell-text` alone, so the squeeze
+#: simply moved to the column beside it: `td.cell-list` had no width rule of any kind, DOCUMENTS
+#: collapsed to ~105px and broke each document slug at its hyphens into a 210px-tall row.
 TABLE_BUDGET_JS = """
-() => {
+(exempt) => {
   const sideways = [];
   for (const el of document.querySelectorAll("main *")) {
     const cs = getComputedStyle(el);
@@ -609,11 +666,24 @@ TABLE_BUDGET_JS = """
       if (!allowed) sideways.push(el.tagName.toLowerCase() + name);
     }
   }
-  const narrowProse = Array.from(document.querySelectorAll(".data-table td.cell-text"))
+  const overWide = [];
+  for (const box of document.querySelectorAll(".table-scroll")) {
+    if (box.clientWidth === 0 || getComputedStyle(box).display === "none") continue;
+    const table = box.querySelector("table");
+    if (table && exempt.includes(table.id)) continue;
+    const over = box.scrollWidth - box.clientWidth;
+    if (over > 0) overWide.push({ table: (table && table.id) || "?", over: over, box: box.clientWidth });
+  }
+  const narrowProse = Array.from(document.querySelectorAll(".data-table tbody td"))
     .filter((td) => td.innerText.trim().length > 24)
-    .map((td) => ({ col: td.dataset.col, width: Math.round(td.getBoundingClientRect().width) }))
+    .map((td) => ({
+      col: td.dataset.col,
+      cls: td.className,
+      width: Math.round(td.getBoundingClientRect().width),
+      lines: Math.round(td.getBoundingClientRect().height / parseFloat(getComputedStyle(td).lineHeight || 16)),
+    }))
     .filter((cell) => cell.width > 0 && cell.width < 96);
-  return { sideways: sideways.slice(0, 8), narrowProse: narrowProse.slice(0, 8) };
+  return { sideways: sideways.slice(0, 8), overWide: overWide.slice(0, 8), narrowProse: narrowProse.slice(0, 8) };
 }
 """
 
@@ -637,9 +707,16 @@ def _tabbed(route: str) -> list[str]:
 def test_no_table_overflows_without_the_affordance_and_no_narrow_column_holds_prose(
     browser, dashboard, label, width, height
 ):
-    """npo3-02 (UX W7). `/dashboard/retrieval` overflowed its container at 1280 and the QUERY
-    column was shredded into a 55px ribbon of word fragments once the humanised STRATEGY label
-    beside it grew. Measured on a fresh load at each desktop width, on every dashboard route."""
+    """npo3-02 (UX W7), and npo4-01 = DR3-06 = re-audit #3's I5.
+
+    `/dashboard/retrieval` overflowed its container at 1280 and the QUERY column was shredded into a
+    55px ribbon of word fragments once the humanised STRATEGY label beside it grew. W8's half is the
+    other direction: between the two captures retrieval went 1,219→1,394, model calls 1,399→1,497
+    and turns 1,311→1,395, all inside containers of 1,199 and 1,359 — and this test stayed green,
+    because a `.table-scroll` was allowed to scroll by construction and the prose measurement looked
+    at one cell class. A container a reader has to scroll to see a column is a budget nobody kept:
+    every table fits, `WIDTH_EXEMPT_TABLES` names the one the owner ruled otherwise, and every cell
+    class is measured. Fresh load at each desktop width, every dashboard route, every tab panel."""
     context = browser.new_context(viewport={"width": width, "height": height})
     tab = context.new_page()
     try:
@@ -651,8 +728,8 @@ def test_no_table_overflows_without_the_affordance_and_no_narrow_column_holds_pr
             for url in _tabbed(route):
                 tab.goto(dashboard.base_url + url, wait_until="networkidle")
                 tab.wait_for_timeout(100)
-                measured = tab.evaluate(TABLE_BUDGET_JS)
-                if measured["sideways"] or measured["narrowProse"]:
+                measured = tab.evaluate(TABLE_BUDGET_JS, list(WIDTH_EXEMPT_TABLES))
+                if measured["sideways"] or measured["overWide"] or measured["narrowProse"]:
                     offenders[url] = measured
         assert not offenders, f"at {label}: {offenders}"
     finally:
@@ -680,3 +757,368 @@ def test_the_waterfall_costs_one_row_per_step_and_the_session_page_fits_a_phone(
         assert height < 5000, f"the session page is {height}px tall at 390x844"
     finally:
         context.close()
+
+
+# -- UX W8 fix round: the four geometry residuals of re-audit #3 (C4, I1, I2, I3, I8, I14) --------
+
+#: One span of the desktop waterfall: how tall its row is, and how far its disclosure sits from the
+#: step number it belongs to. `drift` is the whole of DR3-01: `.span-row` placed every child in a
+#: column and none of them in a row, so sparse auto-placement gave each span three bands — an empty
+#: one carrying only the chevron, then seq/kind/name/duration, then the summary and the bar — and
+#: the chevron painted a whole band above its own step number, reading as the trailing control of
+#: the span before it. Measured against `.span-seq` rather than against the `<li>` box, because the
+#: `<li>` spans all three bands and so contains the chevron either way: what changed is that the
+#: chevron and the number it belongs to are on one line.
+DESKTOP_WATERFALL_JS = """
+() => {
+  const rows = Array.from(document.querySelectorAll("ol.waterfall > li.span-row"));
+  const middle = (el) => { const box = el.getBoundingClientRect(); return box.top + box.height / 2; };
+  const drift = rows.map((row) => {
+    const summary = row.querySelector(".span-payload > summary");
+    const seq = row.querySelector(".span-seq");
+    return summary && seq ? Math.abs(middle(summary) - middle(seq)) : 0;
+  });
+  return {
+    rows: rows.length,
+    open: document.querySelectorAll(".span-payload[open]").length,
+    height: document.documentElement.scrollHeight,
+    drift: Math.round(Math.max(0, ...drift)),
+    pitch: Math.round(Math.max(0, ...rows.map((row) => row.getBoundingClientRect().height))),
+  };
+}
+"""
+
+#: The ruling's bound for the desktop session page with the demo-1 data (W8 addendum, DR3-01). The
+#: capture that failed the gate measured **4,372px** at this viewport against 3,220 before W7.
+DESKTOP_SESSION_MAX_PX = 3400
+
+
+def test_the_desktop_waterfall_paints_one_row_per_span(browser, dashboard):
+    """DR3-01 = re-audit #3's C4, and the guard that could not see it.
+
+    W7's phone guard (above) passed throughout: the ≤70rem block declares `grid-row` for every item
+    and the phone was right. The desktop block declared columns only, so one span became three
+    bands, the page grew 36% and the chevron left its own row — none of which a row *count* can
+    detect, because the `<li>` count never changed. Three measurements, at the viewport the
+    regression was captured at: the page's height, one `<li>` per span, and the disclosure on the
+    same centre line as the row it belongs to.
+    """
+    api = dashboard.visit("/api/traces/sessions/" + dashboard.session_route.rsplit("/", 1)[1])
+    spans = api.evaluate("() => JSON.parse(document.body.innerText).turns.reduce((n, t) => n + t.spans.length, 0)")
+    assert spans > 0, "the seeded session has steps"
+
+    context = browser.new_context(viewport={"width": 1440, "height": 900})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        tab.goto(dashboard.base_url + dashboard.session_route, wait_until="networkidle")
+        tab.wait_for_timeout(200)
+        measured = tab.evaluate(DESKTOP_WATERFALL_JS)
+    finally:
+        context.close()
+
+    assert measured["rows"] == spans, f"{measured['rows']} waterfall rows for {spans} steps"
+    assert measured["open"] == 0, "payloads ship closed, so the payload track costs no row"
+    assert measured["height"] <= DESKTOP_SESSION_MAX_PX, (
+        f"the session page is {measured['height']}px tall at 1440x900 (bound {DESKTOP_SESSION_MAX_PX}): {measured}"
+    )
+    # A couple of pixels for two boxes of different heights on one centre line; a band apart is ~30.
+    assert measured["drift"] <= 6, (
+        f"the disclosure is {measured['drift']}px off its own step's line — the row is banded: {measured}"
+    )
+
+
+#: Is the page nav one row, and does every group sit on it? `offsetTop` is measured against the
+#: same offset parent for all four `<ul>`s, so a wrapped group is simply a second value.
+NAV_ROW_JS = """
+() => {
+  const nav = document.getElementById("dash-nav");
+  const groups = Array.from(nav.querySelectorAll("ul.dash-nav-group"));
+  const style = getComputedStyle(nav);
+  const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const tallest = Math.max(...groups.map((group) => group.offsetHeight));
+  return {
+    height: nav.offsetHeight,
+    oneRowHeight: Math.ceil(tallest + padding),
+    tops: [...new Set(groups.map((group) => group.offsetTop))],
+    chrome: document.getElementById("app-chrome").offsetHeight,
+  };
+}
+"""
+
+#: Every desktop width the audit and the owner's ruling name: the row must fit at 1280 and up.
+NAV_DESKTOPS = (("1440x900", 1440, 900), ("1280x800", 1280, 800))
+
+
+@pytest.mark.parametrize("label,width,height", NAV_DESKTOPS, ids=[label for label, _, _ in NAV_DESKTOPS])
+def test_the_page_nav_fits_one_row_on_every_desktop(browser, dashboard_server, label, width, height):
+    """nav-r3-1 = re-audit #3's I1.
+
+    W7's bordered pills, 0.9rem of padding on both sides of every divider and a 0.35rem eyebrow tail
+    took four groups and ten page links to ~1,463px — wider than the viewport they had to fit — so
+    REFERENCE wrapped alone onto a second row beside ~1,200px of empty ground and the pinned chrome
+    grew from 108 to **147px of a 900px viewport** before the page's first sentence. The row is a
+    budget; this is the only thing that can hold it to one.
+    """
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard_server}/?access={TOKEN}", wait_until="networkidle")
+        tab.goto(f"{dashboard_server}/dashboard", wait_until="networkidle")
+        # The row wraps when the brand webfont lands, not when the page parses (see I2 below).
+        tab.wait_for_timeout(400)
+        measured = tab.evaluate(NAV_ROW_JS)
+    finally:
+        context.close()
+
+    assert len(measured["tops"]) == 1, f"at {label} the nav groups sit on {len(measured['tops'])} rows: {measured}"
+    assert measured["height"] <= measured["oneRowHeight"], f"at {label} the nav is taller than one row: {measured}"
+
+
+#: Where a `#turn-N` deep link actually landed, against the chrome that is pinned over it.
+LANDING_JS = """
+() => {
+  const chrome = document.getElementById("app-chrome").getBoundingClientRect();
+  const card = document.getElementById("turn-1");
+  const head = card && card.querySelector(".turn-head");
+  return {
+    chromeBottom: Math.round(chrome.bottom),
+    cardTop: card ? Math.round(card.getBoundingClientRect().top) : null,
+    headTop: head ? Math.round(head.getBoundingClientRect().top) : null,
+    published: getComputedStyle(document.documentElement).getPropertyValue("--dash-nav-h").trim(),
+  };
+}
+"""
+
+LANDING_VIEWPORTS = (("1440x900", 1440, 900), ("1280x800", 1280, 800), ("390x844", 390, 844))
+
+
+@pytest.mark.parametrize("label,width,height", LANDING_VIEWPORTS, ids=[label for label, _, _ in LANDING_VIEWPORTS])
+def test_a_deep_link_lands_below_the_chrome_pinned_over_it(browser, dashboard, label, width, height):
+    """nav-r3-2 = DR3-02 = re-audit #3's I2 — the goal-(c) regression.
+
+    `_chrome_height.html` published `--dash-nav-h` during parse and re-measured only on `resize`.
+    Both are the wrong moment: the script runs while the brand webfont is still loading, so at 1440
+    the nav still fitted one row (110px) as it was measured and reflowed to two (147px) when the
+    font arrived — with no resize to notice it. The card then landed 25px behind the chrome with
+    "Turn 1 · answered" sliced in half.
+
+    **A context of its own per viewport, with an empty HTTP cache**, because that race is exactly
+    what a warm cache hides: reuse a tab and the font is already there when the measurement runs.
+    """
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.context.add_cookies([{"name": "mosaic_access", "value": TOKEN, "url": dashboard.base_url}])
+        tab.goto(f"{dashboard.base_url}{dashboard.session_route}#turn-1", wait_until="load")
+        tab.wait_for_timeout(500)
+        measured = tab.evaluate(LANDING_JS)
+    finally:
+        context.close()
+
+    assert measured["cardTop"] is not None, "the deep link names a turn this page renders"
+    assert measured["cardTop"] >= measured["chromeBottom"], (
+        f"at {label} the turn landed {measured['chromeBottom'] - measured['cardTop']}px behind the chrome: {measured}"
+    )
+    assert measured["headTop"] >= measured["chromeBottom"], (
+        f"at {label} the turn's own header is under the chrome: {measured}"
+    )
+
+
+#: The section a citation named, the heading it owns, and whether the browser lit it.
+READER_LANDING_JS = """
+(id) => {
+  const target = document.getElementById(id);
+  if (!target) return null;
+  const section = target.closest(".reader-section") || target;
+  const heading = section.querySelector("h3");
+  const passage = section.querySelector(".reader-passage");
+  const chrome = document.getElementById("app-chrome").getBoundingClientRect();
+  const landed = target.tagName === "SECTION" ? heading : passage;
+  return {
+    chromeBottom: Math.round(chrome.bottom),
+    headingTop: Math.round(heading.getBoundingClientRect().top),
+    landedTop: Math.round(landed.getBoundingClientRect().top),
+    landedOn: target.tagName.toLowerCase(),
+    background: getComputedStyle(section).backgroundColor,
+    accentSoft: getComputedStyle(document.documentElement).getPropertyValue("--accent-soft").trim(),
+  };
+}
+"""
+
+READER_DOC = "/policy/remote-and-hybrid-work"
+
+
+def _rgb(value: str) -> tuple[int, ...]:
+    """`#d5e6e2` or `rgb(213, 230, 226)` → `(213, 230, 226)`, so the two can be compared."""
+    value = value.strip()
+    if value.startswith("#"):
+        return tuple(int(value[index : index + 2], 16) for index in (1, 3, 5))
+    return tuple(int(part) for part in re.findall(r"\d+", value)[:3])
+
+
+@pytest.mark.parametrize("label,width,height", LANDING_VIEWPORTS, ids=[label for label, _, _ in LANDING_VIEWPORTS])
+def test_a_citation_lands_on_its_section_and_lights_it(browser, dashboard, label, width, height):
+    """nav-r3-3 = DR3-03 = re-audit #3's I3 — the surface every chat citation points at.
+
+    W7 moved the chunk id off the `<section>` and onto an `<a class="anchor">` placed *after* the
+    `<h3>`, so the browser aligned the anchor and the heading went under the masthead — 18px of it
+    at 1440, the whole line at 390 — and `.reader-section:target` could never match again, because
+    the fragment named the `<a>`. Both halves are measured here: where the reader lands, and whether
+    the product says which passage they followed a link to.
+    """
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.context.add_cookies([{"name": "mosaic_access", "value": TOKEN, "url": dashboard.base_url}])
+        tab.goto(dashboard.base_url + READER_DOC, wait_until="networkidle")
+        fragments = tab.evaluate(
+            "() => Array.from(document.querySelectorAll('.reader-contents a')).map(a => a.getAttribute('href'))"
+        )
+        assert fragments, "the reader lists its sections"
+        for fragment in fragments[:3]:
+            tab.goto(dashboard.base_url + READER_DOC + fragment, wait_until="load")
+            tab.wait_for_timeout(350)
+            measured = tab.evaluate(READER_LANDING_JS, fragment[1:])
+            assert measured, f"{fragment} names nothing on the page"
+            assert measured["headingTop"] >= measured["chromeBottom"], (
+                f"at {label} {fragment} put its heading "
+                f"{measured['chromeBottom'] - measured['headingTop']}px under the chrome: {measured}"
+            )
+            assert _rgb(measured["background"]) == _rgb(measured["accentSoft"]), (
+                f"at {label} {fragment} landed on a section the page does not light: {measured}"
+            )
+    finally:
+        context.close()
+
+
+#: Every sideways scroller inside `main`, with the two affordances the product standardised on in
+#: W7: the permanent thin scrollbar and the edge gradients that cancel themselves at the ends.
+SCROLLER_AFFORDANCE_JS = """
+() => {
+  const out = [];
+  for (const el of document.querySelectorAll("main *")) {
+    const style = getComputedStyle(el);
+    if (style.display === "none" || el.clientWidth === 0) continue;
+    if (el.closest(".visually-hidden")) continue;
+    if (el.scrollWidth <= el.clientWidth + 1) continue;
+    const scrolls = style.overflowX === "auto" || style.overflowX === "scroll";
+    if (!scrolls) continue;
+    out.push({
+      el: el.tagName.toLowerCase() + (el.className ? "." + String(el.className).split(" ")[0] : ""),
+      over: el.scrollWidth - el.clientWidth,
+      scrollbar: style.scrollbarWidth === "thin",
+      shade: (style.backgroundImage || "none").includes("gradient"),
+    });
+  }
+  return out;
+}
+"""
+
+
+def test_every_sideways_scroller_on_a_phone_says_that_it_scrolls(browser, dashboard):
+    """npo4-05 = re-audit #3's I8, and the reason W7's overflow guard never saw it.
+
+    W7 turned the session page's "Show these steps" filters into a nowrap row that scrolls sideways
+    and gave it neither affordance: at 390x844 it measured 870/311 with five of the nine toggles
+    invisible and the row clipped mid-label. The existing container guard runs at 1440 and 1280
+    only, and allows anything inside `.table-scroll` — so the one viewport the defect lives at was
+    not measured at all. A box may scroll; it may not scroll in silence.
+    """
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    tab = context.new_page()
+    silent: dict[str, list] = {}
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        for route in dashboard.routes:
+            tab.goto(dashboard.base_url + route, wait_until="networkidle")
+            tab.wait_for_timeout(100)
+            mute = [box for box in tab.evaluate(SCROLLER_AFFORDANCE_JS) if not (box["scrollbar"] and box["shade"])]
+            if mute:
+                silent[route] = mute
+    finally:
+        context.close()
+    assert not silent, f"these boxes scroll sideways with no affordance at 390x844: {silent}"
+
+
+#: Every in-place definition on the page: the term, whether it can take focus, and the sentence the
+#: accessibility tree will read out for it.
+DEFINITIONS_JS = """
+() => Array.from(document.querySelectorAll("[aria-describedby]")).flatMap((el) => {
+  const bubble = document.getElementById(el.getAttribute("aria-describedby"));
+  if (!bubble || bubble.getAttribute("role") !== "tooltip") return [];
+  const style = getComputedStyle(el);
+  const box = el.getBoundingClientRect();
+  return [{
+    term: (el.textContent || el.getAttribute("value") || el.id || "").trim().slice(0, 40),
+    focusable: el.tabIndex >= 0,
+    described: bubble.textContent.trim(),
+    painted: style.display !== "none" && box.width > 0 && box.height > 0,
+  }];
+})
+"""
+
+#: …the per-table legend the phone card layout prints above the stack of cards, and every place a
+#: definition is still nothing but a `title=`.
+#:
+#: The `title_only` selector is deliberately narrow: a column header, the label of a filter control
+#: and anything wearing the `.has-help` affordance are where this product puts definitions. A
+#: `title` elsewhere is a different thing and stays — the unrounded figure behind a rounded metric
+#: tile, the full timestamp behind a one-line run label — which is **P15**, not this defect.
+PHONE_LEGEND_JS = """
+() => ({
+  legends: Array.from(document.querySelectorAll(".table-legend")).map((el) => ({
+    painted: getComputedStyle(el).display !== "none",
+    terms: Array.from(el.querySelectorAll("dt")).map((dt) => dt.textContent.trim()),
+    empty: Array.from(el.querySelectorAll("dd")).filter((dd) => !dd.textContent.trim()).length,
+  })),
+  title_only: Array.from(document.querySelectorAll("th [title], label [title], .has-help[title]"))
+    .filter((el) => el.tabIndex < 0)
+    .map((el) => el.tagName.toLowerCase() + ":" + el.getAttribute("title").slice(0, 40)),
+})
+"""
+
+DEFINITION_VIEWPORTS = (("1440x900", 1440, 900), ("390x844", 390, 844))
+
+
+@pytest.mark.parametrize(
+    "label,width,height", DEFINITION_VIEWPORTS, ids=[label for label, _, _ in DEFINITION_VIEWPORTS]
+)
+def test_every_in_place_definition_is_a_control_a_reader_can_reach(browser, dashboard, label, width, height):
+    """DR3-07 = re-audit #3's I14, the last of `dashboard-readability-5`.
+
+    The owner ruled out a glossary page, so a term a grader cannot be expected to know carries its
+    definition where it is used — and all 27 of them were a bare `title=` on a non-focusable
+    `<span>`. No tab stop, no `aria-describedby`, nothing at all under a thumb, and nothing
+    whatsoever at 390px, where the card layout clips the entire `<thead>` that carried them. Each
+    one is a `<dfn tabindex="0">` with a `role="tooltip"` beside it now, and on a phone the columns'
+    definitions are printed once above the cards their rows become.
+    """
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    unreachable: dict[str, list] = {}
+    mute: dict[str, list] = {}
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        for route in dashboard.routes:
+            tab.goto(dashboard.base_url + route, wait_until="networkidle")
+            tab.wait_for_timeout(100)
+            definitions = tab.evaluate(DEFINITIONS_JS)
+            broken = [item for item in definitions if not item["focusable"] or not item["described"]]
+            if broken:
+                unreachable[route] = broken
+            page = tab.evaluate(PHONE_LEGEND_JS)
+            if page["title_only"]:
+                mute[route] = page["title_only"]
+            for legend in page["legends"]:
+                # The header is clipped away at 390, so the definitions are printed above the cards
+                # — and only there: on a desktop each one belongs to the column it explains.
+                assert legend["painted"] == (width < 640), (
+                    f"{route} at {label}: the column legend is {'hidden' if width < 640 else 'painted'}: {legend}"
+                )
+                assert legend["terms"] and not legend["empty"], f"{route} at {label}: an empty legend: {legend}"
+    finally:
+        context.close()
+
+    assert not unreachable, f"at {label} these definitions are not reachable: {unreachable}"
+    assert not mute, f"at {label} these definitions are still hover-only `title=` attributes: {mute}"

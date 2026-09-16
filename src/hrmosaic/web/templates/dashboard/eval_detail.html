@@ -73,8 +73,14 @@
         {#- Through `rate`, not `pct` (UX W8, W7 review): every other rate on this page carries its
             denominator while the sample is small (**P14**, npo3-07 = M14), and the headline strip
             — the first figures a reader sees — was the one place still printing `50.0%` from one
-            of two items. -#}
-        {% elif metric in rate_metrics %}{{ view.metrics[metric]|rate(view.metrics.n_scored.get(metric), 'item') }}
+            of two items.
+
+            `always=true` since the W8 fix round (npo4-02 = I6): on this page the denominator is
+            never optional. `Argument correctness 100.0%` was computed over 19 items — under P14's
+            own threshold — and rendered bare, because the lookup key was the metric's long name
+            and the runner's bucket is `arg_correctness`; `RATE_DENOMINATORS` now aliases the two,
+            and a rate over 28 no longer looks like a rate over 1. -#}
+        {% elif metric in rate_metrics %}{{ view.metrics[metric]|rate(view.metrics.n_scored.get(metric), 'item', always=true) }}
         {% else %}{{ view.metrics[metric]|num }}{% endif %}
       </span>
       <span class="metric-label">{{ metric|metric_label }}</span>
@@ -108,30 +114,39 @@
   <h4>Behaviour and safety</h4>
   <dl class="facts" id="behaviour-metrics">
     <div><dt>{{ 'over_refusal_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.over_refusal_rate|rate(view.metrics.over_refusal_n, 'item') }}</dd></div>
+      <dd>{{ view.metrics.over_refusal_rate|rate(view.metrics.over_refusal_n, 'item', always=true) }}</dd></div>
     <div><dt>{{ 'missed_refusal_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.missed_refusal_rate|rate(view.metrics.missed_refusal_n, 'item') }}</dd></div>
-    {#- Every rate on this row carries its denominator while the sample is small, or it does not
-        belong beside two that do: `ACTION-SAFETY PASS RATE 100.0%` over a single item sat next to
-        `OVER-REFUSAL RATE 0.0% (0 of 18 items)` (UX W6, npo2-05 / **P14**). The denominators are
-        the run's own `n_scored`. -#}
+      <dd>{{ view.metrics.missed_refusal_rate|rate(view.metrics.missed_refusal_n, 'item', always=true) }}</dd></div>
+    {#- Every rate on this row carries its denominator, and since the W8 fix round it carries it
+        whatever the sample size (npo4-02 = I6): `ACTION-SAFETY PASS RATE 100.0%` and
+        `TOOL CATALOG REOPENED 0.0%` sat bare next to `OVER-REFUSAL RATE 0.0% (0 of 18 items)`
+        because their samples were 28 and the threshold let them through — and the page's own
+        dataset legend says one of the 28 was an unsafe action. The denominators are the run's own
+        `n_scored`, which is what the "Items scored per metric" list below prints. -#}
     <div><dt>{{ 'action_safety_pass_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.action_safety_pass_rate|rate(view.metrics.n_scored.get('action_safety_pass_rate'), 'item') }}</dd></div>
+      <dd>{{ view.metrics.action_safety_pass_rate|rate(view.metrics.n_scored.get('action_safety_pass_rate'), 'item', always=true) }}</dd></div>
     <div><dt>{{ 'recommendation_labeled_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.recommendation_labeled_rate|rate(view.metrics.n_scored.get('recommendation_labeled_rate'), 'item') }}</dd></div>
+      <dd>{{ view.metrics.recommendation_labeled_rate|rate(view.metrics.n_scored.get('recommendation_labeled_rate'), 'item', always=true) }}</dd></div>
     <div><dt>{{ 'catalog_reopened_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.catalog_reopened_rate|rate(view.metrics.n_scored.get('catalog_reopened_rate'), 'item') }}</dd></div>
+      <dd>{{ view.metrics.catalog_reopened_rate|rate(view.metrics.n_scored.get('catalog_reopened_rate'), 'item', always=true) }}</dd></div>
     <div><dt>{{ 'judge_agreement_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.judge_agreement_rate|rate(view.metrics.judge_agreement_n, 'item') }}</dd></div>
+      <dd>{{ view.metrics.judge_agreement_rate|rate(view.metrics.judge_agreement_n, 'item', always=true) }}</dd></div>
   </dl>
 
   <h4>Workflow completion</h4>
-  <p class="note">How often a workflow reached its end state, per workflow.</p>
+  {#- What the denominator of these rows IS, said once above them (W8 fix round, npo4-02 = I6): the
+      run reports one workflow-completion sample for the whole dataset, not one per workflow, and a
+      footer line reading "Workflow completion 28 items" three screens below two bare `0.0%`s left
+      the reader to guess whether it applied to either of them. Every row now prints that sample in
+      its own cell, so the row and the legend say the same thing. -#}
+  <p class="note">How often a workflow reached its end state, per workflow. Each rate is over the
+    items this run scored for workflow completion — the run reports one sample for the dataset, not
+    one per workflow.</p>
   <ul id="workflow-completion" class="pill-list">
     {% for workflow, value in view.metrics.workflow_completion_by_workflow.items() %}
     {#- `pto request 0.0%` with no `n` at all is the bare rate P14 forbids (UX W6, dr-new-8). -#}
     <li><span class="pill">{{ workflow|enum_label }}</span>
-      {{ value|rate(view.metrics.n_scored.get('workflow_completion'), 'item') }}</li>
+      {{ value|rate(view.metrics.n_scored.get('workflow_completion'), 'item', always=true) }}</li>
     {% else %}<li class="muted">No item defines a workflow end state.</li>{% endfor %}
   </ul>
 
@@ -151,11 +166,18 @@
   </div>
 
   <h4>Items scored per metric</h4>
+  {#- The metrics this page actually prints, under the names this page prints them under (W8 fix
+      round, M17 = DR3-08). The list walked the runner's raw `n_scored`, so it named `Cit resolve`
+      for a tile headed "Citations that resolve" and listed `Doc recall`, `Behaviour` and `Safety` —
+      short keys with no tile anywhere on the page — while the three rates W7 added carried their
+      full names. `RATE_DENOMINATORS` aliases each long metric name to the runner's bucket, so one
+      walk over the page's own vocabulary lists every denominator exactly once. -#}
   <p class="note">Not every metric applies to every item; this is the denominator each one was
-    computed over.</p>
+    computed over — the same figure each rate above prints in its own cell.</p>
   <ul id="n-scored" class="pill-list">
-    {% for metric, count in view.metrics.n_scored.items() %}
-    <li><span class="pill">{{ metric|metric_label }}</span> {{ count|counted('item') }}</li>
+    {% for metric in rate_denominators if view.metrics.n_scored.get(metric) %}
+    <li><span class="pill">{{ metric|metric_label }}</span>
+      {{ view.metrics.n_scored[metric]|counted('item') }}</li>
     {% else %}<li class="muted">No denominators reported.</li>{% endfor %}
   </ul>
 </section>

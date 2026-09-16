@@ -23,6 +23,12 @@
     <div><dt>Version</dt><dd>{{ view.document.version }}</dd></div>
     <div><dt>Id</dt><dd><code class="id-chip" title="{{ view.document.doc_id }}">{{ view.document.doc_id }}</code></dd></div>
   </dl>
+  {#- The same document as a document (W8 fix round, M11 = nav-r3-7, the half that is this
+      page's): `/policy/{doc_id}` was reachable from a citation and from the chat empty state
+      and from nowhere else, so a grader who arrived at the inspector had no route to the
+      readable twin of the thing they were inspecting. -#}
+  <p class="policy-library"><a href="/policy/{{ view.document.doc_id }}">Open the readable
+    version of this document</a></p>
 </section>
 
 <section class="panel">

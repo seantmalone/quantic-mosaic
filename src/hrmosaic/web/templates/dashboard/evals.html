@@ -31,11 +31,14 @@
 
 <section class="panel tab-panel" id="tab-runs" role="tabpanel" aria-labelledby="tab-btn-runs"{% if tab != 'runs' %} hidden{% endif %}>
   <h3>Runs</h3>
+  {#- RUN already reads "no structured tools · deployed" — the variant and the target, in that
+      order, in the cell a reader clicks (UX W7, npo3-01). Printing each of them again in a column
+      of its own said the same two facts three times and took the table to 1,560px inside a 1,359px
+      container (W8 fix round, M1 = npo4-06, and half of npo4-01 = I5). Both survive as the
+      Variant filter above, in the run page's own facts list, and in Export JSON (P15). -#}
   {{ t.table('eval-runs-table', [
       {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
       {'label': 'Run', 'key': 'label', 'kind': 'run', 'href_prefix': '/dashboard/evals/', 'link_key': 'run_id'},
-      {'label': 'Variant', 'key': 'variant', 'kind': 'badge'},
-      {'label': 'Target', 'key': 'target', 'kind': 'badge'},
       {'label': 'Items', 'key': 'n_items', 'kind': 'num'},
       {'label': 'Judged', 'key': 'judged', 'kind': 'bool',
        'help': 'Whether a judge model scored this run. Judging is run on the baseline variant only.'},

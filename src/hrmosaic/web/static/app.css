@@ -242,9 +242,6 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
      kept the 111px on every later load. With a floor the panel spends the PAGE's scroll instead —
      the same answer W6 already adopted below 30rem, applied at every viewport. */
   flex: 1 1 auto; min-height: 18rem; overflow-y: auto; overscroll-behavior: contain;
-  /* Sized by its floor, never by its content: see `.conversation` above. Off below 30rem, where
-     the transcript is a document and must be as tall as what it holds. */
-  contain: size;
   /* Load-bearing, like `.turn`'s: `#turn-status` is `.visually-hidden` once a turn has finished
      (UX W7, cpux2-3), and `.visually-hidden` is `position: absolute`. Without a positioned
      scroll container the live region escaped the transcript to its static position — the foot of
@@ -260,6 +257,14 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
     radial-gradient(farthest-side at 50% 100%, var(--edge-shade), transparent) bottom / 100% 0.7rem no-repeat;
   background-attachment: local, local, scroll, scroll;
 }
+/* Sized by its floor, never by its content — ONCE IT HOLDS A TURN (see `.conversation` above).
+   At rest the empty state is the content: the greeting, four starters and the `/policy` link,
+   ~425px, and with unconditional containment the 18rem floor was also the ceiling, so at 1440
+   and 1280 starter 3 was sliced and starter 4 and the link were off screen while the panel below
+   painted every control whole (UX W8 fix round, dgc-r3-1). The page may scroll at rest; the
+   product's own empty state may not be cut. Off below 30rem, where the transcript is a document
+   and must be as tall as what it holds. */
+.transcript:has(.turn) { contain: size; }
 .transcript::-webkit-scrollbar { width: 0.55rem; }
 .transcript::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 .messages { display: flex; flex-direction: column; gap: var(--space-5); }
@@ -509,6 +514,10 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
      into the margin it is given; `width: 100%` would not. */
   .conversation { width: auto; margin-inline: calc(var(--space-3) * -1); padding-inline: var(--space-3); }
   .transcript { flex: none; overflow-y: visible; contain: none; background: none; padding-right: 0; }
+  /* `.transcript:has(.turn)` above outranks the bare `.transcript` on specificity, so the
+     containment has to be switched off here by name too: with it on, a phone transcript stayed
+     18rem tall and the answer painted over the composer (UX W8 fix round). */
+  .transcript:has(.turn) { contain: none; }
   /* With the document as the scroller the button's place in the flow is the foot of a 2,000px
      transcript — offered, and out of reach from the top of it. It rides the viewport just above
      the sticky composer instead; `--composer-h` is published by `autogrow()` (UX W7, cpux2-1). */
@@ -558,37 +567,55 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 /* than pushing the page sideways.                                                       */
 /* ==================================================================================== */
 
-body.dashboard { font: var(--text-body); background: var(--paper); }
+/* `accent-color` in one declaration (W8 fix round, M2 = npo4-07): every checkbox the dashboard
+   paints — the nine always-visible step toggles on the session page, "Errors only", "Failures
+   first", "Cold items only" — drew in the operating system's blue on a teal page, the one place
+   the product's own colour had never been asked for. */
+body.dashboard { font: var(--text-body); background: var(--paper); accent-color: var(--accent); }
 
 /* The second sticky row lives inside `.app-chrome`, so it is NOT sticky itself. */
 .dash-nav {
   display: flex; flex-wrap: wrap; gap: 0.25rem 0; align-items: center;
-  padding: 0.45rem 1.25rem;
+  padding: 0.45rem 1rem;
   background: var(--card); border-bottom: 1px solid var(--line);
 }
 /* One group: its eyebrow and the pills it names, with a hairline between groups so the eyebrow
-   visibly belongs to the pills that follow it (UX W7, Addendum 2 — the owner's decision). */
+   visibly belongs to the pills that follow it (UX W7, Addendum 2 — the owner's decision).
+
+   The row has a **budget** (W8 fix round, nav-r3-1 = re-audit #3 I1). W7's 0.9rem on both sides of
+   every divider, 0.75rem inside every pill and a 0.35rem eyebrow tail took four groups and ten
+   pills to ~1,463px — wider than a 1440 viewport — so REFERENCE wrapped alone onto a second row
+   beside ~1,200px of empty ground and the pinned chrome grew 108→147px of a 900px one. The divider
+   is one 0.5rem gutter each side rather than two 0.9rem ones, and the pill is ground-and-border
+   with 0.5rem of air: the row fits at 1280 and at 1440 with every group on one line.
+   `tests/ux/test_dashboard_principles.py` measures that, because arithmetic here is a guess. */
 .dash-nav-group {
-  list-style: none; margin: 0; padding: 0 0.9rem 0 0;
-  display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; min-width: 0;
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; min-width: 0;
 }
-.dash-nav-group + .dash-nav-group { padding-left: 0.9rem; border-left: 1px solid var(--line); }
-/* The group label is a label: muted, smaller, uppercase and letter-spaced, and it does nothing —
-   no underline, no hover, no focus, an arrow cursor. It sat in the same row and weight as the
-   page links and read as one more of them. Not focusable (an `<li>`), `aria-hidden` (the `<ul>`'s
-   `aria-label` is what assistive tech hears). `--text-meta` is the type floor. */
+/* The divider is ONE gutter, drawn as a margin with the hairline on the group that follows it
+   (W8 fix round, nav-r3-1): W7 paid 0.9rem on both sides of every rule, which is 1.8rem of air
+   three times over for a 1px line. */
+.dash-nav-group + .dash-nav-group {
+  margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid var(--line);
+}
+/* The group label is a label: muted, uppercase, letter-spaced, and it does nothing — no underline,
+   no hover, no focus, an arrow cursor. It sat in the same row and weight as the page links and read
+   as one more of them. Not focusable (an `<li>`), `aria-hidden` (the `<ul>`'s `aria-label` is what
+   assistive tech hears). Case, tracking and `--ink-mute` are what separate it from the pills now
+   that both sit at `--text-meta` — the 13px type floor — so the row fits (nav-r3-1). */
 .dash-nav-eyebrow {
-  font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-mute);
-  text-decoration: none; cursor: default; user-select: none; margin-right: 0.35rem;
+  font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-mute);
+  text-decoration: none; cursor: default; user-select: none;
 }
 /* …and the page links are pills that look like what they are: a border and a ground at rest, a
    lifted border and darker ink on hover, the accent ring on keyboard focus, the accent fill on the
    current page. */
 .dash-nav-link {
   display: inline-flex; align-items: center;
-  padding: 0.3rem 0.75rem; border-radius: 999px;
+  padding: 0.25rem 0.5rem; border-radius: 999px;
   border: 1px solid var(--line); background: var(--paper);
-  font: var(--text-small); text-decoration: none; color: var(--ink-soft); white-space: nowrap;
+  font: var(--text-meta); text-decoration: none; color: var(--ink-soft); white-space: nowrap;
   cursor: pointer;
 }
 .dash-nav-link:hover { border-color: var(--accent); background: var(--card); color: var(--ink); }
@@ -694,8 +721,11 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
 .table-scroll::-webkit-scrollbar { height: 0.55rem; }
 .table-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 .data-table { border-collapse: collapse; width: 100%; font: var(--text-small); background: var(--card); }
+/* 0.55rem of gutter, not 0.65rem (W8 fix round, I5): on a thirteen-column table the cell padding
+   alone was 169px, and a tenth of a rem back from each side of each column is the cheapest 40px a
+   wide table can find — it costs no content and no legibility. */
 .data-table th, .data-table td {
-  padding: 0.45rem 0.65rem; text-align: left; vertical-align: top;
+  padding: 0.45rem 0.55rem; text-align: left; vertical-align: top;
   border-bottom: 1px solid var(--line);
 }
 .data-table thead th {
@@ -716,21 +746,44 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
 .data-table th.cell-pct, .data-table td.cell-pct,
 .data-table th.cell-pct_of, .data-table td.cell-pct_of,
 .data-table th.cell-score, .data-table td.cell-score {
-  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+  text-align: right; font-variant-numeric: tabular-nums;
 }
 /* `white-space: nowrap` on *every* cell is what clipped `TOKENS` to `1,17` and spent 906px of a
    1946px table on JSON nobody can read (`dashboard-readability-4`). It belongs on the cells whose
-   value is one token, and nowhere else. */
-.data-table td.cell-time, .data-table td.cell-badge, .data-table td.cell-bool, .data-table td.cell-id,
-.data-table th.cell-time, .data-table th.cell-badge, .data-table th.cell-bool, .data-table th.cell-id {
+   value is one token, and nowhere else.
+
+   On the **value**, never on the label (W8 fix round, npo4-01 = DR3-06 = re-audit #3 I5). A header
+   is two or three English words and it was the widest thing in its own column: `GUARDRAIL BLOCKS`
+   held 156px over a column of single digits, `PASSAGES REQUESTED` 177px over a `5`, and four
+   tables ran past their containers on their headers alone. A label wraps; a figure does not. */
+.data-table td.cell-num, .data-table td.cell-ms, .data-table td.cell-ms_n, .data-table td.cell-secs,
+.data-table td.cell-usd, .data-table td.cell-pct, .data-table td.cell-pct_of, .data-table td.cell-score,
+.data-table td.cell-time, .data-table td.cell-bool, .data-table td.cell-id {
   white-space: nowrap;
 }
 /* A prose column keeps a measure and breaks between words (UX W7, npo3-02): `anywhere` shredded
    the retrieval QUERY column into a 55px ribbon of word fragments once the humanised STRATEGY
-   label beside it grew, and a badge column is never wider than its own content. */
-.data-table td.cell-text, .data-table td.cell-code { min-width: 10rem; max-width: 24rem; overflow-wrap: break-word; }
+   label beside it grew, and a badge column is never wider than its own content.
+
+   7rem, not 10rem (W8 fix round, I5): a 10rem floor reserved 160px for every text column on the
+   page, including `MODEL` over "stub", `JUDGE` over an em dash and `CHOSEN BY` over "model" — three
+   columns of white space bought at the cost of the ones beside them. 7rem is still a measure. */
+.data-table td.cell-text, .data-table td.cell-code { min-width: 7rem; max-width: 24rem; overflow-wrap: break-word; }
 .data-table td.cell-code { overflow-wrap: anywhere; }
+/* `width: 1%` is "as narrow as your own content"; the floor is what stops "as narrow as your
+   longest *word*" (I5). Without it the humanised `hybrid — dense and keyword` wrapped to six lines
+   in an 89px column — the shredding W7 fixed for prose, arriving in the column beside it. */
 .data-table th.cell-badge, .data-table td.cell-badge { width: 1%; }
+.data-table td.cell-badge { min-width: 6.5rem; }
+/* A humanised enum wraps like the words it now is (I5): `hybrid — dense and keyword` under nowrap
+   was a 211px column on a table that had none to spare. */
+.data-table td.cell-badge, .data-table td.cell-list, .data-table td.cell-enum { white-space: normal; }
+/* …but the pill itself is one token. Without this the DOCUMENTS column — which had no width rule
+   at all, collapsed to ~105px and broke every slug at its hyphens — painted `remote-and-hybrid-
+   work` over four lines and made a 4-document row 210px tall (I5). A floor so it cannot collapse
+   again, and whole slugs inside it. */
+.data-table td.cell-list { min-width: 9rem; }
+.data-table td.cell-list .pill { white-space: nowrap; }
 /* The headline-metrics table's run column: one line, so the label and the timestamp beside it stop
    setting the height of every row (UX W6). The timestamp is the cell's `title`. */
 .data-table td.cell-run { white-space: nowrap; }
@@ -745,8 +798,44 @@ body.dashboard { font: var(--text-body); background: var(--paper); }
 }
 a .id-chip { color: var(--accent); }
 /* The owner ruled out a glossary page: a term a grader cannot be expected to know carries its
-   definition where it is used (`dashboard-readability-5`). */
-.has-help { border-bottom: 1px dotted var(--ink-soft); cursor: help; }
+   definition where it is used (`dashboard-readability-5`).
+
+   And it is a **control**, not a `title=` (W8 fix round, DR3-07 = re-audit #3 I14). All 27 of them
+   were a bare `title` on a non-focusable `<span>`: no tab stop, nothing under a thumb, and nothing
+   at 390px at all, where the card layout clips the `<thead>` that held them. The term is a `<dfn>`
+   with `tabindex="0"` and an `aria-describedby` that names the bubble below, so the sentence is in
+   the accessibility tree whether or not it is painted; the bubble is a `role="tooltip"` that the
+   stylesheet reveals on hover and on focus — which is also what a tap gives a focusable element.
+   No script: a definition that needs JavaScript to be read is the defect one step further on. */
+.has-help { border-bottom: 1px dotted var(--ink-soft); cursor: help; font-style: normal; }
+.has-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Absolute, so a bubble never moves the row it explains; the positioning ancestor is the header
+   cell (`position: sticky`), the filter field or the toggle, each of which says so.
+
+   `display: none` at rest, not `visibility` or `opacity`: an invisible-but-laid-out box still
+   counts towards its ancestor's scrollable overflow, and a 18rem bubble hanging off the last
+   column of a table put every filter label and every toggle over its own box in the P7 probe —
+   a defect invented by the fix for a different one. The description survives the display switch:
+   `aria-describedby` computes its text from the referenced node whether or not that node is
+   rendered (the accname rule; verified against Chromium's own accessibility tree in
+   `tests/ux/test_accessibility.py`). `[hidden]` is not usable here — the reset in `<head>` makes
+   it `!important`, which no `:hover` rule can answer. */
+.help-bubble {
+  display: none; position: absolute; left: 0; top: 100%; z-index: 5;
+  width: max-content; max-width: 18rem; margin-top: 0.25rem; padding: 0.4rem 0.6rem;
+  font: var(--text-meta); text-transform: none; letter-spacing: normal; text-align: left;
+  color: var(--ink); background: var(--card);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-tile);
+  box-shadow: 0 2px 8px var(--edge-shade);
+}
+.has-help:hover ~ .help-bubble, .has-help:focus ~ .help-bubble,
+.toggle:hover .help-bubble, .toggle:focus-within .help-bubble { display: block; }
+.filter-field, .toggle { position: relative; }
+/* The same label without the control, for the one place the control cannot go: see `_table.html`. */
+.help-flat { display: none; }
+/* Every defined column of a table, printed once above the cards its rows become on a phone (I14).
+   Off on a desktop, where each definition lives in the header it belongs to. */
+.table-legend { display: none; }
 /* The raw JSON a one-line human summary replaced, one row below it (`dashboard-readability-19`). */
 .detail-row td { padding: 0 0.65rem 0.5rem; background: var(--card); }
 .row-detail summary { font: var(--text-meta); color: var(--ink-soft); cursor: pointer; }
@@ -766,9 +855,14 @@ a .id-chip { color: var(--accent); }
     background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-tile);
   }
   .data-table tbody tr:nth-child(even) { background: var(--card); }
+  /* `td.cell-badge` belongs in this list (W8 fix round, M18 = DR3-09): `width: 1%` and the badge
+     floor beside it are *column* rules and a card has no columns, so 62 badge cells over five pages
+     collapsed to a 3px box and their pills sat flush left while every other value in the card was
+     right-aligned. Both are unset here, at the specificity that set them. */
+  .data-table td.cell-badge { width: auto; min-width: 0; }
   .data-table td, .data-table th.cell-num, .data-table td.cell-num, .data-table td.cell-ms,
   .data-table td.cell-ms_n, .data-table td.cell-secs, .data-table td.cell-usd, .data-table td.cell-pct,
-  .data-table td.cell-pct_of, .data-table td.cell-score {
+  .data-table td.cell-pct_of, .data-table td.cell-score, .data-table td.cell-badge {
     display: flex; gap: 0.75rem; justify-content: space-between; text-align: right;
     max-width: none; border-bottom: 0; padding: 0.15rem 0;
   }
@@ -777,6 +871,12 @@ a .id-chip { color: var(--accent); }
     font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft);
   }
   .data-table td.cell-text { text-align: left; }
+  /* `white-space: nowrap` on an id is a **column** rule — it keeps a chip on one line so the rows
+     below line up — and there are no columns in a card. `tax-and-location-addendum` beside its own
+     label took `top-documents` 27px past its 311px box here, which the W7 guard never saw because
+     it ran at 1440 and 1280 only (W8 fix round, npo4-01/npo4-05 at 390). A card has the whole row
+     to wrap into. */
+  .data-table td.cell-id { white-space: normal; overflow-wrap: anywhere; }
   .detail-row td::before, .empty-row td::before { content: none; }
 
   /* Column priority (UX W6, dr-new-5). Thirteen columns is thirteen lines per card: Model calls
@@ -790,6 +890,23 @@ a .id-chip { color: var(--accent); }
      is painted here and hidden everywhere else by the rule below. */
   .card-detail > summary { font: var(--text-meta); color: var(--ink-soft); cursor: pointer; }
   .data-table td.card-toggle::before { content: none; }
+
+  /* The header is folded into a 1px clip box here, so a `<dfn tabindex="0">` inside it would be a
+     tab stop and a tap target with no pixels — the two things a definition must not be (W8 fix
+     round, DR3-07 = I14). The control and its bubble go; the plain label stays, so the column keeps
+     its name in the table's semantics; and the definitions are printed below in `.table-legend`. */
+  .data-table thead .has-help, .data-table thead .help-bubble { display: none; }
+  .data-table thead .help-flat { display: inline; }
+  .table-legend {
+    display: block; margin: 0 0 0.75rem; padding: 0.6rem 0.75rem;
+    font: var(--text-meta); background: var(--paper); border-radius: var(--radius-tile);
+  }
+  .table-legend div { margin: 0 0 0.4rem; }
+  .table-legend div:last-child { margin-bottom: 0; }
+  .table-legend dt { font-weight: 600; color: var(--ink); }
+  .table-legend dd { margin: 0; color: var(--ink-soft); }
+  /* A definition a thumb can hit, where the definition is painted (P12's 44px rule). */
+  .filter-field .has-help { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
 }
 /* The card's disclosure exists only on a phone: a table that is a table needs no "more". */
 .card-toggle { display: none; }
@@ -883,9 +1000,16 @@ a .id-chip { color: var(--accent); }
 .reader-contents { margin: 0 0 1.5rem; padding: 0.75rem 1rem; background: var(--paper); border-radius: var(--radius); }
 .reader-contents h3 { margin: 0 0 0.4rem; font-size: var(--text-floor); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
 .reader-contents ol { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; }
+/* What a landing target clears while `--dash-nav-h` is unset — before `_chrome_height.html` has
+   measured, or with scripting off altogether. 6rem (96px) was under every real chrome the product
+   has: 106px with the nav on one row, 139px with it on two, 178px on a phone, so a deep link that
+   arrived before the measurement landed behind the masthead (W8 fix round, nav-r3-2 = DR3-02).
+   It is a guess of last resort and it errs high. The measured value still wins wherever it exists. */
+:root { --dash-nav-fallback: 9rem; }
+@media (max-width: 44rem) { :root { --dash-nav-fallback: 11.5rem; } }
 /* The measured chrome, not a guess: 5.5rem was right at 1440 and 100px short of the three-row
    masthead at 390px, so every citation landed behind it (UX W6, nav-reaudit-2). */
-.reader-section { scroll-margin-top: calc(var(--dash-nav-h, 6rem) + 0.75rem); }
+.reader-section { scroll-margin-top: calc(var(--dash-nav-h, var(--dash-nav-fallback)) + 0.75rem); }
 .reader-back { margin: 0 0 0.75rem; font: var(--text-small); }
 .reader-passage p { margin: 0 0 0.6rem; }
 .reader-passage p:last-child, .reader-passage ul:last-child, .reader-passage ol:last-child { margin-bottom: 0; }
@@ -894,7 +1018,13 @@ a .id-chip { color: var(--accent); }
 .reader-passage code { font-family: var(--mono); font-size: var(--text-floor); }
 .reader-section h3 { margin: 1.4rem 0 0.35rem; font-size: 1rem; color: var(--accent); }
 .reader-section p { margin: 0; }
-.reader-section:target { background: var(--accent-soft); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
+/* Both link shapes, as the session page's `.turn-card` rule already does (W8 fix round, nav-r3-3 =
+   DR3-03): `#{chunk_id}` is the section itself for the passage that opens it, and the hidden
+   `.anchor` inside it for every later passage of the same heading — and a hidden element cannot
+   carry a highlight of its own. W7 left only the first selector, against markup where the fragment
+   never named the section, so a citation landed with nothing lit at all. */
+.reader-section:target,
+.reader-section:has(> .anchor:target) { background: var(--accent-soft); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin: 0 -0.8rem; }
 
 .policy-library { margin: var(--space-3) 0 0; font: var(--text-small); }
 
@@ -910,7 +1040,7 @@ a .id-chip { color: var(--accent); }
    is one row at 1440px and three at 390px, so the offset is measured into `--dash-nav-h` by
    `dashboard/_base.html` and applied as `scroll-margin-top` (UX W1, navigation-and-ia-17). */
 .anchor { display: block; visibility: hidden; }
-.anchor, .turn-card, .chunk, [id^="turn-"] { scroll-margin-top: calc(var(--dash-nav-h, 6rem) + 0.75rem); }
+.anchor, .turn-card, .chunk, [id^="turn-"] { scroll-margin-top: calc(var(--dash-nav-h, var(--dash-nav-fallback)) + 0.75rem); }
 /* …and the other half of `dashboard-readability-29`: scrolling a turn into view is not the same as
    saying *which* turn. Both link shapes are covered — `#turn-<seq>` is the card itself (the chat
    deep link) and `#turn-<turn_id>` is the hidden `.anchor` inside it (the turns listing), and a
@@ -952,6 +1082,16 @@ a .id-chip { color: var(--accent); }
 .span-summary { grid-column: 4; }
 .span-track { grid-column: 5; }
 .span-duration { grid-column: 6; }
+/* …and the ROW, not only the column (W8 fix round, DR3-01 = re-audit #3 C4). The comment above was
+   half true: every item named its column and none named its row, so sparse auto-placement spread a
+   span over THREE bands — an empty band carrying only the chevron, then seq/kind/name/duration,
+   then the summary and the bar — and the chevron painted above its own row, reading as the trailing
+   control of the previous span. The session page went 3,220 → 4,372px at 1440 on that alone. The
+   ≤70rem block below has declared both since W5, which is why the phone was right and the desktop
+   was not. A closed payload still costs no row: its `<pre>` is only in the tree while it is open. */
+.span-seq, .span-row > .pill, .span-name, .span-summary, .span-track, .span-duration,
+.span-payload > summary { grid-row: 1; }
+.span-payload > pre { grid-row: 2; }
 .span-row[data-status="error"] .span-name { color: var(--danger); font-weight: 600; }
 .span-seq { color: var(--ink-soft); }
 .span-name { font-weight: 600; overflow-wrap: anywhere; }
@@ -1030,8 +1170,23 @@ a .id-chip { color: var(--accent); }
      a step larger than chat on purpose, and a phone is not a projector. */
   .turn-answer .answer-block { font: var(--text-small); }
   /* The nine kind toggles wrapped to five rows of 44px controls above the record; one row that
-     scrolls sideways inside itself, as the page nav does. */
-  #kind-toggles .toggle-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 0.25rem; }
+     scrolls sideways inside itself, as the page nav does — **and says so**. W7 took the row nowrap
+     and gave it neither of the two affordances the product had already standardised on, so at 390
+     it measured 870/311 with five of the nine toggles invisible and the row clipped mid-label and
+     nothing at all to say there was more (W8 fix round, npo4-05 = re-audit #3 I8). The four
+     gradients and the scrollbar rule are `.table-scroll`'s, on this panel's own ground. */
+  #kind-toggles .toggle-row {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 0.25rem;
+    background:
+      linear-gradient(to right, var(--card) 30%, transparent) left / 2rem 100% no-repeat,
+      linear-gradient(to left, var(--card) 30%, transparent) right / 2rem 100% no-repeat,
+      radial-gradient(farthest-side at 0 50%, var(--edge-shade), transparent) left / 0.6rem 100% no-repeat,
+      radial-gradient(farthest-side at 100% 50%, var(--edge-shade), transparent) right / 0.6rem 100% no-repeat,
+      var(--card);
+    background-attachment: local, local, scroll, scroll, scroll;
+  }
+  #kind-toggles .toggle-row::-webkit-scrollbar { height: 0.4rem; }
+  #kind-toggles .toggle-row::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
   #kind-toggles .toggle { flex: none; }
   /* The document's title carries the citation on a phone; its slug is one click away on the reader. */
   .citation-chip .id-chip { display: none; }
