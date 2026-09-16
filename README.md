@@ -47,14 +47,14 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 3,235 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 3,257 tests as of
 2026-09-15, unit, contract, integration, architecture and e2e-with-stub, every one of them against
-the scripted stub provider, so no credential is involved. 291 of those are the browser-based UX
+the scripted stub provider, so no credential is involved. 295 of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
 and CI runs them in a job of their own that never blocks `test` or `deploy`. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-15: **95% of statements and 88% of branches
-over 9,621 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+over 9,765 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
