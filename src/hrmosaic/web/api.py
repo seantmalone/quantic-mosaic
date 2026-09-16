@@ -47,6 +47,7 @@ import time
 from collections import deque
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from html import escape
 from pathlib import Path
 from typing import Any, Literal
@@ -2125,30 +2126,62 @@ DEMO_PROMPT_LABELS = {
     "demo_2": "Three days of PTO, opened for me",
 }
 
-#: The day the two demo scripts were recorded, and the day `scripts/demo_task_*.sh` still send
-#: their fixed dates against (`MOCK_TODAY` pins it for `make demo1` / `make demo2`).
-RECORDED_TODAY = date(2026, 9, 10)
+#: The submission date the two demo scripts assume — the mock data's own `as_of`, and the one
+#: date that reproduces the recorded "8 business days" of notice to 15 September once Boston's
+#: Labor Day is excluded. `make demo1` / `make demo2` pin `MOCK_TODAY` to it, and
+#: `demo_prompts(RECORDED_TODAY)` is **exactly** the wording `scripts/demo_task_*.sh` carry, which
+#: `tests/unit/test_demo_prompts_are_dated.py` checks by parsing the scripts (W8 fix round).
+RECORDED_TODAY = date(2026, 9, 1)
 
 #: How far ahead the Berlin trip has to start for §18.1's fixed dates to still make sense: the
 #: international-remote notice rule is 21 calendar days (`remote.international.manager_notice_days`).
 BERLIN_NOTICE_DAYS = 21
+
+#: What §18.2's PTO request has to give: `pto.notice.standard_days`, in business days of the demo
+#: persona's own calendar.
+STANDARD_NOTICE_DAYS = 5
+
+#: The persona both demo buttons speak for (§18): the calendar the notice is counted in is hers.
+DEMO_EMPLOYEE_ID = "E1042"
 
 #: …and where it rolls to when they do not: the first Monday at least five weeks out, for six weeks.
 BERLIN_ROLL_WEEKS = 5
 BERLIN_TRIP_WEEKS = 6
 
 
+@lru_cache(maxsize=1)
+def _demo_holidays() -> frozenset[date]:
+    """The observed holidays of the demo persona's own calendar (E1042, Boston), for the notice count."""
+    from hrmosaic.mcpserver.server import ServerDeps
+
+    deps = ServerDeps()
+    employee = deps.employee(DEMO_EMPLOYEE_ID) or {}
+    # Employee → office → calendar, the same walk `check_policy_compliance._holidays` makes.
+    office = next((row for row in deps.records("offices") if row.get("office_id") == employee.get("office_id")), {})
+    calendar_id = office.get("holiday_calendar_id")
+    for calendar in deps.records("holidays_2026"):
+        if calendar.get("holiday_calendar_id") == calendar_id:
+            return frozenset(date.fromisoformat(item["observed"]) for item in calendar.get("holidays") or [])
+    return frozenset()
+
+
 def _pto_span(today: date) -> tuple[date, date]:
-    """Tuesday to Thursday of the **second** week after today (W8, C04).
+    """Tuesday to Thursday of the **second** week after today — or the first later week that
+    gives the notice the policy asks for (W8, C04; the holiday clause from the fix round).
 
     §18.2's demo is "three days of PTO, opened for me", and its point is the confirmation gate —
     not a notice shortfall. Now that notice is measured from the submission date rather than from
     the frozen snapshot, a fixed 15–17 September gave zero business days' notice on every run after
     that week, so the engine scored the demo's own request `unmet` on the notice requirement. The
-    second week out is always at least five business days away, whatever day the demo is run.
+    second week out is at least five business days away on any ordinary day; around Thanksgiving
+    and Christmas it is four, because the engine excludes observed holidays and so does this.
     """
+    from hrmosaic.mcpserver.rules import business_days_between
+
     monday = today + timedelta(days=7 - today.weekday())
     tuesday = monday + timedelta(days=8)
+    while business_days_between(today, tuesday, _demo_holidays()) < STANDARD_NOTICE_DAYS:
+        tuesday += timedelta(days=7)
     return tuesday, tuesday + timedelta(days=2)
 
 
@@ -2177,8 +2210,8 @@ def demo_prompts(today: date | None = None) -> dict[str, str]:
     two headline paths would demonstrate a policy failure rather than the gate. The dates move; the
     questions, the personas and the two capabilities they show do not.
 
-    `scripts/demo_task_*.sh` still send the recorded wording, and the recorded stub scripts replay
-    against `MOCK_TODAY=2026-09-10`, so the fixed pair remains reachable as `DEMO_PROMPTS`.
+    `scripts/demo_task_*.sh` still send the recorded wording, and `make demo1` / `make demo2` run
+    the server with `MOCK_TODAY=2026-09-01`, so the fixed pair remains reachable as `DEMO_PROMPTS`.
     """
     today = today or app_settings.today()
     berlin_start, berlin_end = _berlin_span(today)
@@ -2197,8 +2230,9 @@ def demo_prompts(today: date | None = None) -> dict[str, str]:
     }
 
 
-#: The recorded pair: what `scripts/demo_task_*.sh` send and what the committed stub scripts were
-#: captured against. The page renders `demo_prompts()` instead, dated against today.
+#: The recorded pair: byte-for-byte what `scripts/demo_task_*.sh` send (the test parses them), and
+#: what the committed stub scripts' expectations were written against. The page renders
+#: `demo_prompts()` instead, dated against today.
 DEMO_PROMPTS = demo_prompts(RECORDED_TODAY)
 
 __all__ = [

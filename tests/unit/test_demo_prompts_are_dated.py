@@ -6,13 +6,19 @@ date**, so §18.2's "three days of PTO from Tuesday 15 September" is a request w
 days' notice on any run after that week — the engine scores its own demo `unmet` on the notice
 requirement, and the headline path demonstrates a policy failure instead of the confirmation gate.
 
-The dates move. The questions, the personas and the two capabilities they show do not.
+The dates move on the page. The shell scripts keep the recorded wording and run against
+`MOCK_TODAY=2026-09-01`, and the two have to agree byte for byte — the test at the bottom parses
+the scripts, because the first version of it compared `DEMO_PROMPTS` with its own definition and
+`make demo2` shipped two business days of notice past it (W8 fix round, Critical 2).
+
+The questions, the personas and the two capabilities they show do not move.
 """
 
 from __future__ import annotations
 
 import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -20,9 +26,14 @@ from hrmosaic.agent.dates import MONTHS
 from hrmosaic.mcpserver.rules import business_days_between
 from hrmosaic.web import api
 
-#: Every Monday-to-Sunday starting day, over three months, so no run of the demo is on a day the
-#: prompt is wrong for.
-DAYS = [date(2026, 9, 1) + timedelta(days=offset) for offset in range(0, 120, 3)]
+#: Every starting day over four months, so no run of the demo is on a day the prompt is wrong
+#: for — including the two holiday-dense weeks the second-week formula alone gets wrong.
+DAYS = [date(2026, 9, 1) + timedelta(days=offset) for offset in range(0, 130)]
+
+SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+
+#: `PROMPT='…'` as the two POSIX scripts write it: single-quoted, one line, no escapes.
+PROMPT_LINE = re.compile(r"^PROMPT='(.+)'$", re.MULTILINE)
 
 #: `pto.notice.standard_days` — what §18.2's request has to give.
 STANDARD_NOTICE = 5
@@ -53,11 +64,20 @@ def _dates(text: str) -> list[date]:
 
 @pytest.mark.parametrize("today", DAYS, ids=lambda value: value.isoformat())
 def test_the_pto_prompt_always_gives_the_notice_the_policy_asks_for(today):
+    """Counted the way the engine counts it — in the demo persona's own holiday calendar. The
+    second-week formula alone gives four business days on six days around Thanksgiving and
+    Christmas (W7-review Minor), and the prompt rolls a week on exactly those."""
     start, end = _dates(api.demo_prompts(today)["demo_2"])
 
+    assert business_days_between(today, start, api._demo_holidays()) >= STANDARD_NOTICE
     assert business_days_between(today, start, frozenset()) >= STANDARD_NOTICE
     assert (end - start).days == 2, "three days, Tuesday to Thursday"
     assert start.weekday() == 1 and end.weekday() == 3
+
+
+def test_the_holiday_calendar_is_the_demo_personas_own():
+    assert date(2026, 9, 7) in api._demo_holidays(), "Labor Day, observed in Boston"
+    assert date(2026, 11, 26) in api._demo_holidays()
 
 
 @pytest.mark.parametrize("today", DAYS, ids=lambda value: value.isoformat())
@@ -95,8 +115,25 @@ def test_the_berlin_prompt_rolls_to_a_monday_once_the_spec_dates_are_too_close()
     assert "3 November" not in rolled
 
 
-def test_the_recorded_pair_is_what_the_shell_scripts_send():
-    """`scripts/demo_task_*.sh` carry their own fixed wording, and the stubs were recorded against
-    it with `MOCK_TODAY=2026-09-10`. `DEMO_PROMPTS` is that pair, and stays reachable."""
-    assert api.DEMO_PROMPTS == api.demo_prompts(api.RECORDED_TODAY)
+def _script_prompt(name: str) -> str:
+    match = PROMPT_LINE.search((SCRIPTS / name).read_text(encoding="utf-8"))
+    assert match, f"{name} no longer carries a one-line PROMPT='…'"
+    return match.group(1)
+
+
+def test_the_recorded_pair_is_byte_for_byte_what_the_shell_scripts_send():
+    """`make demo1` / `make demo2` send the scripts' own wording against `MOCK_TODAY=2026-09-01`,
+    and `DEMO_PROMPTS` claims to be that pair. Parsed out of the scripts, not out of its own
+    definition — the tautological version of this test let `make demo2` ship a request with two
+    business days of notice (W8 fix round, Critical 2)."""
+    assert api.DEMO_PROMPTS["demo_1"] == _script_prompt("demo_task_1.sh")
+    assert api.DEMO_PROMPTS["demo_2"] == _script_prompt("demo_task_2.sh")
     assert set(api.DEMO_PROMPTS) == set(api.DEMO_PROMPT_LABELS)
+
+
+def test_the_recorded_date_gives_the_recorded_notice():
+    """Eight business days from `RECORDED_TODAY` to the scripts' 15 September, holidays excluded —
+    the figure the recorded demo-2 synthesis and `docs/demo-script.md` both state."""
+    start, _end = _dates(api.DEMO_PROMPTS["demo_2"])
+    assert start == date(2026, 9, 15)
+    assert business_days_between(api.RECORDED_TODAY, start, api._demo_holidays()) == 8

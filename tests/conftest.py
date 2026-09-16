@@ -17,10 +17,12 @@ from pathlib import Path
 
 # **Before `hrmosaic.settings` is imported anywhere.** `MOCK_TODAY` pins the date the rules engine
 # treats as the submission date (W8, C04); without it a notice figure is computed from the wall
-# clock, so a suite that passes today fails tomorrow and the recorded stubs — captured on
-# 2026-09-10 and replayed verbatim — would drift away from their own expectations. It changes
-# nothing else: balances and tenure still read the mock data's `as_of: 2026-09-01`.
-os.environ.setdefault("MOCK_TODAY", "2026-09-10")
+# clock, so a suite that passes today fails tomorrow and the recorded stubs — whose expectations
+# were written against the mock data's own `as_of` — would drift away from them. 2026-09-01 is the
+# one date that reproduces the recorded "8 business days" of notice to 15 September with Boston's
+# Labor Day excluded, which is what `make demo2` and `scripts/demo_task_2.sh` assume (W8 fix
+# round, Critical 2). It changes nothing else: balances and tenure still read `as_of`.
+os.environ.setdefault("MOCK_TODAY", "2026-09-01")
 
 import pytest  # noqa: E402 - the env var above has to be set before `hrmosaic.settings` loads
 import uvicorn  # noqa: E402

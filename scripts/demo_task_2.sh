@@ -11,6 +11,13 @@
 # holding the token, so this is belt-and-braces, not a requirement.
 #
 #   BASE_URL=https://mosaic-hr.onrender.com APP_ACCESS_TOKEN=… sh scripts/demo_task_2.sh
+#
+# The prompt below is the RECORDED wording, with its fixed dates. The rules engine measures notice
+# from the submission date (W8), so the server this script talks to must run with
+# `MOCK_TODAY=2026-09-01` — the mock data's own snapshot, and the one date that gives the recorded
+# 8 business days of notice to 15 September once Boston's Labor Day is excluded — for the recorded
+# expectations to hold; `make demo1` / `make demo2` set it. The chat page's own demo buttons carry
+# dates that move with the day instead (`web/api.py::demo_prompts`).
 set -eu
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"

@@ -57,6 +57,9 @@ def test_a_first_person_denial_of_a_permitted_tool_is_one(sentence):
         "I will not handle a discrimination concern here — contact People Operations.",
         # A statement about the reader, not about the assistant.
         "You cannot carry more than five days into the next plan year.",
+        # Third person with a "for you" in it: a policy sentence, not this assistant (W7-review Minor).
+        "A manager cannot open a ticket for you without a written request.",
+        "Nobody is able to submit the request on your behalf without your written consent.",
     ],
 )
 def test_a_denial_that_is_not_about_a_permitted_tool_survives(sentence):
@@ -108,6 +111,55 @@ def test_the_attribute_the_envelope_actually_carries_is_kept():
     assert capability.apply([block(sentence, "recommendation")], [PROFILE], permitted=PERMITTED).blocks[0]["text"] == (
         sentence
     )
+
+
+#: A live-shaped demo-1 answer for a **hybrid** employee. Every sentence names remote work, and
+#: every one of them is company policy or the reader's own request — none is a claim about the
+#: reader's work arrangement. Until W8's fix round, all seven were dropped (Critical 1).
+DEMO_1_SHAPED = [
+    (
+        "Work performed outside your home country under the remote work policy requires a Tax & Legal "
+        "review for stays over 30 days."
+    ),
+    "International remote work of more than 30 days requires approval from your director and from Tax & Legal.",
+    "Germany is on the approved-destination list in the remote-and-hybrid-work policy.",
+    "Your remote work request for Berlin needs 21 calendar days' notice to your manager.",
+    "You may work remotely from an approved country for up to 90 days in a rolling twelve months.",
+    "Remote work abroad on a company-managed device requires the always-on VPN.",
+    (
+        "You have completed 3 years 9 months of continuous service, exceeding the 12-month minimum for "
+        "remote work abroad."
+    ),
+]
+
+
+@pytest.mark.parametrize("sentence", DEMO_1_SHAPED)
+def test_a_policy_sentence_about_remote_work_is_not_a_claim_about_the_reader(sentence):
+    """W8 fix round, Critical 1. All three demo personas are `hybrid` and demo 1 is *about*
+    international remote work: a check that read the word "remote" as a claim about the reader
+    emptied the headline demo's answer of everything it had to say."""
+    assert not capability.contradicts_the_record(sentence, [PROFILE]), sentence
+
+
+def test_the_whole_demo_1_shaped_answer_survives_for_a_hybrid_employee():
+    blocks = [block(sentence, "policy_fact") for sentence in DEMO_1_SHAPED]
+    result = capability.apply(blocks, [PROFILE], permitted=PERMITTED)
+
+    assert [item["text"] for item in result.blocks] == DEMO_1_SHAPED
+    assert not result.changed
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "As a fully remote employee you have no onsite requirement.",
+        "You are a fully remote employee, so no onsite days apply to you.",
+        "Your work arrangement is fully remote.",
+    ],
+)
+def test_a_claim_about_the_readers_own_arrangement_is_still_caught(sentence):
+    """The C10 exhibit, in the three frames it takes: the reader is the subject."""
+    assert capability.contradicts_the_record(sentence, [PROFILE]), sentence
 
 
 def test_a_turn_that_never_read_the_profile_has_nothing_to_contradict():

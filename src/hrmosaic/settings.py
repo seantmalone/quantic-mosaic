@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     #: The date the app treats as "today" when it anchors a submission (W8, C04). Empty in every
     #: real deployment — the wall clock is the submission date, exactly as §12.3's "real wall clock
     #: everywhere" requires. It exists for the two surfaces that must be reproducible: the recorded
-    #: stub scripts, which were captured on 2026-09-10 and whose expectations would otherwise move
+    #: stub scripts, whose expectations assume the mock data's own `as_of` and would otherwise move
     #: every day, and the tests that assert a notice figure. It is NOT a clock override: balances,
     #: tenure and every other snapshot figure still read the mock data's own `as_of`.
     mock_today: str = ""
@@ -189,7 +189,7 @@ class Settings(BaseSettings):
     def _iso_or_empty(cls, value: str) -> str:
         """`MOCK_TODAY` is an ISO date or nothing. A typo must fail at import, not in a verdict."""
         if value.strip() and not _ISO_DATE.fullmatch(value.strip()):
-            raise ValueError("MOCK_TODAY must be an ISO-8601 date, e.g. 2026-09-10")
+            raise ValueError("MOCK_TODAY must be an ISO-8601 date, e.g. 2026-09-01")
         return value.strip()
 
     def today(self) -> date:

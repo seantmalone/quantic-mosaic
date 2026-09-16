@@ -114,8 +114,10 @@ Prompt (the **Demo 1** button sends it): *"I want to work from Berlin from 3 Nov
 > international-remote notice rule — and otherwise rolls to the first Monday five weeks out, for six
 > weeks. Demo 2 always names the **Tuesday to Thursday of the second week after today**, which is
 > always at least five business days' notice. Everything else about both turns is unchanged, and
-> `scripts/demo_task_1.sh` / `scripts/demo_task_2.sh` still send the recorded wording against
-> `MOCK_TODAY=2026-09-10`, which is what `make demo1` and `make demo2` replay. If you are reading
+> `scripts/demo_task_1.sh` / `scripts/demo_task_2.sh` still send the recorded wording, and
+> `make demo1` / `make demo2` run the server with `MOCK_TODAY=2026-09-01` — the mock data's own
+> snapshot, and the one submission date that gives the recorded 8 business days of notice to 15
+> September once Boston's Labor Day is excluded. If you are reading
 > the arguments off the span rail, read the dates the button actually sent rather than the ones
 > written below.
 

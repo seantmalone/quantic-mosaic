@@ -27,7 +27,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from hrmosaic.agent.outcome import DENIALS, sentences
+from hrmosaic.agent.outcome import DENIALS, about_the_reader, sentences
 
 #: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
@@ -53,10 +53,41 @@ PROFILE_ATTRIBUTES: dict[str, tuple[str, ...]] = {
 #: The profile envelope, and the only one this step reads attributes from.
 PROFILE_TOOL = "lookup_employee_profile"
 
-#: *"on your behalf"*, *"for you"* — the phrase that makes a denial one about **this** assistant
-#: rather than about a policy. Without it, "a manager cannot approve their own request" reads as a
-#: capability denial.
-FIRST_PERSON = re.compile(r"\b(?:i|we)\b|\bon your behalf\b|\bfor you\b", re.IGNORECASE)
+#: A denial is about **this** assistant only in the first person (W8 fix round, W7-review Minor).
+#: "on your behalf" and "for you" are modifiers, not an alternative: *"A manager cannot open a
+#: ticket for you without a written request"* is a policy sentence, and it carries both.
+FIRST_PERSON = re.compile(r"\b(?:i|we)\b", re.IGNORECASE)
+
+#: Where an attribute word is the name of a **topic**, not a claim about anybody (W8 fix round,
+#: Critical 1). All three demo personas are `hybrid`, and demo 1 is about international remote
+#: work: without this, every sentence containing the word "remote" — *"Work performed outside your
+#: home country under the remote work policy…"* — was dropped from a hybrid employee's answer and a
+#: block that was nothing but such a sentence went whole. The phrases are removed before the
+#: attribute words are looked for.
+TOPIC_PHRASES: tuple[str, ...] = (
+    "remote-and-hybrid-work",
+    "remote & hybrid work",
+    "remote and hybrid work",
+    "international remote work",
+    "remote work policy",
+    "remote-work policy",
+    "remote work",
+    "remote-work",
+    "hybrid work",
+    "hybrid-work",
+    "onsite work",
+    "on-site work",
+    "work remotely",
+    "working remotely",
+)
+
+#: The frames in which an attribute word is a claim about the **reader**, when the sentence does
+#: not simply open with "you"/"your": *"as a fully remote employee"*, *"you are a remote worker"*.
+READER_FRAME = re.compile(
+    r"\b(?:as|for|being)\s+an?\s+(?:\w+\s+)?(?:remote|hybrid|onsite|on-site|in-office)\s+(?:employee|worker|colleague|staff)\b"
+    r"|\byou(?:'re| are| work| now work)\s+(?:an?\s+)?(?:\w+\s+)?(?:remote|hybrid|onsite|on-site|in-office)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -101,9 +132,28 @@ def denies_a_permitted_tool(text: str, permitted: Sequence[str]) -> bool:
     return any(word in lowered for name in permitted for word in TOOL_ACTIONS.get(name, ()))
 
 
+def _about_the_readers_arrangement(sentence: str) -> bool:
+    """Is this a claim about the reader — not a sentence that happens to name a topic?
+
+    Two shapes count: a sentence whose subject is the reader (*"You are…"*, *"Your…"*), and an
+    attribute word inside a reader frame (*"as a fully remote employee"*). A policy sentence in the
+    third person is neither, whatever words it uses.
+    """
+    return about_the_reader(sentence) or bool(READER_FRAME.search(sentence))
+
+
 def contradicts_the_record(text: str, envelopes: Iterable[Any]) -> bool:
-    """Does this sentence state a profile attribute the reader's own envelope contradicts?"""
+    """Does this sentence state a profile attribute of the **reader** that their envelope contradicts?
+
+    Three gates, in order (W8 fix round, Critical 1): the sentence has to be about the reader; the
+    topic phrases are taken out first, so "remote" inside "the remote work policy" names a policy
+    and not a person; and only then is what is left compared with the envelope.
+    """
+    if not _about_the_readers_arrangement(text):
+        return False
     lowered = text.lower()
+    for phrase in TOPIC_PHRASES:
+        lowered = lowered.replace(phrase, " ")
     for body in _bodies(envelopes, tool=PROFILE_TOOL):
         for field_name, vocabulary in PROFILE_ATTRIBUTES.items():
             actual = str(body.get(field_name) or "").lower()
@@ -150,8 +200,10 @@ __all__ = [
     "FIRST_PERSON",
     "PROFILE_ATTRIBUTES",
     "PROFILE_TOOL",
+    "READER_FRAME",
     "STEP_NAME",
     "TOOL_ACTIONS",
+    "TOPIC_PHRASES",
     "Outcome",
     "apply",
     "contradicts_the_record",

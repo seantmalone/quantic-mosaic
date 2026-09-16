@@ -9,10 +9,13 @@ HOST ?= 127.0.0.1
 GIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo dev)
 IMAGE ?= mosaic-hr
 BASE_URL ?= http://$(HOST):$(PORT)
-# The day the two recorded demo scripts were captured. `MOCK_TODAY` is what the rules engine
+# The submission date the two recorded demo scripts assume. `MOCK_TODAY` is what the rules engine
 # anchors notice on (W8, C04), so replaying a recording against today's wall clock would score its
-# fixed dates differently every day. Only the demo replays pin it; a real deployment leaves it unset.
-MOCK_TODAY ?= 2026-09-10
+# fixed dates differently every day. 2026-09-01 — the mock data's own `as_of` — is the only date
+# that gives the recorded "8 business days" to 15 September once Boston's Labor Day (2026-09-07)
+# is excluded; 2026-09-10 gave two, and `make demo2` was demonstrating a notice shortfall (W8 fix
+# round, Critical 2). Only the demo replays pin it; a real deployment leaves it unset.
+MOCK_TODAY ?= 2026-09-01
 
 .PHONY: setup run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
 
