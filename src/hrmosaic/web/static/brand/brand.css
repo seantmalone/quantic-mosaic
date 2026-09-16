@@ -152,6 +152,9 @@
   --danger: #96251e;
   --danger-soft: #fbe7e4;
   --ok: #1e6335;
+  /* The second and third chart series (UX W9, A11Y4-02): the canvases read every colour from here. */
+  --info: #3b6fb0;
+  --series-3: #7a5bb5;
   --ok-soft: #e2efe6;
 
   --mark-a: #58958e;
@@ -184,6 +187,8 @@
     --danger: #f0918a;
     --danger-soft: #33191a;
     --ok: #72c990;
+    --info: #8fb4e6;
+    --series-3: #b9a5e3;
     --ok-soft: #12291b;
 
     --mark-a: #3a7c75;
@@ -221,6 +226,8 @@
   --danger: #f0918a;
   --danger-soft: #33191a;
   --ok: #72c990;
+  --info: #8fb4e6;
+  --series-3: #b9a5e3;
   --ok-soft: #12291b;
 
   --mark-a: #3a7c75;

@@ -29,7 +29,7 @@
 {% block content %}
 {{ t.table('sessions-table', [
     {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
-    {'label': 'Persona', 'key': 'employee_id'},
+    {'label': 'Persona', 'key': 'employee_id', 'kind': 'persona'},
     {'label': 'Outcomes', 'key': 'outcomes', 'kind': 'list'},
     {'label': 'Turns', 'key': 'n_turns', 'kind': 'num'},
     {'label': 'Total', 'key': 'total_ms', 'kind': 'ms'},

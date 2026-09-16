@@ -68,7 +68,7 @@
       {# The unrounded figure stays one hover away, and is in Export JSON either way (P15). #}
       <span class="metric-value"{% if view.metrics[metric] is not none %} title="{{ view.metrics[metric] }}"{% endif %}>
         {% if view.metrics[metric] is none %}
-          {% if metric in judged_metrics %}<span class="not-judged">not judged on this variant</span>
+          {% if metric in judged_metrics %}<span class="not-judged">not judged</span>
           {% else %}<span class="muted">—</span>{% endif %}
         {#- Through `rate`, not `pct` (UX W8, W7 review): every other rate on this page carries its
             denominator while the sample is small (**P14**, npo3-07 = M14), and the headline strip
@@ -84,8 +84,10 @@
         {% else %}{{ view.metrics[metric]|num }}{% endif %}
       </span>
       <span class="metric-label">{{ metric|metric_label }}</span>
-      {% if metric in judged_metrics %}<span class="pill pill-judged">judged</span>{% endif %}
-      {% if metric in deterministic_metrics %}<span class="pill">deterministic</span>{% endif %}
+      {#- The method pill says what it is, and a tile whose value is "not judged"
+          does not also wear a pill saying "judged" (UX W9, DR4-04). -#}
+      {% if metric in judged_metrics and view.metrics[metric] is not none %}<span class="pill pill-judged">judged metric</span>{% endif %}
+      {% if metric in deterministic_metrics %}<span class="pill">scored deterministically</span>{% endif %}
     </div>
     {% endfor %}
   </div>
@@ -98,7 +100,9 @@
   <div class="table-scroll">
     <table id="escalation-matrix" class="data-table">
       <thead><tr><th scope="col">gold ↓ / predicted →</th>
-        {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}<th scope="col">{{ predicted|enum_label }}</th>{% endfor %}</tr></thead>
+        {#- The header carries the same kind class as its cells, so a count sits under its own
+            label and not beside the next one's (UX W9, DR4-01 — plan §3.10). -#}
+        {% for predicted in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}<th scope="col" class="cell-num">{{ predicted|enum_label }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for gold in ['answer', 'clarify', 'refuse', 'escalate', 'confirm'] %}
         <tr><th scope="row">{{ gold|enum_label }}</th>
@@ -134,19 +138,19 @@
   </dl>
 
   <h4>Workflow completion</h4>
-  {#- What the denominator of these rows IS, said once above them (W8 fix round, npo4-02 = I6): the
-      run reports one workflow-completion sample for the whole dataset, not one per workflow, and a
-      footer line reading "Workflow completion 28 items" three screens below two bare `0.0%`s left
-      the reader to guess whether it applied to either of them. Every row now prints that sample in
-      its own cell, so the row and the legend say the same thing. -#}
+  {#- Each row over ITS OWN sample (UX W9, DR4-02 = npo5-01): the W8 fix round printed the
+      dataset-wide workflow-completion sample in both rows — "0.0% (0 of 28 items)" for a workflow
+      the dataset tags one item for — which the lede above them disowned in the same breath. The
+      runner publishes `n_scored["workflow:<name>"]`; for an older run file the dashboard recounts
+      it from the dataset's `workflow:` tags. -#}
   <p class="note">How often a workflow reached its end state, per workflow. Each rate is over the
-    items this run scored for workflow completion — the run reports one sample for the dataset, not
-    one per workflow.</p>
+    items the dataset tags for that workflow and this run scored — one or two items each, so these
+    are indicators, not rates.</p>
   <ul id="workflow-completion" class="pill-list">
     {% for workflow, value in view.metrics.workflow_completion_by_workflow.items() %}
     {#- `pto request 0.0%` with no `n` at all is the bare rate P14 forbids (UX W6, dr-new-8). -#}
     <li><span class="pill">{{ workflow|enum_label }}</span>
-      {{ value|rate(view.metrics.n_scored.get('workflow_completion'), 'item', always=true) }}</li>
+      {{ value|rate(view.metrics.n_scored.get('workflow:' ~ workflow), 'item', always=true) }}</li>
     {% else %}<li class="muted">No item defines a workflow end state.</li>{% endfor %}
   </ul>
 
@@ -337,7 +341,7 @@
       new Chart(document.getElementById("chart-latency"), {
         type: "bar",
         data: { labels: ["<1 s", "1–2 s", "2–4 s", "4–8 s", "8–16 s", "≥16 s"],
-                datasets: [{ label: "items", data: buckets, backgroundColor: "#1f6f6b" }] },
+                datasets: [{ label: "items", data: buckets, backgroundColor: window.chartPalette().accent }] },
         options: { responsive: true, maintainAspectRatio: false,
                    plugins: { title: { display: true, text: "Latency histogram" } },
                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
@@ -345,7 +349,8 @@
       new Chart(document.getElementById("chart-cold-warm"), {
         type: "bar",
         data: { labels: ["warm p50", "warm p95", "cold p50", "cold p95"],
-                datasets: [{ label: "ms", backgroundColor: ["#1f6f6b", "#1f6f6b", "#8a5a00", "#8a5a00"],
+                datasets: [{ label: "ms", backgroundColor: [window.chartPalette().accent, window.chartPalette().accent,
+                                                            window.chartPalette().warn, window.chartPalette().warn],
                              data: [data.latency.p50, data.latency.p95,
                                     data.latency.cold_p50, data.latency.cold_p95] }] },
         options: { responsive: true, maintainAspectRatio: false,
@@ -355,7 +360,7 @@
       new Chart(document.getElementById("chart-rss"), {
         type: "line",
         data: { labels: data.rss_series.map(function (point) { return point.turn_id.slice(0, 8); }),
-                datasets: [{ label: "Memory (MB)", borderColor: "#3b6fb0", tension: 0.25,
+                datasets: [{ label: "Memory (MB)", borderColor: window.chartPalette().info, tension: 0.25,
                              data: data.rss_series.map(function (point) { return point.rss_mb; }) }] },
         options: { responsive: true, maintainAspectRatio: false,
                    plugins: { title: { display: true, text: "Memory at the end of each turn" } } }

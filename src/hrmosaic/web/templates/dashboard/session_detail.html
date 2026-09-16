@@ -30,7 +30,7 @@
   {% endif %}
   <dl class="facts">
     <div><dt>Started</dt><dd>{{ view.session.created_at|ts }}</dd></div>
-    <div><dt>Persona</dt><dd>{{ view.session.employee_id or 'admin' }}</dd></div>
+    <div><dt>Persona</dt><dd>{% if view.session.employee_id %}<span class="persona" title="{{ view.session.employee_id }}">{{ view.session.employee_id|persona_name }}</span>{% else %}admin{% endif %}</dd></div>
     <div><dt>Turns</dt><dd>{{ view.session.n_turns|num }}</dd></div>
     <div><dt>Sign-in</dt><dd><span class="pill">{{ view.session.auth_mode|enum_label }}</span></dd></div>
     <div><dt>Role</dt><dd><span class="pill">{{ view.session.actor_role|enum_label }}</span></dd></div>
@@ -150,7 +150,9 @@
           is unchanged; the eye gets a chevron. -#}
       <details class="span-payload">
         <summary><span class="visually-hidden">Step {{ span.seq|num }} · {{ span.kind|kind_label }} · {{ span.name }}</span><span class="span-chevron" aria-hidden="true">▸</span></summary>
-        <pre class="mono">{{ span.payload|payload_pretty }}</pre>
+        {#- The payload box scrolls and holds no focusable content, so it is focusable itself
+            (WCAG 2.1.1; UX W9, A11Y4-04), named by the step it belongs to. -#}
+        <pre class="mono" tabindex="0" role="region" aria-label="Step {{ span.seq|num }} payload">{{ span.payload|payload_pretty }}</pre>
       </details>
       <span class="span-seq mono">{{ span.seq|num }}</span>
       <span class="pill pill-{{ span.kind }}">{{ span.kind|kind_label }}</span>

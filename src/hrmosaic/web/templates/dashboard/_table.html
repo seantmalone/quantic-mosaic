@@ -108,6 +108,7 @@
   {%- elif kind == 'badge' -%}<span class="pill pill-{{ value }}">{{ value|enum_label }}</span>
   {%- elif kind == 'rule' -%}<span class="pill pill-{{ value }}">{{ value|rule_label }}</span>
   {%- elif kind == 'enum' -%}{{ value|enum_label }}
+  {%- elif kind == 'persona' -%}<span class="persona" title="{{ value }}">{{ value|persona_name }}</span>
   {%- elif kind == 'code' -%}<code class="mono">{{ value|compact(60) }}</code>
   {%- else -%}{{ value|string|truncate(120) }}
   {%- endif -%}

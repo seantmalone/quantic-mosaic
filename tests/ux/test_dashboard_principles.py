@@ -1155,3 +1155,86 @@ def test_every_in_place_definition_is_a_control_a_reader_can_reach(browser, dash
 
     assert not unreachable, f"at {label} these definitions are not reachable: {unreachable}"
     assert not mute, f"at {label} these definitions are still hover-only `title=` attributes: {mute}"
+
+
+# -- UX W9: an opened payload is readable, and every scroll box is keyboard-reachable -------------
+
+OPEN_PAYLOAD_JS = """
+() => {
+  const row = document.querySelector("ol.waterfall > li.span-row");
+  const details = row.querySelector("details.span-payload");
+  const pre = details.querySelector("pre");
+  const tall = Array.from(document.querySelectorAll("*")).filter((el) => {
+    const cs = getComputedStyle(el);
+    return (cs.overflowY === "auto" || cs.overflowY === "scroll") && el.scrollHeight > el.clientHeight + 1;
+  });
+  return {
+    open: details.open,
+    pre_width: pre.clientWidth, row_width: row.clientWidth,
+    pre_visible: pre.getClientRects().length > 0,
+    short_scrollers: tall.filter((el) => el.clientHeight < 200).map((el) => el.tagName + (el.id ? "#" + el.id : "")),
+    height: document.documentElement.scrollHeight,
+  };
+}
+"""
+
+SCROLL_REGIONS_JS = """
+() => Array.from(document.querySelectorAll("*")).filter((el) => {
+  const cs = getComputedStyle(el);
+  return (cs.overflowY === "auto" || cs.overflowY === "scroll") && el.scrollHeight > el.clientHeight + 1
+    && el !== document.scrollingElement;
+}).map((el) => ({
+  tag: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "")
+    + (el.className ? "." + String(el.className).split(" ")[0] : ""),
+  reachable: el.tabIndex >= 0 || !!el.querySelector("a[href], button, input, select, textarea, [tabindex]"),
+  named: !!el.getAttribute("aria-label") || !!el.getAttribute("aria-labelledby"),
+}))
+"""
+
+
+@pytest.mark.parametrize("label,width,height", DESKTOPS, ids=[label for label, _, _ in DESKTOPS])
+def test_an_opened_payload_spans_the_row_and_closed_ones_still_cost_none(browser, dashboard, label, width, height):
+    """A11Y4-01, re-audit #4's Critical. The W8 fix declared rows for the payload `<pre>`, but Chrome
+    lays a `<details>` body out through a `::details-content` box — that box is the grid item, and
+    it was auto-placed into the 35px chevron track: an opened payload was a one-character ribbon in
+    a 352px scroll box. The height budget could not see it; this measures the width."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        tab.goto(dashboard.base_url + dashboard.session_route, wait_until="networkidle")
+        tab.wait_for_timeout(150)
+        closed = tab.evaluate(OPEN_PAYLOAD_JS)
+        assert closed["open"] is False and closed["height"] <= DESKTOP_SESSION_MAX_PX, closed
+        tab.click("ol.waterfall > li.span-row details.span-payload > summary")
+        tab.wait_for_timeout(150)
+        opened = tab.evaluate(OPEN_PAYLOAD_JS)
+        assert opened["open"] is True and opened["pre_visible"], opened
+        assert opened["pre_width"] >= 0.6 * opened["row_width"], f"{label}: the opened payload is a ribbon: {opened}"
+        assert opened["short_scrollers"] == [], f"{label}: something scrolls inside a box under 200px: {opened}"
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("label,width,height", DESKTOPS, ids=[label for label, _, _ in DESKTOPS])
+def test_every_scroll_container_is_keyboard_reachable_and_named(browser, dashboard, label, width, height):
+    """A11Y4-04 (WCAG 2.1.1): a scrollable region with no focusable content must be focusable
+    itself, as `.table-scroll` already was — the payload boxes and the corpus full text were not."""
+    context = browser.new_context(viewport={"width": width, "height": height})
+    tab = context.new_page()
+    unreachable: dict[str, list] = {}
+    try:
+        tab.goto(f"{dashboard.base_url}/?access={TOKEN}", wait_until="networkidle")
+        for route in dashboard.routes:
+            tab.goto(dashboard.base_url + route, wait_until="networkidle")
+            tab.evaluate("() => document.querySelectorAll('details.span-payload').forEach((d) => { d.open = true; })")
+            tab.wait_for_timeout(100)
+            regions = tab.evaluate(SCROLL_REGIONS_JS)
+            broken = [r for r in regions if not r["reachable"] or not r["named"]]
+            if broken:
+                unreachable[route] = broken
+        assert not unreachable, (
+            f"at {label}: scroll boxes a keyboard cannot reach or a reader cannot name: {unreachable}"
+        )
+    finally:
+        context.close()

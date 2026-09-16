@@ -19,12 +19,32 @@
     // Reduced motion, once for every chart on every page (UX W5, accessibility-and-responsive-19).
     // Registered in `<head>`, so it is the FIRST `load` listener on the document and Chart.js has
     // its defaults set before any page script constructs a chart.
-    window.addEventListener("load", function () {
-      if (typeof Chart !== "undefined" && window.matchMedia
-          && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    // The charts read their colours from the stylesheet, so a dark page gets dark-theme ink
+    // (UX W9, A11Y4-02): every canvas was drawn in hard-coded light-palette hex and Chart.js's
+    // own `#666` text, at 2.9:1 on the dark card. `window.chartPalette()` is what the page scripts
+    // call instead of a literal, and the defaults are re-read when the theme flips.
+    window.chartPalette = function () {
+      var css = getComputedStyle(document.documentElement);
+      var read = function (name, fallback) { return (css.getPropertyValue(name) || fallback).trim(); };
+      return {
+        accent: read("--accent", "#1f6f6b"), ink: read("--ink", "#1c1c1c"), inkSoft: read("--ink-soft", "#555"),
+        line: read("--line", "#d9d4cc"), warn: read("--warn", "#8a5a00"), info: read("--info", "#3b6fb0"),
+        series: [read("--accent", "#1f6f6b"), read("--info", "#3b6fb0"), read("--series-3", "#7a5bb5"),
+                 read("--warn", "#8a5a00"), read("--ok", "#2f7d32"), read("--danger", "#9b2c2c")]
+      };
+    };
+    function themeCharts() {
+      if (typeof Chart === "undefined") { return; }
+      var palette = window.chartPalette();
+      Chart.defaults.color = palette.inkSoft;
+      Chart.defaults.borderColor = palette.line;
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         Chart.defaults.animation = false;
       }
-    });
+      Object.values(Chart.instances || {}).forEach(function (chart) { chart.update(); });
+    }
+    window.addEventListener("load", themeCharts);
+    if (window.matchMedia) { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeCharts); }
   </script>
 </head>
 <body class="dashboard" data-page="{{ page_number }}">

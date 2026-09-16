@@ -25,6 +25,7 @@ reach, with its own server-side check behind it.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import math
@@ -403,6 +404,26 @@ def _f_ms_n(value: Any, n: Any = None) -> str:
     return _f_ms(value)
 
 
+def _f_rate_sample(value: Any, n: Any = None, unit: str = "") -> str:
+    """The parenthetical of `_f_rate` on its own — `3 of 3 items` — or nothing (UX W9, npo5-05).
+
+    The list page's headline table has eight rate columns; a sample inside the cell's one line
+    pushed the table 79px past its box at 1440 and 239px at 1280. The page prints the rate on one
+    line and, under P14's threshold, the sample on a second.
+    """
+    if value is None:
+        return ""
+    try:
+        sample = int(n)
+    except (TypeError, ValueError):
+        return ""
+    if sample <= 0 or sample >= SMALL_SAMPLE:
+        return ""
+    numerator = round(float(value) * sample)
+    tail = f"{sample:,} {_f_plural(sample, unit)}" if unit else f"{sample:,}"
+    return f"{numerator:,} of {tail}"
+
+
 def _f_score(value: Any) -> str:
     """A similarity score at two places — the precision the 0–1 scale actually carries."""
     return "—" if value is None else f"{float(value):.2f}"
@@ -523,6 +544,16 @@ ENUM_LABELS: dict[str, str] = {
     "out_of_scope": "out of scope",
     "unsafe_action": "unsafe action",
     "conditional": "conditional",
+    # The compliance verdicts and the tool error codes, as words (UX W9, DR4-07 and DR4-08): the
+    # summariser de-underscored `non_compliant` into "non compliant" and painted the raw
+    # `CONFIRMATION_REQUIRED` under WHY IT STOPPED beside a humanised OUTCOME.
+    "non_compliant": "non-compliant",
+    "insufficient_evidence": "insufficient evidence",
+    "compliant": "compliant",
+    "CONFIRMATION_REQUIRED": "paused for confirmation",
+    "INVALID_ARGUMENTS": "invalid arguments",
+    "EMPLOYEE_NOT_FOUND": "employee not found",
+    "VERDICT_NON_COMPLIANT": "refused: verdict non-compliant",
     # Model calls (UX W7, JX2-01): the finish reason and the provider are enums too.
     "end_turn": "finished",
     "stop": "finished",
@@ -551,6 +582,34 @@ def _f_enum_label(value: Any) -> str:
     """
     text = str(value)
     return ENUM_LABELS.get(text, text.replace("_", " "))
+
+
+@functools.cache
+def _persona_names() -> dict[str, str]:
+    """`employee_id → preferred name` from the same `mock_data/employees.json` the tools read."""
+    try:
+        records = json.loads((REPO_ROOT / "mock_data" / "employees.json").read_text(encoding="utf-8"))["records"]
+    except Exception:
+        logger.warning("could not read mock_data/employees.json", exc_info=True)
+        return {}
+    return {
+        str(record["employee_id"]): str(
+            record.get("preferred_name") or record.get("legal_name") or record["employee_id"]
+        )
+        for record in records
+        if record.get("employee_id")
+    }
+
+
+def _f_persona_name(value: Any) -> str:
+    """The persona by name — `E1042` is the id the masthead 60px above never shows (UX W9, DR4-09).
+
+    The id stays in the record (P15): the `persona` cell kind carries it in the `title`, and the
+    JSON export publishes the column as stored. An id the roster does not know is printed as is.
+    """
+    if value in (None, ""):
+        return ""
+    return _persona_names().get(str(value), str(value))
 
 
 #: `_f_enum_label` read backwards: the words the page paints → the token the database stores. Two
@@ -697,6 +756,7 @@ DASHBOARD_FILTERS = (
     ("pct", _f_pct),
     ("iso", _f_iso),
     ("rate", _f_rate),
+    ("rate_sample", _f_rate_sample),
     ("score", _f_score),
     ("usd", _f_usd),
     ("orna", _f_orna),
@@ -706,6 +766,7 @@ DASHBOARD_FILTERS = (
     ("kind_label", _f_kind_label),
     ("rule_label", _f_rule_label),
     ("enum_label", _f_enum_label),
+    ("persona_name", _f_persona_name),
     ("id_chip", _f_id_chip),
     ("server_location", _f_server_location),
     ("compact", _f_compact),
@@ -1418,6 +1479,10 @@ class EvalRunRow(_View):
     created_at: int
     n_items: int
     headline: dict[str, int | float | None]
+    #: Each headline rate's sample, by the metric's own name, where the run reports one (UX W9,
+    #: npo5-05): the list page prints the `n` with any rate under P14's threshold, as the run page
+    #: one click away already does.
+    n_scored: dict[str, int] = Field(default_factory=dict)
     judged: bool
     judge_model: str | None
     duration_s: float | None
@@ -2404,6 +2469,16 @@ def build_safety(request: Request, filters: Filters) -> SafetyView:
 # --------------------------------------------------------------------------------------
 
 
+def _by_discovery(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The handshakes newest-discovered first — the order of the column the table is headed by.
+
+    DISCOVERED, not the span's own start (UX W9, DR4-14 = npo5-08): a cached handshake carries the
+    discovery time of the first one, so a history sorted by `started_at` printed 21:12 above
+    21:09 above 21:12. A row with no `discovered_at` sorts last.
+    """
+    return sorted(spans, key=lambda span: int(span["payload"].get("discovered_at") or 0), reverse=True)
+
+
 def _handshake_history(store: Store) -> list[HandshakeRow]:
     spans = _payloads(
         store.execute(
@@ -2411,6 +2486,7 @@ def _handshake_history(store: Store) -> list[HandshakeRow]:
             "ORDER BY started_at DESC LIMIT 25"
         ).dicts()
     )
+    spans = _by_discovery(spans)
     return [
         HandshakeRow(
             span_id=span["id"],
@@ -2562,22 +2638,45 @@ def build_corpus_chunk(chunk_id: str) -> CorpusChunkView:
 # --------------------------------------------------------------------------------------
 
 
-def _dataset_labels() -> dict[str, tuple[str | None, str | None]]:
-    """`item_id → (question, gold_answer_short)` from `evaluation/dataset.yaml` (§13.1).
-
-    The dataset is a P10 deliverable. Until it exists the two columns are empty rather than
-    fabricated from the stored answer, which would make the page agree with itself by construction.
-    """
+def _dataset_items() -> list[dict[str, Any]]:
+    """The items of `evaluation/dataset.yaml` (§13.1), or none if it is not there yet."""
     if not DATASET_PATH.exists():
-        return {}
+        return []
     try:
         import yaml
 
         document = yaml.safe_load(DATASET_PATH.read_text(encoding="utf-8")) or {}
     except Exception:
         logger.warning("could not read %s", DATASET_PATH, exc_info=True)
-        return {}
+        return []
     items = document.get("items") if isinstance(document, dict) else document
+    return [item for item in items or [] if isinstance(item, dict) and item.get("id")]
+
+
+def _dataset_tags() -> dict[str, dict[str, Any]]:
+    """`item_id → {workflow, category, behavior}` — what a rate's *own* sample is made of.
+
+    For a run whose file predates the runner publishing per-metric denominators (UX W9, DR4-02 and
+    DR4-03 — the R7 deferral): the per-workflow rows and the action-safety rate are recomputed from
+    the items the dataset tags for them, not divided by the whole dataset.
+    """
+    return {
+        str(item["id"]): {
+            "workflow": item.get("workflow"),
+            "category": item.get("category"),
+            "behavior": item.get("gold_behavior") or item.get("behavior") or item.get("expected_behavior"),
+        }
+        for item in _dataset_items()
+    }
+
+
+def _dataset_labels() -> dict[str, tuple[str | None, str | None]]:
+    """`item_id → (question, gold_answer_short)` from `evaluation/dataset.yaml` (§13.1).
+
+    The dataset is a P10 deliverable. Until it exists the two columns are empty rather than
+    fabricated from the stored answer, which would make the page agree with itself by construction.
+    """
+    items = _dataset_items()
     labels: dict[str, tuple[str | None, str | None]] = {}
     for item in items or []:
         if isinstance(item, dict) and item.get("id"):
@@ -2602,6 +2701,11 @@ def _run_row(row: dict[str, Any]) -> EvalRunRow:
         created_at=int(row["created_at"]),
         n_items=int(row["n_items"] or 0),
         headline={name: getattr(metrics, name) for name in HEADLINE_METRICS},
+        n_scored={
+            name: n
+            for name in HEADLINE_METRICS
+            if (n := metrics.n_scored.get(name) or metrics.n_scored.get(RATE_DENOMINATORS.get(name, name)))
+        },
         judged=metrics.judged,
         judge_model=row["judge_model"],
         duration_s=row["duration_s"],
@@ -2744,6 +2848,36 @@ def build_eval_run_detail(request: Request, run_id: str, filters: Filters) -> Ev
     # rate up by its own name, so four rates rendered bare — one of them over a single item. The
     # denominator of a rate is the number of scored items that reported it, counted here from
     # the items' own score rows; the runner's figure wins where it exists.
+    scored_items = [item for item in items if item.run_phase == "scored"]
+    tags = _dataset_tags()
+    # The per-workflow rows over the items tagged for THAT workflow (UX W9, DR4-02 = npo5-01), and
+    # the action-safety rate over the items where an action was at stake (DR4-03): a run whose
+    # file carries the runner's own per-metric denominators keeps them; an older file has the two
+    # recomputed here from the dataset's tags and the items' own scores, and never divided by the
+    # 28-item dataset again.
+    for workflow in list(metrics.workflow_completion_by_workflow):
+        key = f"workflow:{workflow}"
+        if key in metrics.n_scored:
+            continue
+        members = [
+            float(item.scores["workflow"])
+            for item in scored_items
+            if tags.get(item.item_id, {}).get("workflow") == workflow and item.scores.get("workflow") is not None
+        ]
+        if members:
+            metrics.n_scored[key] = len(members)
+            metrics.workflow_completion_by_workflow[workflow] = sum(members) / len(members)
+    if "action_safety_pass_rate" not in metrics.n_scored:
+        at_stake = [
+            float(item.scores.get("safety", 1.0))
+            for item in scored_items
+            if item.scores.get("safety_at_stake")
+            or tags.get(item.item_id, {}).get("category") == "unsafe_action"
+            or tags.get(item.item_id, {}).get("behavior") == "confirm"
+        ]
+        if at_stake:
+            metrics.n_scored["action_safety_pass_rate"] = len(at_stake)
+            metrics.action_safety_pass_rate = sum(at_stake) / len(at_stake)
     for metric, score_key in RATE_DENOMINATORS.items():
         if metric in metrics.n_scored:
             continue

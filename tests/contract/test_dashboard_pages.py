@@ -23,6 +23,7 @@ What this file pins down:
 from __future__ import annotations
 
 import html
+import json
 import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -408,11 +409,11 @@ async def test_page_eleven_renders_not_judged_rather_than_a_zero_on_an_ablation_
     assert 'id="chunk-size-table"' in listing.text
 
     assert 'data-metric="groundedness_mean"' in baseline.text
-    assert "not judged on this variant" not in _metric_cell(baseline.text, "groundedness_mean")
-    assert "not judged on this variant" in _metric_cell(arm.text, "groundedness_mean")
+    assert "not judged" not in _metric_cell(baseline.text, "groundedness_mean")
+    assert "not judged" in _metric_cell(arm.text, "groundedness_mean")
     # the deterministic aggregates are shown on both, and never as "not judged"
     for metric in ("cit_resolve_mean", "tool_selection_accuracy", "strict_pass_rate"):
-        assert "not judged on this variant" not in _metric_cell(arm.text, metric), metric
+        assert "not judged" not in _metric_cell(arm.text, metric), metric
 
     for selector in ('id="chart-latency"', 'id="chart-cold-warm"', 'id="chart-rss"', 'id="escalation-matrix"'):
         assert selector in baseline.text, selector
@@ -760,3 +761,78 @@ async def test_no_queue_reaches_a_reader_as_its_routing_slug(seeded):
         if found:
             offenders[url] = found
     assert not offenders, f"a queue's routing slug is painted here: {offenders}"
+
+
+# -- UX W9: the re-audit #4's P9/P10/P14 findings on the dashboard pages --------------------------
+
+
+async def test_the_persona_column_prints_the_name_and_keeps_the_id_in_the_title(seeded):
+    """DR4-09: PERSONA printed `E1042` 60px under a masthead naming the same person."""
+    from hrmosaic.web.dashboard import _persona_names
+
+    body = (await seeded.client.get("/dashboard/sessions")).text
+    cells = re.findall(r'<span class="persona" title="(E\d+)">([^<]+)</span>', body)
+    assert cells, body[:500]
+    for employee_id, name in cells:
+        assert name == _persona_names()[employee_id] != employee_id
+
+
+async def test_every_per_workflow_row_and_the_safety_rate_carry_their_own_sample(seeded):
+    """DR4-02 = npo5-01 and DR4-03: the two rows printed the 28-item dataset, and the action-safety
+    rate was 100% of 28 on a dataset with one unsafe action. For a run file that predates the
+    runner's per-metric denominators, the page recounts each from the dataset's own tags."""
+    from hrmosaic.web.dashboard import _dataset_tags, _f_enum_label, _f_metric_label
+
+    tags = _dataset_tags()
+    files = {}
+    for path in EVAL_RUNS.glob("*.json"):
+        document = json.loads(path.read_text(encoding="utf-8"))
+        files[document.get("run_id") or document.get("id") or path.stem] = document
+    runs = (await seeded.client.get("/api/eval/runs")).json()["runs"]
+    checked = 0
+    for run in runs:
+        document = files.get(run["run_id"])
+        if not document or not document.get("items"):
+            continue
+        scored = [item for item in document["items"] if (item.get("run_phase") or "scored") == "scored"]
+        body = (await seeded.client.get(f"/dashboard/evals/{run['run_id']}")).text
+
+        rows = re.search(r'<ul id="workflow-completion".*?</ul>', body, re.DOTALL)
+        for workflow in document.get("metrics", {}).get("workflow_completion_by_workflow", {}):
+            expected = sum(1 for item in scored if tags.get(item["item_id"], {}).get("workflow") == workflow)
+            assert rows, body[:300]
+            row = re.search(
+                r'<span class="pill">' + re.escape(_f_enum_label(workflow)) + r"</span>\s*([^<]*)</li>", rows.group(0)
+            )
+            assert row, rows.group(0)
+            sample = re.search(r"of (\d+) items?\)", row.group(1))
+            if expected:
+                assert sample and int(sample.group(1)) == expected, (workflow, row.group(1))
+            else:
+                assert not sample or int(sample.group(1)) != 28, (workflow, row.group(1))
+            checked += 1
+
+        at_stake = [
+            item
+            for item in scored
+            if item.get("category") == "unsafe_action" or tags.get(item["item_id"], {}).get("behavior") == "confirm"
+        ]
+        safety = re.search(re.escape(_f_metric_label("action_safety_pass_rate")) + r"</dt>\s*<dd>([^<]*)</dd>", body)
+        assert safety, body[:300]
+        sample = re.search(r"of (\d+) items?\)", safety.group(1))
+        assert sample, safety.group(1)
+        expected = len(at_stake) or document["metrics"]["n_scored"]["safety"]
+        assert int(sample.group(1)) == expected, (run["run_id"], safety.group(1), expected)
+        checked += 1
+    assert checked, "no committed run to check"
+
+
+async def test_a_headline_rate_under_the_threshold_prints_its_sample_on_the_list_page(seeded):
+    """npo5-05: fifteen bare "100.0%" for argument correctness, where the run page said 19 of 19."""
+    body = (await seeded.client.get("/dashboard/evals")).text
+    cells = re.findall(r'data-col="arg_correctness_rate"[^>]*class="cell-num">\s*([^<]*?)\s*(<[^>]*>[^<]*)?<', body)
+    rated = [(value, tail) for value, tail in cells if "%" in value]
+    assert rated, body[:300]
+    for value, tail in rated:
+        sample = re.search(r'<span class="sample">(\d+) of (\d+) items?', tail or "")
+        assert sample and int(sample.group(2)) < 20, (value, tail)

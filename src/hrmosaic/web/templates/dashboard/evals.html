@@ -67,10 +67,18 @@
           {% for metric in headline_metrics %}
           <td data-col="{{ metric }}" data-label="{{ metric|metric_label }}" class="cell-num">
             {% if run.headline[metric] is none %}
+              {#- One spelling of "this variant was not scored for this metric" — "not judged" for a
+                  judged metric, "not scored" for a deterministic one — the same two words the run
+                  page's tiles use (UX W9, DR4-05); a longer phrase widened the eight-column table
+                  past its box. -#}
               {% if metric in judged_metrics %}
-              <span class="not-judged" title="not judged on this variant">not judged</span>
-              {% else %}<span class="muted">—</span>{% endif %}
+              <span class="not-judged">not judged</span>
+              {% else %}<span class="muted">not scored</span>{% endif %}
+            {#- A rate under P14's threshold carries its `n` here too, not only one click away on
+                the run page (UX W9, npo5-05): fifteen bare "100.0%" over 19 items. -#}
             {% elif metric in rate_metrics %}{{ run.headline[metric]|pct }}
+              {%- set sample = run.headline[metric]|rate_sample(run.n_scored.get(metric), 'item') -%}
+              {%- if sample %}<span class="sample">{{ sample }}</span>{% endif %}
             {% else %}{{ run.headline[metric]|num }}{% endif %}
           </td>
           {% endfor %}
@@ -120,7 +128,7 @@
           {% for row in compare.variants %}
           <tr><td>{{ row.variant }}</td>
             {% for metric in ablation_series %}
-            <td>{% if row.metrics.get(metric) is none %}not judged on this variant{% else %}{{ row.metrics.get(metric)|pct }}{% endif %}</td>
+            <td>{% if row.metrics.get(metric) is none %}not judged{% else %}{{ row.metrics.get(metric)|pct }}{% endif %}</td>
             {% endfor %}</tr>
           {% else %}<tr><td>No variant has been run yet.</td></tr>{% endfor %}
         </tbody>
@@ -131,7 +139,7 @@
   <script id="chart-ablation-labels" type="application/json">{{ metric_labels|tojson }}</script>
   <script id="chart-ablation-series" type="application/json">{{ ablation_series|tojson }}</script>
   <p class="note">Judged metrics are computed on the <code>baseline</code> variant only: the two
-    ablation arms report <span class="not-judged">not judged on this variant</span> rather than a
+    ablation arms report <span class="not-judged">not judged</span> rather than a
     zero, and the chart omits those series.</p>
 
   <h4>Pass flips against baseline</h4>
@@ -196,7 +204,7 @@
       var variants = JSON.parse(document.getElementById("chart-ablation-data").textContent);
       var labels = JSON.parse(document.getElementById("chart-ablation-labels").textContent);
       var series = JSON.parse(document.getElementById("chart-ablation-series").textContent);
-      var palette = ["#1f6f6b", "#3b6fb0", "#7a5bb5", "#8a5a00", "#2f7d32", "#9b2c2c"];
+      var palette = window.chartPalette().series;
       var datasets = [];
       series.forEach(function (metric, index) {
         var values = variants.map(function (row) { return row.metrics[metric]; });

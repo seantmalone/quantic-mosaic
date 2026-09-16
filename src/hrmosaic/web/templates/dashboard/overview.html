@@ -155,7 +155,7 @@
   <h3>Latest conversations</h3>
   {{ t.table('latest-sessions', [
     {'label': 'Started', 'key': 'started_at', 'kind': 'time'},
-    {'label': 'Persona', 'key': 'employee_id'},
+    {'label': 'Persona', 'key': 'employee_id', 'kind': 'persona'},
     {'label': 'Outcomes', 'key': 'outcomes', 'kind': 'list'},
     {'label': 'Turns', 'key': 'n_turns', 'kind': 'num'},
     {'label': 'Total', 'key': 'total_ms', 'kind': 'ms'},
@@ -186,7 +186,7 @@
         data: {
           labels: data.map(function (b) { return b.hour.slice(11, 16); }),
           datasets: [{ label: "turns", data: data.map(function (b) { return b.turns; }),
-                       borderColor: "#1f6f6b", backgroundColor: "rgba(31,111,107,0.15)",
+                       borderColor: window.chartPalette().accent, backgroundColor: window.chartPalette().accent + "26",
                        fill: true, tension: 0.3, pointRadius: 2 }]
         },
         options: {
