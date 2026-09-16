@@ -135,6 +135,18 @@ RELATIONS: dict[str, str] = {
 #: its own template below.
 IN_WORDS: dict[str, str] = {"true": "yes", "false": "no"}
 
+#: A label whose head noun is a count — "days since the transaction", "onsite days each week" — takes
+#: a plural verb (W8 minor round, NEW-1): *"Your days since the transaction are 12"*, never *"is"*.
+#: The head is the first noun of the label's pre-comma phrase, and in this vocabulary a plural head
+#: is always a unit of time in the first two words.
+_PLURAL_HEAD = re.compile(r"^(?:\w+\s+)?(?:days|months|weeks|hours)\b", re.IGNORECASE)
+
+
+def _verb(label: str) -> str:
+    head = label.split(",", 1)[0].strip()
+    return "are" if _PLURAL_HEAD.match(head) else "is"
+
+
 #: *"up to USD 2,500"* — a ceiling quoted as though it were the rule that applies (W8, C07). The
 #: `expenses-002` answer quoted the manager's limit on a USD 3,000 claim and closed by routing the
 #: report to the manager, which is the tier the amount had already left.
@@ -278,7 +290,11 @@ def reader_sentence(row: Row) -> str:
         return f"Your {row.label}: {stated}; the policy requires {wanted}."
     relation = RELATIONS.get(match["op"], "")
     asked = f"{relation} {expected}".strip()
-    return f"Your {row.label}, is {value}; the policy asks for {asked}."
+    # A label that ends in an appositive — "…, in business days" — closes it with a comma before
+    # the verb; a plain label takes none (NEW-1: "Your destination country, is DE" was a comma too
+    # many, and "Your days since the transaction is 12" a verb too few).
+    joiner = ", " if "," in row.label else " "
+    return f"Your {row.label}{joiner}{_verb(row.label)} {value}; the policy asks for {asked}."
 
 
 def relation(sentence: str, row: Row) -> str | None:

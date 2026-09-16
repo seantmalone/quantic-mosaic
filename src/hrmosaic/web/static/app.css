@@ -817,8 +817,9 @@ a .id-chip { color: var(--accent); }
    column of a table put every filter label and every toggle over its own box in the P7 probe —
    a defect invented by the fix for a different one. The description survives the display switch:
    `aria-describedby` computes its text from the referenced node whether or not that node is
-   rendered (the accname rule; verified against Chromium's own accessibility tree in
-   `tests/ux/test_accessibility.py`). `[hidden]` is not usable here — the reset in `<head>` makes
+   rendered (the accname rule; asserted against Chromium's own accessibility tree by
+   `test_every_in_place_definition_is_a_control_a_reader_can_reach` in
+   `tests/ux/test_dashboard_principles.py`). `[hidden]` is not usable here — the reset in `<head>` makes
    it `!important`, which no `:hover` rule can answer. */
 .help-bubble {
   display: none; position: absolute; left: 0; top: 100%; z-index: 5;

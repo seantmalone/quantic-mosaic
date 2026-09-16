@@ -785,3 +785,49 @@ def test_a_debt_no_permitted_tool_can_settle_is_not_a_debt():
         disabled=["lookup_employee_profile", "check_pto_balance", "lookup_benefits_status"],
     )
     assert not Orchestrator()._data_outstanding(turn)
+
+
+# -- W8 minor round: the write the turn asked for (R3), the verdict for the write's queue (R4) ---
+
+
+def test_the_deterministic_write_is_the_one_the_turn_asked_for():
+    """R3: an action turn asking for an email got a ticket card whenever the slots described one."""
+    orchestrator = Orchestrator()
+    ticket = a_turn(intent="action")
+    assert orchestrator._requested_write(ticket) == "create_mock_hr_ticket"
+
+    selected = a_turn(intent="action")
+    selected.decision = selected.decision.model_copy(update={"selected_tools": ["draft_hr_email"]})
+    assert orchestrator._requested_write(selected) == "draft_hr_email"
+
+    asked = a_turn(intent="action")
+    asked.request = asked.request.model_copy(update={"message": "Please draft an email to my manager about the dates."})
+    assert orchestrator._requested_write(asked) == "draft_hr_email"
+
+    disabled = a_turn(intent="action", disabled=["draft_hr_email"])
+    disabled.decision = disabled.decision.model_copy(update={"selected_tools": ["draft_hr_email"]})
+    assert orchestrator._requested_write(disabled) is None, "a write the gate refuses is not proposed"
+
+
+def test_no_card_is_built_for_a_write_the_slots_do_not_describe():
+    """R3: the orchestrator has a template for a ticket, and none for an email's recipient, subject
+    and body — those are the model's to write, not the orchestrator's to invent."""
+    turn = a_turn(intent="action")
+    turn.state.record("check_policy_compliance", {"scenario": "pto_request", "verdict": "conditional", "computed": {}})
+    assert Orchestrator()._write_arguments(turn, "create_mock_hr_ticket") is not None
+    assert Orchestrator()._write_arguments(turn, "draft_hr_email") is None
+
+
+def test_the_refusal_reads_the_verdict_for_the_writes_own_scenario_not_the_latest():
+    """R4: a turn that scored two scenarios refuses a PTO ticket on the PTO verdict even when a
+    later, compliant verdict for another scenario is the last thing it scored."""
+    turn = a_turn(intent="action")
+    turn.state.record("check_policy_compliance", {"scenario": "pto_request", "verdict": "non_compliant"})
+    turn.state.record("check_policy_compliance", {"scenario": "international_remote", "verdict": "compliant"})
+
+    assert Orchestrator._verdict_for_queue(turn, "hr-timeoff")["scenario"] == "pto_request"
+    assert Orchestrator._verdict_for_queue(turn, "hr-mobility")["scenario"] == "international_remote"
+    assert Orchestrator._verdict_for_queue(turn, "it-equipment") is None, "no verdict for that queue's scenario"
+    assert Orchestrator._verdict_for_queue(turn, "")["scenario"] == "international_remote", (
+        "an unmapped queue: the latest"
+    )

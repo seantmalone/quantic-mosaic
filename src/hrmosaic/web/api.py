@@ -1812,9 +1812,13 @@ def _record_expiry(request: Request, store: Store, turn: Mapping[str, Any], pend
     reader is told (W8, C11). The same `expire_proposal` the maintenance sweep runs over the
     proposals nobody came back to (W7-review I6)."""
     answer, blocks = expired_answer()
-    buffer = trace_module.expire_proposal(
-        str(turn["id"]), pending["id"], final_answer=answer, answer_blocks=blocks
-    ) or trace_module.reopen_turn(str(turn["id"]), 0, resumed=False)
+    buffer = trace_module.expire_proposal(str(turn["id"]), pending["id"], final_answer=answer, answer_blocks=blocks)
+    if buffer is None:
+        # The span was resolved between the read and the call — the maintenance sweep, or a
+        # concurrent decision. The turn is reopened only to be closed with the same outcome, so
+        # nothing is left open until the next boot's stale-turn sweep (W8 minor round, NEW-2).
+        buffer = trace_module.reopen_turn(str(turn["id"]), 0, resumed=False)
+        buffer.close(outcome="refused", stop_reason="expired", final_answer=answer, answer_blocks=blocks, next_steps=[])
     usage, timings = _turn_rollups(store, buffer.turn_id)
     response = ChatResponse(
         session_id=buffer.session_id,

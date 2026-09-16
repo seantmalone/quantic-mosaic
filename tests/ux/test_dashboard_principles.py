@@ -1081,6 +1081,22 @@ PHONE_LEGEND_JS = """
 DEFINITION_VIEWPORTS = (("1440x900", 1440, 900), ("390x844", 390, 844))
 
 
+#: The index of the first `<dfn>` that is actually painted, or null: what the accessibility-tree
+#: assertion below is taken on (W8 minor round, NEW-5).
+FIRST_PAINTED_DEFINITION_JS = """
+() => {
+  const terms = Array.from(document.querySelectorAll("dfn[aria-describedby]"));
+  const index = terms.findIndex((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+  return index < 0 ? null : index;
+}
+"""
+
+#: Whether a term's bubble is painted while nothing hovers or focuses it.
+BUBBLE_PAINTED_JS = """
+(el) => getComputedStyle(document.getElementById(el.getAttribute("aria-describedby"))).display !== "none"
+"""
+
+
 @pytest.mark.parametrize(
     "label,width,height", DEFINITION_VIEWPORTS, ids=[label for label, _, _ in DEFINITION_VIEWPORTS]
 )
@@ -1107,6 +1123,23 @@ def test_every_in_place_definition_is_a_control_a_reader_can_reach(browser, dash
             broken = [item for item in definitions if not item["focusable"] or not item["described"]]
             if broken:
                 unreachable[route] = broken
+            # The description survives `display: none` on the bubble — asserted against Chromium's
+            # own accessibility tree, not inferred from the markup (W8 minor round, NEW-5): the
+            # accessible node of the first PAINTED `<dfn>` on the page carries the bubble's sentence
+            # as its description while the bubble itself is not painted. Painted, because a term
+            # inside a closed tab panel or a clipped phone `<thead>` is pruned from the tree along
+            # with its container, which says nothing about the description rule.
+            index = tab.evaluate(FIRST_PAINTED_DEFINITION_JS)
+            if index is not None:
+                first = tab.query_selector_all("dfn[aria-describedby]")[index]
+                expected = tab.evaluate(
+                    "el => document.getElementById(el.getAttribute('aria-describedby')).textContent.trim()", first
+                )
+                node = tab.accessibility.snapshot(root=first, interesting_only=False)
+                assert node is not None and " ".join(str(node.get("description", "")).split()) == expected, (
+                    f"{route} at {label}: the accessibility tree does not carry the definition: {node} != {expected!r}"
+                )
+                assert not tab.evaluate(BUBBLE_PAINTED_JS, first), f"{route} at {label}: the bubble is painted at rest"
             page = tab.evaluate(PHONE_LEGEND_JS)
             if page["title_only"]:
                 mute[route] = page["title_only"]

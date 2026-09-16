@@ -391,3 +391,63 @@ def test_a_row_with_no_label_falls_back_to_the_policy_text_and_never_to_the_key(
         "days in advance."
     )
     assert "notice business days" not in sentence
+
+
+# -- W8 minor round, NEW-1: no spurious comma, and the verb agrees with the label ----------------
+
+
+def test_a_plain_singular_label_takes_is_and_no_comma():
+    destination = compliance.Row(
+        id="remote.intl.destination",
+        text="The destination must be on the approved-country list.",
+        status="met",
+        reason="parameters.destination_country is DE; the policy value is DE, IE, NL, PT, ES, CA, MX (in).",
+        label="destination country",
+    )
+    assert compliance.reader_sentence(destination) == (
+        "Your destination country is DE; the policy asks for one of DE, IE, NL, PT, ES, CA, MX."
+    )
+
+
+def test_a_plural_label_takes_are():
+    window = compliance.Row(
+        id="expense.submission_window",
+        text="Expenses must be submitted within 45 calendar days of the transaction date.",
+        status="met",
+        reason="computed.claim_age_days is 12; the policy value is 45 (lte).",
+        label="days since the transaction",
+    )
+    assert compliance.reader_sentence(window) == (
+        "Your days since the transaction are 12; the policy asks for no more than 45."
+    )
+    onsite = compliance.Row(
+        id="remote.domestic.onsite_days",
+        text="Hybrid employees work on site at least 3 days each week.",
+        status="unmet",
+        reason="parameters.onsite_days_per_week is 2; the policy value is 3 (gte).",
+        label="onsite days each week",
+    )
+    assert compliance.reader_sentence(onsite) == "Your onsite days each week are 2; the policy asks for at least 3."
+
+
+def test_every_label_in_the_rules_file_renders_as_a_sentence_with_one_verb_and_no_stray_comma():
+    """Every evaluable requirement of `corpus/rules.yml`, through the template it will actually use."""
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    rules = yaml.safe_load((Path(__file__).resolve().parents[2] / "corpus" / "rules.yml").read_text(encoding="utf-8"))
+    for scenario in rules["scenarios"].values():
+        for requirement in scenario["requirements"]:
+            row = compliance.Row(
+                id=requirement["id"],
+                text=requirement["text"],
+                status="met",
+                reason=f"{requirement['check']['subject']} is 7; the policy value is 5 (gte).",
+                label=requirement["label"],
+            )
+            sentence = compliance.reader_sentence(row)
+            assert not re.search(r",\s+(?:is|are)\s", sentence) or "," in requirement["label"], sentence
+            assert re.search(r"\b(?:is|are) 7;", sentence), sentence
+            assert "_" not in sentence, sentence

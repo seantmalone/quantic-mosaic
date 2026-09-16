@@ -1536,23 +1536,47 @@ class Orchestrator:
         `_propose` turns it into the same card. The arguments are templated from the compliance
         call's own parameters, so the card cannot describe a request the turn never scored.
         """
-        arguments = self._write_arguments(turn)
-        if arguments is None or turn.tool_calls_made >= self.settings.agent_max_tool_calls:
+        tool = self._requested_write(turn)
+        arguments = self._write_arguments(turn, tool) if tool else None
+        if tool is None or arguments is None or turn.tool_calls_made >= self.settings.agent_max_tool_calls:
             # No card past the turn's own budget (W7-review Minor): the partial is what the stop
-            # is for, and a call the budget forbids is not one the orchestrator gets to make.
+            # is for, and a call the budget forbids is not one the orchestrator gets to make. And
+            # no card for a write the resolved slots do not describe (W8 minor round, R3).
             return
-        result = await self._call(turn, WRITE_TOOLS[0], arguments)
+        result = await self._call(turn, tool, arguments)
         turn.tool_calls_made += 1
         if result.confirmation_required:
             self._propose(turn, result)
             turn.step_summaries.append("the assistant proposed the requested write from the turn's own slots")
 
-    def _write_arguments(self, turn: _Turn) -> dict[str, Any] | None:
+    def _requested_write(self, turn: _Turn) -> str | None:
+        """Which write the turn asked for — the one the router selected, else the one the question
+        names, else a ticket — provided it is permitted (W8 minor round, R3).
+
+        An `intent == "action"` turn asking for an email got a ticket card whenever the slots
+        described one; the write is now the turn's own, and `_write_arguments` declines to build a
+        card for a write it has no template for.
+        """
+        permitted = self._permitted(turn)
+        selected = turn.decision.selected_tools if turn.decision is not None else []
+        chosen = next((name for name in selected if name in WRITE_TOOLS), None)
+        if chosen is None:
+            message = turn.request.message.lower()
+            chosen = (
+                "draft_hr_email" if re.search(r"\b(?:e-?mail|draft|message|write to)\b", message) else WRITE_TOOLS[0]
+            )
+        return chosen if chosen in permitted else None
+
+    def _write_arguments(self, turn: _Turn, tool: str = WRITE_TOOLS[0]) -> dict[str, Any] | None:
         """`create_mock_hr_ticket` arguments built from the turn's resolved slots, or `None`.
 
         `None` when the turn never resolved enough to describe the request: a card whose summary
-        was invented would be worse than no card, because the reader confirms what it says.
+        was invented would be worse than no card, because the reader confirms what it says — and
+        `None` for any write this has no slot template for (`draft_hr_email` has none: its
+        recipient, subject and body are the model's to write, not the orchestrator's to invent).
         """
+        if tool != "create_mock_hr_ticket":
+            return None
         employee_id = turn.request.employee_id
         if not employee_id or not EMPLOYEE_ID.match(employee_id):
             return None
@@ -2130,15 +2154,12 @@ class Orchestrator:
         way the answer can be written around the refusal — and the reason is kept on the turn so
         the answer opens with it as a `notice`.
         """
-        body = turn.state.latest(COMPLIANCE_TOOL)
+        # The verdict has to be the one for **the write's** scenario (W7-review Minor; W8 minor
+        # round, R4): a ticket bound for `hr-timeoff` is refused on the `pto_request` verdict even
+        # when a later, compliant verdict for another scenario is the latest thing the turn scored.
+        # A queue no scenario maps to is judged on the latest verdict, as before.
+        body = self._verdict_for_queue(turn, str(call.args.get("queue") or ""))
         if not body or body.get("verdict") != "non_compliant":
-            return False
-        # The verdict has to be the one for **the write's** scenario (W7-review Minor): a ticket
-        # bound for `hr-timeoff` is refused on a `pto_request` verdict, not on whatever the turn
-        # scored last. A queue no scenario maps to is refused on any verdict, as before.
-        queue = str(call.args.get("queue") or "")
-        expected = DETERMINISTIC_QUEUES.get(str(body.get("scenario") or ""))
-        if queue and expected is not None and expected != queue:
             return False
         envelope = _ToolEnvelope(name=COMPLIANCE_TOOL, result_json=json.dumps(body, ensure_ascii=False))
         failing = next((row for row in compliance_restatement.rows([envelope]) if row.status == "unmet"), None)
@@ -2178,6 +2199,16 @@ class Orchestrator:
         )
         turn.step_summaries.append(f"step {turn.steps_taken}: {call.name} refused — the verdict is non_compliant")
         return True
+
+    @staticmethod
+    def _verdict_for_queue(turn: _Turn, queue: str) -> dict[str, Any] | None:
+        """The compliance body that scored **this write's** scenario — the latest one whose scenario
+        maps to the queue — or, for a queue no scenario maps to, the latest verdict of the turn."""
+        bodies = list(turn.state.results.get(COMPLIANCE_TOOL) or [])
+        matching = [body for body in bodies if DETERMINISTIC_QUEUES.get(str(body.get("scenario") or "")) == queue]
+        if matching:
+            return matching[-1]
+        return bodies[-1] if bodies and not queue else None
 
     def _propose(self, turn: _Turn, result: ToolResult) -> None:
         """The pending `confirmation` span — no token, and nothing written (§8.6 step 1)."""
