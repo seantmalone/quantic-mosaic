@@ -820,3 +820,88 @@ def test_a_mixed_block_gives_up_only_its_record_half():
         {"type": "record", "text": "Your manager is Dana.", "citations": []},
     ]
     assert result.retyped == [0]
+
+
+# -- W8 fix round: the scalar set, the number rule, the marker, the still clause -----------------
+
+
+def test_a_short_or_generic_envelope_string_is_not_the_readers_record():
+    """W7-review I3. `status: "met"`, `verdict: "conditional"`, `role: "Director"` and
+    `department: "Engineering"` all came out of the envelopes as scalars, so advice naming a
+    director was retyped as the reader's data and "met" matched "metric"."""
+    verdict = _ToolEnvelope(
+        name="check_policy_compliance",
+        result_json=json.dumps(
+            {
+                "verdict": "conditional",
+                "requirements": [{"id": "x", "status": "met", "met": True}],
+                "approvals_required": [
+                    {"role": "Director", "reason": "Reports above USD 2,500 need director approval."}
+                ],
+            }
+        ),
+    )
+    profile = _ToolEnvelope(
+        name="lookup_employee_profile",
+        result_json=json.dumps(
+            {"preferred_name": "Dana", "department": "Engineering", "title": "Director, Engineering"}
+        ),
+    )
+    scalars = outcome.envelope_scalars([verdict, profile])
+
+    assert "dana" in scalars
+    assert not {"met", "conditional", "director", "engineering", "director, engineering"} & scalars
+
+    advice = {"type": "recommendation", "text": "Ask a director in Engineering to review the metric.", "citations": []}
+    assert outcome.apply([advice], [verdict, profile]).blocks == [advice]
+
+
+def test_a_scalar_matches_whole_words_only():
+    profile = _ToolEnvelope(name="lookup_employee_profile", result_json=json.dumps({"preferred_name": "Dana"}))
+    assert not outcome.states_the_record(
+        "Contact Danaher Robotics for the part.", set(), outcome.envelope_scalars([profile])
+    )
+    assert outcome.states_the_record("Your manager is Dana.", set(), outcome.envelope_scalars([profile]))
+
+
+def test_a_cited_sentence_that_mixes_the_record_with_a_policy_number_keeps_its_citation():
+    """Demo 1's own first block. The tenure in it is the reader's; the 12-month minimum is policy,
+    and the citation is the reader's only way to check it (W7-review I3)."""
+    profile = _ToolEnvelope(
+        name="lookup_employee_profile",
+        result_json=json.dumps({"preferred_name": "Priya", "tenure": "3 years 9 months", "tenure_months_at_as_of": 45}),
+    )
+    block = {
+        "type": "policy_fact",
+        "text": (
+            "You have completed 3 years 9 months of continuous service, exceeding the 12-month minimum "
+            "required to work outside your home country."
+        ),
+        "citations": ["c_6577bf6f392890bf"],
+    }
+    result = outcome.apply([block], [profile])
+
+    assert result.blocks == [block]
+    assert result.retyped == []
+
+
+def test_a_policy_claim_marked_on_the_block_is_exempt_wherever_it_ends_up():
+    """W7-review I1: the exemption used to be an index into a list other steps had shortened."""
+    balance = _ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5}')
+    claim = {
+        "type": "recommendation",
+        "text": "You have 13.5 days remaining, which is more than the request needs.",
+        "citations": [],
+        outcome.POLICY_CLAIM: True,
+    }
+    result = outcome.apply([claim], [balance])
+
+    assert result.blocks[0]["type"] == "recommendation", "a demoted policy claim is not the reader's record"
+    assert result.retyped == []
+
+
+def test_still_beside_a_filing_verb_is_a_directive_only_when_aimed_at_the_reader():
+    """W7-review Minor: "The ticket is still open." is a statement, not an instruction."""
+    assert outcome.directs("You must still submit the formal PTO request in MosaicOne.", "create_mock_hr_ticket")
+    assert not outcome.directs("The ticket is still open.", "create_mock_hr_ticket")
+    assert not outcome.directs("Your manager can still open the request to add notes.", "create_mock_hr_ticket")

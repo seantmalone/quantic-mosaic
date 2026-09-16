@@ -232,7 +232,7 @@ async def test_a_fully_satisfied_scenario_is_compliant():
     assert len(body["next_steps"]) == 1, "an unmet-guarded next step must not ride along on a clean verdict"
 
 
-async def test_an_absent_subject_is_unmet_but_cannot_prove_non_compliance():
+async def test_an_absent_subject_is_not_stated_and_cannot_prove_non_compliance():
     """The one adopted verdict rule nothing else in the suite pinned.
 
     `corpus/rules.yml`'s header states it: a requirement whose subject is **absent** is `met: false`
@@ -251,8 +251,10 @@ async def test_an_absent_subject_is_unmet_but_cannot_prove_non_compliance():
         "blocking"
     ], "the fixture only bites while expense.vp_limit is blocking"
     assert vp_limit["met"] is False
+    assert vp_limit["status"] == "not_stated"
     assert vp_limit["reason"].startswith("Not stated:")
-    assert "expense.vp_limit" in body["unmet"]
+    # Not in `unmet[]` either: that list is the rows that were checked and failed (W8 fix round).
+    assert "expense.vp_limit" not in body["unmet"]
     window = next(item for item in body["requirements"] if item["id"] == "expense.submission_window")
     assert window["met"] is True, "something must be evaluable, or the verdict is insufficient_evidence"
     assert body["verdict"] == "conditional", "an absent subject cannot prove a violation"
@@ -315,7 +317,8 @@ async def test_manual_and_informational_need_no_parameter_to_be_evaluable():
         "conduct.severity_response",
         "conduct.retaliation_protection",
     ]
-    assert body["unmet"] == ["conduct.not_automated"]
+    # A `manual` row is `not_stated`, and `unmet[]` lists only rows that were checked and failed.
+    assert body["unmet"] == []
     assert body["verdict"] == "conditional"
 
 
@@ -346,7 +349,8 @@ def test_a_manual_requirement_alone_is_insufficient_evidence_not_a_verdict():
             rules_version=RULE_SET.rules_version, scenarios={"conduct_escalation": spec}, facts=RULE_SET.facts
         ),
     )
-    assert body["unmet"] == ["conduct.not_automated"]
+    # A `manual` row is `not_stated`, and `unmet[]` lists only rows that were checked and failed.
+    assert body["unmet"] == []
     assert body["requirements"][0]["status"] == "not_stated"
     assert body["verdict"] == "insufficient_evidence"
 
@@ -670,3 +674,14 @@ async def test_a_new_hires_election_deadline_is_the_end_of_their_own_window():
     assert body["computed"]["benefits_eligibility_date"] == "2026-11-13"
     assert body["computed"]["benefits_election_deadline"] == "2026-12-13"
     assert _row(body, "benefits.new_hire_window")["status"] == "met"
+
+
+def test_the_unmet_list_never_carries_a_not_stated_row():
+    """W7-review Minor: `unmet[]` listed every row with `met: false`, which is the exact conflation
+    `status` exists to end — and it is published on the wire and rendered into EMPLOYEE CONTEXT."""
+    body = _pto({"days": 3}, submitted_on="2026-09-10")
+
+    not_stated = {row["id"] for row in body["requirements"] if row["status"] == "not_stated"}
+    assert not_stated, "the fixture has rows nobody supplied a parameter for"
+    assert not set(body["unmet"]) & not_stated
+    assert set(body["unmet"]) == {row["id"] for row in body["requirements"] if row["status"] == "unmet"}

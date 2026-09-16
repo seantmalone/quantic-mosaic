@@ -166,3 +166,11 @@ def test_the_step_is_idempotent():
 
     assert twice.blocks == once.blocks
     assert not twice.changed
+
+
+def test_a_space_after_the_parenthesis_does_not_double_it():
+    """W7-review Minor: "( 13.5 accrued …" kept its "(" and gained a second one."""
+    spaced = "You have 8.0 days remaining ( 13.5 accrued minus 4.0 used, plus 2.5 carryover )."
+    result = arithmetic.apply([block(spaced)], envelopes(DANA))
+
+    assert result.blocks[0]["text"] == REPAIRED

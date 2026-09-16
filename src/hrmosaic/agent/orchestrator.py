@@ -1001,8 +1001,9 @@ class Orchestrator:
             if broadened is not None:
                 raw, repaired, relabelled = broadened
 
-        # -- 5c. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
-        # A write the user confirmed and the server performed is reported from the tool result,
+        # -- 5c–5k. the deterministic answer steps, in order (§9.1 step 5; §7.4) ---------------
+        # Outcome consistency (P22): a write the user confirmed and the server performed is
+        # reported from the tool result,
         # not from model output: the `performed` statement goes first with its id and is the
         # turn's one account of the write, so a model block of any type that names that id goes
         # (P29 — the live 2026-09-15 answer filed "HR ticket MOCK-HR-000007 has been created"
@@ -1018,12 +1019,23 @@ class Orchestrator:
         # record `record` rather than leaving it under "not company policy" (JX2-05); the blocks
         # G3 demoted from an uncited `policy_fact` are handed over so a policy claim is never
         # retyped as the reader's data.
+        # **A G3-demoted policy claim is marked on the block, not by position** (W8 fix round,
+        # W7-review I1). `relabelled.relabelled` indexes `relabelled.blocks`; the merge and the
+        # restatement below can each remove a block ahead of one, and an index that has drifted
+        # exempts the wrong block from the record backstop. Every later step copies the dict, so
+        # the marker travels; `_finished` strips it before the answer is validated.
+        claimed = set(relabelled.relabelled)
+        marked = [
+            {**block, outcome_consistency.POLICY_CLAIM: True} if index in claimed else dict(block)
+            for index, block in enumerate(relabelled.blocks)
+        ]
+
         # -- 5c. merge the claims the breadth round duplicated (W8, C26) --------------------
         # The model answered the breadth instruction by adding a second block rather than a second
         # citation, so `remote-004` told the reader the same rule twice in different words with
         # different sources. Blocks whose normalised claim matches are folded into the first, and
         # their citations are unioned onto it.
-        merged, _merged_away = breadth.merge(relabelled.blocks)
+        merged, _merged_away = breadth.merge(marked)
         # …and where the repair round was actually bought and the answer is **still** narrower than
         # its own evidence, the shortfall is recorded rather than left advisory. Only there: a
         # narrow answer on a turn that never bought the repair is not a failed invariant.
@@ -1049,14 +1061,17 @@ class Orchestrator:
             next_steps=[str(step) for step in (raw.get("next_steps") or [])],
         )
 
+        # -- 5e. outcome consistency (P22) — NOT a guardrail, and no G-number ---------------
         consistent = outcome_consistency.apply(
             restated.blocks,
             turn.envelopes,
             next_steps=restated.next_steps,
-            policy_claims=relabelled.relabelled,
+            policy_claims=[
+                index for index, block in enumerate(restated.blocks) if block.get(outcome_consistency.POLICY_CLAIM)
+            ],
         )
 
-        # -- 5e. the capability check (W8, C09, C10) ---------------------------------------
+        # -- 5f. the capability check (W8, C09, C10) ---------------------------------------
         # A sentence asserting the assistant cannot do what a permitted tool does, or stating a
         # profile attribute the reader's own envelope contradicts, is dropped. **After** the
         # outcome step, not before it: on a turn that performed the write, the whole escalation
@@ -1064,24 +1079,24 @@ class Orchestrator:
         # under "Who to contact" beside a ticket that exists.
         capable = capability_check.apply(consistent.blocks, turn.envelopes, permitted=self._permitted(turn))
 
-        # -- 5f. approver resolution (W8, C06) ---------------------------------------------
+        # -- 5g. approver resolution (W8, C06) ---------------------------------------------
         # "requires approval from your director", served to the Director of Engineering. The chain
         # is resolved on the envelope; this is the backstop for the answer that wrote the role.
         named = approver_resolution.apply(capable.blocks, turn.envelopes, next_steps=consistent.next_steps)
 
-        # -- 5g. arithmetic consistency (W8, C13) — the numeric twin of 5h ------------------
+        # -- 5h. arithmetic consistency (W8, C13) — the numeric twin of 5i ------------------
         # "8.0 days … (13.5 accrued minus 4.0 used, plus 2.5 carryover)" comes to 12.0. The total
         # is the tool's and stays; the working is replaced by the envelope's own, or removed.
         summed = arithmetic_consistency.apply(named.blocks, turn.envelopes, next_steps=named.next_steps)
 
-        # -- 5d. date consistency (UX W6, npo2-02) — NOT a guardrail, and no G-number -------
+        # -- 5i. date consistency (UX W6, npo2-02) — NOT a guardrail, and no G-number -------
         # Where the answer shows its arithmetic — "(21 days before 3 November)" — the arithmetic is
         # redone from the two operands in the sentence and the stated deadline is corrected. The
         # recorded failure told the reader to file on 13 September against a 13 October deadline it
         # had computed itself. Nothing else about the sentence is touched.
         dated = date_consistency.apply(summed.blocks, next_steps=summed.next_steps)
 
-        # -- 5e. snapshot consistency (P29, npo2-08/-13) — NOT a guardrail, and no G-number ----
+        # -- 5j. snapshot consistency (P29, npo2-08/-13) — NOT a guardrail, and no G-number ----
         # The employee-data snapshot is stated once, by the page's own footer ("Based on employee
         # data from 1 September 2026"), so an answer that restates it — "your PTO balance as of
         # 1 September 2026 is 13.5 days", live on 2026-09-15 — prints the same fact twice on one
@@ -1091,7 +1106,7 @@ class Orchestrator:
         # dates the turn's own envelopes carry are touched: a deadline is somebody else's fact.
         snapshotted = snapshot_consistency.apply(dated.blocks, turn.envelopes, next_steps=dated.next_steps)
 
-        # -- 5i. next-step entailment (W8, C08) — last, over the blocks that survived --------
+        # -- 5k. next-step entailment (W8, C08) — last, over the blocks that survived --------
         # `next_steps` was read by no rule: G2 and G3 run over blocks only. A step naming a date, a
         # duration, an amount or a person the answer never established is dropped, and the drop is
         # recorded the way G3 records one.
@@ -1105,7 +1120,10 @@ class Orchestrator:
             )
 
         answer = AnswerSchema(
-            blocks=[AnswerBlock.model_validate(block) for block in snapshotted.blocks],
+            blocks=[
+                AnswerBlock.model_validate({k: v for k, v in block.items() if k != outcome_consistency.POLICY_CLAIM})
+                for block in snapshotted.blocks
+            ],
             next_steps=entailed.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )

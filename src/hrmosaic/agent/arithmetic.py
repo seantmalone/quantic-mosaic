@@ -71,7 +71,7 @@ DECOMPOSITION_TERMS: tuple[tuple[str, str, str], ...] = (
 #: `plus`/`minus` between two numbers, or it is not a decomposition at all.
 DECOMPOSITION = re.compile(
     r"(?P<total>\d+(?:\.\d+)?)(?P<between>[^.()]{0,60}?)"
-    r"\(\s*(?P<body>[^)]*?\d[^)]*?\b(?:plus|minus)\b[^)]*?\d[^)]*?)\s*\)",
+    r"(?P<paren>\()\s*(?P<body>[^)]*?\d[^)]*?\b(?:plus|minus)\b[^)]*?\d[^)]*?)\s*\)",
     re.IGNORECASE,
 )
 
@@ -191,7 +191,9 @@ def correct(text: str, envelope: Mapping[str, Any] | None) -> str:
     for match in DECOMPOSITION.finditer(text):
         if _sound(float(match["total"]), match["body"], envelope):
             continue
-        pieces.append(text[cursor : match.start("body") - 1])
+        # Up to the parenthesis itself, wherever the body starts after it: "( 13.5 accrued …"
+        # used to keep its "(" and gain a second one (W7-review Minor).
+        pieces.append(text[cursor : match.start("paren")])
         if replacement is not None:
             pieces.append(f"({replacement})")
             cursor = match.end()

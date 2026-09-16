@@ -126,3 +126,17 @@ def test_the_step_is_idempotent():
 
     assert twice.next_steps == once.next_steps
     assert not twice.changed
+
+
+def test_a_duration_is_entailed_by_a_number_token_and_not_by_a_digit_substring():
+    """W7-review Minor: "3 days" reduced to "3", which is inside every turn's ground somewhere."""
+    ground = entailment.grounds(
+        [], [_ToolEnvelope(name="check_pto_balance", result_json='{"remaining_days": 13.5, "days": 3}')]
+    )
+
+    assert entailment.entailed("3 days", ground), "the envelope carries days: 3"
+    assert not entailment.entailed("6 days", ground), "6 is not a token, whatever digits the ground holds"
+    assert not entailment.entailed("35 days", ground), "and 35 is not entailed by 13.5"
+    assert entailment.entailed(
+        "USD 2,500", entailment.grounds([], [_ToolEnvelope(name="x", result_json='{"limit": 2500}')])
+    )

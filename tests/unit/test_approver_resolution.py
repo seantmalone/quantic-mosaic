@@ -126,3 +126,15 @@ def test_the_step_is_idempotent():
 
     assert twice.blocks == once.blocks
     assert not twice.changed
+
+
+def test_the_readers_whole_name_is_replaced_not_only_its_first_word():
+    """W7-review Minor: "approval from Dana Whitfield" left " Whitfield" stranded after Miguel."""
+    profile = envelope({"preferred_name": "Dana"}, name="lookup_employee_profile")
+    result = approvers.apply(
+        [block("This needs approval from Dana Whitfield before you travel.")], [envelope(DANA_CHAIN), profile]
+    )
+
+    assert result.blocks[0]["text"] == (
+        "This needs approval from Miguel (one level up, since nobody approves their own request) before you travel."
+    )

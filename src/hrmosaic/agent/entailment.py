@@ -163,14 +163,28 @@ def grounds(blocks: Sequence[Mapping[str, Any]], envelopes: Iterable[Any]) -> st
     return _normalise(" ".join(parts))
 
 
+#: A number as a JSON body or a sentence writes one — a whole token, never a run of digits inside
+#: a longer one. `"3"` is entailed by `"days": 3` and not by `"13.5"` or `2026-09-03`.
+_NUMBER_TOKEN = re.compile(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])")
+
+
 def entailed(claim: str, ground: str) -> bool:
-    """Is this specific one the turn actually established?"""
+    """Is this specific one the turn actually established?
+
+    A date or a name has to appear as written. A duration or an amount is entailed when its
+    **number** is a whole token of the ground — `USD 2,500` against `2500`, `3 days` against
+    `"days": 3` — and not when its digits merely occur inside some longer figure, which is how the
+    first version of this let every small duration through (W7-review Minor).
+    """
     normalised = _normalise(claim)
     if normalised in ground:
         return True
-    # `USD 2,500` in a step against `2500` in an envelope, and `3 days` against `"days": 3`.
-    digits = re.sub(r"[^\d.]", "", normalised)
-    return bool(digits) and digits in ground
+    number = re.search(r"\d[\d.]*", normalised)
+    if number is None:
+        return False
+    value = number.group(0).rstrip(".")
+    tokens = set(_NUMBER_TOKEN.findall(ground))
+    return value in tokens or (value.endswith(".0") and value[:-2] in tokens) or f"{value}.0" in tokens
 
 
 def apply(

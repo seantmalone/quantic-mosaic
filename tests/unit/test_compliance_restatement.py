@@ -301,3 +301,33 @@ def test_a_turn_with_no_amount_in_it_never_touches_a_threshold():
 
     assert result.blocks[0]["text"] == quoted["text"]
     assert result.thresholds == 0
+
+
+# -- W8 fix round: a not_stated row is opposable only by a conclusion about THIS request ----------
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Verbal approval is insufficient.",
+        "Verbal agreement, a message in chat and an email thread are all insufficient on their own.",
+        "A request without written approval does not meet the policy.",
+    ],
+)
+def test_a_policy_sentence_about_the_approval_rule_is_not_a_verdict_on_the_request(sentence):
+    """W7-review I4. `pto.request.manager_approval` is `manual` and therefore `not_stated` on
+    every PTO turn; a true, cited policy sentence about approval was being replaced by "I could
+    not check the approval requirement."."""
+    result = compliance.apply([block(sentence, "policy_fact")], [envelope(SCENARIO_4_VERDICT)])
+
+    assert result.blocks[0]["text"] == sentence
+    assert result.restated == []
+
+
+def test_a_conclusion_about_this_request_on_a_not_stated_row_is_still_replaced():
+    for sentence in (
+        "Your request already meets the manager approval requirement.",
+        "This requirement is met because the approval is on file.",
+    ):
+        result = compliance.apply([block(sentence)], [envelope(SCENARIO_4_VERDICT)])
+        assert result.blocks[0]["text"] == "I could not check the approval requirement.", sentence

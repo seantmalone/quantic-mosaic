@@ -39,7 +39,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from hrmosaic.agent.outcome import sentences
+from hrmosaic.agent.outcome import about_the_reader, sentences
 
 #: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
@@ -147,6 +147,14 @@ CEILING = re.compile(
 
 #: The subject whose value is the amount the question asked about.
 AMOUNT_SUBJECT = "parameters.amount_usd"
+
+#: A sentence that concludes about **this request** rather than about the rule in general (W8 fix
+#: round, W7-review I4). `pto.request.manager_approval` is a `manual` row and therefore
+#: `not_stated` on every PTO turn; without this, *"Verbal approval is insufficient."* — a true,
+#: cited policy sentence — was replaced by "I could not check the approval requirement."
+THIS_REQUEST = re.compile(
+    r"\b(?:this|your)\s+(?:request|requirement|claim|trip|application|leave|case)\b", re.IGNORECASE
+)
 
 #: The shape `rules.py::_evaluate_requirement` writes a decided reason in.
 REASON = re.compile(r"^(?P<subject>[\w.]+) is (?P<value>.+?); the policy value is (?P<expected>.+?) \((?P<op>\w+)\)\.$")
@@ -277,8 +285,12 @@ def relation(sentence: str, row: Row) -> str | None:
         return "opposes" if stated == "denies" else "agrees"
     if row.status == "unmet":
         return "opposes" if stated == "asserts" else "agrees"
-    # `not_stated`: any conclusion is one the engine did not reach (W8, C05).
-    return "opposes"
+    # `not_stated`: a conclusion about **this request** is one the engine did not reach (W8, C05).
+    # A sentence about the rule itself — "Verbal approval is insufficient." — states policy, and
+    # policy is not a verdict on anybody's request (W8 fix round).
+    if about_the_reader(sentence) or THIS_REQUEST.search(sentence):
+        return "opposes"
+    return "unsure"
 
 
 def correct(text: str, rows_: Sequence[Row]) -> tuple[str, list[str], list[str]]:
@@ -424,6 +436,7 @@ __all__ = [
     "AMOUNT_SUBJECT",
     "CEILING",
     "SUBJECT_WORDS",
+    "THIS_REQUEST",
     "Outcome",
     "Row",
     "apply",

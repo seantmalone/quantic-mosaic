@@ -325,6 +325,38 @@ PROSE_FIELDS: frozenset[str] = frozenset(
 #: How long a scalar may be and still be a value rather than a sentence (W8, C15).
 MAX_SCALAR_CHARS = 48
 
+#: …and how short it may be and still be a value rather than a word that happens to be in a
+#: sentence (W8 fix round). `status: "met"` matched "met", "meter" and "metric" as a substring.
+MIN_SCALAR_CHARS = 4
+
+#: The envelope keys whose string value is the reader's own record (W8 fix round, W7-review I3).
+#: Admitting every short string admitted `verdict: "conditional"`, `role: "Director"` and
+#: `department: "Engineering"`, so advice naming a director was retyped as the reader's data and a
+#: cited policy sentence lost its citation. Names, the office, the work arrangement, ids — and an
+#: ISO date under any key, because that is how a date reaches an envelope.
+SCALAR_KEYS: frozenset[str] = frozenset(
+    {
+        "preferred_name",
+        "legal_name",
+        "first_name",
+        "last_name",
+        "name",
+        "to_name",
+        "city",
+        "office_name",
+        "work_arrangement",
+        "ticket_id",
+        "draft_id",
+    }
+)
+
+#: The key a block carries while it is a policy claim G3 demoted from an uncited `policy_fact`
+#: (W8 fix round, W7-review I1). Positional indexes into the block list drifted as soon as the
+#: merge and restatement steps removed a block ahead of one, so the exemption from the record
+#: backstop protected the wrong block; the marker travels with the block through every step's
+#: `dict(block)` copy and is stripped before the answer is validated.
+POLICY_CLAIM = "_policy_claim"
+
 #: An ISO date, so the human form of the same day joins the scalar set.
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -515,7 +547,10 @@ def directs(text: str, tool_name: str) -> bool:
     lowered = text.lower()
     named = any(re.search(rf"\b{verb}\b", lowered) for verb in verbs)
     if named:
-        if "still" in lowered:
+        # `still` beside a filing verb is the hedge that concedes the write and directs anyway —
+        # when it is aimed at the reader. *"The ticket is still open"* is a statement (W7-review
+        # Minor), so the clause has to be second-person as well.
+        if "still" in lowered and re.search(r"\byou\b", lowered):
             return True
         if re.search(rf"\byou\b[^.!?]*?\b(?:{'|'.join(DIRECTIVE_MODALS)})\b", lowered):
             return True
@@ -630,9 +665,11 @@ def envelope_scalars(envelopes: Iterable[Any]) -> set[str]:
             value = node.strip()
             if key in PROSE_FIELDS or not value or len(value) > MAX_SCALAR_CHARS:
                 return
-            found.add(value.casefold())
             if _ISO_DATE.fullmatch(value):
+                found.add(value.casefold())
                 found.add(date_consistency.human_date(date.fromisoformat(value)).casefold())
+            elif key in SCALAR_KEYS and len(value) >= MIN_SCALAR_CHARS:
+                found.add(value.casefold())
         elif isinstance(node, dict):
             for name, value in node.items():
                 walk(value, str(name))
@@ -673,7 +710,9 @@ def states_the_record(
     if not scalars_only and numbers and numbers_in(text) & numbers:
         return True
     lowered = text.casefold()
-    return any(scalar in lowered for scalar in scalars)
+    # Whole words: "Dana" is not in "Danaher", and the four-character floor above keeps "hybrid"
+    # while dropping the "met" that matched "metric".
+    return any(re.search(rf"(?<!\w){re.escape(scalar)}(?!\w)", lowered) for scalar in scalars)
 
 
 def _record_split(
@@ -701,16 +740,22 @@ def _record_split(
     """
     kind = str(block.get("type") or "")
     text = str(block.get("text") or "")
-    if is_policy_claim or kind not in ("recommendation", "policy_fact") or not text:
+    if is_policy_claim or block.get(POLICY_CLAIM) or kind not in ("recommendation", "policy_fact") or not text:
         return dict(block), None, False
 
     def is_record(sentence: str) -> bool:
         # A **cited** block gives up only a sentence about the reader that names a value only the
-        # reader's record knows. A policy sentence written in the second person — *"You accrue
-        # 1.50 days of PTO per month"* — is still policy, and retyping it would strip the citation
-        # that is the reader's only way to check it.
+        # reader's record knows and carries **no number at all**. A policy sentence written in the
+        # second person — *"You accrue 1.50 days of PTO per month"* — is still policy, and so is
+        # *"You have completed 3 years 9 months of service, exceeding the 12-month minimum"*: the
+        # number in it is the policy's, and retyping the sentence would strip the citation that is
+        # the reader's only way to check it (W8 fix round, W7-review I3).
         if kind == "policy_fact":
-            return about_the_reader(sentence) and states_the_record(sentence, numbers, scalars, scalars_only=True)
+            return (
+                about_the_reader(sentence)
+                and not numbers_in(sentence)
+                and states_the_record(sentence, numbers, scalars, scalars_only=True)
+            )
         return states_the_record(sentence, numbers, scalars)
 
     parts = sentences(text)
@@ -842,6 +887,8 @@ __all__ = [
     "DIRECTIVE_VERBS",
     "IMPERATIVES",
     "MAX_SCALAR_CHARS",
+    "MIN_SCALAR_CHARS",
+    "POLICY_CLAIM",
     "NEXT_EVENT",
     "PERFORMED",
     "PREPOSITIONS",
@@ -849,6 +896,7 @@ __all__ = [
     "PROSE_FIELDS",
     "RECORD",
     "RE_PREFIXES",
+    "SCALAR_KEYS",
     "STEP_NAME",
     "WRITE_SUCCESS",
     "Outcome",

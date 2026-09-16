@@ -51,7 +51,8 @@ ROUTED_NOTE = "one level up, since nobody approves their own request"
 #: *"approval from Dana"*, *"approved by Dana"*, *"sign-off from Dana"* — where an answer names the
 #: person who approves. Used to catch a sentence that names the **reader** in that position.
 APPROVED_BY = re.compile(
-    r"\b(?:approval|approved|sign-?\s?off|authorisation|authorization)\s+(?:from|by)\s+(?P<who>[A-Z][\w'’-]+)"
+    r"\b(?:approval|approved|sign-?\s?off|authorisation|authorization)\s+(?:from|by)\s+"
+    r"(?P<who>[A-Z][\w'’-]+(?:\s+[A-Z][\w'’-]+)?)"
 )
 
 
@@ -163,10 +164,12 @@ def correct(text: str, resolved: Sequence[Approver], *, reader: str | None = Non
         if higher is not None and higher.name != reader:
 
             def unself(match: re.Match[str]) -> str:
-                if match["who"] != reader:
+                # The whole name run goes — "Dana Whitfield", not "Dana" with the surname stranded
+                # after the replacement (W7-review Minor).
+                if match["who"].split()[0] != reader:
                     return match.group(0)
                 named.append(higher.role)
-                return match.group(0).replace(reader, higher.phrase)
+                return match.group(0).replace(match["who"], higher.phrase)
 
             text = APPROVED_BY.sub(unself, text)
     return text, named

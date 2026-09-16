@@ -667,7 +667,9 @@ def evaluate(
         "submitted_on": submitted.isoformat(),
         "computed": context.computed(),
         "requirements": [decision.entry for decision in decisions],
-        "unmet": [decision.entry["id"] for decision in decisions if not decision.met],
+        # The rows that were checked and failed — never a `not_stated` one, which is the exact
+        # conflation `status` exists to end (W8, C05; the list itself caught up in the fix round).
+        "unmet": [decision.entry["id"] for decision in decisions if decision.entry.get("status") == "unmet"],
         "approvals_required": approvals,
         "next_steps": next_steps,
         "escalate_to": str(spec["escalate_to"]),
