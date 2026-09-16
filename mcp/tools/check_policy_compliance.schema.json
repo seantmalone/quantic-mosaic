@@ -241,6 +241,11 @@
             "title": "Reason",
             "type": "string"
           },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
           "fact_key": {
             "title": "Fact Key",
             "type": "string"

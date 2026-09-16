@@ -61,10 +61,10 @@ coverage:
 UX_OUT ?= .ux-capture
 
 ux:
-	$(BIN)/pytest -q -m ux
+	MOCK_TODAY=$(MOCK_TODAY) $(BIN)/pytest -q -m ux
 
 ux-capture:
-	$(BIN)/python scripts/ux_capture.py --out $(UX_OUT)
+	MOCK_TODAY=$(MOCK_TODAY) $(BIN)/python scripts/ux_capture.py --out $(UX_OUT)
 
 ingest:
 	$(BIN)/python -m hrmosaic.rag.ingest

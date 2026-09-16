@@ -127,6 +127,13 @@
     var provisional = document.getElementById("provisional-answer");
     var provisionalBlocks = document.getElementById("provisional-blocks");
     var status = document.getElementById("turn-status");
+    // Where the status line lives between turns. While a turn runs it moves INSIDE the pending
+    // bubble — one bubble carrying one line, as §3.2 draws it — and comes back when the turn lands,
+    // so the finished-turn announcement is still made from inside the transcript (UX W8 fix
+    // round, CPUX3-04: the seeded pending state was an empty card with the line floating below).
+    var statusHome = status.parentNode;
+    var statusPlaceholder = document.createComment("turn-status");
+    statusHome.insertBefore(statusPlaceholder, status);
     var sendButton = document.getElementById("send-button");
     var stopButton = document.getElementById("stop-button");
     var jumpButton = document.getElementById("jump-latest");
@@ -198,9 +205,43 @@
       return getComputedStyle(transcript).overflowY === "visible" ? document.scrollingElement : transcript;
     }
 
+    function newestTurn() {
+      var turns = document.querySelectorAll("#messages .turn");
+      return turns.length ? turns[turns.length - 1] : null;
+    }
+
+    // **Where the newest message ends, not where the scroller ends** (UX W8 fix round, CPUX3-01
+    // = a11y-r3-1). Below 30rem the document is the scroller and, with the demo panel always
+    // expanded under the conversation, the document's end is the end of the PANEL — ~640-830px
+    // below the answer. Sticking to `scrollHeight` therefore landed every phone reader on the demo
+    // controls with no conversation visible and the composer's textarea under the masthead, and
+    // `#jump-latest` stayed hidden because "the bottom" had been reached. The bottom the reader
+    // means is the newest turn's end, kept just above the sticky composer.
+    function newestBottomTarget() {
+      // The composer is `position: sticky; bottom: 0`, so its top edge is where the visible
+      // conversation ends on a phone; on the desktop the transcript box ends above the composer.
+      return window.innerHeight - form.offsetHeight - NEWEST_GAP_PX;
+    }
+
     function atBottom() {
       var box = scroller();
-      return box.scrollHeight - box.scrollTop - box.clientHeight <= STICK_SLACK_PX;
+      if (box === transcript) {
+        return box.scrollHeight - box.scrollTop - box.clientHeight <= STICK_SLACK_PX;
+      }
+      var turn = newestTurn();
+      if (!turn) { return true; }
+      var r = turn.getBoundingClientRect();
+      return r.bottom > 0 && r.bottom <= newestBottomTarget() + STICK_SLACK_PX;
+    }
+
+    // The gap the newest turn keeps above the composer, so its last line is not flush with it.
+    var NEWEST_GAP_PX = 12;
+
+    function scrollNewestIntoView() {
+      var turn = newestTurn();
+      if (!turn) { document.scrollingElement.scrollTop = 0; return; }
+      var r = turn.getBoundingClientRect();
+      window.scrollBy(0, Math.round(r.bottom - newestBottomTarget()));
     }
 
     //: Whether the reader is following the conversation — true until they scroll up to re-read
@@ -227,7 +268,7 @@
     function stickToBottom(force) {
       var box = scroller();
       if (force || atBottom()) {
-        box.scrollTop = box.scrollHeight;
+        if (box === transcript) { box.scrollTop = box.scrollHeight; } else { scrollNewestIntoView(); }
         following = true;
         jumpButton.hidden = true;
       } else {
@@ -334,11 +375,13 @@
       pendingQuestion.textContent = question;
       pendingTurn.hidden = false;
       provisional.hidden = false;
+      provisional.appendChild(status);
       paintStatus(PENDING_STATUS);
       stickToBottom(true);
     }
 
     function clearPending() {
+      if (status.parentNode !== statusHome) { statusHome.insertBefore(status, statusPlaceholder); }
       pendingTurn.hidden = true;
       pendingQuestion.textContent = "";
       clearProvisional();

@@ -58,6 +58,13 @@
 #                      informational                   a standing rule that always holds: reported
 #                                                      `met: true`, cited, never listed in `unmet`
 #
+#   label              <a reader phrase>               what the measured thing is called in front
+#                                                     of a person — "notice before the first day
+#                                                     off, in business days". The chat surface's
+#                                                     restatement is built from it and never from
+#                                                     the subject key (W8 fix round); required,
+#                                                     non-empty, no underscores (check_facts.py)
+#
 #   fact_key           <a key of facts.yml>            the literal fact
 #                      pto_balance.<field>             INDIRECT: that field of the employee's own
 #                                                      balance row holds the real key, so the accrual
@@ -123,6 +130,7 @@ scenarios:
     requirements:
       - id: remote.intl.tenure
         text: "Employees need at least 12 months of continuous service to work outside their home country."
+        label: "continuous service, in months"
         fact_key: remote.international.eligibility_tenure_months
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Eligibility"
@@ -130,12 +138,14 @@ scenarios:
         check: {subject: employee.tenure_months_at_as_of, operator: gte}
       - id: remote.intl.duration
         text: "Stays over 30 consecutive days require Tax & Legal review."
+        label: "stay abroad, in consecutive days"
         fact_key: remote.international.threshold_days
         doc_id: tax-and-location-addendum
         heading_path: "Duration Thresholds > Stays Exceeding 30 Days"
         check: {subject: parameters.duration_days, operator: lte}
       - id: remote.intl.annual_limit
         text: "No more than 90 days outside the home country in a rolling 12-month period."
+        label: "days outside the home country in the rolling year"
         fact_key: remote.international.max_days_per_year
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Duration Limits"
@@ -143,18 +153,21 @@ scenarios:
         check: {subject: parameters.duration_days, operator: lte}
       - id: remote.intl.destination
         text: "The destination must be on the approved-country list."
+        label: "destination country"
         fact_key: tax.approved_countries
         doc_id: tax-and-location-addendum
         heading_path: "Approved Countries"
         check: {subject: parameters.destination_country, operator: in}
       - id: remote.intl.manager_notice
         text: "Written manager approval at least 21 calendar days before departure."
+        label: "notice to your manager before departure, in calendar days"
         fact_key: remote.international.manager_notice_days
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Approval"
         check: {subject: computed.notice_calendar_days, operator: gte}
       - id: remote.intl.tax_review_lead
         text: "A Tax & Legal review request must be filed at least 21 calendar days before departure."
+        label: "lead time for the Tax & Legal review request, in calendar days"
         fact_key: tax.review.lead_time_days
         doc_id: tax-and-location-addendum
         heading_path: "Duration Thresholds > Stays Exceeding 30 Days"
@@ -162,12 +175,14 @@ scenarios:
         check: {subject: computed.notice_calendar_days, operator: gte}
       - id: remote.intl.device
         text: "A company-managed, full-disk-encrypted laptop with always-on VPN is mandatory."
+        label: "company-managed laptop with full-disk encryption and always-on VPN"
         fact_key: remote.international.device_requirement
         doc_id: remote-and-hybrid-work
         heading_path: "Working Outside Your Home Country > Device and Connectivity Requirements"
         check: {subject: parameters.device_is_company_managed, operator: manual}
       - id: remote.intl.no_contract_signing
         text: "No contracts may be signed or customer agreements negotiated while abroad."
+        label: "customer-facing activity while abroad"
         fact_key: tax.pe_risk.no_contract_signing
         doc_id: tax-and-location-addendum
         heading_path: "Permanent Establishment Risk"
@@ -205,6 +220,7 @@ scenarios:
     requirements:
       - id: remote.domestic.onsite_days
         text: "Hybrid employees work on site at least 3 days each week."
+        label: "onsite days each week"
         fact_key: remote.hybrid.onsite_days_per_week
         doc_id: remote-and-hybrid-work
         heading_path: "Hybrid Expectations > Required Onsite Days"
@@ -212,12 +228,14 @@ scenarios:
         check: {subject: parameters.onsite_days_per_week, operator: gte}
       - id: remote.domestic.other_state_notice
         text: "More than 10 business days in another US state requires notification to People Operations."
+        label: "business days in another US state"
         fact_key: remote.domestic.other_state_notice_days
         doc_id: remote-and-hybrid-work
         heading_path: "Working From Another US State"
         check: {subject: parameters.duration_days, operator: lte}
       - id: remote.domestic.vpn
         text: "Always-on VPN is required on any network Mosaic Robotics does not control."
+        label: "always-on VPN on a network the company does not control"
         fact_key: security.vpn.untrusted_network_required
         doc_id: security-acceptable-use
         heading_path: "Working in Public Places"
@@ -246,12 +264,14 @@ scenarios:
     requirements:
       - id: pto.request.notice
         text: "PTO requests must be submitted at least 5 business days in advance."
+        label: "notice before the first day off, in business days"
         fact_key: pto.notice.standard_days
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Notice Requirements"
         check: {subject: computed.notice_business_days, operator: gte}
       - id: pto.request.extended_notice
         text: "Six or more consecutive business days need 15 business days of notice."
+        label: "notice for six or more consecutive days off, in business days"
         fact_key: pto.notice.extended_days
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Notice Requirements"
@@ -259,6 +279,7 @@ scenarios:
         check: {subject: computed.notice_business_days, operator: gte}
       - id: pto.request.balance
         text: "The requested days must be covered by the balance accrued at the snapshot."
+        label: "PTO balance, in days"
         fact_key: pto_balance.accrual_fact_key
         doc_id: pto-and-holidays
         heading_path: "Accrual > Standard Accrual Rates"
@@ -266,12 +287,14 @@ scenarios:
         check: {subject: pto_balance.remaining_days, operator: gte, compare_to: parameters.days}
       - id: pto.request.blackout
         text: "Requests overlapping the 2026 year-end blackout need director approval."
+        label: "overlap with the year-end blackout"
         fact_key: pto.blackout.year_end_2026
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Blackout Periods"
         check: {subject: computed.overlaps_blackout, operator: eq, compare_to: "literal:false"}
       - id: pto.request.manager_approval
         text: "Every PTO request needs written manager approval in MosaicOne."
+        label: "written manager approval in MosaicOne"
         fact_key: pto.approval.manager_required
         doc_id: pto-and-holidays
         heading_path: "Requesting Time Off > Approval Chain"
@@ -300,12 +323,14 @@ scenarios:
     requirements:
       - id: expense.submission_window
         text: "Expenses must be submitted within 45 calendar days of the transaction date."
+        label: "days since the transaction"
         fact_key: expenses.submission.deadline_days
         doc_id: expenses-and-reimbursement
         heading_path: "Submission and Deadlines"
         check: {subject: computed.claim_age_days, operator: lte}
       - id: expense.receipt
         text: "An itemised receipt is required for every expense of USD 25 or more."
+        label: "itemised receipt"
         fact_key: expenses.receipt.threshold_usd
         doc_id: expenses-and-reimbursement
         heading_path: "Receipt Requirements"
@@ -313,12 +338,14 @@ scenarios:
         check: {subject: parameters.has_itemised_receipt, operator: manual}
       - id: expense.manager_limit
         text: "A direct manager may approve expense reports up to USD 2,500."
+        label: "claim against the direct manager's approval limit, in US dollars"
         fact_key: expenses.approval.manager_limit_usd
         doc_id: expenses-and-reimbursement
         heading_path: "Approval Thresholds"
         check: {subject: parameters.amount_usd, operator: lte}
       - id: expense.vp_limit
         text: "A vice president may approve expense reports up to USD 25,000."
+        label: "claim against the vice president's approval limit, in US dollars"
         fact_key: approvals.expense.vp_limit_usd
         doc_id: manager-approval-matrix
         heading_path: "Expenses"
@@ -326,6 +353,7 @@ scenarios:
         check: {subject: parameters.amount_usd, operator: lte}
       - id: expense.home_office_cap
         text: "The home office allowance is capped at USD 750 per plan year."
+        label: "home-office claim for the plan year, in US dollars"
         fact_key: expenses.home_office.annual_cap_usd
         doc_id: expenses-and-reimbursement
         heading_path: "Home Office and Equipment Stipends > Annual Home Office Allowance"
@@ -333,6 +361,7 @@ scenarios:
         check: {subject: parameters.amount_usd, operator: lte}
       - id: expense.lodging_cap
         text: "The standard lodging cap is USD 250 per night before taxes and fees."
+        label: "nightly lodging rate, in US dollars"
         fact_key: travel.lodging.nightly_cap_usd
         doc_id: travel-policy
         heading_path: "Lodging"
@@ -364,12 +393,14 @@ scenarios:
     requirements:
       - id: equipment.director_threshold
         text: "Equipment requests above USD 500 need director approval as well as manager approval."
+        label: "equipment cost, in US dollars"
         fact_key: equipment.request.director_threshold_usd
         doc_id: equipment-and-asset
         heading_path: "Requesting Additional Equipment"
         check: {subject: parameters.amount_usd, operator: lte}
       - id: equipment.refresh_eligibility
         text: "Company laptops are refreshed on a 36-month cycle."
+        label: "device age, in months"
         fact_key: equipment.refresh_cycle_months
         doc_id: equipment-and-asset
         heading_path: "Refresh Cycle"
@@ -377,6 +408,7 @@ scenarios:
         check: {subject: parameters.device_age_months, operator: gte}
       - id: equipment.return_window
         text: "All company equipment is returned within 5 business days of the final day of employment."
+        label: "business days since your final day"
         fact_key: equipment.return.separation_days
         doc_id: equipment-and-asset
         heading_path: "Return at Separation"
@@ -406,6 +438,7 @@ scenarios:
     requirements:
       - id: benefits.waiting_period
         text: "Medical, dental and vision eligibility begins 90 days after the hire date."
+        label: "days since your hire date"
         fact_key: benefits.eligibility.waiting_period_days
         doc_id: benefits-and-open-enrollment
         heading_path: "Eligibility > Waiting Period"
@@ -413,6 +446,7 @@ scenarios:
         check: {subject: computed.tenure_days, operator: gte}
       - id: benefits.window_open
         text: "Open enrollment opens on 1 November 2026."
+        label: "requested effective date against the day open enrollment opens"
         fact_key: benefits.open_enrollment.open_date
         doc_id: benefits-and-open-enrollment
         heading_path: "Open Enrollment > The 2026 Enrollment Window"
@@ -420,6 +454,7 @@ scenarios:
         check: {subject: parameters.effective_date, operator: date_gte}
       - id: benefits.window_close
         text: "Open enrollment closes on 21 November 2026."
+        label: "requested effective date against the day open enrollment closes"
         fact_key: benefits.open_enrollment.close_date
         doc_id: benefits-and-open-enrollment
         heading_path: "Open Enrollment > The 2026 Enrollment Window"
@@ -427,6 +462,7 @@ scenarios:
         check: {subject: parameters.effective_date, operator: date_lte}
       - id: benefits.new_hire_window
         text: "A new hire has 30 days from the end of the 90-day waiting period to elect cover."
+        label: "days since your benefits eligibility began"
         fact_key: benefits.new_hire.election_window_days
         doc_id: benefits-and-open-enrollment
         heading_path: "Eligibility > Waiting Period"
@@ -434,6 +470,7 @@ scenarios:
         check: {subject: computed.days_since_eligibility, operator: lte}
       - id: benefits.qle_window
         text: "A qualifying life event must be reported within 30 days of the event."
+        label: "days since the qualifying life event"
         fact_key: benefits.qle.window_days
         doc_id: benefits-and-open-enrollment
         heading_path: "Qualifying Life Events"
@@ -460,6 +497,7 @@ scenarios:
     requirements:
       - id: conduct.not_automated
         text: "Harassment, discrimination, legal threats, medical matters and pay disputes are routed to a named People Operations partner and are never handled by an automated assistant."
+        label: "handling by a named People Operations partner"
         fact_key: escalation.sensitive_topics_never_automated
         doc_id: hr-escalation-and-case-handling
         heading_path: "What Must Be Escalated"
@@ -467,18 +505,21 @@ scenarios:
         check: {subject: parameters.handled_by_named_partner, operator: manual}
       - id: conduct.acknowledgement
         text: "People Operations acknowledges every reported concern within 2 business days."
+        label: "acknowledgement of the report"
         fact_key: conduct.report.acknowledgement_days
         doc_id: workplace-conduct
         heading_path: "Investigation Process"
         check: {subject: parameters.reported, operator: informational}
       - id: conduct.severity_response
         text: "Severity 1 cases receive a response within 4 business hours."
+        label: "response time for the reported severity"
         fact_key: escalation.severity1.response_hours
         doc_id: hr-escalation-and-case-handling
         heading_path: "Case Severity and Response Times"
         check: {subject: parameters.severity, operator: informational}
       - id: conduct.retaliation_protection
         text: "Retaliation against a person who reports a concern in good faith is itself a violation."
+        label: "protection from retaliation for reporting"
         fact_key: conduct.retaliation.prohibited
         doc_id: workplace-conduct
         heading_path: "Prohibited Conduct > Retaliation"

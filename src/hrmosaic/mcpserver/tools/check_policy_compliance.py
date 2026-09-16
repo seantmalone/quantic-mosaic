@@ -131,6 +131,9 @@ class Requirement(BaseModel):
     #: requirement nobody had evaluated was narrated as a settled failure.
     status: Literal["met", "unmet", "not_stated"] = "not_stated"
     reason: str
+    #: The requirement's reader label from `corpus/rules.yml` — what the measured thing is called
+    #: in front of a person (W8 fix round, JX3-01). The chat surface's restatement is built from it.
+    label: str = ""
     fact_key: str
     evidence: Evidence | None = None
 

@@ -29,8 +29,10 @@ from __future__ import annotations
 
 import html as html_module
 import re
+from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.anyio
 
@@ -101,7 +103,39 @@ MARKUP_FORBIDDEN = (
 #: request so the audit trail is complete"*, from the PTO policy demo 2 quotes), and a rule that
 #: forbade a cited passage from saying what the policy says would be the wrong rule. They are
 #: checked where the principle actually points — the app's **own** copy — by the test below.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _subject_leaf_phrases() -> tuple[str, ...]:
+    """Every `check.subject` leaf of `corpus/rules.yml` in its de-underscored form — minus the ones
+    the corpus itself uses as ordinary English (W8 fix round, JX3-01 = CPUX3-02).
+
+    *"Your notice business days is 0"* reached the chat surface because the restatement step turned
+    a stored key into prose, and the snake_case rule below cannot see a key once its underscores are
+    gone. Generated from the file, so a new subject is measured the day it is added. A leaf whose
+    de-underscored form the policy documents themselves write — "effective date", "destination
+    country" — is a phrase a person uses, and forbidding it would forbid the corpus; the rest are
+    keys in disguise and may not appear on the chat surface in any sentence.
+    """
+    rules = yaml.safe_load((REPO_ROOT / "corpus" / "rules.yml").read_text(encoding="utf-8"))
+    prose = " ".join(
+        path.read_text(encoding="utf-8", errors="ignore").lower()
+        for path in (REPO_ROOT / "corpus").iterdir()
+        if path.suffix in {".md", ".html", ".txt"} and path.stem not in {"README"}
+    )
+    phrases = {
+        str(requirement["check"]["subject"]).rsplit(".", 1)[-1].replace("_", " ")
+        for scenario in rules["scenarios"].values()
+        for requirement in scenario["requirements"]
+        if "_" in str(requirement["check"]["subject"]).rsplit(".", 1)[-1]
+    }
+    return tuple(sorted(r"\b" + re.escape(phrase) + r"\b" for phrase in phrases if phrase not in prose))
+
+
+SUBJECT_LEAF_PHRASES = _subject_leaf_phrases()
+
 TEXT_FORBIDDEN = (
+    *SUBJECT_LEAF_PHRASES,
     r"\bspans?\b",
     r"\btraces?\b",
     r"\b[a-z]+_[a-z]+\b",

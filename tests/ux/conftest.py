@@ -71,6 +71,9 @@ def _serve(workdir: Path, script: str) -> Iterator[str]:
     env = {
         **os.environ,
         "LLM_PROVIDER": "stub",
+        # The stubs' submission date, so the browser suite scores the recorded demo the way
+        # `make demo2` does (W8 fix round, JX3-02): `tests/conftest.py` pins the same default.
+        "MOCK_TODAY": os.environ.get("MOCK_TODAY", "2026-09-01"),
         "LLM_STUB_SCRIPT": str(LLM_SCRIPTS / script),
         "APP_ACCESS_TOKEN": TOKEN,
         "APP_ENV": "local",

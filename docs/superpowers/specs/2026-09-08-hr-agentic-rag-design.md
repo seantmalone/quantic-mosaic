@@ -1083,7 +1083,10 @@ anything outside them rather than ignoring a rule quietly. `check.subject` is `p
 `lte`, `lt`, `gte`, `gt`, `eq`, `in`, `date_lte`, `date_gte`, or one of the two unverifiable operators `manual` and `informational`.
 `check.compare_to` is `fact` (the default: the `facts.yml` value this requirement's own `fact_key` names), `parameters.<name>` or `literal:<value>`.
 A `fact_key` is normally a literal key of `facts.yml`; the one indirect form, `pto_balance.<field>`, names the field of the employee's **own** balance
-row that holds the real key, so the accrual band a requirement quotes is the reader's own band and not a constant (W8, C29).
+row that holds the real key, so the accrual band a requirement quotes is the reader's own band and not a constant (W8, C29). Every requirement also
+carries a reader `label` — *"notice before the first day off, in business days"* — published on the wire row; the chat surface's restatement
+(`agent/compliance.py`) is built from it and never from the subject key, and `scripts/check_facts.py` fails the build on a missing or underscored
+one (W8 fix round, JX3-01).
 `applies_when` is `always` (the default), `unmet:<id>`, `met:<id>`, `parameter_eq:<name>:<value>`, `parameter_gte:<name>:<fact_key>` or
 `employee_eq:<field>:<value>`; a requirement whose guard is false is omitted from `requirements[]` entirely, and the same guard selects which
 `approvals_required` and `next_steps` entries the result carries.

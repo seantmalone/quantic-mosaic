@@ -26,7 +26,7 @@ plus an `index.json` with the same shape the audit's carries.
 `prefers-color-scheme` and no screen of the audit had ever been taken in it. After the light pass a
 second context runs with `color_scheme="dark"` over the key page, chat at rest, the demo panel, the
 answered conversation and every dashboard route, under ids suffixed `-dark`. It asks **no new
-question**: the four servers share one trace store, so `/?session=<id>` rehydrates the conversation
+question**: the five servers share one trace store, so `/?session=<id>` rehydrates the conversation
 the light pass produced and the dashboard renders the same records.
 
     make ux-capture                 # into .ux-capture/
@@ -62,18 +62,25 @@ VIEWPORTS = (("1440x900", 1440, 900), ("1280x800", 1280, 800), ("390x844", 390, 
 #: destroyed with it; nothing it opens leaves this machine.
 ACCESS_TOKEN = "uxaudit"
 
-#: The four stub scripts, and what each one's server is used for.
+#: The five stub scripts, and what each one's server is used for.
 SERVERS = {
     "demo_1": ("demo_task_1.json", "key page, the gate's 401s, chat at rest, the cited answer"),
     "demo_2": ("demo_task_2.json", "the confirmation card and the confirmed resume"),
     "refusal": ("out_of_corpus_tuition.json", "the refusal (G1's evidence gate)"),
     "dash": ("fault_ambiguous.json", "clarification, the error turn, and every dashboard route"),
+    # C02's refusal branch, photographed deliberately (W8 fix round, JX3-02): a `non_compliant`
+    # verdict proposes no card, and the turn says why in the product's own voice.
+    "blocked": ("write_blocked.json", "the write the verdict refuses: no card, the reason stated"),
 }
 
 PROMPTS = {
     "demo_1": "I want to work from Berlin from 3 November to 14 December 2026 — can I?",
     "demo_2": (
         "Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 "
+        "— and can you open the request for me?"
+    ),
+    "blocked": (
+        "Can I take three days of PTO from Tuesday 22 September to Thursday 24 September 2026 "
         "— and can you open the request for me?"
     ),
     "refusal": (
@@ -174,7 +181,7 @@ def wait_for_health(base_url: str, *, timeout_s: float = 120.0) -> None:
 
 @contextmanager
 def stub_servers(trace_db: Path) -> Iterator[dict[str, str]]:
-    """The four servers of the audit, sharing one trace store, torn down on the way out."""
+    """The five servers of the audit, sharing one trace store, torn down on the way out."""
     processes: list[subprocess.Popen[bytes]] = []
     urls: dict[str, str] = {}
     logs = trace_db.parent / "servers"
@@ -185,6 +192,11 @@ def stub_servers(trace_db: Path) -> Iterator[dict[str, str]]:
             env = {
                 **os.environ,
                 "LLM_PROVIDER": "stub",
+                # The submission date the recorded stubs assume (W8 fix round, JX3-02 = dgc-r3-6):
+                # without it the engine anchored notice on the wall clock and the demo-2 capture
+                # narrated a filed ticket beside a notice rule it broke. 2026-09-01 is the one date
+                # that gives the recorded 8 business days to 15 September with Labor Day excluded.
+                "MOCK_TODAY": os.environ.get("MOCK_TODAY", "2026-09-01"),
                 "LLM_STUB_SCRIPT": str(SCRIPTS / script),
                 "APP_ACCESS_TOKEN": ACCESS_TOKEN,
                 "APP_ENV": "local",
@@ -383,7 +395,7 @@ class Capture:
                         "repo": str(REPO_ROOT),
                         "mode": "LOCAL, LLM_PROVIDER=stub (no live LLM call was made)",
                         "servers": {name: script for name, (script, _) in SERVERS.items()},
-                        "note": "All four servers shared one TRACE_DB_PATH.",
+                        "note": "All five servers shared one TRACE_DB_PATH.",
                     },
                     "viewports": [label for label, _, _ in VIEWPORTS],
                     "screen_ids": ids,
@@ -743,6 +755,22 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         )
         context.close()
 
+        # -- server 5: the write the verdict refuses (W8 fix round, JX3-02) -------------------
+        # E1108 has 0.25 days of PTO; the engine scores the request `non_compliant` on the balance
+        # and the product proposes no card. The screen exists so C02's coupling is photographed on
+        # purpose rather than inferred from its absence.
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
+        page = sign_in(context, urls["blocked"], "E1108")
+        ask(page, urls["blocked"], PROMPTS["blocked"])
+        shot.screen(
+            page,
+            "chat-write-blocked",
+            route="/",
+            state="write refused by the verdict (C02)",
+            notes="A non_compliant verdict: no confirmation card, and the reason stated first.",
+        )
+        context.close()
+
         # -- server 3: the refusal --------------------------------------------------------
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         page = sign_in(context, urls["refusal"], "E1042")
@@ -880,7 +908,7 @@ def capture(out: Path, urls: dict[str, str]) -> Capture:
         # ink on the wrong ground — could land green.
         #
         # The dark pass deliberately asks no new question. `StubAdapter` spends its script once per
-        # process, and all four servers share one `TRACE_DB_PATH`, so `/?session=<id>` rehydrates
+        # process, and all five servers share one `TRACE_DB_PATH`, so `/?session=<id>` rehydrates
         # demo 1's answered conversation and every dashboard route renders the same records the
         # light pass photographed. Same states, same data, one emulated preference apart.
         context.close()

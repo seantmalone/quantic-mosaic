@@ -25,6 +25,7 @@ SCENARIO_4_VERDICT = {
         {
             "id": "pto.request.notice",
             "text": "PTO requests must be submitted at least 5 business days in advance.",
+            "label": "notice before the first day off, in business days",
             "met": True,
             "status": "met",
             "reason": "computed.notice_business_days is 8; the policy value is 5 (gte).",
@@ -32,6 +33,7 @@ SCENARIO_4_VERDICT = {
         {
             "id": "pto.request.balance",
             "text": "The requested days must be covered by the balance accrued at the snapshot.",
+            "label": "PTO balance, in days",
             "met": True,
             "status": "met",
             "reason": "pto_balance.remaining_days is 13.5; the policy value is 3 (gte).",
@@ -39,6 +41,7 @@ SCENARIO_4_VERDICT = {
         {
             "id": "pto.request.manager_approval",
             "text": "Every PTO request needs written manager approval in MosaicOne.",
+            "label": "written manager approval in MosaicOne",
             "met": False,
             "status": "not_stated",
             "reason": "Not verifiable from the synthetic record; confirm before proceeding.",
@@ -54,6 +57,7 @@ SCENARIO_6_VERDICT = {
         {
             "id": "pto.request.balance",
             "text": "The requested days must be covered by the balance accrued at the snapshot.",
+            "label": "PTO balance, in days",
             "met": False,
             "status": "unmet",
             "reason": "pto_balance.remaining_days is 0.25; the policy value is 3 (gte).",
@@ -138,7 +142,9 @@ def test_scenario_four_the_answer_stops_contradicting_a_met_requirement():
     and the answer denied it using the same eight relabelled as calendar days."""
     result = compliance.apply([block(SCENARIO_4_SENTENCE)], [envelope(SCENARIO_4_VERDICT)])
 
-    assert result.blocks[0]["text"] == ("Your notice business days is 8, and the policy asks for at least 5.")
+    assert result.blocks[0]["text"] == (
+        "Your notice before the first day off, in business days, is 8; the policy asks for at least 5."
+    )
     assert result.restated == [(0, "pto.request.notice")]
     assert result.changed
 
@@ -157,7 +163,7 @@ def test_asserting_a_requirement_the_engine_found_unmet_is_replaced():
         [block("Your balance covers the three days you asked for.")], [envelope(SCENARIO_6_VERDICT)]
     )
 
-    assert result.blocks[0]["text"] == "Your balance, in days is 0.25, and the policy asks for at least 3."
+    assert result.blocks[0]["text"] == "Your PTO balance, in days, is 0.25; the policy asks for at least 3."
     assert result.restated == [(0, "pto.request.balance")]
 
 
@@ -201,7 +207,9 @@ def test_next_steps_are_repaired_the_way_the_blocks_are():
         next_steps=["Ask Dana to waive the notice requirement, which your request does not meet."],
     )
 
-    assert result.next_steps == ["Your notice business days is 8, and the policy asks for at least 5."]
+    assert result.next_steps == [
+        "Your notice before the first day off, in business days, is 8; the policy asks for at least 5."
+    ]
     assert result.restated_steps == [(0, "pto.request.notice")]
 
 
@@ -331,3 +339,55 @@ def test_a_conclusion_about_this_request_on_a_not_stated_row_is_still_replaced()
     ):
         result = compliance.apply([block(sentence)], [envelope(SCENARIO_4_VERDICT)])
         assert result.blocks[0]["text"] == "I could not check the approval requirement.", sentence
+
+
+# -- W8 fix round, JX3-01 = CPUX3-02: a key is never de-underscored into prose ------------------
+
+
+def test_the_reader_sentence_is_built_from_the_label_and_never_from_the_key():
+    notice = compliance.rows([envelope(SCENARIO_4_VERDICT)])[0]
+    sentence = compliance.reader_sentence(notice)
+
+    assert "notice before the first day off" in sentence
+    assert "notice_business_days" not in sentence and "notice business days" not in sentence
+
+
+def test_a_boolean_row_is_said_as_a_fact_not_as_is_yes():
+    blackout = compliance.Row(
+        id="pto.request.blackout",
+        text="Requests overlapping the 2026 year-end blackout need director approval.",
+        status="met",
+        reason="computed.overlaps_blackout is false; the policy value is false (eq).",
+        label="overlap with the year-end blackout",
+    )
+    assert (
+        compliance.reader_sentence(blackout) == "Your overlap with the year-end blackout: no, as the policy requires."
+    )
+    failing = compliance.Row(
+        id=blackout.id,
+        text=blackout.text,
+        status="unmet",
+        label=blackout.label,
+        reason="computed.overlaps_blackout is true; the policy value is false (eq).",
+    )
+    assert (
+        compliance.reader_sentence(failing) == "Your overlap with the year-end blackout: yes; the policy requires no."
+    )
+
+
+def test_a_row_with_no_label_falls_back_to_the_policy_text_and_never_to_the_key():
+    """The build fails on a missing label (`scripts/check_facts.py`); this is what an old envelope
+    without one gets, and it is the requirement's own words."""
+    unlabelled = compliance.Row(
+        id="pto.request.notice",
+        text="PTO requests must be submitted at least 5 business days in advance.",
+        status="unmet",
+        reason="computed.notice_business_days is 0; the policy value is 5 (gte).",
+    )
+    sentence = compliance.reader_sentence(unlabelled)
+
+    assert sentence == (
+        "Your request does not meet this requirement: PTO requests must be submitted at least 5 business "
+        "days in advance."
+    )
+    assert "notice business days" not in sentence

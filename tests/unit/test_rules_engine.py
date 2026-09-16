@@ -685,3 +685,17 @@ def test_the_unmet_list_never_carries_a_not_stated_row():
     assert not_stated, "the fixture has rows nobody supplied a parameter for"
     assert not set(body["unmet"]) & not_stated
     assert set(body["unmet"]) == {row["id"] for row in body["requirements"] if row["status"] == "unmet"}
+
+
+@pytest.mark.parametrize(("scenario", "requirement"), REQUIREMENTS, ids=REQUIREMENT_IDS)
+def test_every_requirement_carries_a_reader_label(scenario, requirement):
+    """W8 fix round, JX3-01: the chat surface's restatement is built from this and never from the
+    subject key, so every one of the 34 rows has one, and none is a key in disguise."""
+    label = requirement["label"]
+    assert label.strip() and "_" not in label, scenario
+
+
+def test_the_label_rides_on_the_wire_row():
+    body = _pto({"start_date": "2026-09-15", "days": 3}, submitted_on="2026-09-01")
+    notice = _row(body, "pto.request.notice")
+    assert notice["label"] == "notice before the first day off, in business days"

@@ -14,7 +14,11 @@ turn's own `check_policy_compliance` envelope.
 The same eight the engine used to *satisfy* the rule, relabelled as calendar days, against an
 anchor date the sentence's own words refute, to reach the opposite verdict — and then the reader
 was sent to chase a waiver she did not need. The deterministic layer had already decided; nothing
-made the written answer agree with it.
+made the written answer agree with it. The replacement is built from the requirement's reader
+`label` in `corpus/rules.yml` — *"Your notice before the first day off, in business days, is 8;
+the policy asks for at least 5."* — and never from the subject key: the first version of this
+step de-underscored `computed.notice_business_days` into prose, and that reached the chat
+surface on every finished PTO turn (re-audit #3, JX3-01).
 
 So for every requirement the engine evaluated, any sentence of any block or step that is **about
 that requirement's subject** and whose **polarity opposes the row** is replaced by the row's own
@@ -127,14 +131,9 @@ RELATIONS: dict[str, str] = {
     "date_lte": "on or before",
 }
 
-#: Subject names whose last path segment does not read as English on its own.
-SUBJECT_LABELS: dict[str, str] = {
-    "amount_usd": "claim",
-    "tenure_days": "length of service, in days",
-    "overlaps_blackout": "overlap with the blackout",
-    "remaining_days": "balance, in days",
-    "days_since_eligibility": "time since your benefits eligibility began",
-}
+#: How a boolean value is said to a person. *"is yes"* is not a sentence, so a boolean row takes
+#: its own template below.
+IN_WORDS: dict[str, str] = {"true": "yes", "false": "no"}
 
 #: *"up to USD 2,500"* — a ceiling quoted as though it were the rule that applies (W8, C07). The
 #: `expenses-002` answer quoted the manager's limit on a USD 3,000 claim and closed by routing the
@@ -168,6 +167,12 @@ class Row:
     text: str
     status: str
     reason: str
+    #: The requirement's reader label from `corpus/rules.yml` (W8 fix round, JX3-01 = CPUX3-02):
+    #: what the measured thing is called in front of a person. The engine's `reason` names the
+    #: subject key — `computed.notice_business_days` — and the first version of this step
+    #: de-underscored the key into prose ("Your notice business days is 0"), which reached the chat
+    #: surface on every finished PTO turn. A key is never turned into English here; the label is.
+    label: str = ""
 
     @property
     def subjects(self) -> tuple[str, ...]:
@@ -227,6 +232,7 @@ def rows(envelopes: Iterable[Any]) -> list[Row]:
                 text=str(requirement.get("text") or ""),
                 status=status,
                 reason=str(requirement.get("reason") or ""),
+                label=str(requirement.get("label") or ""),
             )
     return list(found.values())
 
@@ -246,28 +252,33 @@ def polarity(text: str) -> str | None:
     return "denies" if denies else "asserts"
 
 
-def _label(subject: str) -> str:
-    leaf = subject.rsplit(".", 1)[-1]
-    return SUBJECT_LABELS.get(leaf, leaf.replace("_", " "))
-
-
 def reader_sentence(row: Row) -> str:
-    """The row's own result, in the second person, with no machine vocabulary in it.
+    """The row's own result, in the second person, built from its **label** and its values in words.
 
-    `"computed.notice_business_days is 8; the policy value is 5 (gte)."` becomes *"Your notice
-    business days is 8, and the policy asks for at least 5."* — the engine's own numbers, the
-    engine's own verdict, and nothing the reader has to decode. A reason the engine wrote in some
-    other shape falls back to naming the requirement, which is still truthful.
+    `"computed.notice_business_days is 8; the policy value is 5 (gte)."` on the row labelled
+    *"notice before the first day off, in business days"* becomes *"Your notice before the first
+    day off, in business days, is 8; the policy asks for at least 5."* — the engine's own numbers,
+    the engine's own verdict, and nothing the reader has to decode. A boolean row is said as a
+    fact, not as "is yes". A row with no label, or a reason in a shape this cannot parse, falls back
+    to naming the requirement by its own policy text — and **never** to a key with its underscores
+    swapped for spaces, which is the class the re-audit caught on the chat surface (JX3-01).
     """
     if row.status == "not_stated":
         return f"I could not check the {row.topic} requirement."
     match = REASON.match(row.reason)
     verdict = "meets" if row.status == "met" else "does not meet"
-    if match is None:
-        return f"Your request {verdict} the {row.topic} requirement."
+    if match is None or not row.label:
+        return f"Your request {verdict} this requirement: {row.text.rstrip('.')}."
+    value, expected = match["value"], match["expected"]
+    if value.lower() in IN_WORDS:
+        stated = IN_WORDS[value.lower()]
+        wanted = IN_WORDS.get(expected.lower(), expected)
+        if row.status == "met":
+            return f"Your {row.label}: {stated}, as the policy requires."
+        return f"Your {row.label}: {stated}; the policy requires {wanted}."
     relation = RELATIONS.get(match["op"], "")
-    asked = f"{relation} {match['expected']}".strip()
-    return f"Your {_label(match['subject'])} is {match['value']}, and the policy asks for {asked}."
+    asked = f"{relation} {expected}".strip()
+    return f"Your {row.label}, is {value}; the policy asks for {asked}."
 
 
 def relation(sentence: str, row: Row) -> str | None:
@@ -432,7 +443,7 @@ __all__ = [
     "REASON",
     "RELATIONS",
     "STEP_NAME",
-    "SUBJECT_LABELS",
+    "IN_WORDS",
     "AMOUNT_SUBJECT",
     "CEILING",
     "SUBJECT_WORDS",

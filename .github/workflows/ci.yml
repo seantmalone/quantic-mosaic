@@ -48,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLM_PROVIDER: stub
+      MOCK_TODAY: "2026-09-01"  # the recorded stubs' submission date (W8)
       PYTHONPATH: src                              # belt-and-braces; `pip install -e .` below is what puts
                                                    # `hrmosaic` on the path, exactly as `make setup` does
     steps:
@@ -94,6 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLM_PROVIDER: stub
+      MOCK_TODAY: "2026-09-01"  # the recorded stubs' submission date (W8)
       PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4

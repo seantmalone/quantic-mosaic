@@ -370,6 +370,10 @@ PANEL_JS = r"""
     transcript: transcript.getBoundingClientRect().height,
     transcript_overflow: getComputedStyle(transcript).overflowY,
     starters: document.querySelectorAll(".starter").length,
+    // The empty state, measured where it stands before any scrolling: every starter and the
+    // `/policy` link fully inside the viewport (UX W8 fix round, dgc-r3-1).
+    empty_state_painted: Array.from(document.querySelectorAll("#transcript .starter, #transcript a[href='/policy']"))
+      .map((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; }),
     send: document.getElementById("send-button").getBoundingClientRect().toJSON(),
     doc: document.documentElement.scrollHeight,
     inner: window.innerHeight,
@@ -419,8 +423,13 @@ def test_p8_the_panel_is_always_expanded_and_the_conversation_keeps_its_floor(br
                 assert panel["doc"] > panel["inner"], f"the phone page does not scroll: {panel}"
             else:
                 assert panel["transcript"] >= 18 * 16 - 1, f"{label}: the transcript is below its floor: {panel}"
-            if label == "desktop":
-                assert panel["doc"] <= panel["inner"] + 1, f"at 1440x900 the page grew to fit the panel: {panel}"
+            if label != "phone":
+                # The at-rest page may scroll to make room for the panel; what it may not do is
+                # cut the product's own empty state (dgc-r3-1). The old `doc <= inner` assertion
+                # actively forced the clip.
+                assert panel["empty_state_painted"] and all(panel["empty_state_painted"]), (
+                    f"{label}: a starter or the policy link is not fully painted at rest: {panel}"
+                )
             reachable = tab.evaluate(STARTERS_REACHABLE_JS)
             assert all(reachable), f"{label}: a starter question cannot be scrolled into view: {reachable}"
         finally:
@@ -560,9 +569,31 @@ NEWEST_TURN_JS = """
 () => {
   const turns = document.querySelectorAll('#messages .turn');
   const box = turns[turns.length - 1].getBoundingClientRect();
-  return { bottom: Math.round(box.bottom), viewport: window.innerHeight, scrollY: Math.round(window.scrollY) };
+  const message = document.getElementById('message').getBoundingClientRect();
+  const hit = document.elementFromPoint(message.left + message.width / 2, message.top + message.height / 2);
+  return {
+    top: Math.round(box.top), bottom: Math.round(box.bottom), viewport: window.innerHeight,
+    scrollY: Math.round(window.scrollY),
+    composerTop: Math.round(document.getElementById('chat-form').getBoundingClientRect().top),
+    composerHit: hit ? hit.id || hit.tagName.toLowerCase() : null,
+  };
 }
 """
+
+
+def _newest_turn_is_on_screen(newest: dict) -> None:
+    """The non-vacuous form of "the newest turn is in view" (UX W8 fix round, CPUX3-01).
+
+    `newest.bottom <= viewport` was satisfied by a turn scrolled ABOVE the fold — three re-audits
+    passed over a phone that landed on the demo controls. The turn's end has to be inside the
+    viewport and above the sticky composer, its top has to be above the viewport's bottom, and the
+    composer's textarea has to be the element actually under its own centre.
+    """
+    assert 0 < newest["bottom"] <= newest["viewport"], f"the newest turn's end is not on screen: {newest}"
+    assert newest["top"] < newest["viewport"], f"the newest turn starts below the fold: {newest}"
+    assert newest["bottom"] <= newest["composerTop"] + 1, f"the newest turn ends under the composer: {newest}"
+    assert newest["composerHit"] == "message", f"the composer is not hittable at its own centre: {newest}"
+
 
 #: Whether the composer's box holds its placeholder. An empty textarea's `scrollHeight` measures
 #: its empty value, not the two lines the placeholder wraps to at 390px — which is how W6's on-load
@@ -608,7 +639,7 @@ def test_the_newest_turn_is_brought_into_view_on_a_phone_and_jump_to_latest_work
         assert overflow == "visible", "on a phone the document is the scroller, not the transcript"
         newest = page.evaluate(NEWEST_TURN_JS)
         assert newest["scrollY"] > 0, f"the page never moved after the turn landed: {newest}"
-        assert newest["bottom"] <= newest["viewport"], f"the newest turn's end is below the fold: {newest}"
+        _newest_turn_is_on_screen(newest)
         assert page.eval_on_selector("#jump-latest", "e => e.hidden"), "at the bottom there is nothing to jump to"
 
         page.evaluate("() => window.scrollTo(0, 0)")
@@ -622,7 +653,16 @@ def test_the_newest_turn_is_brought_into_view_on_a_phone_and_jump_to_latest_work
         page.click("#jump-latest")
         page.wait_for_timeout(300)
         newest = page.evaluate(NEWEST_TURN_JS)
-        assert newest["bottom"] <= newest["viewport"], f"Jump to latest did not: {newest}"
+        _newest_turn_is_on_screen(newest)
+        assert page.eval_on_selector("#jump-latest", "e => e.hidden")
+
+        # …and the same landing on a fresh `/?session=` load of the conversation (CPUX3-01's
+        # second leg): a reloaded transcript is scrolled to its newest turn, not to the panel.
+        session_id = page.eval_on_selector("#session-id", "e => e.value")
+        page.goto(f"{fresh_server}/?session={session_id}&access={TOKEN}", wait_until="networkidle")
+        page.wait_for_timeout(400)
+        assert page.evaluate("() => document.querySelectorAll('#messages .turn').length") >= 1
+        _newest_turn_is_on_screen(page.evaluate(NEWEST_TURN_JS))
         assert page.eval_on_selector("#jump-latest", "e => e.hidden")
     finally:
         context.close()
@@ -678,7 +718,7 @@ def test_the_transcript_and_the_composer_follow_the_viewport_across_the_phone_br
         page.set_viewport_size({"width": 390, "height": 844})
         page.wait_for_timeout(500)  # `RESIZE_SETTLE_MS` is 120
         newest = page.evaluate(NEWEST_TURN_JS)
-        assert newest["bottom"] <= newest["viewport"], f"narrowed to a phone, the newest turn is off screen: {newest}"
+        _newest_turn_is_on_screen(newest)
         fit = page.evaluate(COMPOSER_FIT_JS)
         assert fit["scrollHeight"] <= fit["clientHeight"], f"narrowed, the composer keeps a desktop height: {fit}"
         assert page.eval_on_selector("#jump-latest", "e => e.hidden")

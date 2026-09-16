@@ -148,3 +148,74 @@ async def test_the_cancellation_receipt_is_a_notice_above_the_answer_it_kept(web
     assert notice and "Cancelled — nothing was created." in _text(notice.group(0))
     assert "answer-block-policy_fact" in declined.text, "the answer the turn earned is still there"
     assert declined.text.index("answer-notice") < declined.text.index("answer-block-policy_fact")
+
+
+# -- W8 fix round, CPUX3-03: a record block holds the reader's data and no company policy ---------
+
+import json as _json  # noqa: E402 - the guard below reads the turn's own envelopes back out of the store
+from pathlib import Path as _Path  # noqa: E402
+
+from hrmosaic.agent import outcome as _outcome  # noqa: E402
+from hrmosaic.agent.orchestrator import _ToolEnvelope as _Envelope  # noqa: E402
+
+_RULES = _Path(__file__).resolve().parents[2] / "corpus" / "rules.yml"
+
+
+def _requirement_texts() -> set[str]:
+    import yaml
+
+    rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+    return {
+        " ".join(str(requirement["text"]).lower().split())
+        for scenario in rules["scenarios"].values()
+        for requirement in scenario["requirements"]
+    }
+
+
+def _envelopes(store, turn_id: str) -> list:
+    rows = store.execute(
+        "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'tool_call' ORDER BY seq", (turn_id,)
+    ).dicts()
+    found = []
+    for row in rows:
+        payload = _json.loads(row["payload_json"])
+        if payload.get("structured_content"):
+            found.append(
+                _Envelope(name=str(payload["tool_name"]), result_json=_json.dumps(payload["structured_content"]))
+            )
+    return found
+
+
+@pytest.mark.parametrize("script", ["demo_task_1.json", "demo_task_2.json"])
+async def test_every_record_sentence_is_the_readers_data_and_none_is_a_policy_rule(web, store, script):
+    """Re-audit #3 found the demo-1 record block carrying *"Stays exceeding 30 consecutive days
+    require director approval and a Tax & Legal review…"* — a policy requirement under a heading
+    that means "your data", with the one missing citation on the page. Every sentence in a
+    `record` block has to state a value from that turn's own data envelopes, and none may be a
+    requirement `corpus/rules.yml` states."""
+    question = (
+        DEMO_2
+        if script == "demo_task_2.json"
+        else "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
+    )
+    async with web(script) as client:
+        if script == "demo_task_2.json":
+            _card, done = await _confirmed(client)
+            turn_id = re.search(r'data-turn-id="([0-9a-f]+)"', done).group(1)
+            page = done
+        else:
+            page = (await client.post("/chat", json={"message": question}, headers=HTMX)).text
+            turn_id = re.search(r'data-turn-id="([0-9a-f]+)"', page).group(1)
+
+    blocks = _json.loads(
+        store.execute("SELECT answer_blocks_json FROM turns WHERE id = ?", (turn_id,)).scalar() or "[]"
+    )
+    records = [block for block in blocks if block["type"] == "record"]
+    envelopes = _envelopes(store, turn_id)
+    numbers, scalars = _outcome.envelope_numbers(envelopes), _outcome.envelope_scalars(envelopes)
+    rules = _requirement_texts()
+    for block in records:
+        for sentence in _outcome.sentences(block["text"]):
+            normalised = " ".join(sentence.lower().split())
+            assert normalised.rstrip(".") not in {rule.rstrip(".") for rule in rules}, sentence
+            assert _outcome.states_the_record(sentence, numbers, scalars), f"not the reader's data: {sentence}"

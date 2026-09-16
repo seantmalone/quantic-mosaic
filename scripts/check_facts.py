@@ -67,7 +67,7 @@ HEADING_SEPARATOR = " > "
 #: and `blocking` joined the set here in the same commit as `mcpserver/rules.py` — the deliberate,
 #: reviewed act the header of `corpus/rules.yml` asks for. The grammar's own closed vocabulary is
 #: enforced by the engine and by `tests/unit/test_rules_engine.py`, not here.
-REQUIREMENT_KEYS = frozenset({"id", "text", "fact_key", "doc_id", "heading_path"})
+REQUIREMENT_KEYS = frozenset({"id", "text", "label", "fact_key", "doc_id", "heading_path"})
 #: Keys a requirement may carry but need not: a requirement with no `check` is not evaluable.
 OPTIONAL_REQUIREMENT_KEYS = frozenset({"check", "applies_when", "blocking"})
 
@@ -383,6 +383,12 @@ def check_corpus() -> list[str]:
             missing = sorted(REQUIREMENT_KEYS - set(requirement))
             if missing:
                 problems.append(f"{rid}: missing requirement key(s) {missing}")
+            # The reader label is what the chat surface calls the measured thing (W8 fix round,
+            # JX3-01): a requirement without one would fall back to its policy text, never to a
+            # key, but the build fails here so the fallback is never the shipped state.
+            label = str(requirement.get("label") or "").strip()
+            if not label or "_" in label:
+                problems.append(f"{rid}: `label` must be a non-empty reader phrase with no underscores")
             fact_key = str(requirement["fact_key"])
             if fact_key.startswith(BALANCE_FACT_KEY_PREFIX):
                 # An indirect key: the employee's own balance row holds the real one (W8, C29).

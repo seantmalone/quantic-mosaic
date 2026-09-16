@@ -483,6 +483,9 @@ def _entry(requirement: Mapping[str, Any], fact_key: str, evidence: dict[str, An
     return {
         "id": str(requirement["id"]),
         "text": str(requirement["text"]),
+        # The reader label (W8 fix round): what the measured thing is called in front of a person.
+        # `agent/compliance.py` builds its restatement from this and never from the subject key.
+        "label": str(requirement.get("label") or ""),
         "met": False,
         "status": "not_stated",
         "reason": "",
