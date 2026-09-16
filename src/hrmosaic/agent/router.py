@@ -41,7 +41,7 @@ from hrmosaic.core.llm.base import ToolSchema
 Intent = Literal["policy_qa", "employee_data", "workflow", "action"]
 
 #: The two declarative workflows of §9.3, plus "no workflow".
-WorkflowName = Literal["remote_work_eligibility", "pto_request"]
+WorkflowName = Literal["remote_work_eligibility", "pto_request", "expense_claim"]
 
 #: §11's persona format, and the only shape an employee id may take.
 EMPLOYEE_ID = re.compile(r"^E1[0-9]{3}$")
@@ -149,8 +149,21 @@ MONEY = re.compile(
     r"(?:\b(?:usd|eur|gbp)\s*|[$€£]\s?)[\d,]+(?:\.\d+)?|\b[\d,]+(?:\.\d+)?\s*(?:usd|eur|gbp)\b", re.IGNORECASE
 )
 
-#: The tool a monetary approval question has to reach before anything is written about the tier.
-COMPLIANCE_TOOL = "check_policy_compliance"
+#: The workflow a monetary approval question is routed to (W8 fix round, W7-review I2). The first
+#: version of this appended the compliance tool to `selected_tools`, a field nothing consumes.
+EXPENSE_WORKFLOW = "expense_claim"
+
+
+def extract_amount(message: str) -> float | None:
+    """The money amount the question carries, as a number — `USD 3,000` → `3000.0` — or `None`."""
+    match = MONEY.search(message)
+    if match is None:
+        return None
+    digits = re.sub(r"[^\d.]", "", match.group(0))
+    try:
+        return float(digits) if digits else None
+    except ValueError:
+        return None
 
 
 def is_unsafe(message: str) -> bool:
@@ -237,15 +250,22 @@ def normalise(decision: RouteDecision, *, catalog_names: Sequence[str], message:
     """
     tools = [name for name in decision.selected_tools if name in set(catalog_names)]
     monetary = is_monetary_approval(message)
-    if monetary and COMPLIANCE_TOOL in catalog_names and COMPLIANCE_TOOL not in tools:
-        tools.append(COMPLIANCE_TOOL)
+    # A question with an amount in it is decided by a threshold, and the threshold is the engine's
+    # to apply: it is routed to the `expense_claim` workflow — unless the model already chose a
+    # workflow, in which case the amount is that workflow's business — and it needs the reader's
+    # record whatever the model said. `policy_qa` would gate the turn to the RAG tools (§9.2), so
+    # the intent has to move with it.
+    workflow = decision.workflow
+    intent = decision.intent
+    if monetary and workflow is None and intent != "action":
+        workflow, intent = EXPENSE_WORKFLOW, "workflow"
     return decision.model_copy(
         update={
             "rationale_summary": clamp_rationale(decision.rationale_summary),
             "target_employee_id": valid_employee_id(decision.target_employee_id) or find_employee_id(message),
             "selected_tools": tools,
-            # A question with an amount in it is about the reader's own approval tier, so the turn
-            # needs their record whatever the model said.
+            "workflow": workflow,
+            "intent": intent,
             "needs_employee_data": bool(decision.needs_employee_data) or monetary,
         }
     )
@@ -253,8 +273,8 @@ def normalise(decision: RouteDecision, *, catalog_names: Sequence[str], message:
 
 __all__ = [
     "APPROVAL_TERMS",
-    "COMPLIANCE_TOOL",
     "EMPLOYEE_ID",
+    "EXPENSE_WORKFLOW",
     "MAX_RATIONALE_CHARS",
     "MONEY",
     "UNSAFE_PHRASES",
@@ -263,6 +283,7 @@ __all__ = [
     "WorkflowName",
     "allowed_tools",
     "clamp_rationale",
+    "extract_amount",
     "fallback_decision",
     "find_employee_id",
     "is_monetary_approval",

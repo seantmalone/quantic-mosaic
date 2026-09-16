@@ -513,6 +513,7 @@ ENUM_LABELS: dict[str, str] = {
     "policy_qa": "policy question",
     "pto_request": "PTO request",
     "remote_work_eligibility": "remote work eligibility",
+    "expense_claim": "expense claim",
     "dense_only": "dense only",
 }
 

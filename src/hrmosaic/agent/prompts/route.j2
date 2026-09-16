@@ -19,7 +19,7 @@ Reply with JSON matching the RouteDecision schema.
 
 FIELDS
 - intent — `policy_qa` when the policy corpus alone can answer; `employee_data` when one employee's own record, balance or benefit is needed; `workflow` when the turn is a multi-step eligibility or request flow; `action` when the user asks for something to be created or sent.
-- workflow — `remote_work_eligibility`, `pto_request`, or null.
+- workflow — `remote_work_eligibility`, `pto_request`, `expense_claim`, or null.
 - multi_doc — true when a complete answer needs rules from MORE THAN ONE of the documents listed under CORPUS: a question with several parts, or one whose answer depends on both a policy and the approval authority for it. false for a question one document answers.
 - needs_employee_data — true when an employee record, balance or benefit election is needed.
 - needs_clarification — true only when a required detail is missing and cannot be inferred. Name EVERY missing detail in rationale_summary, not only the first — the question the user is shown is built from that line.
@@ -37,7 +37,7 @@ RULES
 2. Choose `policy_qa` whenever the corpus alone suffices: the people-data and write tools are then not offered at all for this turn.
 3. Never invent an employee id, and never guess which employee is meant.
 4. `action` beats `workflow` when the user also asks for something to be created, opened, filed or sent. Set `workflow` as well, and put the write tool in selected_tools: the write is gated and a human confirms it.
-5. A question carrying a money amount and an approval or expense term is an `expense_claim`: set intent `workflow`, needs_employee_data true, and expect a compliance check with that amount.
+5. A question carrying a money amount and an approval or expense term is an `expense_claim`: set intent `workflow`, workflow `expense_claim`, needs_employee_data true, and expect a compliance check with that amount.
 6. RECENT TURNS below, when present, is what this session has already settled. A follow-up that changes one detail — "extend it to five days", "make it Berlin instead" — keeps everything else from the most recent turn. NEVER set needs_clarification for a detail those turns already carry.
 {%- endblock -%}
 {%- block user -%}

@@ -443,7 +443,7 @@ with `catalog_reopened: true`. Any tool reachable only after a reopen is listed 
 when both the actual and expected sets are empty, so a refusal that issued a
 `list_policy_documents` call would score 0.0 for exemplary behaviour.
 
-### The two workflows
+### The workflows
 
 Declarative specs in `agent/workflows/`. The LLM chooses tools; the workflow spec decides when the
 turn is complete.
@@ -452,6 +452,7 @@ turn is complete.
 |---|---|---|
 | `remote_work_eligibility` | employee profile · duration_days · destination_country · policy evidence from ≥ 3 of {remote-and-hybrid-work, tax-and-location-addendum, security-acceptable-use, manager-approval-matrix} · a compliance verdict | a `lookup_employee_profile` result in state **and** a `check_policy_compliance` result with `verdict != insufficient_evidence` **and** citations spanning ≥ 3 distinct `doc_id`s |
 | `pto_request` | employee profile · PTO balance · requested days · policy evidence on notice and approval · a compliance verdict · (optional, gated) a created ticket | a `check_pto_balance` result in state **and** a compliance verdict **and** either an answer with ≥ 2 citations or a confirmed `mock_writes` row |
+| `expense_claim` | employee profile · the claim amount · policy evidence on expense limits and approval authority · a compliance verdict on the amount | a `lookup_employee_profile` result in state **and** a compliance verdict **and** ≥ 2 citable passages. A question carrying a money amount and an approval or expense term is routed here deterministically, the amount is seeded as a slot the compliance call inherits, and a turn that reaches synthesis without a verdict has one scored for it |
 
 **The structured-data slot is required, not merely listed.** An eligibility verdict reached
 without ever reading the employee's work country is not a complete workflow — and that is what

@@ -1,0 +1,65 @@
+{
+  "scenario": "expense_claim",
+  "_note": "W8 fix round, W7-review I2: `eval:expenses-002:1` — a USD 3,000 client trip, answered from the USD 2,500 manager row because the amount never reached the engine. The router here says policy_qa with no workflow, which `normalise` corrects to the expense_claim workflow; the model reads the profile and searches twice but NEVER calls check_policy_compliance — not after the workflow-incomplete reminder either — so the verdict is scored deterministically at synthesis from the amount the question carried. Drives tests/unit/test_expense_claim_is_scored.py. The breadth round's repair re-sends the same answer and is not accepted.",
+  "completions": [
+    {
+      "purpose": "route",
+      "finish_reason": "end_turn",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"multi_doc\": false, \"needs_employee_data\": false, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"Who approves a USD 3,000 expense claim.\"}"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the record and the expense policy.",
+      "tool_calls": [
+        {
+          "id": "toolu_ex_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_ex_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "expense report approval limit manager director",
+            "topic": "expenses",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_ex_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "expense approval authority thresholds",
+            "topic": "approvals",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "I have what I need.",
+      "tool_calls": [],
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "I still have what I need.",
+      "tool_calls": [],
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "synthesize",
+      "finish_reason": "stop",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Expense reports up to USD 2,500 are approved by the direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Submit the report to your manager, who may approve up to USD 2,500.\", \"citations\": []}], \"next_steps\": [\"Send the report to your manager for approval.\"], \"rationale_summary\": \"Answered from the manager row.\"}"
+    },
+    {
+      "purpose": "repair",
+      "finish_reason": "stop",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Expense reports up to USD 2,500 are approved by the direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}, {\"type\": \"recommendation\", \"text\": \"Submit the report to your manager, who may approve up to USD 2,500.\", \"citations\": []}], \"next_steps\": [\"Send the report to your manager for approval.\"], \"rationale_summary\": \"Answered from the manager row.\"}"
+    }
+  ]
+}

@@ -749,3 +749,39 @@ def test_both_forms_of_the_breadth_reminder_state_the_same_debt():
     assert SEARCH_BREADTH_UNSEARCHED.endswith(debt)
     assert SEARCH_BREADTH.startswith("Not yet — you have searched the corpus once.")
     assert SEARCH_BREADTH_UNSEARCHED.startswith("Not yet — you have not searched the corpus yet.")
+
+
+# -- W8 fix round: the data debt, in the two shapes the review found unreachable --------------
+
+
+def test_a_workflow_turn_that_read_the_balance_but_not_the_profile_still_owes_the_record():
+    """W7-review I7: the first version required EVERY reachable slot to be empty."""
+    turn = a_turn()
+    turn.state.record("check_pto_balance", {"remaining_days": 13.5})
+    assert Orchestrator()._data_outstanding(turn)
+    turn.state.record("lookup_employee_profile", {"employee_id": "E1042"})
+    turn.state.record("check_policy_compliance", {"verdict": "conditional"})
+    assert not Orchestrator()._data_outstanding(turn)
+
+
+def test_an_employee_data_turn_with_no_workflow_owes_the_record_until_a_record_tool_answers():
+    """The class's own exhibit, "Which office am I assigned to?", has no workflow to list slots."""
+    turn = a_turn(intent="employee_data", workflow=None)
+    assert Orchestrator()._data_outstanding(turn)
+    turn.state.record("lookup_employee_profile", {"employee_id": "E1042"})
+    assert not Orchestrator()._data_outstanding(turn)
+
+
+def test_a_policy_question_with_no_workflow_owes_nothing():
+    turn = a_turn(intent="policy_qa", workflow=None)
+    assert not Orchestrator()._data_outstanding(turn)
+
+
+def test_a_debt_no_permitted_tool_can_settle_is_not_a_debt():
+    """§13.9's `no_structured_tools` arm: the reminder would ask for a call the gate refuses."""
+    turn = a_turn(
+        intent="employee_data",
+        workflow=None,
+        disabled=["lookup_employee_profile", "check_pto_balance", "lookup_benefits_status"],
+    )
+    assert not Orchestrator()._data_outstanding(turn)

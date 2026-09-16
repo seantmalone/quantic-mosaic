@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from hrmosaic.agent.router import RouteDecision, is_monetary_approval, is_unsafe, normalise
+from hrmosaic.agent.router import RouteDecision, extract_amount, is_monetary_approval, is_unsafe, normalise
 
 pytestmark = pytest.mark.anyio
 
@@ -101,27 +101,41 @@ def test_a_question_with_no_amount_or_no_approval_term_is_not(message):
     assert not is_monetary_approval(message)
 
 
-def test_a_monetary_approval_question_reaches_the_engine_and_the_record():
-    """The amount decides the tier, so the turn has to score it rather than quote a ceiling."""
+def test_a_monetary_approval_question_is_routed_to_the_expense_workflow():
+    """The amount decides the tier, so the turn has to score it rather than quote a ceiling. The
+    first version of this appended a tool to `selected_tools`, which nothing consumes (W7-review
+    I2); the workflow is what the loop reads."""
     routed = normalise(
-        decision(),
+        decision(intent="policy_qa"),
         catalog_names=CATALOG,
         message="I spent USD 3,000 on a client trip — who approves the expense claim?",
     )
 
-    assert "check_policy_compliance" in routed.selected_tools
+    assert routed.workflow == "expense_claim"
+    assert routed.intent == "workflow", "policy_qa would gate the turn to the RAG tools"
     assert routed.needs_employee_data is True
 
 
-def test_a_tool_the_catalog_does_not_carry_is_never_added():
-    """§13.9's ablation disables tools by name; the router may not put one back."""
+def test_a_workflow_the_model_chose_is_not_overridden_by_an_amount():
     routed = normalise(
-        decision(),
-        catalog_names=("search_policy_documents",),
-        message="Who approves a USD 3,000 expense claim?",
+        decision(workflow="pto_request"),
+        catalog_names=CATALOG,
+        message="Can I take three days of PTO and claim the USD 300 train fare?",
     )
+    assert routed.workflow == "pto_request"
 
-    assert routed.selected_tools == []
+
+@pytest.mark.parametrize(
+    ("message", "amount"),
+    [
+        ("I spent USD 3,000 on a client trip — who approves the expense claim?", 3000.0),
+        ("Can I get approval for a $1,200 monitor?", 1200.0),
+        ("Who signs off on a 4,000 USD invoice?", 4000.0),
+        ("What is the notice period for PTO?", None),
+    ],
+)
+def test_the_amount_the_question_carries_is_extracted_as_a_number(message, amount):
+    assert extract_amount(message) == amount
 
 
 def test_an_ordinary_turn_is_left_exactly_as_the_model_routed_it():

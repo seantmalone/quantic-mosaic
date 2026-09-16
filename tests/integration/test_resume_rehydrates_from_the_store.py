@@ -234,9 +234,9 @@ async def test_a_write_that_fails_after_confirmation_does_not_close_the_turn_ans
     ]
     # `distinct_docs_shortfall` rides along on this turn because the repair round was bought and
     # the recorded answer still cites fewer documents than the workflow expects (W8, C26). It is a
-    # record of the served answer's breadth, not of the write; `tool_failed` is the one this test
-    # is about and it is still there.
-    assert "tool_failed" in [error["error_kind"] for error in errors]
+    # record of the served answer's breadth, not of the write. Exact, so a future extra error span
+    # on this turn is noticed rather than tolerated (W7-review Minor).
+    assert [error["error_kind"] for error in errors] == ["tool_failed", "distinct_docs_shortfall"]
     assert errors[0]["component"] == "mcp" and "create_mock_hr_ticket" in errors[0]["message"]
 
 

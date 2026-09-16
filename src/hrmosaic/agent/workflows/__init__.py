@@ -144,19 +144,20 @@ class WorkflowSpec:
 
 def get(name: str | None) -> WorkflowSpec | None:
     """The spec for a router-chosen workflow name, or `None` when the turn has no workflow."""
-    from hrmosaic.agent.workflows import pto_request, remote_work
+    from hrmosaic.agent.workflows import expense_claim, pto_request, remote_work
 
     registry: dict[str, WorkflowSpec] = {
         remote_work.SPEC.name: remote_work.SPEC,
         pto_request.SPEC.name: pto_request.SPEC,
+        expense_claim.SPEC.name: expense_claim.SPEC,
     }
     return registry.get(name or "")
 
 
 def names() -> Sequence[str]:
-    from hrmosaic.agent.workflows import pto_request, remote_work
+    from hrmosaic.agent.workflows import expense_claim, pto_request, remote_work
 
-    return (remote_work.SPEC.name, pto_request.SPEC.name)
+    return (remote_work.SPEC.name, pto_request.SPEC.name, expense_claim.SPEC.name)
 
 
 __all__ = ["EVIDENCE_TOOLS", "INSUFFICIENT", "LoopState", "WorkflowSpec", "get", "names"]

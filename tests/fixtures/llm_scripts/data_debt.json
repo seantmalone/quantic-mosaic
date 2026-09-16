@@ -1,0 +1,64 @@
+{
+  "scenario": "data_debt",
+  "_note": "W8 fix round, W7-review I7: an `employee_data` turn — the C10 exhibit, \"Which office am I assigned to?\" — whose model answers about the reader's office without ever reading the record. Route (employee_data, no workflow); an act step with no tool call (the breadth reminder answers it); one search; another step with no tool call; then, at synthesis, the data debt sends DATA_OUTSTANDING and the model finally reads the profile, answers once more with no tool call (an employee_data turn has no completion predicate to end the loop), and then synthesis. Drives tests/unit/test_data_debt_is_terminal.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "finish_reason": "end_turn",
+      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1108\", \"selected_tools\": [], \"rationale_summary\": \"E1108 asks which office they are assigned to.\"}"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Your office is Boston.",
+      "tool_calls": [],
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Let me check the policy on office assignment.",
+      "tool_calls": [
+        {
+          "id": "toolu_dd_1",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "office assignment work location record",
+            "topic": "remote_work",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Your office is Boston, per the remote work policy.",
+      "tool_calls": [],
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the record now.",
+      "tool_calls": [
+        {
+          "id": "toolu_dd_2",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1108"
+          }
+        }
+      ],
+      "finish_reason": "tool_use"
+    },
+    {
+      "purpose": "act",
+      "response_text": "Your office is on the record I just read.",
+      "tool_calls": [],
+      "finish_reason": "end_turn"
+    },
+    {
+      "purpose": "synthesize",
+      "finish_reason": "stop",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"Onsite is the default for Manufacturing, Test & Calibration, Field Service and Facilities roles.\", \"citations\": [\"c_864fb910f46475a7\"]}, {\"type\": \"recommendation\", \"text\": \"Your office is the one on your record.\", \"citations\": []}], \"next_steps\": [], \"rationale_summary\": \"Read the record after the reminder.\"}"
+    }
+  ]
+}

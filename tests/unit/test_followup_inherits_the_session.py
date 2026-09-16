@@ -96,8 +96,11 @@ async def test_the_session_reaches_the_model_as_data_and_after_the_cached_prefix
     assert user.index("ACTING PERSONA") < user.index("RECENT TURNS IN THIS SESSION") < user.index("QUESTION:")
 
 
-async def test_the_delta_is_scored_over_the_span_the_first_turn_settled(two_turns, store):
-    """Five days over the same start date — the follow-up inherited the dates rather than asking."""
+async def test_the_delta_inherits_the_start_date_the_model_omitted_and_not_the_end_date(two_turns, store):
+    """Deterministic slot inheritance (W7-review I5). The stub's turn-two compliance call carries
+    ONLY `days: 5`; what the `tool_call` span records is what was sent, and it carries the first
+    turn's start date — supplied by the orchestrator, not by the model — while the old end date is
+    left out because the model changed a member of that slot family."""
     _first, second = two_turns
     import json
 
@@ -111,5 +114,13 @@ async def test_the_delta_is_scored_over_the_span_the_first_turn_settled(two_turn
     ]
 
     assert arguments, "the follow-up scored the request"
-    assert arguments[-1]["parameters"]["start_date"] == "2026-09-22"
-    assert arguments[-1]["parameters"]["days"] == 5
+    parameters = arguments[-1]["parameters"]
+    assert parameters["days"] == 5, "what the model said"
+    assert parameters["start_date"] == "2026-09-22", "what the session supplied"
+    assert "end_date" not in parameters, "the old end date would make it a different request"
+
+    plans = store.execute(
+        "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'plan' ORDER BY seq", (second.turn_id,)
+    ).dicts()
+    summaries = " ".join(" ".join(json.loads(row["payload_json"]).get("step_summaries") or []) for row in plans)
+    assert "inherited start_date" in summaries, "and the record says so"

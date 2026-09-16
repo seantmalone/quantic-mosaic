@@ -1394,7 +1394,7 @@ question's shape, and the extra call is not spent on a guess.
 `list_policy_documents` call would score 0.0 for exemplary behaviour. `test_g1_evidence_gate.py` asserts an out-of-scope turn produces **no
 `tool_call` span**, and `test_dataset.py` asserts every `out_of_scope` item has `expected_tools: []`.
 
-### 9.3 The two workflows (R4.2)
+### 9.3 The workflows (R4.2)
 
 Declarative specs in `agent/workflows/`, each listing required slots and a completion predicate. The LLM chooses tools; the workflow spec decides when
 the turn is complete.
@@ -1403,6 +1403,7 @@ the turn is complete.
 |---|---|---|
 | `remote_work_eligibility` | employee profile · duration_days · destination_country · policy evidence from ≥ 3 of {remote-and-hybrid-work, tax-and-location-addendum, security-acceptable-use, manager-approval-matrix} · a compliance verdict | a **`lookup_employee_profile` result in state** **and** a `check_policy_compliance` result with `verdict != insufficient_evidence` **and** citations spanning ≥ 3 distinct `doc_id`s |
 | `pto_request` | employee profile · PTO balance · requested days · policy evidence on notice + approval · a compliance verdict · (optional, gated) a created ticket | a **`lookup_employee_profile` result in state** **and** a **`check_pto_balance` result in state** **and** a compliance verdict **and** either an answer with ≥ 2 citations or a confirmed `mock_writes` row |
+| `expense_claim` (W8 fix round) | employee profile · the claim amount · policy evidence on expense limits + approval authority · a compliance verdict on the amount | a **`lookup_employee_profile` result in state** **and** a compliance verdict **and** ≥ 2 citable passages. The router sends a question carrying a money amount and an approval or expense term here deterministically; the amount is seeded as a resolved slot the compliance call inherits, and a turn reaching synthesis without a verdict has one scored for it (`_score_deterministically`) |
 
 **The structured-data slot is required, not merely listed.** An eligibility verdict reached without ever reading the employee's work country is not a
 complete workflow — and it is what makes the `no_structured_tools` ablation move Workflow completion rather than only ToolSelection (§13.9). The same

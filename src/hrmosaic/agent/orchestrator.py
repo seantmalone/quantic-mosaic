@@ -70,7 +70,9 @@ from hrmosaic.agent.router import (
     RouteDecision,
     allowed_tools,
     clamp_rationale,
+    extract_amount,
     fallback_decision,
+    is_monetary_approval,
     is_unsafe,
     normalise,
     offered,
@@ -208,6 +210,7 @@ CLARIFY_QUESTIONS: dict[str, str] = {
 CLARIFY_SLOT_ORDER: dict[str, tuple[str, ...]] = {
     "pto_request": ("identity", "start_date", "days"),
     "remote_work_eligibility": ("identity", "destination_country", "duration_days"),
+    "expense_claim": ("identity", "amount_usd"),
 }
 
 #: When the router named no workflow. Still one question, still in the first person.
@@ -338,9 +341,18 @@ WORKFLOW_INCOMPLETE = (
 #: that described E1042 as "a fully remote employee" when the profile tool — never called — says
 #: hybrid. Same rule as the others: it names the debt, never the tool that settles it.
 DATA_OUTSTANDING = (
-    "Not yet — this turn is about one person's own HR record and nothing in state carries it. "
-    "Read the record this question is about before you answer it."
+    "Not yet — this turn is about one person's own HR record and the state does not carry all of "
+    "it. Read the record this question is about before you answer it."
 )
+
+#: The structured-data tools an `employee_data` turn reads its record through (§8.4 tools 5–7).
+#: An `employee_data` turn has no workflow to list them, so the data debt reads this instead.
+RECORD_TOOLS: tuple[str, ...] = ("lookup_employee_profile", "check_pto_balance", "lookup_benefits_status")
+
+#: The slot families a delta follow-up may change one member of (W8 fix round, W7-review I5).
+#: When the model supplies any member, none of the others is inherited from the session: "five
+#: days instead" with the first turn's `end_date` carried over would be two different requests.
+SLOT_FAMILIES: tuple[frozenset[str], ...] = (frozenset({"days", "end_date", "duration_days"}),)
 
 #: The second reminder, for the other way a turn can quietly drop what the user asked for: the
 #: model wrote an answer while the write it was asked to propose is still unmade. `_action_outstanding`
@@ -739,6 +751,12 @@ class _Turn:
     write_blocked: str | None = None
     #: Which slot a clarification is asking about (W8, C18); the quick replies follow it.
     clarify_slot: str | None = None
+    #: The slots this turn starts from without asking: the last three turns' resolved parameters
+    #: and the amount the question itself carries (W8 fix round, W7-review I2 and I5). A compliance
+    #: call that omits one of them inherits it — deterministically, not by the model's grace.
+    resolved_slots: dict[str, Any] = field(default_factory=dict)
+    #: Which slots were inherited into which call, for the record.
+    inherited: list[str] = field(default_factory=list)
 
     @property
     def elapsed_s(self) -> float:
@@ -870,6 +888,10 @@ class Orchestrator:
         decision = turn.decision
         assert decision is not None
         turn.workflow = get_workflow(decision.workflow)
+        # What the turn already holds: the session's resolved slots, and the amount in the question.
+        turn.resolved_slots = session.inherited_slots(turn.history)
+        if is_monetary_approval(req.message) and (amount := extract_amount(req.message)) is not None:
+            turn.resolved_slots["amount_usd"] = amount
 
         if decision.sensitive:
             verdict = g5.check(sensitive=True, message=req.message, turn=turn.buffer)
@@ -916,6 +938,14 @@ class Orchestrator:
         decision = turn.decision
         assert decision is not None
 
+        # -- 2b. the data debt (W8, C10; widened in the fix round) — before the gate ---------
+        # A turn that has not read the record it is about is not ready to be gated: the profile
+        # or balance it still owes may be the evidence, and the compliance verdict it still owes
+        # is scored deterministically for an `expense_claim` that reached this point without one.
+        parked = await self._settle_data_debt(turn, cold_start=cold_start)
+        if parked is not None:
+            return parked
+
         # -- 3. G1 over the accumulated chunk set ---------------------------------------
         verdict = g1.check(turn.citable(), turn=turn.buffer)
         if not verdict.passed and decision.rag_only and not turn.reopened:
@@ -937,14 +967,14 @@ class Orchestrator:
         if not verdict.passed:
             return self._refuse(turn, verdict.reason, cold_start=cold_start)
 
-        # -- 3b. the terminal debts (W8, C09 and C10) ------------------------------------
-        # `_nudge` reports these on the step where the model stops calling tools. It cannot report
-        # them on the step where the model stops for some other reason — a budget, a completion
+        # -- 3b. the action debt (W8, C09) -------------------------------------------------
+        # `_nudge` reports it on the step where the model stops calling tools. It cannot report it
+        # on the step where the model stops for some other reason — a budget, a completion
         # predicate it satisfied another way — and on 9 of 12 recorded runs of `unsafe-001` the
         # turn reached synthesis with the write it was asked to propose still unmade, and answered
         # *"I cannot submit PTO requests in MosaicOne on your behalf"*. So the debt is terminal:
         # one more act step with the reminder, and then the orchestrator settles it itself.
-        parked = await self._settle_debts(turn, cold_start=cold_start)
+        parked = await self._settle_action_debt(turn, cold_start=cold_start)
         if parked is not None:
             return parked
 
@@ -1296,6 +1326,7 @@ class Orchestrator:
                     # tool from the array: a model that guesses a name still makes zero calls.
                     self._refused_call(turn, call)
                     continue
+                call = self._inherit_slots(turn, call)
                 result = await self._invoke(turn, call)
                 turn.tool_calls_made += 1
                 if result.confirmation_required:
@@ -1339,20 +1370,21 @@ class Orchestrator:
                 # The recovery path buys exactly **one** additional step (§9.2).
                 return
 
-    async def _settle_debts(self, turn: _Turn, *, cold_start: bool) -> ChatResponse | None:
-        """The two terminal debts of §9.1, settled before synthesis. A parked turn, or `None`.
+    async def _settle_data_debt(self, turn: _Turn, *, cold_start: bool) -> ChatResponse | None:
+        """The data debt of §9.1, settled before the evidence gate. A parked turn, or `None`.
 
-        **The data debt (W8, C10).** A workflow whose structured-data slots are still empty has not
-        read the record it is about. The live failures were a question about the reader's own
-        office declined outright and an answer calling a hybrid employee "fully remote".
-
-        **The action debt (W8, C09).** `intent == "action"`, a permitted write tool, and no gated
-        attempt. `_nudge` already reports this on the step the model stops calling tools; nine of
-        twelve recorded runs of `unsafe-001` reached synthesis another way and denied the
-        product's headline capability instead. One more act step with the reminder, and if the
-        model still will not propose it, the orchestrator proposes it — from the slots the turn
-        itself resolved, so the card is the turn's own state and not an invention.
+        **W8, C10 — widened in the fix round (W7-review I7).** A turn about one person's own record
+        that has not read it: a workflow turn with any reachable structured slot still empty, or an
+        `employee_data` turn with no record tool called at all — which is the class's own exhibit,
+        *"Which office am I assigned to?"*, declined outright with the profile never read. One act
+        step with the reminder. Then, for an `expense_claim` still without a verdict, the engine is
+        asked directly with the amount the question carried (W7-review I2): the threshold is the
+        engine's to apply, and the answer may not say who approves until it has.
         """
+        # A turn already outside its budget keeps the partial the stop exists to produce (§9.4),
+        # exactly as the breadth step does: no re-entry and no deterministic call on its account.
+        if turn.stop_reason in BUDGET_STOPS or turn.elapsed_s >= self.settings.agent_wall_clock_s:
+            return None
         if self._data_outstanding(turn) and "data_outstanding" not in turn.nudges:
             turn.nudges.append("data_outstanding")
             turn.messages.append(Message(role="user", content=DATA_OUTSTANDING))
@@ -1363,8 +1395,28 @@ class Orchestrator:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             if turn.pending is not None:
                 return self._park(turn, cold_start=cold_start)
+        if self._verdict_outstanding(turn):
+            turn.nudges.append("compliance_scored_deterministically")
+            try:
+                await self._score_deterministically(turn)
+            except McpUnavailable as exc:
+                return self._degraded(turn, str(exc), cold_start=cold_start)
+            self._plan(turn, step_index=turn.steps_taken)
+        return None
 
+    async def _settle_action_debt(self, turn: _Turn, *, cold_start: bool) -> ChatResponse | None:
+        """The action debt of §9.1, settled after the gate. A parked turn, or `None`.
+
+        **W8, C09.** `intent == "action"`, a permitted write tool, and no gated attempt. `_nudge`
+        already reports this on the step the model stops calling tools; nine of twelve recorded
+        runs of `unsafe-001` reached synthesis another way and denied the product's headline
+        capability instead. One more act step with the reminder, and if the model still will not
+        propose it, the orchestrator proposes it — from the slots the turn itself resolved, so the
+        card is the turn's own state and not an invention.
+        """
         if not self._action_outstanding(turn) or not any(name in self._permitted(turn) for name in WRITE_TOOLS):
+            return None
+        if turn.stop_reason in BUDGET_STOPS or turn.elapsed_s >= self.settings.agent_wall_clock_s:
             return None
         if "action_outstanding" not in turn.nudges:
             turn.nudges.append("action_outstanding")
@@ -1389,16 +1441,93 @@ class Orchestrator:
         return self._park(turn, cold_start=cold_start) if turn.pending is not None else None
 
     def _data_outstanding(self, turn: _Turn) -> bool:
-        """A workflow turn that has read no structured record it requires, and could still read one."""
-        workflow = turn.workflow
-        if workflow is None or turn.pending is not None:
+        """A turn about one person's own record that has not read all of it, and still could.
+
+        Two shapes (W8 fix round, W7-review I7). A **workflow** turn with any reachable required
+        structured slot still empty — reading the balance but not the profile is the same debt as
+        reading neither. And an **`employee_data`** turn, which has no workflow to list its slots:
+        outstanding while no record tool it could call has produced anything.
+        """
+        if turn.pending is not None or turn.decision is None:
+            return False
+        # A resumed, declined or failed write is a turn whose reading moment has passed: the human
+        # answered a card built on what the turn had read, and re-entering the loop behind that
+        # answer would put a second act step between the confirmation and the answer.
+        if turn.declined or turn.write_failed or any(name in turn.state.results for name in WRITE_TOOLS):
             return False
         permitted = self._permitted(turn)
-        reachable = [name for name in workflow.requires_tool_results if name in permitted]
-        missing = [name for name in workflow.missing_tool_results(turn.state) if name in permitted]
-        # Every reachable slot still empty: the turn has read nothing at all about this person.
-        # A turn that read some of them has established a record and is not this failure.
-        return bool(missing) and len(missing) == len(reachable)
+        workflow = turn.workflow
+        if workflow is not None:
+            # `workflow_incomplete` IS this reminder for a workflow turn — the same debt in the
+            # same words — and the model has already been told once. A second act step for it
+            # would be the reminder twice; the verdict, where it is the debt, is scored below.
+            if "workflow_incomplete" in turn.nudges:
+                return False
+            return any(name in permitted for name in workflow.missing_tool_results(turn.state))
+        if turn.decision.intent != "employee_data":
+            return False
+        reachable = [name for name in RECORD_TOOLS if name in permitted]
+        return bool(reachable) and not any(turn.state.has(name) for name in reachable)
+
+    def _verdict_outstanding(self, turn: _Turn) -> bool:
+        """An `expense_claim` at synthesis with no verdict on an amount the turn knows (W7-review I2)."""
+        workflow = turn.workflow
+        return (
+            workflow is not None
+            and workflow.name == "expense_claim"
+            and not turn.state.has(COMPLIANCE_TOOL)
+            and turn.resolved_slots.get("amount_usd") is not None
+            and COMPLIANCE_TOOL in self._permitted(turn)
+            and turn.tool_calls_made < self.settings.agent_max_tool_calls
+            and bool(turn.request.employee_id and EMPLOYEE_ID.match(turn.request.employee_id))
+        )
+
+    async def _score_deterministically(self, turn: _Turn) -> None:
+        """Ask the engine for the verdict the turn reached synthesis without (W7-review I2).
+
+        Only the amount the question carried and the scenario the workflow names: the orchestrator
+        supplies what the turn already holds, never a value the model would have had to decide.
+        The result enters state and the envelopes exactly as a model-made call's would, so the
+        answer steps read it the same way.
+        """
+        arguments = {
+            "scenario": "expense_claim",
+            "employee_id": turn.request.employee_id,
+            "parameters": {"amount_usd": turn.resolved_slots["amount_usd"]},
+        }
+        result = await self._call(turn, COMPLIANCE_TOOL, arguments)
+        turn.tool_calls_made += 1
+        if not result.is_error:
+            self._scan(turn, await self._absorb_async(turn, result))
+            turn.step_summaries.append("the assistant scored the claim amount the question carried")
+
+    def _inherit_slots(self, turn: _Turn, call: ToolCall) -> ToolCall:
+        """Fill the compliance parameters the model omitted from what the turn already holds.
+
+        **Deterministic slot inheritance** (W8 fix round, W7-review I2 and I5). "What if I extend
+        it to five days instead?" is a delta of the previous turn, and the previous turn's
+        `start_date` is a fact the session holds — the prompt tells the model so, and this is what
+        makes it true when the model leaves the slot empty anyway. Only keys the call lacks are
+        filled, never one the model supplied; and a slot family the model changed one member of
+        (`days` / `end_date` / `duration_days`) is not completed from the session, because five
+        days from the old start with the old end date would be two different requests. The merged
+        arguments are what the `tool_call` span records, so the record is what was sent.
+        """
+        if call.name != COMPLIANCE_TOOL or not turn.resolved_slots:
+            return call
+        parameters = dict(call.args.get("parameters") or {})
+        supplied = {key for key, value in parameters.items() if value not in (None, "")}
+        blocked = set().union(*(family for family in SLOT_FAMILIES if family & supplied))
+        added = {
+            key: value
+            for key, value in turn.resolved_slots.items()
+            if key not in supplied and key not in blocked and key != "scenario"
+        }
+        if not added:
+            return call
+        turn.inherited.extend(sorted(added))
+        turn.step_summaries.append(f"inherited {', '.join(sorted(added))} from the session into the compliance check")
+        return call.model_copy(update={"args": {**call.args, "parameters": {**parameters, **added}}})
 
     async def _propose_deterministically(self, turn: _Turn) -> None:
         """Issue the write the turn was asked for, from the slots the turn itself resolved (C09).
@@ -1408,7 +1537,9 @@ class Orchestrator:
         call's own parameters, so the card cannot describe a request the turn never scored.
         """
         arguments = self._write_arguments(turn)
-        if arguments is None:
+        if arguments is None or turn.tool_calls_made >= self.settings.agent_max_tool_calls:
+            # No card past the turn's own budget (W7-review Minor): the partial is what the stop
+            # is for, and a call the budget forbids is not one the orchestrator gets to make.
             return
         result = await self._call(turn, WRITE_TOOLS[0], arguments)
         turn.tool_calls_made += 1
@@ -2001,6 +2132,13 @@ class Orchestrator:
         """
         body = turn.state.latest(COMPLIANCE_TOOL)
         if not body or body.get("verdict") != "non_compliant":
+            return False
+        # The verdict has to be the one for **the write's** scenario (W7-review Minor): a ticket
+        # bound for `hr-timeoff` is refused on a `pto_request` verdict, not on whatever the turn
+        # scored last. A queue no scenario maps to is refused on any verdict, as before.
+        queue = str(call.args.get("queue") or "")
+        expected = DETERMINISTIC_QUEUES.get(str(body.get("scenario") or ""))
+        if queue and expected is not None and expected != queue:
             return False
         envelope = _ToolEnvelope(name=COMPLIANCE_TOOL, result_json=json.dumps(body, ensure_ascii=False))
         failing = next((row for row in compliance_restatement.rows([envelope]) if row.status == "unmet"), None)

@@ -138,8 +138,13 @@ async def test_a_turn_whose_clock_ran_out_during_synthesis_also_skips_the_step(w
 
     `stop_reason` is `answered` here — no budget stop was ever recorded — so the clock has to be
     re-read at step 5b rather than inferred from the stop reason alone.
+
+    Three steps, not two, since W8's fix round: the question carries a money amount and an approval
+    term, so it is routed to the `expense_claim` workflow and the model's prose-only step draws the
+    workflow-incomplete reminder; the clock jumps after the step that answers it, which is still
+    "the loop finished inside the budget and synthesis carried it past".
     """
-    clock_that_jumps_after(monkeypatch, steps=2)
+    clock_that_jumps_after(monkeypatch, steps=3)
 
     response, recorder = await drive("citation_breadth_repair.json")
 
