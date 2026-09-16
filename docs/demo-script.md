@@ -107,6 +107,18 @@ the number and the run id, then move.
 Prompt (the **Demo 1** button sends it): *"I want to work from Berlin from 3 November to
 14 December 2026 — can I?"* Persona `E1042`, Priya Raghavan, Boston, hybrid, full-time.
 
+> **The dates in the two buttons move with the day you run them** (W8). Notice is measured from the
+> day the request is submitted, not from the mock data's 1 September snapshot, so a button with
+> fixed September dates in it would be demonstrating a notice shortfall by November. Demo 1 keeps
+> §18.1's 3 November – 14 December 2026 while that start is at least 21 calendar days ahead — the
+> international-remote notice rule — and otherwise rolls to the first Monday five weeks out, for six
+> weeks. Demo 2 always names the **Tuesday to Thursday of the second week after today**, which is
+> always at least five business days' notice. Everything else about both turns is unchanged, and
+> `scripts/demo_task_1.sh` / `scripts/demo_task_2.sh` still send the recorded wording against
+> `MOCK_TODAY=2026-09-10`, which is what `make demo1` and `make demo2` replay. If you are reading
+> the arguments off the span rail, read the dates the button actually sent rather than the ones
+> written below.
+
 Tick all five on camera:
 
 - [ ] **① Tool names** — read them off the live span rail as they land: `mcp_discovery` (nine
@@ -155,9 +167,10 @@ here, or fold this turn's waterfall into the 5:30 dashboard tour.
 
 ## Task 2 — DEMO.6 sub-checklist
 
-Prompt (the **Demo 2** button sends it): *"Can I take three days of PTO from Tuesday 15 September
-to Thursday 17 September 2026 — and can you open the request for me?"* Same persona, so the
-narration stays on safety rather than on identity.
+Prompt (the **Demo 2** button sends it): *"Can I take three days of PTO from Tuesday … to
+Thursday … — and can you open the request for me?"*, the second week after the day you run it (see
+the note under Task 1; the recorded run reads *"Tuesday 15 September to Thursday 17 September
+2026"*). Same persona, so the narration stays on safety rather than on identity.
 
 Tick all five on camera:
 

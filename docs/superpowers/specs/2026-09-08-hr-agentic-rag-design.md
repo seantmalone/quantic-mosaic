@@ -866,6 +866,28 @@ there to bound. The clock is re-read rather than inferred from `stop_reason` alo
 turn past it. The price is one extra synthesis call on the minority of turns
 that are multi-document, inside budget, and under-cite: ~15 s at the deployed p50, visible in the trace as a second `llm_call` span with `purpose: repair`.
 
+**Six more steps that are not guardrails either, all added at W8** after the demo-path review of 2026-09-15 found the deterministic layer and the
+written answer were never reconciled. Each is a pure function, each emits no `guardrail` span and carries no number, and each runs in §9.1 step 5 in
+the order that section lists:
+
+* `agent/compliance.py` — **compliance restatement** (C03, C05, C07). For every requirement the engine evaluated, a sentence about that requirement's
+  subject whose polarity opposes its `status` is replaced by that row's own result in the reader's voice; a conclusion about a `not_stated` row becomes
+  *"I could not check the … requirement"*; a sentence carrying two verdicts is left alone and recorded `unverified`. The same step replaces a ceiling
+  quoted below the amount the question carries — *"up to USD 2,500"* on a USD 3,000 claim — with the approval tier that does apply.
+* `agent/capability.py` — **the capability check** (C09, C10). A sentence denying, in the first person, what a **permitted** tool does is dropped, and
+  so is one stating a profile attribute the reader's own envelope contradicts.
+* `agent/approvers.py` — **approver resolution** (C06). A bare role takes the name `approvers[]` resolved; a role the reader holds themselves becomes
+  the person one level up, with `manager-approval-matrix.md`'s own reason in the same clause.
+* `agent/arithmetic.py` — **arithmetic consistency** (C13), the numeric twin of `agent/dates.py`. A `<total> … (<a> plus/minus <b>)` decomposition that
+  does not sum is replaced by the envelope's own — `accrued − used − pending`, carryover only where there is unexpired carryover — or removed. The
+  tool's total is never touched, and an addend whose envelope counterpart is zero is forbidden even where the sum works out.
+* `agent/entailment.py` — **next-step entailment** (C08). `next_steps` is written in parallel with the blocks and was read by no rule; a step carrying
+  a date, a duration, an amount or a person's name that appears in no surviving block and no envelope is dropped, recorded as G3 records a drop. A
+  deadline that shows its working is exempt: `agent/dates.py` has already recomputed it from its anchor.
+* `agent/breadth.py` gains **claim merge and the shortfall record** (C26): `policy_fact` blocks with the same normalised claim fold into one and union
+  their citations, and where the repair round was bought and the answer is still narrower than the workflow's `min_distinct_docs`, the shortfall is
+  recorded on the turn rather than left advisory.
+
 **G1's candidate set includes the compliance engine's evidence (P13).** Tool 4 is deterministic and every requirement it evaluates carries an
 `evidence` block naming a **committed** chunk, resolved by `mcpserver/rules.py` from a `(doc_id, heading_path)` pair in `corpus/rules.yml`. Nothing had
 ever scored those ids, so the gate could not see them and a turn could reach a correct, cited verdict and be refused for want of evidence. The
@@ -1285,18 +1307,43 @@ POST /chat  (or /chat/confirm)
  ├─ 3. G1 evidence gate over the accumulated chunk set
  ├─ 4. SYNTHESIZE  one constrained-JSON llm_call(purpose="synthesize") → AnswerSchema
  ├─ 5. G2 citation resolvability (repair) · G3 fact-vs-recommendation
+ ├─ 3b. the two terminal debts (W8): intent==action with a permitted write and no gated attempt, or
+ │       a workflow whose every reachable structured slot is still empty ⇒ ONE more act step with
+ │       ACTION_OUTSTANDING / DATA_OUTSTANDING, and for the action debt, if the model still will
+ │       not propose it, the orchestrator proposes the card itself from the resolved slots
+ ├─ 4. SYNTHESIZE  one constrained-JSON llm_call(purpose="synthesize") → AnswerSchema
+ ├─ 5. G2 citation resolvability (repair) · G3 fact-vs-recommendation
  ├─ 5b. citation breadth (§7.4, P24): on a multi-document turn still inside its budget whose answer
  │       cites fewer documents than its citable evidence spans, ONE llm_call(purpose="repair")
  │       naming the uncited ones; the second answer replaces the first only if it is broader and
  │       G2/G3 cost it nothing. A budget-stopped turn skips it: the partial is what the stop is for
- ├─ 5c. outcome consistency (§7.4, P22): a confirmed write is reported as done, from the tool result
+ ├─ 5c. claim merge (W8): `policy_fact` blocks with the same normalised claim fold into one and
+ │       union their citations; a shortfall against the workflow's min_distinct_docs is recorded
+ ├─ 5d. compliance restatement (W8): a sentence whose polarity opposes a requirement's own `status`
+ │       is replaced by that row's result, in the reader's voice; a `not_stated` row gets "I could
+ │       not check …"; a ceiling below the amount the question carries is replaced by the tier that
+ │       does apply
+ ├─ 5e. outcome consistency (§7.4, P22): a confirmed write is reported as done, from the tool result
+ ├─ 5f. capability check (W8): a sentence denying what a permitted tool does, or stating a profile
+ │       attribute the reader's own envelope contradicts, is dropped
+ ├─ 5g. approver resolution (W8): a bare role takes the name the envelope resolved; a role the
+ │       reader holds themselves becomes the person one level up
+ ├─ 5h. arithmetic consistency (W8): a decomposition that does not sum to its stated total is
+ │       replaced by the envelope's own, or removed; the tool's total is never touched
+ ├─ 5i. date consistency (UX W6) · snapshot consistency (P29) · next-step entailment (W8): a step
+ │       naming a date, a duration, an amount or a person the answer never established is dropped
  ├─ 6. close the turn: rollups, latency decomposition, outcome, stop_reason
  └─ 7. ONE batched flush of the turn's spans + llm_messages + the closing UPDATE
 ```
 
-**Three reminders, at most one per act step.** When the model stops calling tools while the turn still owes something, the loop appends one
+**The confirmation gate is coupled to the verdict** (W8). A write whose scenario the same turn scored `non_compliant` is refused at the call boundary,
+recorded, and never turned into a card; the answer opens with a `notice` giving the failing row's own reason and the contact the scenario escalates to.
+`non_compliant` **is** the "a blocking requirement is unmet" condition (§8.4), so the verdict alone is the test.
+
+**Four reminders, at most one per act step.** When the model stops calling tools while the turn still owes something, the loop appends one
 deterministic `user` message and takes another step: `workflow_incomplete` (§9.3's predicate is unmet), `action_outstanding` (the user asked for
-something to be created and nothing has been proposed) and, added at P13, `search_breadth` — the turn has searched the federated corpus at most once
+something to be created and nothing has been proposed), `data_outstanding` (added at W8: the turn is about one person's own record and has read none of
+it) and, added at P13, `search_breadth` — the turn has searched the federated corpus at most once
 while the question spans more of it than one query reaches, which is how the judged baseline lost `remote-002` and `expenses-002` with two cited
 documents where three were required. Each is sent at most once per turn, only on a step where no other reminder fired, and only while a permitted tool
 could still settle it. `search_breadth` has **two forms of one debt**: it fires at *at most* one search, so its opening clause states the real count

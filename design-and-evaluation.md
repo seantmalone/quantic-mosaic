@@ -637,6 +637,23 @@ a bare verb. `tests/unit/test_g4_no_false_positives.py` runs G4 over **every chu
 committed manifest** and asserts that every quarantined chunk belongs to `security-acceptable-use`
 (the canary), that at least one is quarantined, and that no chunk from any other document is.
 
+**Nine deterministic steps run after synthesis, and none of them is a guardrail.** They emit no
+`guardrail` span and carry no G-number, because the six rules above are a closed set. Each is a
+pure function over the blocks G2 and G3 have already repaired, and each exists for a measured
+failure in which the deterministic layer and the written answer disagreed:
+
+| step | module | what it repairs |
+|---|---|---|
+| citation breadth + claim merge | `agent/breadth.py` | one repair call on an answer narrower than its evidence; duplicate claims fold into one block and union their citations, and a remaining shortfall is recorded |
+| compliance restatement | `agent/compliance.py` | a sentence whose polarity opposes a requirement's `status`; a conclusion on a `not_stated` row; a ceiling quoted below the amount the question carries |
+| outcome consistency | `agent/outcome.py` | the account of a performed write, and any sentence telling the reader to go and file it themselves |
+| capability check | `agent/capability.py` | a first-person denial of what a permitted tool does; a profile attribute the reader's own envelope contradicts |
+| approver resolution | `agent/approvers.py` | a bare role where the envelope resolved a name; a reader sent to approve their own request |
+| arithmetic consistency | `agent/arithmetic.py` | a decomposition that does not sum to the total beside it |
+| date consistency | `agent/dates.py` | a stated deadline whose own parenthetical working contradicts it; a weekday that is not the day it names |
+| snapshot consistency | `agent/snapshot.py` | the snapshot date restated in the answer; a tenure in machine units |
+| next-step entailment | `agent/entailment.py` | a step naming a date, a duration, an amount or a person the answer never established |
+
 **Confirmation is not a guardrail — it is a property of the MCP server**, which is precisely why
 action safety can be a plain test rather than a reported number. The one-time token lives in the
 `confirmations` table, is minted **only in `web/`** after a human clicks Confirm, is bound to the
@@ -756,14 +773,14 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,541 tests as of 2026-09-15) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 2,824 tests as of 2026-09-15) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
 **The coverage gate is the same command locally and in CI.** `make coverage` and the `test` job
 both run `coverage run --branch --source=src/hrmosaic -m pytest -q`, write `coverage.xml` and then
 enforce `coverage report --fail-under=90`; the suite measured **95% of statements and 87% of
-branches over 8,243 statements** on 2026-09-15 (94% combined, which is the number the gate reads),
+branches over 9,414 statements** on 2026-09-15 (94% combined, which is the number the gate reads),
 so the 90 floor is a regression guard rather than a target to grow into. No third-party coverage
 service and no badge token is involved — §15.2's claim that nothing CI holds is a credential stands
 unchanged.

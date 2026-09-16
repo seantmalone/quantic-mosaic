@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from hrmosaic.agent.dates import MONTHS
+from hrmosaic.agent.dates import MONTHS, PARENTHETICAL
 
 #: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
@@ -122,7 +122,14 @@ class Outcome:
 
 
 def claims(text: str) -> list[str]:
-    """Every specific this text commits to: its dates, durations, amounts and names."""
+    """Every specific this text commits to: its dates, durations, amounts and names.
+
+    A deadline that **shows its working** — *"by 13 October 2026 (21 days before 3 November)"* — is
+    not one of them. `agent/dates.py` has already recomputed that date from its anchor and
+    corrected it if it was wrong, so it is derived from a date the turn does carry rather than
+    asserted; asking for it verbatim in a block would drop the most useful step a reader gets.
+    """
+    text = PARENTHETICAL.sub(" ", text)
     found: list[str] = []
     for pattern in (DATE, DURATION, AMOUNT):
         found += [match.group(0) for match in pattern.finditer(text)]
