@@ -237,22 +237,27 @@ def test_p11_the_composer_stays_reachable_and_the_newest_message_stays_in_view(f
 
     assert fresh_page.eval_on_selector_all("#messages .turn", "els => els.length") == 3
     assert not _document_scrolls_sideways(fresh_page)
-    # The page is an app, not a growing document: the transcript scrolls, not the page. Since UX W7
-    # (Addendum 2) the demo panel is always expanded and the transcript keeps an 18rem floor, so
-    # the page *may* scroll by what the panel costs once it carries a turn's summary — that is the
-    # panel's room, the same after one turn as after three, and it is bounded by the panel itself.
-    # What may never happen is the transcript's content leaking into the page's height, which is
-    # what `min-height: 0` on `.conversation` (W2) and `contain: size` on `.transcript` (W7) stop.
-    geometry = fresh_page.evaluate(
-        """() => ({
-          doc: document.documentElement.scrollHeight, inner: window.innerHeight,
-          panel: document.querySelector('section.demo-panel').getBoundingClientRect().height,
-          transcript: document.getElementById('transcript').clientHeight,
-          content: document.getElementById('transcript').scrollHeight })"""
-    )
-    assert geometry["content"] > geometry["transcript"], f"the transcript is not what scrolls: {geometry}"
-    assert geometry["transcript"] >= 18 * 16 - 1, f"the transcript is below its floor: {geometry}"
-    assert geometry["doc"] - geometry["inner"] < geometry["panel"], f"the page grew with the conversation: {geometry}"
+    # The page is an app, not a growing document: the transcript scrolls, not the page. Since UX W9
+    # (CPUX4-01) the conversation owns the first viewport — `.conversation` has a definite height —
+    # and the always-expanded demo panel sits below the fold, so the page *may* scroll by what the
+    # panel costs, the same after one turn as after three, bounded by the panel itself. What may
+    # never happen is the transcript's content leaking into the page's height, which is what the
+    # definite height on `.conversation` and `min-height: 0` on `.transcript` stop.
+    for width, height in ((1440, 900), (1280, 800)):
+        # Both desktop viewports (UX W9, CPUX4-01), on the same three turns: the layout is CSS.
+        fresh_page.set_viewport_size({"width": width, "height": height})
+        fresh_page.wait_for_timeout(400)
+        geometry = fresh_page.evaluate(GEOMETRY_JS)
+        assert geometry["content"] > geometry["transcript"], f"{width}: the transcript is not what scrolls: {geometry}"
+        # The transcript is the viewport less the masthead and the composer — at least 60% of it.
+        assert geometry["transcript"] >= 0.6 * height, f"{width}: the transcript is a letterbox: {geometry}"
+        # The page may scroll by the panel below the fold and the gaps around it — never by the
+        # conversation's content, which is what `.conversation`'s definite height stops.
+        assert geometry["doc"] - geometry["inner"] <= geometry["panel"] + 4 * 16, (
+            f"{width}: the page grew with the conversation: {geometry}"
+        )
+        assert geometry["composer_hit"] == "message", f"{width}: the composer is not hittable: {geometry}"
+        assert geometry["transcript_focusable"], f"{width}: the scrolling transcript is not keyboard-reachable"
 
     send = fresh_page.eval_on_selector("#send-button", "e => e.getBoundingClientRect().toJSON()")
     assert send["top"] >= 0 and send["bottom"] <= 900 + 1, f"the send control is off screen: {send}"
@@ -345,7 +350,9 @@ def test_p8_every_demo_control_the_browser_paints_is_inside_the_panel(fresh_page
     expected = (
         r"How this answer was produced: \d+ tools? used, \d+ policy sections? read, "
         r"in (under a second|\d+\.\d+ (seconds|minutes))\. "
-        r"\d+ of the 6 safety checks applied to this answer; (all \d+|\d+ of the \d+) passed\."
+        r"\d+ of the 6 safety checks applied to this answer; "
+        r"(all \d+ passed|both passed|it passed|it did not pass|none applied|\d+ of the \d+ passed) "
+        r"— \d+ checks? run, (none blocked|\d+ blocked)\."
     )
     assert re.fullmatch(expected, produced), produced
 
@@ -369,6 +376,14 @@ PANEL_JS = r"""
     panel_client: panel.clientHeight,
     transcript: transcript.getBoundingClientRect().height,
     transcript_overflow: getComputedStyle(transcript).overflowY,
+    // The empty state INSIDE the transcript's own visible box, not merely inside the viewport
+    // (UX W9, CPUX4-01): a starter clipped by the box's edge was "in the viewport".
+    empty_state_inside: Array.from(document.querySelectorAll("#transcript .starter, #transcript a[href='/policy']"))
+      .map((el) => { const r = el.getBoundingClientRect(); const t = transcript.getBoundingClientRect();
+                     return r.top >= t.top - 1 && r.bottom <= t.bottom + 1 && r.bottom <= window.innerHeight; }),
+    composer_hit: (() => { const m = document.getElementById("message").getBoundingClientRect();
+                           const hit = document.elementFromPoint(m.left + m.width / 2, m.top + m.height / 2);
+                           return hit ? hit.id || hit.tagName.toLowerCase() : null; })(),
     starters: document.querySelectorAll(".starter").length,
     // The empty state, measured where it stands before any scrolling: every starter and the
     // `/policy` link fully inside the viewport (UX W8 fix round, dgc-r3-1).
@@ -397,8 +412,9 @@ PANEL_VIEWPORTS = (("desktop", 1440, 900), ("laptop", 1280, 800), ("phone", 390,
 def test_p8_the_panel_is_always_expanded_and_the_conversation_keeps_its_floor(browser, ux_server):
     """UX W7, Addendum 2 — the owner's decision, overriding the collapsed `<details>` of W3 and its
     remembered open state: the panel is a plain section with every control on the page at every
-    viewport, and the conversation is not what pays for it. `.transcript` has an 18rem floor, so on
-    a viewport the panel does not fit beside, the page scrolls; on a phone it already did."""
+    viewport, and the conversation is not what pays for it. Since UX W9 (CPUX4-01) the conversation
+    owns the first viewport and the panel sits below the fold, so the page scrolls to it; on a
+    phone it already did."""
     for label, width, height in PANEL_VIEWPORTS:
         context = browser.new_context(viewport={"width": width, "height": height})
         tab = context.new_page()
@@ -422,14 +438,16 @@ def test_p8_the_panel_is_always_expanded_and_the_conversation_keeps_its_floor(br
                 assert panel["transcript_overflow"] == "visible", "on a phone the page is the scroller"
                 assert panel["doc"] > panel["inner"], f"the phone page does not scroll: {panel}"
             else:
-                assert panel["transcript"] >= 18 * 16 - 1, f"{label}: the transcript is below its floor: {panel}"
-            if label != "phone":
-                # The at-rest page may scroll to make room for the panel; what it may not do is
-                # cut the product's own empty state (dgc-r3-1). The old `doc <= inner` assertion
-                # actively forced the clip.
-                assert panel["empty_state_painted"] and all(panel["empty_state_painted"]), (
-                    f"{label}: a starter or the policy link is not fully painted at rest: {panel}"
+                # **The conversation owns the first viewport** (UX W9, CPUX4-01): the transcript
+                # is the viewport less the masthead and the composer — never an 18rem floor that
+                # was also the ceiling — the empty state sits inside ITS box, and the composer is
+                # the element under its own centre. Re-audit #4 measured 288px of transcript
+                # holding 425px of empty state at both desktop widths.
+                assert panel["transcript"] >= 0.6 * height, f"{label}: the transcript is a letterbox: {panel}"
+                assert panel["empty_state_inside"] and all(panel["empty_state_inside"]), (
+                    f"{label}: a starter or the policy link is outside the transcript's box at rest: {panel}"
                 )
+                assert panel["composer_hit"] == "message", f"{label}: the composer is not hittable: {panel}"
             reachable = tab.evaluate(STARTERS_REACHABLE_JS)
             assert all(reachable), f"{label}: a starter question cannot be scrolled into view: {reachable}"
         finally:
@@ -594,6 +612,23 @@ def _newest_turn_is_on_screen(newest: dict) -> None:
     assert newest["bottom"] <= newest["composerTop"] + 1, f"the newest turn ends under the composer: {newest}"
     assert newest["composerHit"] == "message", f"the composer is not hittable at its own centre: {newest}"
 
+
+#: The conversation's geometry after some turns (UX W9, CPUX4-01 and A11Y4-04).
+GEOMETRY_JS = """
+() => {
+  const transcript = document.getElementById('transcript');
+  const m = document.getElementById('message').getBoundingClientRect();
+  const hit = document.elementFromPoint(m.left + m.width / 2, m.top + m.height / 2);
+  return {
+    doc: document.documentElement.scrollHeight, inner: window.innerHeight,
+    panel: document.querySelector('section.demo-panel').getBoundingClientRect().height,
+    transcript: transcript.clientHeight, content: transcript.scrollHeight,
+    composer_hit: hit ? hit.id || hit.tagName.toLowerCase() : null,
+    transcript_focusable: transcript.tabIndex >= 0 && transcript.getAttribute('role') === 'region'
+      && !!transcript.getAttribute('aria-label'),
+  };
+}
+"""
 
 #: Whether the composer's box holds its placeholder. An empty textarea's `scrollHeight` measures
 #: its empty value, not the two lines the placeholder wraps to at 390px — which is how W6's on-load

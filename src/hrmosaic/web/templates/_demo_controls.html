@@ -18,10 +18,11 @@
   drawing and the `<details>` W3 built). No `<summary>`, no collapsed state, nothing remembered in
   `localStorage`: a plain `<section>` with its heading, its disclaimer and every control on the
   page, at every viewport. It is still quarantined (P8) — one dashed, muted section below the
-  composer — and the conversation keeps its floor: `.transcript` has `min-height: 18rem`, so on a
-  viewport this panel does not fit beside, the *page* scrolls and the transcript is never squeezed
-  below the floor (dgc-r2-1); on a phone the page scrolls as it already did. The two-column body
-  at 48rem and up is what keeps the panel to roughly 330px on a wide screen.
+  composer — and the conversation owns the first viewport (UX W9, CPUX4-01): `.conversation` has a
+  definite height, so this panel sits below the fold and the *page* scrolls to it; the transcript
+  is never squeezed for the panel's sake (dgc-r2-1); on a phone the page scrolls as it already
+  did. The two-column body at 48rem and up is what keeps the panel to roughly 330px on a wide
+  screen.
 
   The "Act as" persona group comes first, right under the heading, which is where §3.7 draws it
   (UX W6 dgc-re-2, UX W7 M12): it is a grader's first move, and it holds one position.

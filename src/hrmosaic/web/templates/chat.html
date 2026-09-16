@@ -29,7 +29,9 @@
     {% if session_notice %}<p class="session-notice" role="status">{{ session_notice }}</p>{% endif %}
 
     {#- The conversation scrolls inside this box; the document does not grow (P11). -#}
-    <div id="transcript" class="transcript">
+    {#- A scroll container with no focusable content has to be focusable itself (WCAG 2.1.1; UX W9,
+        A11Y4-04): above 30rem this box scrolls the whole conversation. -#}
+    <div id="transcript" class="transcript" tabindex="0" role="region" aria-label="Conversation transcript">
       <section id="empty-state" class="empty-state"{% if transcript %} hidden{% endif %}>
         <h2>Hi {{ greeting_name }} — ask me anything about HR</h2>
         <p class="empty-lede">I answer from Mosaic's policy documents and your own HR record, and I always
@@ -312,6 +314,11 @@
       // whatever the box above just became — measured, not guessed, the way `_chrome_height.html`
       // measures the masthead (UX W7, cpux2-1).
       document.documentElement.style.setProperty("--composer-h", form.offsetHeight + "px");
+      // …and the masthead's, which `.conversation`'s desktop height is the viewport minus
+      // (UX W9, CPUX4-01). Measured, like the composer, never assumed.
+      var above = 0;
+      document.querySelectorAll("body.chat > .app-chrome, body.chat > .banner").forEach(function (el) { above += el.offsetHeight; });
+      if (above) { document.documentElement.style.setProperty("--chrome-h", above + "px"); }
     }
     messageBox.addEventListener("input", autogrow);
     // …and after layout, not during parse: a box measured before the stylesheet has laid the page
@@ -536,11 +543,10 @@
       demoNoTurn.hidden = true;
     }
 
-    // The panel is load-bearing for layout: `body.chat` has a definite height, so the panel takes
-    // its room out of the transcript (UX W2 report §7.1). It is always expanded (UX W7, Addendum 2
-    // — the owner's decision, overriding W3's collapsed `<details>`), and the transcript's 18rem
-    // floor is what keeps the conversation from paying for it: where the two do not fit, the page
-    // scrolls. There is no script for the panel at all.
+    // The panel is not load-bearing for layout any more: `.conversation` has a definite height —
+    // the first viewport (UX W9, CPUX4-01) — and the panel, always expanded (UX W7, Addendum 2 —
+    // the owner's decision, overriding W3's collapsed `<details>`), sits below the fold, reached
+    // by a page scroll. There is no script for the panel at all.
 
     // -- the conversation's own address (UX W6, nav-reaudit-1 / navigation-and-ia-16) ------
     //

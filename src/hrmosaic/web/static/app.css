@@ -201,32 +201,41 @@ input:focus-within {
    W2 this was a two-column grid whose second column was a 22rem rail of raw span records, and the
    page was a growing document that put the composer off screen after a single answer
    (navigation-and-ia-18, chat-production-ux-2, -16). */
-body.chat { display: flex; flex-direction: column; height: 100dvh; }
-/* A *definite* height, not a minimum: `min-height` leaves the column's height `auto`, and a
-   `flex: 1 1 auto` child then sizes to its content and grows the document — which is the very
-   defect (chat-production-ux-2). The chrome and the notice never shrink; the transcript does. */
+body.chat { display: flex; flex-direction: column; min-height: 100dvh; }
+/* The conversation owns the FIRST viewport (UX W9, CPUX4-01): `.conversation` has a *definite*
+   height — the viewport less the masthead (`--chrome-h`, published by the page script) and the
+   layout's top padding — so the transcript inside it is the viewport less the composer, and the
+   always-expanded Demo & grader panel sits below the fold, reached by a page scroll. Before W9
+   the body was a `100dvh` box shared by the conversation and the panel, and with the panel
+   always expanded the transcript was pinned at its 18rem floor at 1440×900 and 1280×800: 288px
+   of transcript holding 425px of empty state, the fourth starter and the policy link under the
+   composer. A definite height on `.conversation`, not a minimum: `min-height` leaves the height
+   `auto`, and a `flex: 1 1 auto` child then sizes to its content and grows the document
+   (chat-production-ux-2). The chrome and the notice never shrink; the transcript does. */
 body.chat > .app-chrome, body.chat > .banner { flex: none; }
 
 .layout {
-  flex: 1 1 auto; min-height: 0;
+  flex: none;
   display: flex; flex-direction: column; gap: var(--space-4);
   padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
-/* `min-height: 0` is deliberately **not** here (UX W7, dgc-r2-1). A flex item's automatic minimum
-   size is what stops it being squeezed below its own content, and the content here is the
-   transcript's 18rem floor plus the composer. Without it the column was shrunk to whatever the
-   opened demo panel left and its composer painted over the panel; with it the flex line overflows
-   `.layout` instead, and the page — not the conversation — is what scrolls.
-
-   The floor is only the floor because `.transcript` below has `contain: size`: without size
-   containment the transcript's *content* — two answers, ~2,000px — is its contribution to this
-   column's minimum, and the page grew with every turn, which is the W2 defect `min-height: 0`
-   had been there to stop (`test_p11_the_composer_stays_reachable_…`). */
+/* Until W9 this column was a flex item sharing `body.chat`'s 100dvh with the always-expanded
+   demo panel, held above its content by a `contain: size` transcript with an 18rem floor (UX W7,
+   dgc-r2-1) — and at both desktop viewports the floor was where it sat, the panel taking the
+   rest of the fold (re-audit #4, CPUX4-01). The `:has(.turn) { contain: size }` rule and the floor
+   are gone: a definite `height` on this column is what stops the page growing with the
+   conversation (`test_p11_the_composer_stays_reachable_…`), and `min-height: 0` on the transcript
+   inside is what lets it shrink to the column. Below 30rem the document is the scroller and the
+   height is `auto` again (the `@media (max-width: 30rem)` block). */
 .conversation {
-  flex: 1 1 auto;
+  flex: none;
   display: flex; flex-direction: column;
   width: 100%; max-width: var(--measure); margin-inline: auto;
+  /* The first viewport, exactly: masthead (and any notice) above, the layout's top padding, and
+     the rest is this column — transcript above, sticky composer at the viewport's bottom edge. */
+  height: calc(100dvh - var(--chrome-h, 4.5rem) - var(--space-4));
+  min-height: 24rem;
 }
 
 /* The transcript is the page's scroll container, and it says so. It had no affordance at all —
@@ -241,7 +250,7 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
      transcript at 1280x800, and the open state is remembered, so a grader who opened the panel once
      kept the 111px on every later load. With a floor the panel spends the PAGE's scroll instead —
      the same answer W6 already adopted below 30rem, applied at every viewport. */
-  flex: 1 1 auto; min-height: 18rem; overflow-y: auto; overscroll-behavior: contain;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   /* Load-bearing, like `.turn`'s: `#turn-status` is `.visually-hidden` once a turn has finished
      (UX W7, cpux2-3), and `.visually-hidden` is `position: absolute`. Without a positioned
      scroll container the live region escaped the transcript to its static position — the foot of
@@ -257,14 +266,6 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
     radial-gradient(farthest-side at 50% 100%, var(--edge-shade), transparent) bottom / 100% 0.7rem no-repeat;
   background-attachment: local, local, scroll, scroll;
 }
-/* Sized by its floor, never by its content — ONCE IT HOLDS A TURN (see `.conversation` above).
-   At rest the empty state is the content: the greeting, four starters and the `/policy` link,
-   ~425px, and with unconditional containment the 18rem floor was also the ceiling, so at 1440
-   and 1280 starter 3 was sliced and starter 4 and the link were off screen while the panel below
-   painted every control whole (UX W8 fix round, dgc-r3-1). The page may scroll at rest; the
-   product's own empty state may not be cut. Off below 30rem, where the transcript is a document
-   and must be as tall as what it holds. */
-.transcript:has(.turn) { contain: size; }
 .transcript::-webkit-scrollbar { width: 0.55rem; }
 .transcript::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 .messages { display: flex; flex-direction: column; gap: var(--space-5); }
@@ -389,6 +390,9 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
 .confirm-field dd { flex: 1 1 12rem; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .confirm-note { margin: 0 0 var(--space-3); font: var(--text-small); color: var(--ink-soft); }
 .confirm-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* The script moves focus to the heading so a reader announces the pause; the heading is not a
+   control, so it does not wear a control's focus ring (UX W9, CPUX4-09). */
+.confirm-heading:focus { outline: none; }
 .confirm-resolved { margin: 0 0 var(--space-3); font: var(--text-small); font-weight: 600; color: var(--ok); }
 .retry-form { margin-top: var(--space-3); }
 
@@ -507,6 +511,7 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
      because it is `position: sticky` on the page rather than on a box inside it. */
   body.chat { height: auto; min-height: 100dvh; }
   .layout, .conversation { flex: none; }
+  .conversation { height: auto; min-height: 0; }
   /* The column is full-bleed with padding of its own, so the composer's negative margin (below)
      ends at the column's edge rather than 12px past it: P7's mechanical rule read
      `section.conversation` as 378px of content in a 366px box on every phone screen, though
@@ -514,10 +519,6 @@ body.chat > .app-chrome, body.chat > .banner { flex: none; }
      into the margin it is given; `width: 100%` would not. */
   .conversation { width: auto; margin-inline: calc(var(--space-3) * -1); padding-inline: var(--space-3); }
   .transcript { flex: none; overflow-y: visible; contain: none; background: none; padding-right: 0; }
-  /* `.transcript:has(.turn)` above outranks the bare `.transcript` on specificity, so the
-     containment has to be switched off here by name too: with it on, a phone transcript stayed
-     18rem tall and the answer painted over the composer (UX W8 fix round). */
-  .transcript:has(.turn) { contain: none; }
   /* With the document as the scroller the button's place in the flow is the foot of a 2,000px
      transcript — offered, and out of reach from the top of it. It rides the viewport just above
      the sticky composer instead; `--composer-h` is published by `autogrow()` (UX W7, cpux2-1). */
@@ -629,7 +630,7 @@ body.dashboard { font: var(--text-body); background: var(--paper); accent-color:
    viewport, of internal navigation above every page's first sentence (`navigation-and-ia-13`).
    One row that scrolls sideways *inside itself*, with the same thin scrollbar and edge shade the
    wide tables use, so the affordance P7 asks for is there and the document still does not move. */
-@media (max-width: 44rem) {
+@media (max-width: 60rem) {
   .dash-nav {
     flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin;
     gap: 0 var(--space-3);
@@ -1007,7 +1008,7 @@ a .id-chip { color: var(--accent); }
    arrived before the measurement landed behind the masthead (W8 fix round, nav-r3-2 = DR3-02).
    It is a guess of last resort and it errs high. The measured value still wins wherever it exists. */
 :root { --dash-nav-fallback: 9rem; }
-@media (max-width: 44rem) { :root { --dash-nav-fallback: 11.5rem; } }
+@media (max-width: 60rem) { :root { --dash-nav-fallback: 11.5rem; } }
 /* The measured chrome, not a guess: 5.5rem was right at 1440 and 100px short of the three-row
    masthead at 390px, so every citation landed behind it (UX W6, nav-reaudit-2). */
 .reader-section { scroll-margin-top: calc(var(--dash-nav-h, var(--dash-nav-fallback)) + 0.75rem); }
@@ -1106,6 +1107,14 @@ a .id-chip { color: var(--accent); }
 .span-bar.is-instant { width: 2px !important; min-width: 2px; background: var(--ink-soft); border-radius: 0; }
 .span-duration { text-align: right; color: var(--ink-soft); }
 .span-payload { display: contents; }
+/* Chrome lays a `<details>` body out through a `::details-content` box; with the details itself
+   `display: contents`, THAT box is the grid item — and auto-placement put it in the 35px chevron
+   track, so an opened payload was a one-character ribbon in a 352px scroll box (UX W9, A11Y4-01,
+   re-audit #4's Critical). Place it: the full row width, on the row below the span. Closed, it has
+   no box, so a closed payload still costs no row. The `> pre` rule below is kept for engines
+   without the pseudo-element, where the `<pre>` is the grid item. */
+.span-payload:not([open])::details-content { display: none; }
+.span-payload[open]::details-content { display: block; grid-column: 1 / -1; grid-row: 2; min-width: 0; }
 .span-payload > summary {
   grid-column: 7; list-style: none; cursor: pointer; text-align: center;
   color: var(--ink-soft); border-radius: var(--radius-tile);
@@ -1136,6 +1145,7 @@ a .id-chip { color: var(--accent); }
   .span-summary { grid-column: 2 / 5; grid-row: 2; }
   .span-payload > summary { grid-column: 5; grid-row: 1; }
   .span-payload > pre { grid-column: 1 / -1; grid-row: 3; }
+  .span-payload[open]::details-content { grid-column: 1 / -1; grid-row: 3; }
   .span-track { display: none; }
   .span-axis { grid-template-columns: 2.2rem 6rem minmax(0, 1fr) 4.5rem 1.6rem; }
   .span-axis-label { grid-column: 1 / 4; }
@@ -1264,4 +1274,17 @@ a .id-chip { color: var(--accent); }
 .answer-block-label {
   display: block; font: var(--text-meta); text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--ink-soft);
+}
+
+/* The persona cell (UX W9, DR4-09): the name in the cell, the id in its `title` — one line. */
+.persona { white-space: nowrap; }
+
+/* A small sample under its rate, on its own line (UX W9, npo5-05): eight rate columns with the
+   sample inline overran the headline table's box at both desktop widths. */
+.data-table td .sample { display: block; font: var(--text-meta); color: var(--ink-soft); white-space: nowrap; }
+/* …and in a card (under 40rem the cell is a flex row: label, value), the sample takes a row of
+   its own under the value rather than sitting beside it and pushing the card past the box. */
+@media (max-width: 40rem) {
+  .data-table td:has(.sample) { flex-wrap: wrap; }
+  .data-table td .sample { flex: 1 1 100%; text-align: right; }
 }
