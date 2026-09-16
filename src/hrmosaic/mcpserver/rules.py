@@ -28,6 +28,17 @@ had been doing two jobs — "the engine checked this and it fails" and "the call
 parameter, so nothing was checked" — and the answer could not tell them apart, so a requirement
 nobody had evaluated was narrated as a settled failure. `met` stays for every existing consumer and
 means exactly `status == "met"`.
+
+**…and a `blocking` flag** (W10, ruling 3), the *effective* one the engine used rather than the
+file's, so a caller that cannot read `rules.yml` — `agent/**` never imports this package — can ask
+the question the verdict does not answer: is there a blocking row nobody could score? A `manual`
+check publishes `false` whatever the file says.
+
+**`days` is derived from the two dates** (W10, ruling 2), as business days inclusive of both ends
+with the employee's own observed holidays excluded — the same calendar `notice_business_days`
+walks. Five of the sixteen recorded demo paths omitted it, so the one blocking PTO requirement came
+back `not_stated` on every one of them. The two walks are echoed in `computed` as `notice_span` and
+`business_day_span`, in the words an answer quotes rather than re-derives.
 """
 
 from __future__ import annotations
@@ -188,6 +199,40 @@ def business_days_between(start: date, end: date, holidays: frozenset[date]) -> 
     return count
 
 
+def business_days_inclusive(start: date, end: date, holidays: frozenset[date]) -> int:
+    """Business days the span `start`…`end` actually covers, both ends included (W10, ruling 2).
+
+    The twin of `business_days_between`, and deliberately a second function rather than an offset
+    on the first: *notice* is the gap between two days and *duration* is the days themselves, and
+    the one time the two were computed from one expression the demo reported a three-day request
+    as giving three days of notice. Weekends and the employee's own observed holidays are excluded
+    from both, which is why `days` derived here is comparable with the balance the policy measures
+    in working days.
+    """
+    if end < start:
+        return 0
+    count = 0
+    cursor = start
+    while cursor <= end:
+        if cursor.weekday() < 5 and cursor not in holidays:
+            count += 1
+        cursor += timedelta(days=1)
+    return count
+
+
+def _add_months(anchor: date, months: int) -> date:
+    """`anchor` plus whole calendar months, clamped to the last day of a shorter month."""
+    year, month = divmod(anchor.month - 1 + months, 12)
+    year, month = anchor.year + year, month + 1
+    following = date(year + (month == 12), (month % 12) + 1, 1)
+    return date(year, month, min(anchor.day, (following - timedelta(days=1)).day))
+
+
+def _weekday_date(value: date) -> str:
+    """`2026-09-29` → `"Tuesday 29 September"` — how the span is read back to a person."""
+    return f"{value.strftime('%A')} {value.day} {value.strftime('%B')}"
+
+
 # --------------------------------------------------------------------------------------
 # The evaluation context
 # --------------------------------------------------------------------------------------
@@ -274,6 +319,43 @@ class Context:
         end = _parse_date(self.parameters.get("end_date"))
         return None if start is None or end is None else (end - start).days + 1
 
+    def business_days(self) -> int | None:
+        """The working days the requested span covers — what `days` means (W10, ruling 2).
+
+        Derived from `start_date` and `span_end()`, so it is defined both for a request written as
+        two dates and for one written as a start plus a count. It is the number the balance
+        requirement compares against, and `derive_parameters` writes it into `parameters.days`
+        when the caller supplied none.
+        """
+        start = _parse_date(self.parameters.get("start_date"))
+        end = self.span_end()
+        return None if start is None or end is None else business_days_inclusive(start, end, self.holidays)
+
+    def business_day_span(self) -> str | None:
+        """The span in the words the answer quotes: *"Tuesday 29 September to Friday 2 October:
+        4 business days"* (W10, ruling 2). `None` where the request carries no dates."""
+        start = _parse_date(self.parameters.get("start_date"))
+        end = self.span_end()
+        days = self.business_days()
+        if start is None or end is None or days is None:
+            return None
+        unit = "business day" if days == 1 else "business days"
+        return f"{_weekday_date(start)} to {_weekday_date(end)}: {days} {unit}"
+
+    def notice_span(self) -> str | None:
+        """The business-day walk behind `notice_business_days`, in the same words (W10, ruling 1).
+
+        *"Tuesday 1 September to Tuesday 15 September: 8 business days' notice"* — the span the
+        engine actually walked, from the submission date the **server** set, so an answer quotes
+        the walk instead of re-deriving it against a date it guessed.
+        """
+        start = _parse_date(self.parameters.get("start_date"))
+        notice = self.notice_business_days()
+        if start is None or notice is None:
+            return None
+        unit = "business day" if notice == 1 else "business days"
+        return f"{_weekday_date(self.submitted_on)} to {_weekday_date(start)}: {notice} {unit}' notice"
+
     def overlaps_blackout(self) -> bool | None:
         """True when the requested span touches a blackout date on the employee's balance record."""
         start = _parse_date(self.parameters.get("start_date"))
@@ -335,6 +417,10 @@ class Context:
             "tenure_months_at_as_of": self.employee.get("tenure_months_at_as_of"),
             "notice_business_days": self.notice_business_days(),
             "notice_calendar_days": self.notice_calendar_days(),
+            # The two walks the engine made, in the words an answer may quote (W10, rulings 1, 2).
+            "notice_span": self.notice_span(),
+            "business_days": self.business_days(),
+            "business_day_span": self.business_day_span(),
             "duration_days": self.duration_days(),
             "claim_age_days": self.claim_age_days(),
             "overlaps_blackout": self.overlaps_blackout(),
@@ -489,6 +575,12 @@ def _entry(requirement: Mapping[str, Any], fact_key: str, evidence: dict[str, An
         "met": False,
         "status": "not_stated",
         "reason": "",
+        # Whether this row can stop the request on its own (W10, ruling 3). Published because the
+        # caller cannot read `rules.yml` — `agent/**` never imports `mcpserver` — and a write must
+        # be refused when a blocking row is `unmet` **or** `not_stated`, which is a question about
+        # the row and not about the verdict. `_evaluate_requirement` overwrites it for a `manual`
+        # check, which is never blocking whatever the file says.
+        "blocking": False,
         "fact_key": fact_key,
         "evidence": evidence,
     }
@@ -579,14 +671,22 @@ def _verdict(decisions: Sequence[Decision]) -> str:
     return "compliant"
 
 
-def derive_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
-    """The caller's parameters plus what the two dates imply (W8, C05).
+def derive_parameters(parameters: Mapping[str, Any], holidays: frozenset[date] = frozenset()) -> dict[str, Any]:
+    """The caller's parameters plus what the two dates imply (W8, C05; W10, ruling 2).
 
     `duration_days` is derived from `start_date` and `end_date` rather than taken on trust, because
     a model that supplied neither got a requirement reported as "Not stated" and an answer that
     asserted a duration anyway. An `end_date` before its `start_date` is an **argument error**: it
     is not a request the engine can score, and the live Berlin turn that sent one was answered with
     a confident conclusion built on rows that had evaluated nothing.
+
+    **`days` is derived the same way** (W10, ruling 2). Five of the sixteen recorded demo paths left
+    `days` out of the parameters, so the one *blocking* PTO requirement — does the balance cover the
+    request? — came back `not_stated` on every one of them, and two of those turns filed a ticket
+    for a request nobody had checked the reader could afford. A span written as two dates states its
+    own day count: business days between them inclusive, weekends and the employee's own observed
+    holidays excluded, which is the calendar `notice_business_days` already walks. A caller-supplied
+    `days` is never overwritten.
     """
     derived = dict(parameters)
     start, end = _parse_date(derived.get("start_date")), _parse_date(derived.get("end_date"))
@@ -596,7 +696,45 @@ def derive_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
                 f"end_date {end.isoformat()} is before start_date {start.isoformat()}; send the dates in order"
             )
         derived.setdefault("duration_days", (end - start).days + 1)
+        derived.setdefault("days", business_days_inclusive(start, end, holidays))
     return derived
+
+
+#: The subjects that measure how long somebody has worked here, and the unit each is in. A row
+#: comparing one of them is a row an employee passes by waiting, so the engine can say **when**
+#: (W10, ruling 14, scenario 02).
+TENURE_SUBJECTS: dict[str, str] = {
+    "employee.tenure_months_at_as_of": "months",
+    "computed.tenure_days": "days",
+}
+
+
+def tenure_eligible_on(spec: Mapping[str, Any], decisions: Sequence[Decision], context: Context) -> str | None:
+    """The day an unmet tenure requirement starts being met, or `None` (W10, ruling 14).
+
+    E1108 was told, correctly, that he does not have the twelve months of service an international
+    stay needs — and was never told that he reaches them on 15 August 2027, which is the one thing
+    the question *"can I?"* actually wants. The threshold is the requirement's own fact value and
+    the anchor is the hire date, so the date is the engine's arithmetic and not a model's.
+    """
+    hire = _parse_date(context.employee.get("hire_date"))
+    if hire is None:
+        return None
+    unmet = {decision.entry["id"] for decision in decisions if decision.entry.get("status") == "unmet"}
+    for requirement in spec["requirements"]:
+        if str(requirement["id"]) not in unmet:
+            continue
+        check = requirement.get("check") or {}
+        unit = TENURE_SUBJECTS.get(str(check.get("subject")))
+        if unit is None:
+            continue
+        expected = _numeric(context.fact(context.resolve_fact_key(str(requirement["fact_key"]))))
+        if expected is None:
+            continue
+        if unit == "days":
+            return (hire + timedelta(days=int(expected))).isoformat()
+        return _add_months(hire, int(expected)).isoformat()
+    return None
 
 
 def evaluate(
@@ -621,13 +759,16 @@ def evaluate(
     submitted = _parse_date(submitted_on)
     if submitted is None:
         raise RuleError(f"unparseable submitted_on {submitted_on!r}")
+    observed = frozenset(parsed for parsed in (_parse_date(day) for day in holidays) if parsed)
     context = Context(
         as_of=snapshot,
         submitted_on=submitted,
         employee=dict(employee),
         balance=dict(balance),
-        parameters=derive_parameters(parameters),
-        holidays=frozenset(parsed for parsed in (_parse_date(day) for day in holidays) if parsed),
+        # The employee's own calendar goes in first: `days` is derived in business days, and a
+        # business day is one their office actually works (W10, ruling 2).
+        parameters=derive_parameters(parameters, observed),
+        holidays=observed,
         facts=rule_set.facts,
         connection=connection,
     )
@@ -642,6 +783,11 @@ def evaluate(
         decided[decision.entry["id"]] = decision.met
         decisions.append(decision)
     decisions = _settle_manual(decisions)
+    for decision in decisions:
+        # The *effective* flag, not the file's: a `manual` row is never blocking whatever
+        # `rules.yml` says, and the row the caller reads has to be the row the engine used
+        # (W10, ruling 3).
+        decision.entry["blocking"] = decision.blocking
 
     approvals = [
         {key: value for key, value in approval.items() if key != "applies_when"}
@@ -672,7 +818,14 @@ def evaluate(
         "verdict": _verdict(decisions),
         "as_of": as_of,
         "submitted_on": submitted.isoformat(),
-        "computed": context.computed(),
+        "computed": {
+            **context.computed(),
+            **(
+                {"tenure_eligible_on": eligible}
+                if (eligible := tenure_eligible_on(spec, decisions, context)) is not None
+                else {}
+            ),
+        },
         "requirements": [decision.entry for decision in decisions],
         # The rows that were checked and failed — never a `not_stated` one, which is the exact
         # conflation `status` exists to end (W8, C05; the list itself caught up in the fix round).

@@ -103,15 +103,21 @@ def normalise_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
 
 PARAMETERS_DESCRIPTION = (
     "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, "
-    "end_date, days, amount_usd, category, transaction_date, reason. Notice days are always "
-    "computed by the engine from start_date against the submission date and any supplied notice "
-    "value is ignored; duration_days is derived from start_date and end_date."
+    "end_date, days, amount_usd, category, transaction_date, reason. The submission date is the "
+    "server's own — never send one — and notice is always computed by the engine from it against "
+    "start_date, so any supplied notice value is ignored; duration_days and days are derived from "
+    "start_date and end_date."
 )
 
-#: What `submitted_on` is for, in the words the tool schema publishes (W8, C04).
+#: What `submitted_on` means, in the words the **result** publishes (W8, C04; W10, ruling 1).
+#: It is no longer an input: six of the sixteen recorded demo paths supplied one, three of them the
+#: request's own start date and three the mock data's frozen snapshot, and each was narrated as the
+#: notice the request gave. A date the model chose is not evidence of when anything was submitted,
+#: so the server sets it — `Settings.today()`, pinned by `MOCK_TODAY` for the recorded stubs — and
+#: echoes it beside the business-day walk it made.
 SUBMITTED_ON_DESCRIPTION = (
-    "The date the request is submitted, ISO-8601. Notice is measured from it, never from the data "
-    "snapshot. Defaults to today."
+    "The date the request was submitted — the server's own date, never the caller's. Notice is "
+    "measured from it, and `computed.notice_span` shows the business-day walk."
 )
 
 
@@ -130,6 +136,10 @@ class Requirement(BaseModel):
     #: fails" and "never checked", and an answer cannot tell those apart from a boolean — so a
     #: requirement nobody had evaluated was narrated as a settled failure.
     status: Literal["met", "unmet", "not_stated"] = "not_stated"
+    #: Whether this row alone can stop the request (W10, ruling 3). `agent/**` never imports the
+    #: server, so a caller deciding whether a write may be proposed has to read the flag off the
+    #: wire; a `manual` check publishes `false` here however `rules.yml` marks it.
+    blocking: bool = False
     reason: str
     #: The requirement's reader label from `corpus/rules.yml` — what the measured thing is called
     #: in front of a person (W8 fix round, JX3-01). The chat surface's restatement is built from it.
@@ -195,8 +205,9 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
             list[str], Field(description="Advisory: topics the caller wants covered. Never changes a verdict.")
         ] = [],  # noqa: B006 - the schema publishes an empty-array default (§8.4); pydantic copies it per call
         parameters: Annotated[dict[str, str | float | bool], Field(description=PARAMETERS_DESCRIPTION)] = {},  # noqa: B006
-        submitted_on: Annotated[str, Field(description=SUBMITTED_ON_DESCRIPTION)] = "",
     ) -> ComplianceOutput:
+        # **`submitted_on` is not a parameter** (W10, ruling 1). It is not the model's to supply:
+        # the server sets it to its own today, and the result echoes it.
         call = read_meta(ctx)
         started = now_micros()
         try:
@@ -206,7 +217,6 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
                 scenario=scenario,
                 employee_id=employee_id,
                 parameters=dict(parameters),
-                submitted_on=submitted_on,
             )
         except rules.RuleError as exc:
             # An argument no verdict can be built on — `end_date` before `start_date` is the one the
@@ -226,8 +236,12 @@ def _holidays(deps: ServerDeps, employee: dict[str, Any]) -> list[str]:
     return [] if calendar is None else [holiday["observed"] for holiday in calendar["holidays"]]
 
 
-def submission_date(supplied: str) -> str:
-    """The caller's `submitted_on`, or today (W8, C04). `MOCK_TODAY` pins "today" for the stubs."""
+def submission_date(supplied: str = "") -> str:
+    """Today (W8, C04; W10, ruling 1). `MOCK_TODAY` pins "today" for the recorded stubs.
+
+    `supplied` survives for the tests and the internal callers that pin a submission date
+    deliberately; nothing on the wire can reach it any more.
+    """
     return supplied.strip() or settings.today().isoformat()
 
 

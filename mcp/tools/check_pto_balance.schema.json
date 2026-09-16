@@ -189,6 +189,30 @@
         "default": null,
         "title": "Remaining Days"
       },
+      "carryover_cap_days": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Carryover Cap Days"
+      },
+      "projected_forfeit_on_31_dec": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Projected Forfeit On 31 Dec"
+      },
       "next_accrual_date": {
         "anyOf": [
           {

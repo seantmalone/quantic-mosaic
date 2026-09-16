@@ -2244,9 +2244,13 @@ class Orchestrator:
     def _refuse_write(self, turn: _Turn, call: ToolCall, result: ToolResult) -> bool:
         """Refuse a proposed write the turn's own verdict forbids. Did it refuse? (W8, C02)
 
-        `non_compliant` **is** the "blocking requirement unmet" condition: §8.4 defines it as an
-        evaluable `blocking` requirement that is unmet, so the verdict alone is the test and no
-        second reading of the requirement rows can disagree with it.
+        `non_compliant` is the verdict §8.4 gives an **evaluable** blocking requirement that is
+        unmet. It is not the whole condition (W10, ruling 3): a blocking row nobody could evaluate
+        comes back `not_stated`, does not reach `unmet[]`, and leaves the verdict at `conditional`
+        — which is how MOCK-HR-000014 was filed for a three-day request against a balance of 0.25
+        days that the turn had never checked, because `days` never reached the engine. **A request
+        the engine could not clear is never filed**: any blocking row that is not `met` refuses the
+        write, whether it failed or was never scored.
 
         The model is told, in the tool channel, that the call was refused and why — it is the only
         way the answer can be written around the refusal — and the reason is kept on the turn so
@@ -2257,10 +2261,26 @@ class Orchestrator:
         # when a later, compliant verdict for another scenario is the latest thing the turn scored.
         # A queue no scenario maps to is judged on the latest verdict, as before.
         body = self._verdict_for_queue(turn, str(call.args.get("queue") or ""))
-        if not body or body.get("verdict") != "non_compliant":
+        if not body:
+            return False
+        unclear = [
+            row
+            for row in body.get("requirements") or []
+            if isinstance(row, dict) and row.get("blocking") and row.get("status") != "met"
+        ]
+        if body.get("verdict") != "non_compliant" and not unclear:
             return False
         envelope = _ToolEnvelope(name=COMPLIANCE_TOOL, result_json=json.dumps(body, ensure_ascii=False))
-        failing = next((row for row in compliance_restatement.rows([envelope]) if row.status == "unmet"), None)
+        blocked_ids = {str(row.get("id")) for row in unclear}
+        rows = compliance_restatement.rows([envelope])
+        # The row the reader is owed: the blocking one that stopped it, else any failure.
+        failing = next(
+            (row for row in rows if row.id in blocked_ids and row.status == "unmet"),
+            next(
+                (row for row in rows if row.id in blocked_ids),
+                next((row for row in rows if row.status == "unmet"), None),
+            ),
+        )
         reason = compliance_restatement.reader_sentence(failing) if failing is not None else ""
         contact = str(body.get("escalate_to") or "")
         turn.write_blocked = " ".join(
@@ -2272,10 +2292,15 @@ class Orchestrator:
             )
             if part
         )
+        unclear_reason = (
+            f"the {body.get('scenario')} verdict is non_compliant"
+            if body.get("verdict") == "non_compliant"
+            else f"a blocking requirement is unresolved ({', '.join(sorted(blocked_ids))})"
+        )
         self._error(
             turn,
             "write_blocked",
-            f"{call.name} was not proposed: the {body.get('scenario')} verdict is non_compliant",
+            f"{call.name} was not proposed: {unclear_reason}",
             component="agent_loop",
         )
         turn.messages.append(

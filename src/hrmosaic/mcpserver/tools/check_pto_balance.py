@@ -29,6 +29,7 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from hrmosaic.core.db import now_micros
+from hrmosaic.mcpserver import rules
 from hrmosaic.mcpserver.server import READ_ONLY, ServerDeps, envelope, not_found, read_meta, result
 from hrmosaic.mcpserver.tools.lookup_employee_profile import EMPLOYEE_ID
 
@@ -51,6 +52,12 @@ class BalanceOutput(BaseModel):
     carryover_expires_on: str | None = None
     carryover_unexpired: float | None = None
     remaining_days: float | None = None
+    #: How much of `remaining_days` is lost on 31 December, and the cap that decides it (W10,
+    #: ruling 8). *"Any balance above 5.0 days on 31 December is forfeited"* is a rule an answer
+    #: kept quoting without ever telling the reader their own number; the engine states it, so the
+    #: answer prints it rather than doing the subtraction in prose.
+    carryover_cap_days: float | None = None
+    projected_forfeit_on_31_dec: float | None = None
     next_accrual_date: str | None = None
     blackout_dates: list[str] | None = None
     policy_doc_id: str | None = None
@@ -62,6 +69,18 @@ class BalanceOutput(BaseModel):
 
 def balance_row(deps: ServerDeps, employee_id: str) -> dict[str, Any] | None:
     return next((row for row in deps.records("pto_balances") if row["employee_id"] == employee_id), None)
+
+
+#: The fact that caps how much PTO survives the year end — `corpus/facts.yml`'s own key, so the
+#: number the tool publishes and the number the policy quotes are one value (W10, ruling 8).
+CARRYOVER_CAP_FACT = "pto.carryover.max_days"
+
+
+def carryover_cap(deps: ServerDeps) -> float | None:
+    """The carryover ceiling from `facts.yml`, or `None` when the fact is absent."""
+    facts = rules.load_rules(deps.rules_path, deps.facts_path).facts
+    value = facts.get(CARRYOVER_CAP_FACT, {}).get("value")
+    return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
 
 
 def unexpired_carryover(row: dict[str, Any], snapshot: date) -> float:
@@ -110,6 +129,8 @@ def _balance(deps: ServerDeps, *, employee_id: str, requested_as_of: str | None)
     snapshot = date.fromisoformat(snapshot_text)
     carryover_unexpired = unexpired_carryover(row, snapshot)
     remaining = float(row["accrued_ytd"]) - float(row["used_ytd"]) - float(row["pending_days"]) + carryover_unexpired
+    cap = carryover_cap(deps)
+    forfeit = None if cap is None else round(max(0.0, remaining - cap), 2)
     return BalanceOutput(
         employee_id=employee_id,
         as_of=snapshot_text,
@@ -124,6 +145,8 @@ def _balance(deps: ServerDeps, *, employee_id: str, requested_as_of: str | None)
         carryover_expires_on=row.get("carryover_expires_on"),
         carryover_unexpired=carryover_unexpired,
         remaining_days=round(remaining, 2),
+        carryover_cap_days=cap,
+        projected_forfeit_on_31_dec=forfeit,
         next_accrual_date=row["next_accrual_date"],
         blackout_dates=list(row["blackout_dates"]),
         policy_doc_id=POLICY_DOC_ID,
@@ -131,4 +154,11 @@ def _balance(deps: ServerDeps, *, employee_id: str, requested_as_of: str | None)
     ).model_dump(mode="json", exclude_none=True)
 
 
-__all__ = ["BalanceOutput", "balance_row", "register", "unexpired_carryover"]
+__all__ = [
+    "CARRYOVER_CAP_FACT",
+    "BalanceOutput",
+    "balance_row",
+    "carryover_cap",
+    "register",
+    "unexpired_carryover",
+]

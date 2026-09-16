@@ -47,15 +47,9 @@
           ]
         },
         "default": {},
-        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, end_date, days, amount_usd, category, transaction_date, reason. Notice days are always computed by the engine from start_date against the submission date and any supplied notice value is ignored; duration_days is derived from start_date and end_date.",
+        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, end_date, days, amount_usd, category, transaction_date, reason. The submission date is the server's own — never send one — and notice is always computed by the engine from it against start_date, so any supplied notice value is ignored; duration_days and days are derived from start_date and end_date.",
         "title": "Parameters",
         "type": "object"
-      },
-      "submitted_on": {
-        "default": "",
-        "description": "The date the request is submitted, ISO-8601. Notice is measured from it, never from the data snapshot. Defaults to today.",
-        "title": "Submitted On",
-        "type": "string"
       }
     },
     "required": [
@@ -236,6 +230,11 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "blocking": {
+            "default": false,
+            "title": "Blocking",
+            "type": "boolean"
           },
           "reason": {
             "title": "Reason",
