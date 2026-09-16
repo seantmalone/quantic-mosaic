@@ -231,15 +231,15 @@ async def test_every_record_sentence_is_the_readers_data_and_none_is_a_policy_ru
             assert _outcome.states_the_record(sentence, numbers, scalars), f"not the reader's data: {sentence}"
 
 
-async def test_the_demo_paths_say_the_blocking_rows_nobody_could_check(web, store):
-    """W10, ruling 6, narrowed by the fix round to the ruling's own word: a `not_stated` **blocking**
-    row is one the reader has to verify before proceeding, and it renders as one explicit line.
+async def test_the_demo_paths_say_every_row_nobody_could_check(web, store):
+    """W10, ruling 6, as settled in the fix round: **every** `not_stated` row renders as one
+    explicit line, blocking rows first.
 
     Demo 1 carries two `manual` rows — the device requirement and the customer-facing one — which
-    are `not_stated` on every run and publish `blocking: false`, so nothing is said for them: a line
-    on every answer this product ever writes is noise, not disclosure. The assertion is therefore
-    two-sided, and neither side is vacuous: what `not_stated_lines` computes for this turn's own
-    verdict is exactly what the answer says, and the `manual` rows are not in it."""
+    are `not_stated` on every run and publish `blocking: false`. Those are scenario 01's own defect:
+    the answer read as though the trip were in order on a device requirement nobody had verified.
+    Neither side of this is vacuous — the lines are computed from this turn's own verdict, and the
+    order they appear in the answer is asserted against the order the rule produces."""
     async with web("demo_task_1.json") as client:
         page = (
             await client.post(
@@ -257,10 +257,12 @@ async def test_the_demo_paths_say_the_blocking_rows_nobody_could_check(web, stor
 
     unchecked = [row for row in rows if row.status == "not_stated"]
     assert unchecked, "the international-remote scenario always carries a `manual` row"
-    assert any(not row.blocking for row in unchecked), "and those rows cannot stop the request"
+    assert any(not row.blocking for row in unchecked), "…and it cannot stop the request"
 
-    for line in _compliance.not_stated_lines(rows):
+    lines = _compliance.not_stated_lines(rows)
+    assert len(lines) == len(unchecked), "one line per row, blocking or not"
+    for line in lines:
         assert line in said, line
-    for row in unchecked:
-        if not row.blocking:
-            assert row.label not in said, f"a row that cannot stop the request is not a line: {row.id}"
+    assert [said.index(line) for line in lines] == sorted(said.index(line) for line in lines), (
+        "the reader meets them in the order the rule produces: blocking first"
+    )

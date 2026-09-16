@@ -192,7 +192,9 @@ POLICY_FACT = "policy_fact"
 #: How a `not_stated` row is said to the reader — one explicit line per row, never silence
 #: (W10, ruling 6). Scenarios 01, 03, 07 and 09 each hid one: the device requirement and the
 #: written-approval requirement were simply absent from the answer, so a reader was told their
-#: request was in order on rows nobody had checked.
+#: request was in order on rows nobody had checked. **Every** such row gets one, blocking first
+#: (settled in the W10 fix round): all four of those scenarios turn on `manual` rows, which are
+#: never blocking, so a blocking-only reading would have said nothing on any of them.
 NOT_STATED_LINE = "{label}: not verified from your record — confirm before you proceed."
 
 #: What a row with no reader label is called in that line.
@@ -384,22 +386,28 @@ def supporting_row(step: str, rows_: Sequence[Row]) -> Row | None:
 
 
 def not_stated_lines(rows_: Sequence[Row]) -> list[str]:
-    """One explicit line per `not_stated` **blocking** row, in the engine's order (W10, ruling 6).
+    """One explicit line per `not_stated` row — **every** one, blocking first (W10, ruling 6).
 
-    Blocking only, which is the ruling's own word (W10 fix round). The first version said every
-    `not_stated` row, and on `international_remote` that is the `manual` device row on every run —
-    a line on every answer, and the growth that pushed the session page past its pixel budget. A
-    row that cannot stop the request is not one a reader has to verify before proceeding; the
-    `manual` rows are still `not_stated` in the verdict and on the dashboard, and the restatement
-    above still refuses to conclude anything about them.
+    **Settled by the coordinator, W10 fix round.** The ruling's sentence says *blocking*; its own
+    scenario list — 01, 03, 07, 09 — is entirely `manual` rows, which publish `blocking: false` by
+    construction, so the two cannot both be read narrowly. Every `not_stated` row gets its line:
+    a requirement nobody could check is a requirement nobody could check, and leaving it out is
+    exactly the silence that let scenario 01 read as though the trip were in order on a device
+    requirement no one had verified.
+
+    **Blocking first**, then the rest, each group in the engine's own order: a row that can stop
+    the request is the one the reader needs first, and the ordering is the only thing the two
+    classes are distinguished by on the page.
     """
-    # `.capitalize()` would lower-case the rest — "Written manager approval in mosaicone" — and the
-    # labels carry product names.
-    return [
-        NOT_STATED_LINE.format(label=(label := (row.label or UNLABELLED).strip())[:1].upper() + label[1:])
-        for row in rows_
-        if row.status == "not_stated" and row.blocking
-    ]
+
+    def line(row: Row) -> str:
+        # `.capitalize()` would lower-case the rest — "Written manager approval in mosaicone" — and
+        # the labels carry product names.
+        label = (row.label or UNLABELLED).strip()
+        return NOT_STATED_LINE.format(label=label[:1].upper() + label[1:])
+
+    unchecked = [row for row in rows_ if row.status == "not_stated"]
+    return [line(row) for row in unchecked if row.blocking] + [line(row) for row in unchecked if not row.blocking]
 
 
 def _normalised(text: str) -> str:
@@ -609,9 +617,10 @@ def apply(
     **the requirement row it restates** — never to the verdict's first chunk, and never at all when
     no single row supports it (W10 fix round, Important 1).
 
-    **…and every `not_stated` blocking row is said** (W10, ruling 6): one explicit line each,
-    appended as a `record` block, because a requirement that can stop the request and that nobody
-    could check is a thing the reader has to check.
+    **…and every `not_stated` row is said** (W10, ruling 6): one explicit line each, blocking rows
+    first, appended as a `record` block — because a requirement nobody could check is a thing the
+    reader has to check, and leaving it out is what let an answer read as though the request were
+    in order on a row no one had verified.
     """
     evaluated = rows(envelopes)
     amount, covering = stated_amount(evaluated), covering_rule(envelopes)

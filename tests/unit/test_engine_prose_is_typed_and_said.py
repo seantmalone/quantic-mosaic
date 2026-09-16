@@ -10,10 +10,11 @@ where it came from. Five of the sixteen recorded demo paths mis-typed one:
   request were a suggestion.
 
 And four of them (01, 03, 07, 09) simply **left out** a `not_stated` row, so a reader was told their
-request was in order on a row nobody had checked. Since the W10 fix round the line is for a
-**blocking** row — the ruling's own word: a requirement that cannot stop the request is not one a
-reader has to verify before proceeding, and the `manual` rows that would otherwise produce a line on
-every single answer are all non-blocking.
+request was in order on a row nobody had checked. **Every** such row gets its line — settled in the
+W10 fix round, because all four of those scenarios turn on `manual` rows, which publish
+`blocking: false` by construction, so a blocking-only reading would have said nothing on any of
+them. Blocking rows come first: the row that can stop the request is the one the reader needs
+first, and the order is the only thing separating the two classes on the page.
 
 The citation a retyped step carries is the row it restates, and nothing else. The first version
 cited `citations[0]` — the verdict's **first** evidence chunk, which on every `pto_request` turn is
@@ -146,22 +147,47 @@ def test_a_cited_policy_fact_is_never_retyped():
 # -- ruling 6 ---------------------------------------------------------------------------
 
 
-def test_every_not_stated_blocking_row_is_said_in_one_explicit_line():
+BALANCE_LINE = "PTO balance, in days: not verified from your record — confirm before you proceed."
+APPROVAL_LINE = "Written manager approval in MosaicOne: not verified from your record — confirm before you proceed."
+
+
+def test_every_not_stated_row_is_said_in_one_explicit_line_blocking_first():
+    """Both rows, and the blocking one first. The verdict lists `manager_approval` (a `manual`
+    check, non-blocking) **before** `balance` (blocking); the lines come back the other way."""
     result = compliance_restatement.apply([], [envelope()])
-    assert result.unchecked == ["PTO balance, in days: not verified from your record — confirm before you proceed."]
+
+    assert result.unchecked == [BALANCE_LINE, APPROVAL_LINE]
     assert result.blocks[-1]["type"] == compliance_restatement.RECORD
 
 
-def test_a_not_stated_row_that_cannot_stop_the_request_says_nothing():
+def test_a_manual_row_is_said_too_and_comes_after_the_blocking_ones():
     """`pto.request.manager_approval` is a `manual` check and therefore `not_stated` on every PTO
-    turn; a line for it would be on every answer this product ever writes."""
-    lines = compliance_restatement.not_stated_lines(compliance_restatement.rows([envelope()]))
-    assert not any("manager approval" in line for line in lines)
+    turn — and scenarios 03, 07 and 09 are exactly that row going unsaid."""
+    rows = compliance_restatement.rows([envelope()])
+    manual = next(row for row in rows if row.id == "pto.request.manager_approval")
+    assert (manual.status, manual.blocking) == ("not_stated", False)
+
+    lines = compliance_restatement.not_stated_lines(rows)
+    assert lines.index(APPROVAL_LINE) > lines.index(BALANCE_LINE)
 
 
-def test_the_line_is_not_repeated_when_the_answer_already_carries_it():
-    line = compliance_restatement.not_stated_lines(compliance_restatement.rows([envelope()]))[0]
-    block = {"type": "record", "text": line, "citations": []}
+def test_the_engine_order_is_kept_inside_each_class():
+    """Two blocking rows stay in the order the engine evaluated them."""
+    rows = [
+        compliance_restatement.Row(id="a", text="", status="not_stated", reason="", label="first", blocking=True),
+        compliance_restatement.Row(id="b", text="", status="not_stated", reason="", label="second", blocking=True),
+        compliance_restatement.Row(id="c", text="", status="not_stated", reason="", label="third", blocking=False),
+        compliance_restatement.Row(id="d", text="", status="met", reason="", label="fourth", blocking=True),
+    ]
+    assert [line.split(":")[0] for line in compliance_restatement.not_stated_lines(rows)] == [
+        "First",
+        "Second",
+        "Third",
+    ]
+
+
+def test_a_line_the_answer_already_carries_is_not_said_twice():
+    block = {"type": "record", "text": f"{BALANCE_LINE} {APPROVAL_LINE}", "citations": []}
     result = compliance_restatement.apply([block], [envelope()])
     assert result.unchecked == [] and len(result.blocks) == 1
 
