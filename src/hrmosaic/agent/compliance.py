@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,6 +179,26 @@ REASON = re.compile(
 _UNIT_TAIL = re.compile(r",\s*in\s+(?P<unit>[^,]+)$")
 
 
+#: The block type an engine reason is said in (W10, ruling 5). A verdict about the reader's own
+#: request is neither company policy nor advice, and `_turn.html` files every `recommendation`
+#: under *"What I suggest you do"* with a *"not company policy"* footnote — so scenario 15 shipped
+#: the engine's own reason as a suggestion, and scenarios 03, 13 and 16 shipped mandatory steps
+#: from `rules.yml` under the same disclaimer. Same value as `agent/outcome.py`'s `RECORD`.
+RECORD = "record"
+
+#: The type a sentence sourced from a `rules.yml` requirement or a policy chunk carries.
+POLICY_FACT = "policy_fact"
+
+#: How a `not_stated` row is said to the reader — one explicit line per row, never silence
+#: (W10, ruling 6). Scenarios 01, 03, 07 and 09 each hid one: the device requirement and the
+#: written-approval requirement were simply absent from the answer, so a reader was told their
+#: request was in order on rows nobody had checked.
+NOT_STATED_LINE = "{label}: not verified from your record — confirm before you proceed."
+
+#: What a row with no reader label is called in that line.
+UNLABELLED = "This requirement"
+
+
 @dataclass(frozen=True)
 class Row:
     """One evaluated requirement, as this step needs it."""
@@ -221,10 +241,15 @@ class Outcome:
     unverified: list[tuple[int, str]] = field(default_factory=list)
     #: How many sentences quoted a threshold the request had already outgrown (W8, C07).
     thresholds: int = 0
+    #: `(index into the blocks, the type it was given)` for every block this step retyped
+    #: (W10, ruling 5).
+    retyped: list[tuple[int, str]] = field(default_factory=list)
+    #: The `not_stated` lines this step added, in the engine's own order (W10, ruling 6).
+    unchecked: list[str] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
-        return bool(self.restated or self.restated_steps or self.thresholds)
+        return bool(self.restated or self.restated_steps or self.thresholds or self.retyped or self.unchecked)
 
 
 def rows(envelopes: Iterable[Any]) -> list[Row]:
@@ -255,6 +280,61 @@ def rows(envelopes: Iterable[Any]) -> list[Row]:
                 label=str(requirement.get("label") or ""),
             )
     return list(found.values())
+
+
+def engine_steps(envelopes: Iterable[Any]) -> tuple[list[str], list[dict[str, str]]]:
+    """`(the engine's own next_steps, the citations its verdict resolved)` (W10, ruling 5).
+
+    `rules.yml`'s `next_steps` are *requirements*: "Submit the request in MosaicOne so the manager
+    can approve it in writing" is what the policy says happens, not something a model thought of.
+    Three scenarios shipped them under *"Recommendation — not company policy"*.
+    """
+    steps: list[str] = []
+    citations: list[dict[str, str]] = []
+    for envelope in envelopes:
+        if getattr(envelope, "name", "") != COMPLIANCE_TOOL:
+            continue
+        try:
+            body = json.loads(getattr(envelope, "result_json", "") or "")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(body, dict):
+            continue
+        steps.extend(str(step) for step in (body.get("next_steps") or []) if isinstance(step, str))
+        # The per-requirement evidence first: those are the ids `_engine_evidence` absorbs into the
+        # turn, so a citation taken from here resolves for G2 and reaches the top-level array
+        # (W10, ruling 10). The verdict's own `citations[]` follow as the fallback.
+        for source in (body.get("requirements") or [], body.get("citations") or []):
+            for entry in source:
+                if not isinstance(entry, dict):
+                    continue
+                citation = entry.get("evidence") if "evidence" in entry else entry
+                if isinstance(citation, dict) and citation.get("chunk_id"):
+                    citations.append({str(key): str(value) for key, value in citation.items() if key != "snippet"})
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for citation in citations:
+        if citation["chunk_id"] in seen:
+            continue
+        seen.add(citation["chunk_id"])
+        unique.append(citation)
+    return list(dict.fromkeys(steps)), unique
+
+
+def not_stated_lines(rows_: Sequence[Row]) -> list[str]:
+    """One explicit line per `not_stated` row, in the engine's own order (W10, ruling 6)."""
+    # `.capitalize()` would lower-case the rest — "Written manager approval in mosaicone" — and the
+    # labels carry product names.
+    return [
+        NOT_STATED_LINE.format(label=(label := (row.label or UNLABELLED).strip())[:1].upper() + label[1:])
+        for row in rows_
+        if row.status == "not_stated"
+    ]
+
+
+def _normalised(text: str) -> str:
+    """Comparable bytes for two statements of the same instruction."""
+    return " ".join(re.sub(r"[^a-z0-9 ]+", " ", text.lower()).split())
 
 
 def _carries(text: str, phrases: Sequence[str]) -> bool:
@@ -360,6 +440,32 @@ def correct(text: str, rows_: Sequence[Row]) -> tuple[str, list[str], list[str]]
     return " ".join(part.strip() for part in repaired), restated, unverified
 
 
+def retype(
+    block: Mapping[str, Any],
+    restated: Sequence[str],
+    mandated: Collection[str],
+    citations: Sequence[Mapping[str, str]],
+) -> str | None:
+    """The type this block should carry, or `None` to leave it alone (W10, ruling 5).
+
+    Two moves, and only out of `recommendation` — the one type `_turn.html` disclaims:
+
+    * a block this step rewrote is now carrying the **engine's own reason**, which is a statement
+      about the reader's request: `record`;
+    * a block that restates one of the engine's own `next_steps` is `rules.yml` speaking, so it is
+      a `policy_fact` — provided the verdict resolved a citation for it to carry, because an
+      uncited policy claim is worse than an undisclaimed one.
+
+    Nothing already typed `policy_fact`, `record`, `performed`, `escalation` or `notice` is touched:
+    this step only repairs the label the model reaches for when it has nothing better.
+    """
+    if str(block.get("type") or "") != "recommendation":
+        return None
+    if _normalised(str(block.get("text") or "")) in mandated:
+        return POLICY_FACT if citations else RECORD
+    return RECORD if restated else None
+
+
 def stated_amount(rows_: Sequence[Row]) -> float | None:
     """The amount the question asked about, read off the engine's own requirement reasons."""
     for row in rows_:
@@ -423,12 +529,23 @@ def apply(
     *,
     next_steps: Sequence[str] = (),
 ) -> Outcome:
-    """The pure rule, over everything `render_answer()` puts in front of one reader. Mutates nothing."""
+    """The pure rule, over everything `render_answer()` puts in front of one reader. Mutates nothing.
+
+    **Typing travels with the sentence** (W10, ruling 5). A sentence this step replaces is now the
+    engine's own reason, so its block is the reader's `record` rather than advice; a block that is
+    one of the engine's own `next_steps` is `rules.yml` speaking and is a cited `policy_fact`.
+
+    **…and every `not_stated` row is said** (W10, ruling 6): one explicit line each, appended as a
+    `record` block, because a requirement nobody checked is a thing the reader has to check.
+    """
     evaluated = rows(envelopes)
     amount, covering = stated_amount(evaluated), covering_rule(envelopes)
+    engine_next_steps, engine_citations = engine_steps(envelopes)
+    mandated = {_normalised(step) for step in engine_next_steps}
     body: list[dict[str, Any]] = []
     restated: list[tuple[int, str]] = []
     unverified: list[tuple[int, str]] = []
+    retyped: list[tuple[int, str]] = []
     rewritten = 0
     for index, block in enumerate(blocks):
         item = dict(block)
@@ -439,6 +556,12 @@ def apply(
             # The block was nothing but a threshold the request had already outgrown.
             continue
         item["text"] = text
+        kind = retype(item, changed, mandated, engine_citations)
+        if kind is not None:
+            item["type"] = kind
+            if kind == POLICY_FACT and not (item.get("citations") or []):
+                item["citations"] = [engine_citations[0]["chunk_id"]]
+            retyped.append((index, kind))
         restated.extend((index, requirement_id) for requirement_id in changed)
         unverified.extend((index, requirement_id) for requirement_id in unsure)
         body.append(item)
@@ -454,6 +577,12 @@ def apply(
         steps.append(text)
         restated_steps.extend((index, requirement_id) for requirement_id in changed)
         unverified.extend((index, requirement_id) for requirement_id in unsure)
+
+    unchecked = not_stated_lines(evaluated)
+    said = " ".join(str(block.get("text") or "") for block in body)
+    stated = [line for line in unchecked if line not in said]
+    if stated:
+        body.append({"type": RECORD, "text": " ".join(stated), "citations": []})
     return Outcome(
         blocks=body,
         next_steps=steps,
@@ -461,11 +590,17 @@ def apply(
         restated_steps=restated_steps,
         unverified=unverified,
         thresholds=rewritten,
+        retyped=retyped,
+        unchecked=stated,
     )
 
 
 __all__ = [
     "COMPLIANCE_TOOL",
+    "NOT_STATED_LINE",
+    "POLICY_FACT",
+    "RECORD",
+    "UNLABELLED",
     "NEGATIVE",
     "POSITIVE",
     "REASON",
@@ -482,8 +617,11 @@ __all__ = [
     "correct",
     "correct_ceilings",
     "covering_rule",
+    "engine_steps",
+    "not_stated_lines",
     "polarity",
     "reader_sentence",
+    "retype",
     "rows",
     "stated_amount",
 ]

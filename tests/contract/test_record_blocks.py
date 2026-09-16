@@ -155,6 +155,7 @@ async def test_the_cancellation_receipt_is_a_notice_above_the_answer_it_kept(web
 import json as _json  # noqa: E402 - the guard below reads the turn's own envelopes back out of the store
 from pathlib import Path as _Path  # noqa: E402
 
+from hrmosaic.agent import compliance as _compliance  # noqa: E402
 from hrmosaic.agent import outcome as _outcome  # noqa: E402
 from hrmosaic.agent.orchestrator import _ToolEnvelope as _Envelope  # noqa: E402
 
@@ -192,7 +193,12 @@ async def test_every_record_sentence_is_the_readers_data_and_none_is_a_policy_ru
     require director approval and a Tax & Legal review…"* — a policy requirement under a heading
     that means "your data", with the one missing citation on the page. Every sentence in a
     `record` block has to state a value from that turn's own data envelopes, and none may be a
-    requirement `corpus/rules.yml` states."""
+    requirement `corpus/rules.yml` states.
+
+    Since W10 (ruling 6) one more shape is the reader's record: the explicit line a `not_stated`
+    row renders as — *"<label>: not verified from your record — confirm before you proceed."* It
+    states no value because there is none; that **is** the fact, and it is built from the turn's own
+    verdict envelope, so it is admitted by construction rather than by wording."""
     question = (
         DEMO_2
         if script == "demo_task_2.json"
@@ -214,8 +220,35 @@ async def test_every_record_sentence_is_the_readers_data_and_none_is_a_policy_ru
     envelopes = _envelopes(store, turn_id)
     numbers, scalars = _outcome.envelope_numbers(envelopes), _outcome.envelope_scalars(envelopes)
     rules = _requirement_texts()
+    unchecked = set(_compliance.not_stated_lines(_compliance.rows(envelopes)))
+    assert records, "the demo paths both state the reader's record"
     for block in records:
         for sentence in _outcome.sentences(block["text"]):
             normalised = " ".join(sentence.lower().split())
             assert normalised.rstrip(".") not in {rule.rstrip(".") for rule in rules}, sentence
+            if sentence in unchecked:
+                continue  # W10, ruling 6: the row nobody could check, from this turn's own verdict
             assert _outcome.states_the_record(sentence, numbers, scalars), f"not the reader's data: {sentence}"
+
+
+async def test_the_demo_paths_say_the_rows_nobody_could_check(web, store):
+    """W10, ruling 6, against scenario 01: demo 1's `remote.intl.device` row is `manual`, so it is
+    `not_stated` on every run — and the recorded answer simply left it out, so a reader was told
+    the trip was in order on a requirement nobody had checked."""
+    async with web("demo_task_1.json") as client:
+        page = (
+            await client.post(
+                "/chat",
+                json={"message": "I want to work from Berlin from 3 November to 14 December 2026 — can I?"},
+                headers=HTMX,
+            )
+        ).text
+    turn_id = re.search(r'data-turn-id="([0-9a-f]+)"', page).group(1)
+    blocks = _json.loads(
+        store.execute("SELECT answer_blocks_json FROM turns WHERE id = ?", (turn_id,)).scalar() or "[]"
+    )
+    said = " ".join(block["text"] for block in blocks)
+    expected = _compliance.not_stated_lines(_compliance.rows(_envelopes(store, turn_id)))
+    assert expected, "the international-remote scenario always carries a `manual` row"
+    for line in expected:
+        assert line in said, line

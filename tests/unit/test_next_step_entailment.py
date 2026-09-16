@@ -140,3 +140,36 @@ def test_a_duration_is_entailed_by_a_number_token_and_not_by_a_digit_substring()
     assert entailment.entailed(
         "USD 2,500", entailment.grounds([], [_ToolEnvelope(name="x", result_json='{"limit": 2500}')])
     )
+
+
+# -- W10, ruling 13: a step never repeats a sentence the answer already prints --------------------
+
+
+def test_a_step_the_answer_already_says_is_dropped():
+    """Scenarios 01, 02, 03 and 13: `render_answer()` prints the blocks and then the next steps, so
+    a step whose normalised text is contained in a block is the same instruction twice on one
+    screen — once with the two copies differing only in a trailing full stop."""
+    blocks = [
+        {
+            "type": "policy_fact",
+            "text": "Submit the request in MosaicOne so your manager can approve it in writing.",
+            "citations": ["c_one"],
+        }
+    ]
+    result = entailment.apply(
+        blocks, [], next_steps=["Submit the request in MosaicOne so your manager can approve it in writing"]
+    )
+    assert result.next_steps == []
+    assert result.dropped[0][2] == entailment.DUPLICATE
+
+
+def test_containment_counts_so_a_shorter_step_inside_a_longer_sentence_goes():
+    blocks = [{"type": "record", "text": "Watch for Dana's approval in MosaicOne this week.", "citations": []}]
+    result = entailment.apply(blocks, [], next_steps=["Watch for Dana's approval in MosaicOne"])
+    assert result.next_steps == []
+
+
+def test_a_step_the_answer_does_not_say_survives():
+    blocks = [{"type": "policy_fact", "text": "Notice is five business days.", "citations": ["c_one"]}]
+    result = entailment.apply(blocks, [], next_steps=["Add a calendar hold for the dates."])
+    assert result.next_steps == ["Add a calendar hold for the dates."]

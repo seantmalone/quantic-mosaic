@@ -357,6 +357,12 @@ SCALAR_KEYS: frozenset[str] = frozenset(
 #: `dict(block)` copy and is stripped before the answer is validated.
 POLICY_CLAIM = "_policy_claim"
 
+#: The key a block carries its **position in the model's own answer** under (W10 addendum). The
+#: citation carry needs to put a lost citation back on the block it came from and nowhere else, and
+#: a block's index drifts as soon as a step removes one ahead of it. Set once, before the first
+#: step, travels through every `dict(block)` copy, and stripped before the answer is validated.
+BLOCK_ID = "_block_id"
+
 #: An ISO date, so the human form of the same day joins the scalar set.
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -780,8 +786,13 @@ def dedupe_sentences(blocks: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str
     your HR record"*, printed the same clause again word for word — the restatement step and the
     refusal's own lede had each written it. The first statement stands; a later block that
     repeats it loses the sentence, and a block left with nothing goes.
+
+    **A dropped block's citations go to the block that kept the sentence** (W10 addendum). A
+    duplicate `policy_fact` is the same claim twice with two sources, and dropping it whole took
+    one of those sources out of the served answer — the exact loss the citation carry exists to
+    stop, arriving one step earlier.
     """
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     kept: list[dict[str, Any]] = []
     removed: list[tuple[int, str]] = []
     for index, block in enumerate(blocks):
@@ -789,18 +800,26 @@ def dedupe_sentences(blocks: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str
         text = str(item.get("text") or "")
         parts = sentences(text)
         keep: list[str] = []
+        homes: list[int] = []
         for sentence in parts:
             key = " ".join(sentence.lower().split()).rstrip(".:;")
             core = key.split(": ", 1)[
                 -1
             ]  # the lede's "I have not opened the request: …" carries the clause after the colon
-            if key in seen or core in seen:
+            home = seen.get(key, seen.get(core))
+            if home is not None:
                 removed.append((index, sentence))
+                homes.append(home)
                 continue
-            seen.add(key)
-            seen.add(core)
+            seen[key] = seen[core] = len(kept)
             keep.append(sentence)
         if not keep and parts:
+            # The whole block was a repeat: its citations belong to whichever block said it first,
+            # so the evidence survives even though the sentence does not.
+            for home in dict.fromkeys(homes):
+                kept[home]["citations"] = list(
+                    dict.fromkeys([*(kept[home].get("citations") or []), *(item.get("citations") or [])])
+                )
             continue
         if len(keep) != len(parts):
             item["text"] = " ".join(part.strip() for part in keep)
@@ -924,6 +943,7 @@ __all__ = [
     "IMPERATIVES",
     "MAX_SCALAR_CHARS",
     "MIN_SCALAR_CHARS",
+    "BLOCK_ID",
     "POLICY_CLAIM",
     "NEXT_EVENT",
     "PERFORMED",

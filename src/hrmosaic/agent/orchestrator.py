@@ -360,6 +360,28 @@ PROFILE_OUTSTANDING = (
 #: G1's copy and a G1 verdict of `refuse` under this reason.
 NO_SUPPORTED_CLAIMS = "no_supported_claims"
 SUBSTANTIVE_BLOCKS = ("policy_fact", "record", "performed")
+
+#: The shape ruling 1 is actually about (W10 addendum): an answer that says, in so many words, that
+#: the corpus does not reach the question. Without this the refusal fired on every answer whose
+#: policy facts G2 could not resolve — a citation defect answered by G2's own cascade, not by
+#: throwing the answer away.
+NO_EVIDENCE_PHRASES: tuple[str, ...] = (
+    "does not cover",
+    "do not cover",
+    "is not addressed",
+    "are not addressed",
+    "not addressed in",
+    "does not address",
+    "no information",
+    "not covered",
+    "could not find",
+    "does not contain",
+    "do not contain",
+    "not available in",
+)
+
+#: The keys a deterministic step carries on a block and no reader ever sees.
+BLOCK_MARKERS: tuple[str, ...] = (outcome_consistency.POLICY_CLAIM, outcome_consistency.BLOCK_ID)
 PROFILE_TOOL = "lookup_employee_profile"
 PROFILE_FIRST_TOOLS = ("check_policy_compliance", "check_pto_balance")
 
@@ -1072,9 +1094,18 @@ class Orchestrator:
         # restatement below can each remove a block ahead of one, and an index that has drifted
         # exempts the wrong block from the record backstop. Every later step copies the dict, so
         # the marker travels; `_finished` strips it before the answer is validated.
+        # **…and every block carries its own identity** (W10 addendum). The citation carry below
+        # used to re-home a lost citation to the *nearest surviving policy fact*, scaled by
+        # position — which puts one claim's evidence under another claim's sentence as soon as a
+        # step removes a block. A marker set here travels through every step's `dict(block)` copy,
+        # so the carry can say "this block, or nowhere". Stripped before the answer is validated.
         claimed = set(relabelled.relabelled)
         marked = [
-            {**block, outcome_consistency.POLICY_CLAIM: True} if index in claimed else dict(block)
+            {
+                **block,
+                outcome_consistency.BLOCK_ID: index,
+                **({outcome_consistency.POLICY_CLAIM: True} if index in claimed else {}),
+            }
             for index, block in enumerate(relabelled.blocks)
         ]
 
@@ -1167,15 +1198,55 @@ class Orchestrator:
                 component=step_entailment.STEP_NAME,
             )
 
-        # -- 5l. the repair's citations survive the steps (W9 addendum, ruling 2) ---------------
+        # -- 5l. the ledes the product says in its own voice, all of them, in their final order ---
+        # Assembled here rather than one `model_copy` at a time (W10 addendum) so that the two
+        # steps below — the de-duplication and the citation carry — see the answer a reader sees.
+        # Reading order, top first: the budget note, the failed write, the refused write, the
+        # cancelled card, then the answer the turn earned.
+        budget_limited = turn.stop_reason in BUDGET_STOPS and not self._complete(turn, snapshotted.blocks)
+        ledes: list[dict[str, Any]] = []
+        if budget_limited:
+            # §9.4: a budget stop is a graceful partial answer plus an `error` span naming the
+            # reason. **Only when the answer is actually short** (W10, ruling 12): scenario 15
+            # carried a complete answer under "I reached my step limit for this turn", because the
+            # repair leg 400'd on its own schema and spent the budget without losing anything.
+            self._error(
+                turn,
+                turn.stop_reason,
+                f"the turn stopped at its {turn.stop_reason} budget",
+                component="agent_loop",
+            )
+            ledes.append({"type": NOTICE, "text": BUDGET_NOTE[turn.stop_reason], "citations": []})
+        if turn.write_failed:
+            # §9.4's graceful partial for the other way a turn falls short of what it was asked to
+            # do: the action was authorised and did not happen.
+            ledes.append({"type": NOTICE, "text": WRITE_FAILED_NOTE, "citations": []})
+        if turn.write_blocked:
+            # **The reader is told why, in the product's own voice** (W8, C02, C17), because the
+            # answer below is about a request that was not filed.
+            ledes.append({"type": NOTICE, "text": turn.write_blocked, "citations": []})
+        if turn.declined:
+            # The receipt for what the reader decided (W8, C11, C17); the answer they already
+            # earned follows it.
+            ledes.append({"type": NOTICE, "text": CANCELLED_NOTICE, "citations": []})
+
+        # One sentence, once per turn (UX W9, CPUX4-02): the refusal's lede and the record block
+        # had each written the failing row's clause. **Before the citation carry** (W10 addendum):
+        # it can drop a whole block, and a block dropped after the carry takes the carried
+        # citations with it — so a duplicate's citations are unioned onto the block that kept the
+        # sentence and the carry then runs over what is actually served.
+        deduped, repeated = outcome_consistency.dedupe_sentences([*ledes, *snapshotted.blocks])
+
+        # -- 5m. the repair's citations survive the steps (W9 addendum, ruling 2) ---------------
         # A step that took a sentence or a block took its citations with it, and `remote-002` was
         # served two documents of the three the breadth repair had produced. A citation the
-        # post-breadth blocks carried and the served blocks do not goes back on the nearest
-        # surviving policy fact.
-        served, _carried = breadth.carry_citations(marked, snapshotted.blocks)
+        # post-breadth blocks carried and the served blocks do not goes back **on its own block**
+        # (W10 addendum): a citation is evidence for one claim, and re-homing it to the nearest
+        # surviving policy fact attached it to a different one.
+        served, _carried = breadth.carry_citations(marked, deduped)
 
-        # -- 5m. an answer with no supported claim is not an answer (W9 addendum, ruling 1) -----
-        if self._unsupported(turn, served):
+        # -- 5n. an answer with no supported claim is not an answer (W9 addendum, ruling 1) -----
+        if self._unsupported(turn, served, had_policy_fact=bool(claimed) or self._cited_facts(marked)):
             emit(
                 turn.buffer,
                 "G1",
@@ -1187,69 +1258,18 @@ class Orchestrator:
 
         answer = AnswerSchema(
             blocks=[
-                AnswerBlock.model_validate({k: v for k, v in block.items() if k != outcome_consistency.POLICY_CLAIM})
+                AnswerBlock.model_validate({k: v for k, v in block.items() if k not in BLOCK_MARKERS})
                 for block in served
             ],
             next_steps=entailed.next_steps,
             rationale_summary=clamp_rationale(str(raw.get("rationale_summary") or "")),
         )
-        if turn.declined:
-            # The receipt for what the reader decided, first and in the product's own voice
-            # (W8, C11, C17); the answer they already earned follows it.
-            answer = answer.model_copy(
-                update={
-                    "blocks": [
-                        AnswerBlock(type=NOTICE, text=CANCELLED_NOTICE, citations=[]),
-                        *answer.blocks,
-                    ]
-                }
-            )
-        if turn.write_blocked:
-            # **The reader is told why, in the product's own voice** (W8, C02, C17). It goes first,
-            # because the answer below is about a request that was not filed.
-            answer = answer.model_copy(
-                update={
-                    "blocks": [
-                        AnswerBlock(type=NOTICE, text=turn.write_blocked, citations=[]),
-                        *answer.blocks,
-                    ]
-                }
-            )
-        # One sentence, once per turn (UX W9, CPUX4-02): the refusal's lede and the record block
-        # had each written the failing row's clause. Run after every lede is in place.
-        deduped, repeated = outcome_consistency.dedupe_sentences([block.model_dump() for block in answer.blocks])
         if repeated:
-            answer = answer.model_copy(update={"blocks": [AnswerBlock.model_validate(block) for block in deduped]})
-        if turn.write_failed:
-            # §9.4's graceful partial for the other way a turn falls short of what it was asked to
-            # do: the action was authorised and did not happen. The note goes first, and states no
-            # policy, so it is a `recommendation`.
-            answer = answer.model_copy(
-                update={
-                    "blocks": [
-                        AnswerBlock(type=NOTICE, text=WRITE_FAILED_NOTE, citations=[]),
-                        *answer.blocks,
-                    ]
-                }
-            )
-        budget_limited = turn.stop_reason in BUDGET_STOPS
-        if budget_limited:
-            # §9.4: a budget stop is a graceful partial answer plus an `error` span naming the
-            # reason. The note goes first so the reader knows the answer is incomplete before
-            # reading it, and it is a `recommendation` because it states no policy.
             self._error(
                 turn,
-                turn.stop_reason,
-                f"the turn stopped at its {turn.stop_reason} budget",
-                component="agent_loop",
-            )
-            answer = answer.model_copy(
-                update={
-                    "blocks": [
-                        AnswerBlock(type=NOTICE, text=BUDGET_NOTE[turn.stop_reason], citations=[]),
-                        *answer.blocks,
-                    ]
-                }
+                "repeated_sentence",
+                "; ".join(f"{sentence!r} was already said" for _index, sentence in repeated),
+                component=outcome_consistency.STEP_NAME,
             )
         outcome: TurnOutcome = "partial" if budget_limited or turn.write_failed else "answered"
         return self._finish(
@@ -1257,7 +1277,11 @@ class Orchestrator:
             answer,
             outcome=outcome,
             stop_reason=turn.stop_reason,
-            citations=repaired.citations,
+            # **The citations the served blocks actually carry** (W10 addendum, Critical). They used
+            # to be G2's, taken at step 5b — before nine steps that add, drop and re-home a
+            # citation — so `/chat`, the turn record and the chat page reported a set the blocks
+            # beside them did not have, and `min_distinct_docs` was scored on the wrong one.
+            citations=self._served_citations(turn, answer.blocks, repaired.citations),
             cold_start=cold_start,
         )
 
@@ -1539,13 +1563,86 @@ class Orchestrator:
         reachable = [name for name in RECORD_TOOLS if name in permitted]
         return bool(reachable) and not any(turn.state.has(name) for name in reachable)
 
-    def _unsupported(self, turn: _Turn, blocks: Sequence[Mapping[str, Any]]) -> bool:
+    def _unsupported(self, turn: _Turn, blocks: Sequence[Mapping[str, Any]], *, had_policy_fact: bool = False) -> bool:
         """No policy fact, no record, no performed write — only an escalation or advice saying the
-        evidence does not cover the question (W9 addendum, ruling 1). A declined, blocked or failed
-        write is answered by its own notice and is not this shape."""
+        evidence does not cover the question (W9 addendum, ruling 1).
+
+        **Four conditions, not one** (W10 addendum). The first version asked only whether a
+        substantive block survived, which refuses two turns it was never aimed at: a turn stopped
+        at a §9.4 budget, whose graceful partial is what the budget is *for*, and a turn whose
+        policy facts G2 could not resolve — a citation defect, answered by G2's own cascade and by
+        the breadth shortfall, not by throwing the answer away. So the refusal needs all of:
+
+        1. the turn did not stop at a budget;
+        2. no `policy_fact` existed **before** G3 relabelled the uncited ones — `had_policy_fact`
+           is that history, which the served blocks no longer carry;
+        3. no `record` and no `performed` block survived;
+        4. something in the answer says the evidence does not cover the question — `oos-005`'s
+           shape, and the one this rule was written for.
+
+        A declined, blocked or failed write is answered by its own notice and is not this shape.
+        """
         if turn.declined or turn.write_blocked or turn.write_failed:
             return False
-        return not any(block.get("type") in SUBSTANTIVE_BLOCKS for block in blocks)
+        if turn.stop_reason in BUDGET_STOPS or had_policy_fact:
+            return False
+        if any(block.get("type") in SUBSTANTIVE_BLOCKS for block in blocks):
+            return False
+        return any(phrase in str(block.get("text") or "").lower() for block in blocks for phrase in NO_EVIDENCE_PHRASES)
+
+    @staticmethod
+    def _cited_facts(blocks: Sequence[Mapping[str, Any]]) -> bool:
+        """Did the model's own answer carry a cited `policy_fact` before the steps ran?"""
+        return any(block.get("type") == "policy_fact" and (block.get("citations") or []) for block in blocks)
+
+    def _complete(self, turn: _Turn, blocks: Sequence[Mapping[str, Any]]) -> bool:
+        """Is this answer whole, whatever the budget did? (W10, ruling 12)
+
+        The budget lede says *"here is what I established before stopping"*, and scenario 15 said
+        it over a complete four-block answer with its verdict, its approver and its citations —
+        the budget went on a repair call the provider rejected for the repair schema's own
+        `additionalProperties`, and nothing about the answer was short. An answer is complete when
+        the **workflow's** completion predicate holds and a substantive block survived. A turn with
+        no workflow has no predicate to ask, so it keeps §9.4's graceful partial exactly as before:
+        the ruling narrows the lede to the case where something can say the answer is whole, and
+        never widens it into a guess.
+        """
+        workflow = turn.workflow
+        if workflow is None or not workflow.is_complete(turn.state):
+            return False
+        return any(block.get("type") in SUBSTANTIVE_BLOCKS for block in blocks)
+
+    def _served_citations(
+        self, turn: _Turn, blocks: Sequence[AnswerBlock], fallback: Sequence[Citation]
+    ) -> list[Citation]:
+        """The citations the **served** blocks carry, in first-appearance order (W10 addendum).
+
+        `_finish` used to be handed G2's citations, taken at step 5b — before nine deterministic
+        steps that merge blocks, drop sentences, re-home a citation and add cited facts of their
+        own. So `/chat`, the turn record and the chat page published a set the blocks beside them
+        did not have, and `min_distinct_docs` was scored on the wrong one. Resolution goes through
+        G2's own rule, so nothing reaches the reader that G2 would have stripped; a citation the
+        index cannot resolve is simply absent, which is the same fail-closed behaviour.
+        """
+        resolved = {citation.chunk_id: citation for citation in fallback}
+        served: list[Citation] = []
+        seen: set[str] = set()
+        for block in blocks:
+            for chunk_id in block.citations:
+                if chunk_id in seen:
+                    continue
+                seen.add(chunk_id)
+                citation = resolved.get(chunk_id)
+                if citation is None:
+                    outcome = g2.resolve(
+                        chunk_id,
+                        displayed=turn.evidence.get(chunk_id),
+                        quarantined=chunk_id in turn.quarantined,
+                    )
+                    citation = outcome.citation
+                if citation is not None:
+                    served.append(citation)
+        return served
 
     def _profile_outstanding(self, turn: _Turn) -> bool:
         """A verdict or a balance computed for the acting employee with the profile never read."""

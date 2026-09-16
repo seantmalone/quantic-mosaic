@@ -196,7 +196,10 @@ def test_a_policy_sentence_about_the_rule_itself_is_not_a_verdict():
     result = compliance.apply([fact], [envelope(SCENARIO_4_VERDICT)])
 
     assert result.blocks[0]["text"] == fact["text"]
-    assert not result.changed
+    assert not result.restated and not result.unverified and not result.retyped
+    # …the `not_stated` row is still said, in its own block (W10, ruling 6): the rule the model
+    # quoted is not the same thing as the row nobody could check.
+    assert [block["type"] for block in result.blocks] == ["policy_fact", compliance.RECORD]
 
 
 def test_next_steps_are_repaired_the_way_the_blocks_are():

@@ -32,7 +32,11 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
+
+from hrmosaic.agent import dates as date_consistency
+from hrmosaic.agent.outcome import about_the_reader, sentences
 
 #: What the step is called where it is named — reports, the spec paragraph beside §7.4's table.
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
@@ -80,6 +84,24 @@ DECOMPOSITION = re.compile(
 _TERM = re.compile(
     r"(?P<sign>plus|minus|and)?\s*(?P<value>\d+(?:\.\d+)?)\s*"
     r"(?P<label>(?:(?!\b(?:plus|minus|and)\b)[^,;])*)",
+    re.IGNORECASE,
+)
+
+
+#: The block type the engine's own account of a balance is said in — the reader's record, never
+#: advice. Same value as `agent/outcome.py`'s `RECORD`.
+RECORD = "record"
+
+#: A sentence about expiry or forfeiture of the reader's own balance (W10, ruling 8). Scenario 16
+#: told E1007 her carryover expires on *"31 March 2027"* — a date no field of her balance carries,
+#: and one that describes carryover which expired on 31 March **2026** — and never told her that
+#: 3.0 of her 8.0 days are forfeited on 31 December.
+EXPIRY_WORDS = ("expire", "expires", "expired", "expiry", "forfeit", "forfeited", "forfeiture", "carry", "carried")
+
+#: A date as an answer writes one, in either vocabulary.
+_DATE = re.compile(
+    r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|"
+    r"October|November|December)(?:\s+\d{4})?\b|\b\d{4}-\d{2}-\d{2}\b",
     re.IGNORECASE,
 )
 
@@ -208,6 +230,100 @@ def correct(text: str, envelope: Mapping[str, Any] | None) -> str:
     return "".join(pieces)
 
 
+def statement(envelope: Mapping[str, Any]) -> str | None:
+    """The engine's own account of the balance, or `None` (W10, ruling 8).
+
+    *"You have 8.0 days of PTO remaining: 13.5 accrued minus 4.0 used minus 1.5 pending."* — the
+    total the tool computed and the working the tool's own fields produce, so a reader who checks
+    the arithmetic finds it holds.
+    """
+    total = _number(envelope.get("remaining_days"))
+    if total is None:
+        return None
+    working = decomposition(envelope)
+    tail = f": {working}" if working else ""
+    return f"You have {_render(total)} days of PTO remaining{tail}."
+
+
+def expired_note(envelope: Mapping[str, Any]) -> str | None:
+    """What happened to carryover the balance no longer contains, or `None` (W10, ruling 8)."""
+    prior = _number(envelope.get("carryover_from_prior_year")) or 0.0
+    unexpired = _number(envelope.get("carryover_unexpired"))
+    expires = envelope.get("carryover_expires_on")
+    if prior <= 0.0 or unexpired != 0.0 or not isinstance(expires, str):
+        return None
+    return (
+        f"Your {_render(prior)} days of carryover expired on "
+        f"{date_consistency.human_date(date.fromisoformat(expires))} and are not in that figure."
+    )
+
+
+def forfeit_note(envelope: Mapping[str, Any]) -> str | None:
+    """The forfeiture the balance fields imply, or `None` (W10, ruling 8)."""
+    forfeit = _number(envelope.get("projected_forfeit_on_31_dec"))
+    cap = _number(envelope.get("carryover_cap_days"))
+    total = _number(envelope.get("remaining_days"))
+    if not forfeit or cap is None or total is None:
+        return None
+    return (
+        f"{_render(forfeit)} of those {_render(total)} days are above the {_render(cap)}-day "
+        f"carryover limit and are forfeited on 31 December if unused."
+    )
+
+
+def envelope_dates(envelope: Mapping[str, Any]) -> set[str]:
+    """Every date the balance carries, in both vocabularies — what a sentence may name."""
+    found: set[str] = set()
+    for value in envelope.values():
+        if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            found.add(value)
+            found.add(date_consistency.human_date(date.fromisoformat(value)))
+    return found
+
+
+def restate(text: str, envelope: Mapping[str, Any] | None) -> tuple[str, int]:
+    """`(the text, how many sentences were replaced)` (W10, ruling 8).
+
+    Two sentence-level rules, both about the reader's own balance and neither touching a sentence
+    that quotes the policy:
+
+    1. a sentence that **states a total** the balance does not carry — *"This comprises 5.5 days
+       from your current year accrual (13.5 accrued minus 4.0 used minus 1.5 pending) and 2.5 days
+       carried over"*, which says 5.5 and then shows the working for 8.0 — is replaced by the
+       engine's own statement. `correct()` above repairs a parenthetical; it cannot repair the
+       sentence built around one;
+    2. a sentence about the reader's own expiry or forfeiture that names a **date no field
+       states** — *"31 March 2027"* — is replaced by the engine's own note, or dropped where the
+       engine has nothing to put there. A date the envelope carries is left alone.
+    """
+    if envelope is None:
+        return text, 0
+    total = _number(envelope.get("remaining_days"))
+    dates = envelope_dates(envelope)
+    engine = statement(envelope)
+    replaced = 0
+    kept: list[str] = []
+    for sentence in sentences(text):
+        stated = [float(match["total"]) for match in DECOMPOSITION.finditer(sentence)]
+        wrong_total = total is not None and any(abs(value - total) > TOLERANCE for value in stated)
+        lowered = sentence.lower()
+        invented = (
+            about_the_reader(sentence)
+            and any(word in lowered for word in EXPIRY_WORDS)
+            and any(match.group(0) not in dates for match in _DATE.finditer(sentence))
+        )
+        if not wrong_total and not invented:
+            kept.append(sentence)
+            continue
+        replaced += 1
+        replacement = engine if wrong_total else expired_note(envelope)
+        if replacement:
+            kept.append(replacement)
+    if not replaced:
+        return text, 0
+    return " ".join(part.strip() for part in kept), replaced
+
+
 @dataclass
 class Outcome:
     """The blocks and next steps after the step, and how many strings it rewrote."""
@@ -229,7 +345,12 @@ def apply(
     *,
     next_steps: Sequence[str] = (),
 ) -> Outcome:
-    """The pure rule, over everything `render_answer()` puts in front of one reader. Mutates nothing."""
+    """The pure rule, over everything `render_answer()` puts in front of one reader. Mutates nothing.
+
+    Since W10 (ruling 8) the step also replaces a *sentence* whose stated balance total the
+    envelope does not carry, drops an expiry date no field states, and — where the fields imply a
+    forfeiture nothing in the answer mentions — states it as one `record` line.
+    """
     envelope = balance(envelopes)
     corrected = 0
     body: list[dict[str, Any]] = []
@@ -237,9 +358,13 @@ def apply(
         item = dict(block)
         before = str(item.get("text") or "")
         after = correct(before, envelope)
+        after, replaced = restate(after, envelope)
+        corrected += replaced
         if after != before:
             item["text"] = after
-            corrected += 1
+            corrected += after != before and not replaced
+        if not str(item.get("text") or "").strip():
+            continue
         body.append(item)
 
     steps: list[str] = []
@@ -248,11 +373,19 @@ def apply(
         after = correct(before, envelope)
         corrected += after != before
         steps.append(after)
+
+    forfeit = forfeit_note(envelope) if envelope is not None else None
+    said = " ".join(str(block.get("text") or "") for block in body)
+    if forfeit and "forfeit" not in said.lower():
+        body.append({"type": RECORD, "text": forfeit, "citations": []})
+        corrected += 1
     return Outcome(blocks=body, next_steps=steps, corrected=corrected)
 
 
 __all__ = [
     "BALANCE_TOOL",
+    "EXPIRY_WORDS",
+    "RECORD",
     "DECOMPOSITION",
     "DECOMPOSITION_TERMS",
     "STEP_NAME",
@@ -263,6 +396,11 @@ __all__ = [
     "balance",
     "correct",
     "decomposition",
+    "envelope_dates",
+    "expired_note",
     "field_of",
+    "forfeit_note",
+    "restate",
+    "statement",
     "terms",
 ]

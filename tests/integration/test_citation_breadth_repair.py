@@ -152,3 +152,30 @@ async def test_a_turn_whose_clock_ran_out_during_synthesis_also_skips_the_step(w
     assert response.outcome == "answered"
     assert [kind for kind, _, _ in spans(response.turn_id) if kind == "error"] == []
     assert {citation.doc_id for citation in response.citations} == {"travel-policy"}
+
+
+# -- W10 addendum, Critical: the citations the turn publishes are the ones its blocks carry -------
+
+
+async def test_the_published_citations_are_the_ones_the_served_blocks_carry(writer, store):
+    """`_finish` used to be handed G2's set, taken at step 5b — before nine deterministic steps that
+    merge blocks, drop sentences, re-home a citation and add cited facts of their own. So `/chat`,
+    the `turns` row and the chat page published a set the blocks beside them did not have, and
+    `min_distinct_docs` — which the judged evaluation scores off that set — was scored on the wrong
+    one. The two halves of one answer agree, in first-appearance order, with no duplicates."""
+    response, _ = await drive("citation_breadth_repair.json")
+
+    on_blocks = [chunk_id for block in response.answer_blocks for chunk_id in block.citations]
+    published = [citation.chunk_id for citation in response.citations]
+    assert published == list(dict.fromkeys(on_blocks)), "the same ids, first appearance first"
+
+    stored = store.execute("SELECT citations_json FROM turns WHERE id = ?", (response.turn_id,)).scalar()
+    assert [citation["chunk_id"] for citation in json.loads(stored)] == published
+
+
+async def test_the_repairs_breadth_survives_to_the_published_set(writer):
+    """The re-diagnosis the addendum asks for, at the stage the metric reads: whatever the steps do
+    to the blocks, the documents the breadth repair bought are the documents the turn publishes."""
+    response, _ = await drive("citation_breadth_repair.json")
+    documents = {citation.doc_id for citation in response.citations}
+    assert len(documents) == 3, documents

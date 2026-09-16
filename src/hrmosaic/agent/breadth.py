@@ -109,6 +109,10 @@ STOPWORDS: frozenset[str] = frozenset(
 #: workflow where there is one; this is the floor for a `multi_doc` turn with none.
 MIN_DISTINCT_DOCS = 2
 
+#: The key a block carries its position in the model's own answer under — `agent/outcome.py`'s
+#: `BLOCK_ID`, repeated here so this module imports nothing. `carry_citations` matches on it.
+BLOCK_ID = "_block_id"
+
 
 class Decision(Protocol):
     """The two `RouteDecision` fields the gate reads (§9.2)."""
@@ -240,37 +244,41 @@ def accepted(
 def carry_citations(
     reference: Sequence[Mapping[str, Any]], blocks: Sequence[Mapping[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """`(blocks with every citation of `reference` still on one of them, the chunk ids carried)`.
+    """`(blocks with every citation of `reference` still on its own block, the chunk ids carried)`.
 
     **No post-synthesis step may drop a citation from a surviving policy fact** (W9 addendum,
     ruling 2): `remote-002` reached the breadth repair with three documents and was served with
     two, because a later step — the record backstop, the restatement, the sentence surgery — took
-    a sentence or a block and its citations went with it. A citation that `reference` carried and
-    `blocks` no longer does is put back on the nearest surviving `policy_fact` — the block that
-    stood closest to the one it came from — so the served answer cites at least what the repair
-    produced. A step that removed *every* policy fact has nothing to carry to, and that answer is
-    the outcome step's to refuse.
+    a *sentence* out of a block and its citations went with the whole block.
+
+    **A citation goes back on its own block and nowhere else** (W10 addendum). The first version
+    put it on the *nearest surviving policy fact*, matched by scaled position, which attaches one
+    claim's evidence to another claim's sentence as soon as a step removes a block — a citation
+    that no longer supports what it sits under is worse than a missing one. Blocks are matched by
+    the `BLOCK_ID` marker the orchestrator sets before the first step and every step copies, so
+    "its own block" is exact; a citation whose whole block is gone vanishes with it.
     """
     kept: list[dict[str, Any]] = [dict(block) for block in blocks]
-    present = {citation for block in kept for citation in block.get("citations") or []}
-    facts = [index for index, block in enumerate(kept) if block.get("type") == "policy_fact"]
-    if not facts:
-        return kept, []
+    surviving: dict[Any, int] = {
+        block[BLOCK_ID]: index for index, block in enumerate(kept) if block.get(BLOCK_ID) is not None
+    }
     carried: list[str] = []
-    for position, block in enumerate(reference):
+    for block in reference:
+        identity = block.get(BLOCK_ID)
+        target = surviving.get(identity) if identity is not None else None
+        if target is None:
+            continue
+        present = set(kept[target].get("citations") or [])
         lost = [citation for citation in block.get("citations") or [] if citation not in present]
         if not lost:
             continue
-        # The surviving fact nearest the block's original position, ties to the earlier one.
-        scaled = round(position * (len(kept) - 1) / max(len(reference) - 1, 1))
-        target = min(facts, key=lambda index: (abs(index - scaled), index))
         kept[target]["citations"] = [*kept[target].get("citations", []), *lost]
-        present.update(lost)
         carried.extend(lost)
     return kept, carried
 
 
 __all__ = [
+    "BLOCK_ID",
     "INSTRUCTION",
     "MIN_DISTINCT_DOCS",
     "STEP_NAME",

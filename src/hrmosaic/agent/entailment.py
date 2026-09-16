@@ -187,18 +187,53 @@ def entailed(claim: str, ground: str) -> bool:
     return value in tokens or (value.endswith(".0") and value[:-2] in tokens) or f"{value}.0" in tokens
 
 
+#: The blocks' own sentences, normalised, for the duplicate rule below.
+DUPLICATE = "already said in the answer"
+
+
+def _sentences(text: str) -> list[str]:
+    """`text` split at terminal punctuation — enough to compare one instruction with another."""
+    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+
+
+def said_in_a_block(step: str, blocks: Sequence[Mapping[str, Any]]) -> bool:
+    """Is this step a sentence the answer above it already carries? (W10, ruling 13)
+
+    `render_answer()` prints the blocks and then the next steps, so a step whose normalised text is
+    contained in a block is the same instruction printed twice on one screen — which four of the
+    sixteen recorded demo paths did (01, 02, 03, 13), once with the two copies differing only in a
+    trailing full stop. Containment rather than equality: the model writes *"Submit the request in
+    MosaicOne"* as a step under a block sentence that says it and more.
+    """
+    needle = _normalise(step).rstrip(".")
+    if not needle:
+        return False
+    for block in blocks:
+        for sentence in _sentences(str(block.get("text") or "")):
+            if needle in _normalise(sentence).rstrip("."):
+                return True
+    return False
+
+
 def apply(
     blocks: Sequence[Mapping[str, Any]],
     envelopes: Iterable[Any],
     *,
     next_steps: Sequence[str] = (),
 ) -> Outcome:
-    """The pure rule. Mutates nothing."""
+    """The pure rule. Mutates nothing.
+
+    Two reasons a step goes: it names a specific the answer never established (W8, C08), or it
+    repeats a sentence the answer already prints (W10, ruling 13).
+    """
     ground = grounds(blocks, envelopes)
     kept: list[str] = []
     dropped: list[tuple[int, str, str]] = []
     for index, step in enumerate(next_steps):
         text = str(step)
+        if said_in_a_block(text, blocks):
+            dropped.append((index, text, DUPLICATE))
+            continue
         unentailed = next((claim for claim in claims(text) if not entailed(claim, ground)), None)
         if unentailed is None:
             kept.append(text)
@@ -209,6 +244,7 @@ def apply(
 
 __all__ = [
     "AMOUNT",
+    "DUPLICATE",
     "DATE",
     "DURATION",
     "NAME",
@@ -219,4 +255,5 @@ __all__ = [
     "claims",
     "entailed",
     "grounds",
+    "said_in_a_block",
 ]
