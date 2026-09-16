@@ -129,15 +129,19 @@ def apply(
         item = dict(block)
         text = str(item.get("text") or "")
         kept: list[str] = []
+        removed: list[str] = []
         for sentence in sentences(text):
             if denies_a_permitted_tool(sentence, permitted) or contradicts_the_record(sentence, envelopes):
-                dropped.append((index, sentence))
+                removed.append(sentence)
             else:
                 kept.append(sentence)
-        if not kept and text:
+        dropped.extend((index, sentence) for sentence in removed)
+        if removed and not kept:
             emptied.append(index)
             continue
-        item["text"] = " ".join(part.strip() for part in kept) if len(kept) != len(sentences(text)) else text
+        # Unchanged bytes when nothing came out: the join only happens where a sentence did.
+        if removed:
+            item["text"] = " ".join(part.strip() for part in kept)
         body.append(item)
     return Outcome(blocks=body, dropped=dropped, emptied=emptied)
 

@@ -60,8 +60,11 @@ from hrmosaic.core.tenure import human_tenure
 #: Deliberately not a `G<n>`: the six guardrails are a closed set.
 STEP_NAME = "snapshot_consistency"
 
-#: The tool whose result carries an employee's tenure in both forms (§8.4 tool 2). Kept as the name
-#: of the canonical source; since W8 (C22) the pair is read from **any** envelope that reports it.
+#: The tool whose result carries an employee's tenure in both forms (§8.4 tool 2) — the canonical
+#: source, and the one the tests name. Since W8 (C22) the pair is read from **any** envelope that
+#: reports it, so nothing here filters on it any more: a turn that reached the reader's tenure
+#: through the compliance engine got "45 months of continuous service" while the same persona on
+#: the same build got "3 years 9 months" from the turn that happened to call this one.
 PROFILE_TOOL = "lookup_employee_profile"
 
 #: The field that carries a tenure in months, wherever an envelope puts it — top level on the
