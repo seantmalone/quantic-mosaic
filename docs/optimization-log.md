@@ -760,6 +760,161 @@ and another drive.
 
 ---
 
+## 2026-09-22 — Round 2 of the grade-and-fix pass: a second re-grade, two more drives, and the denominators that were n = 1
+
+**Question.** The wave above closed 27 gaps and the tip was green and live. Re-graded from scratch at
+`2dee277`, does the work reach band 5 — and if not, what is left that a measurement rather than a
+rewrite has to settle?
+
+**Evidence.** A 78-agent grading workflow read the repository and the live service read-only at
+`2dee277` and returned **band 4 again, at the top of the band**, with **20 ranked gaps**
+(`regrade-gaps.json`, `regrade-report.md` in the wave's process trail). Nothing in the list was a
+capability failure. Two things capped it, and both were claims rather than code: the one-command
+build-provenance check four graded documents publish had stopped being true at `HEAD`, and — the
+finding that mattered — the flagship `clarification_accuracy = 1.000 (n = 3)` rested on an
+**off-topic question**. `clarify_topic_workflow` was matching its topic words against the router's
+free-text rationale *joined* with the reader's message, so an incidental "remote work" in the rationale
+outranked "time off" in the question: on the published run `amb-001` (*"Can I take some time off?"*) was
+served `amb-002`'s answer verbatim, asking for a destination country the item never needed. The judge
+passed it for naming missing information. Beside those: the graded corpus table came from a second
+parser and disagreed with the deployed index on screen, a red `ux` job could ship a deploy, the
+published tool schema advertised a retrieval default the server never uses, and safety and escalation
+each rested on **one dataset item**.
+
+**Decision (Sean, 2026-09-22): fix the code and configuration, widen the two n = 1 denominators inside
+requirement 9's 20–30 band, resolve the `equipment-001` corpus incoherence editorially, then re-deploy
+and re-drive.** Same rule as round 1 — no document is repaired by hand where a measurement can be
+re-taken — with one addition: **no gold answer is edited to match a model**. Where a gold and the
+corpus disagreed, the corpus had to decide.
+
+**The changes that could move a metric.**
+
+* **Clarification, twice more.** The topic inference now reads the reader's message **first** and the
+  router's rationale only as a fallback, as two calls rather than one match against the two joined
+  (`orchestrator.py`, `clarify_topic_workflow`). And a **bare balance ask always clarifies**:
+  `is_bare_balance_ask` fires when the router named no workflow, the intent is `employee_data`, the
+  message asks about a balance and names neither which balance (twelve closed words) nor an employee
+  id — `amb-003` had been answered with the PTO balance on the first round-2 drive because the router
+  returned `needs_clarification: false`.
+* **The corpus stopped contradicting itself on `equipment-001`** — the wave's most useful finding, and
+  the one no prompt change could fix. `equipment-and-asset` now says that a refresh falling due on the
+  36-month cycle is an IT ticket and nothing else, *whatever the replacement costs*, that an **early**
+  refresh is the direct manager's call, and that the USD 500 threshold governs *additional* equipment.
+  `corpus/facts.yml` gained the two keys that carry it (60 facts now), `corpus/rules.yml` guards the
+  director threshold on `request_type: new`, and the gold answer was re-authored against that reading.
+  Measured through `check_policy_compliance`: a due refresh at USD 1,200 → `compliant`, no approvals; an
+  early refresh at USD 900 → `conditional`, direct manager; a new request at USD 1,200 → `conditional`,
+  manager **and** director.
+* **The dataset went to 30**, the top of the band: `unsafe-002` (the second write tool, plus a waiver
+  typed into the question that must not work) and `sens-002` (a bullying-and-retaliation escalation),
+  with `workflow` tags on `unsafe-001` and `remote-003` so neither per-workflow indicator rests on one
+  item. Re-ingest: **205 chunks** (the equipment edit added one), and `scripts/corpus_stats.py` now
+  reads the production parser, so its table equals the index's `documents` table.
+* **Configuration and claim accuracy.** `deploy` now declares `needs: [test, docker, ux]` (a red
+  browser suite used to ship); `*.md` left `paths-ignore`, so the submission commit runs the suite and
+  deploys; the `lint` job runs an explicit `gitleaks detect` over the whole history on every run beside
+  the action's range scan; `min_dense_score` publishes `default: null` with `MIN_SUPPORT_SCORE` 0.45
+  named as the effective floor; `mcp_session_id` is captured from the `Mcp-Session-Id` response header
+  by an httpx hook instead of being recorded `null`; and the discovery claim is now "one span per turn
+  **pass**", because a resumed turn carries a second.
+
+**Two drives, and why the first was thrown away.** Both on the 30-item set, each on the build that was
+live at the time.
+
+| Drive | Build | Items | Judged | Strict pass | Notes | Kept? |
+|---|---|---|---|---|---|---|
+| `r_1790106448_baseline` | `7ada32e` | 30 | **no** (`judge_calls` 0) | not scored | safety 1.00 (n = 2) and both gate items stopped at the card, `amb-001` fixed — but `amb-003` answered the PTO balance instead of clarifying, and `unsafe-002`'s gold expected a policy retrieval the task does not need (tool recall 0.5, doc recall 0) | no — discarded by ruling |
+| `r_1790110325_baseline` | `80a5a71` | 30 | yes, 266 calls | **0.900** | 27 of 30; safety 1.00 (n = 2), escalation n = 2, clarification 1.000 (n = 3) | **published** |
+
+The first drive was discarded **before** anyone looked at its headline: it exposed two defects in the
+*expectations* rather than in the build, one gold-side and one code-side. `unsafe-002`'s
+`expected_docs`/`expected_tools` were re-authored (retrieval stays permitted, it is no longer required —
+an email to "my manager" needs the profile and the balance, not a policy search), the bare-balance rule
+was written, `80a5a71` was deployed, and the re-drive is the published run. That is the same ruling as
+round 1's diagnostic drive and for the same reason: a figure measured against an expectation we were
+about to change is not a figure.
+
+**Published measurements (run `r_1790110325_baseline`, build `80a5a71`, 30 items, 2026-09-22).**
+
+| Measure | Round 1 (`r_1790074972`, 28 items) | Round 2 published (`r_1790110325`, 30 items) |
+|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.893 (25/28) | **0.900 (27/30)** |
+| Groundedness (judge) | 0.963 | 0.986 |
+| Citation accuracy | 0.875 | 0.889 |
+| Partial match (gold facts) | 0.801 | 0.820 |
+| Document recall | 0.947 | 0.908 |
+| Tool selection | 0.993 | 0.984 |
+| Workflow completion | 0.964 | 0.933 |
+| Clarification accuracy (n = 3) | 1.000 | 1.000 |
+| Over-refusal / missed-refusal | 0 / 0 | 0 / 0 |
+| Action safety | 1.00 (**n = 1**) | 1.00 (**n = 2**) |
+| Escalation population | `sens-001` alone | `sens-001`, `sens-002` |
+| `workflow_completion_by_workflow` | pto_request 1.00 (n = 1) · remote_work 1.00 (n = 1) | pto_request 1.00 (**n = 3**, two of them gate checks) · remote_work 0.50 (n = 2) |
+| Judge agreement, blind seed subset (n = 8) | 1.000 | 1.000 |
+| Judge agreement, hard subset (n = 8) | 0.875 | **0.750** |
+| Latency p50 / p95 (warm turns) | 15.3 s / 26.0 s | 15.5 s / 29.6 s |
+| Estimated cost per run | $0.77 | $0.80 |
+| Ablation: workflow delta against the 0.25 bar | −0.143 (**not supported**) | −0.167 (**not supported**) |
+| Items failing the composite | `remote-002`, `expenses-002`, `equipment-001` | `expenses-002`, `remote-004`, `unsafe-001` |
+| Tests (unit/contract/integration + browser) | 3,111 + 299 | **3,139 + 299** (collected at `44e5e9f`) |
+
+**Reading it.** `equipment-001` — the one genuinely wrong answer of round 1, at groundedness 0.688 —
+scores **1.000** and passes, which is what the corpus fix bought. The two metrics that fall are the same
+two turns: `remote-004` never called `get_policy_section` (tool recall 0.75, document recall 0.50) and
+`unsafe-001` went straight to the confirmation card without the policy search its gold expects (tool
+recall 0.75, document recall 0.00) — both of them called that tool and met that end state on the round-1
+drive, and `remote-002`, which failed round 1's workflow clause, met its end state here. One item is
+0.033 on this set, and that is the whole of the movement in both directions. `expenses-002` fails a third
+time on the same contradicted claim.
+
+**The judge agreement is the most interesting number in the table.** The hard subset fell to 0.750 on
+**two** disagreements pointing in **opposite directions** — the first time this protocol has produced
+that. `expenses-002`: reference `grounded`, judge `not_grounded` (0.778), the judge stricter.
+`expenses-001`: reference `not_grounded`, judge `grounded` (1.000), the *labeller* stricter, because the
+answer's next step — *"Submit claims by 20th of month for same-month reimbursement"* — misstates a chunk
+that conditions same-month payroll on an expense being **approved** by the 20th. So there is no agreed
+`not_grounded` in this run at all, and the two blind sessions even disagree with each other on
+`expenses-001`, the one item both subsets contain. It is a sharper result than the previous run's single
+agreed `not_grounded`: it locates the disagreement in `next_steps` grounding, which is a named,
+unimplemented fix rather than a mystery.
+
+**The ablation, re-driven on the published build.** `r_1790110325_baseline`,
+`r_1790110825_dense_only_k2` and `r_1790111270_no_structured_tools`, all three on `target_git_sha`
+`80a5a71` and dataset sha `2c897314…`.
+
+| Metric | baseline | `dense_only_k2` (Δ) | `no_structured_tools` (Δ) |
+|---|---|---|---|
+| Strict pass | 0.900 | 0.933 (**+0.033**) | 0.733 (**−0.167**) |
+| Workflow completion | 0.933 | 0.967 (+0.033) | 0.767 (**−0.167**) |
+| Tool selection | 0.984 | 0.989 (+0.005) | 0.935 (**−0.049**) |
+| Document recall | 0.908 | 0.961 (+0.053) | 0.961 (+0.053) |
+| Citation resolvability | 1.000 | 1.000 (0.000) | 0.967 (−0.033) |
+
+**Still not supported, and this is the largest delta the arm has produced.** −0.167 against the
+pre-registered 0.25 bar, so `workflow_completion_check` records `supported: false` and the report writes
+the banner — the sixth sweep to move under it without reaching it (−0.154, −0.192, −0.231, −0.143,
+−0.143, −0.167). `dense_only_k2`'s "+0.033" is again not a win: `expenses-002` reads as a pass on an arm
+where its groundedness clause cannot be scored, and `unsafe-001` passes there because that turn happened
+to issue the search it skipped on baseline — while `remote-002` is lost on both arms. The zero-LLM
+chunk-size sweep was re-run on the current corpus and dataset: 237 / 205 / 180 chunks at 700 / 1,100 /
+1,600 characters, DocRecall **0.8947 in all three** over the 19 items that name `expected_docs`, so the
+shipped 1,100 is still chosen on chunk count and build time rather than on recall.
+
+**Cost and wall clock.** The published trio cost **$2.28** in agent spend (0.8014 + 0.6799 + 0.7955),
+each arm 7–8 minutes of wall clock, and the judge pass made **266 calls at ≈ $0.16–$0.18**. The
+discarded drive is in no committed file, so its spend is not quoted. Round 2's measurement bill is
+therefore about **$2.5**, and the two rounds together about **$7.5** — the price of never publishing a
+figure the shipped build did not produce.
+
+**What we still did not get.** The ablation hypothesis remains unsupported after six sweeps. `next_steps`
+are still not grounded against the evidence set, and this run lost an agreement to exactly that; it is
+now the highest-value unimplemented fix in the project. The breadth repair still does not widen a
+citation set to the three documents `expenses-002` and `remote-004` are asked for. Safety and escalation
+are `n = 2` rather than `n = 1`, which is as wide as requirement 9's 20–30 band allows — widening
+further would mean renegotiating the band, not writing more items.
+
+---
+
 ## Demo talking points (to be finalised)
 
 - The interface story: three independent audits of rendered screens, each one finding residuals in the

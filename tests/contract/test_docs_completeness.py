@@ -226,6 +226,36 @@ def _section(path: Path, heading: str) -> str:
     return "\n".join(lines[start:stop])
 
 
+def _github_slugs(text: str) -> dict[str, str]:
+    """`{heading line: anchor}` under GitHub's auto-slug rules, in document order.
+
+    Lower-case, drop everything that is not a word character, a space or a hyphen, spaces to
+    hyphens — and number a repeated slug `-1`, `-2`, … the way GitHub does, which is what makes a
+    link to the *second* `### Tool schemas` correct rather than a link back to the first.
+    """
+    slugs: dict[str, str] = {}
+    seen: dict[str, int] = {}
+    for line in text.splitlines():
+        if not re.match(r"#{1,6} ", line):
+            continue
+        title = line.lstrip("#").strip()
+        # GitHub's own rule, in its own order: lower-case, delete every character that is not
+        # `[a-z0-9 _-]`, then turn each remaining space into a hyphen. Spaces are NOT collapsed, so
+        # a heading with an em dash keeps the double hyphen the deletion leaves behind.
+        base = re.sub(r"[^a-z0-9 _-]", "", title.lower()).replace(" ", "-")
+        count = seen.get(base, 0)
+        seen[base] = count + 1
+        slugs[line.rstrip()] = base if count == 0 else f"{base}-{count}"
+    return slugs
+
+
+def _design_toc(text: str) -> str:
+    """The contents list — from `**Contents.**` to the honesty note that follows it."""
+    start = text.index("**Contents.**")
+    stop = text.index("**A note on honesty.**", start)
+    return text[start:stop]
+
+
 def _flatten(text: str) -> str:
     """Lower-cased, whitespace-collapsed, emphasis-stripped prose.
 
@@ -359,8 +389,29 @@ def test_readme_names_the_third_party_components():
 # ------------------------------------------------------- design-and-evaluation.md (DOCS.3, R10.*)
 
 
-def test_design_document_has_the_eight_docs3_sections():
+def test_design_document_has_the_eight_docs3_sections_and_a_toc_that_resolves():
+    """DOCS.3 plus the linked contents list (G5b, gap 19).
+
+    The document is ~1,800 lines and must be read end to end for R10, so it opens with a linked
+    table of contents. Two things are asserted about it, both mechanically: every `##` section is
+    reachable from the list, and every anchor link in the file resolves to a heading that exists.
+    The slugs are GitHub's own, duplicates included — `## MCP server design` and
+    `### MCP server design` are both in this document, and the second one's anchor is
+    `#mcp-server-design-1`, which is the kind of detail a hand-written list gets wrong.
+    """
     assert _missing(DESIGN, DOCS3_SECTIONS) == []
+
+    text = _text(DESIGN)
+    slugs = _github_slugs(text)
+    toc = _design_toc(text)
+    linked = set(re.findall(r"\]\(#([^)]+)\)", toc))
+
+    for heading in [line for line in _lines(DESIGN) if line.startswith("## ")]:
+        slug = slugs[heading]
+        assert slug in linked, f"the contents list does not link {heading} (expected `](#{slug})`)"
+
+    for anchor in sorted(set(re.findall(r"\]\(#([^)]+)\)", text))):
+        assert anchor in set(slugs.values()), f"anchor #{anchor} resolves to no heading in {DESIGN.name}"
 
 
 def test_design_document_has_the_ten_r10_1_justifications():

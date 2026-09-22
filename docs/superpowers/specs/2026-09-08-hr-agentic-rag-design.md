@@ -1,5 +1,32 @@
 # Mosaic HR Copilot — Design Spec (v2)
 
+> **Frozen 2026-09-09 as the pre-implementation design of record** (banner added 2026-09-22). This
+> document is what was approved before any code was written, and it is kept unedited as that record
+> except for the in-place `Amended, UX W…` markers it already carries. **Where it disagrees with
+> [`design-and-evaluation.md`](../../../design-and-evaluation.md), that document is current** — it
+> describes the build that is deployed. The disagreements worth naming before you read on:
+>
+> * **§2's diagram still draws the chat page's "live span rail (SSE)"** — UX W2 deleted it; the chat
+>   page shows a single status line and the streamed answer, and the span waterfall lives on the
+>   dashboard.
+> * **§15.1 is headed "one file, four jobs"** — `ci.yml` declares **five** (`lint`, `test`, `ux`,
+>   `docker`, `deploy`), and since 2026-09-22 `deploy` carries `needs: [test, docker, ux]`, so the
+>   browser suite gates the deploy.
+> * **§18's demo narration stages the deleted span rail, and §18.3's segment table is superseded** —
+>   [`docs/demo-script.md`](../../demo-script.md) carries the shipped segment table and is
+>   authoritative for the recording.
+> * **§18's "citation chip → corpus browser"** — a citation chip deep-links into the `/policy` reader
+>   at the exact chunk; `/dashboard/corpus` is a separate browsing surface.
+> * **"~280 chunks"** — the committed index holds **205**.
+> * **"15.8 s" for index ingestion** — the measured build-time ingest on the 2-CPU builder is
+>   **107.6 s**, published with the rest of the build timings in `design-and-evaluation.md`.
+> * Figures throughout — the 28-item evaluation set, chunk counts, page counts — are the
+>   pre-implementation planning values; every measured figure is published in
+>   `design-and-evaluation.md` and `evaluation/REPORT.md` against the run that produced it.
+>
+> `Status: approved for implementation` below is part of the frozen record, not a statement about
+> today.
+
 **Project:** `quantic-mosaic` · Quantic "AI Engineering Techniques and Architectures" project
 **Date:** 2026-09-09 · **Status:** approved for implementation · **Author:** Claude Code (architect phase)
 **Approach:** *Mosaic Monolith* — one Python process, one container, one read-only index file, one read-write trace store
