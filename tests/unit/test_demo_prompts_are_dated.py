@@ -185,6 +185,16 @@ def test_an_unreachable_instance_is_a_loud_failure(capsys):
     assert "could not read demo_1 from http://127.0.0.1:1/" in captured.err
 
 
+def test_a_base_url_with_no_scheme_is_reported_at_once(capsys):
+    """Fix round 2. `urlopen` reports a missing `http://` as `URLError("unknown url type")`, which
+    the retry loop would have sat on for its whole 120 s budget before blaming the network for a
+    typo. The default timeout is deliberately left in place here: the guard is what makes it fast."""
+    status = demo_prompt.main(["--base-url", "127.0.0.1:8000", "--key", "demo_1"])
+
+    assert status == 1
+    assert "is not an http(s) URL" in capsys.readouterr().err
+
+
 def test_the_key_is_required(capsys):
     """Fix round 1, Minor 4: it defaulted to `demo_1`, so a forgotten flag ran the wrong demo."""
     with pytest.raises(SystemExit) as refused:

@@ -141,21 +141,41 @@ async def test_a_stated_tools_disabled_is_privileged_in_the_employee_persona(web
     assert as_admin_on_the_wrong_label.json() == {"code": "PRIVILEGED_OPTION_REFUSED", "field": "tools_disabled"}
 
 
-async def test_the_process_wide_tool_filter_is_not_read_as_a_privileged_request(web, store):
-    """`MCP_TOOLS_DISABLED` is the process default for `options.tools_disabled` (gap 20), and a
-    default is not something the caller asked for: an employee-persona `web` turn on a process that
-    sets it is answered, with the tool genuinely withheld — not refused `ADMIN_REQUIRED`."""
+def _tools_offered(store, turn_id: str) -> list[list[str]]:
+    """The catalogue each model call of a turn was handed, in `seq` order."""
+    return [
+        json.loads(row["payload_json"]).get("tools_offered") or []
+        for row in store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'llm_call' ORDER BY seq",
+            (turn_id,),
+        ).dicts()
+    ]
+
+
+async def test_the_process_wide_tool_filter_applies_to_an_ordinary_turn(web, store):
+    """`MCP_TOOLS_DISABLED` (gap 20) is the operator's, not the caller's: an employee-persona `web`
+    turn on a process that sets it is **answered**, with the tool genuinely withheld — not refused
+    `ADMIN_REQUIRED`, which is what would happen if a filter nobody asked for were read as a request
+    that asked for it."""
     async with web("rag_only.json", mcp_tools_disabled="get_policy_section") as client:
         response = await client.post("/chat", json={"message": QUESTION})
 
     assert response.status_code == 200, response.text
-    offered = [
-        json.loads(row["payload_json"]).get("tools_offered") or []
-        for row in store.execute(
-            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'llm_call' ORDER BY seq",
-            (response.json()["turn_id"],),
-        ).dicts()
-    ]
+    offered = _tools_offered(store, response.json()["turn_id"])
     assert any(offered), "the turn called the model with a catalogue"
     assert all("get_policy_section" not in names for names in offered), "the filter withheld the tool"
     assert any("search_policy_documents" in names for names in offered), "and withheld nothing else"
+
+
+async def test_no_caller_can_switch_the_process_wide_tool_filter_off(web, store):
+    """Fix round 2, on the wire. `"tools_disabled": []` asks for nothing, so it is **unprivileged**
+    and reaches the agent from any persona — and while `MCP_TOOLS_DISABLED` was a *default* for that
+    field, stating it was all it took to be offered the tool the operator withheld. The filter is
+    unioned in `router.allowed_tools` now, so the turn is still answered and the tool is still gone."""
+    async with web("rag_only.json", mcp_tools_disabled="get_policy_section") as client:
+        response = await client.post("/chat", json={"message": QUESTION, "options": {"tools_disabled": []}})
+
+    assert response.status_code == 200, "an empty list is not a privileged option"
+    offered = _tools_offered(store, response.json()["turn_id"])
+    assert any(offered), "the turn called the model with a catalogue"
+    assert all("get_policy_section" not in names for names in offered), "and could not get the tool back"

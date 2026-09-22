@@ -33,6 +33,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 
@@ -115,6 +116,12 @@ def read_prompt(base_url: str, key: str, *, timeout_s: float = DEFAULT_TIMEOUT_S
     43 and 52 seconds later (§14.4's measurement). Without this the fetch timed out against exactly
     the deployment the demo scripts are advertised for.
     """
+    # A `BASE_URL` with no scheme is a typo, not a cold instance: `urlopen` reports it as
+    # `URLError("unknown url type")`, which the retry below would otherwise sit on for the whole
+    # budget before printing a message that blames the network for a missing `http://`.
+    scheme = urllib.parse.urlsplit(base_url).scheme
+    if scheme not in ("http", "https"):
+        raise Refused(f"{base_url!r} is not an http(s) URL")
     deadline = time.monotonic() + timeout_s
     interval, last = FIRST_INTERVAL_S, "no attempt was made"
     while True:
@@ -151,7 +158,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         print(read_prompt(arguments.base_url, arguments.key, timeout_s=arguments.timeout))
-    except (Refused, TimeoutError) as error:
+    # `ValueError` is `urllib`'s answer to a `BASE_URL` with no scheme ("unknown url type"), and it
+    # is raised before any attempt: without it here the caller saw a traceback instead of the line
+    # that names the variable it got wrong.
+    except (Refused, TimeoutError, ValueError) as error:
         print(f"could not read {arguments.key} from {arguments.base_url}/: {error}", file=sys.stderr)
         return 1
     return 0

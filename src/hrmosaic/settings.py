@@ -123,11 +123,12 @@ class Settings(BaseSettings):
     # --- MCP ------------------------------------------------------------------------------
     mcp_transport: Literal["http", "stdio"] = "http"
     mcp_server_url: str | None = None
-    #: The tool names withheld from the model on a request that does not say otherwise — the
-    #: **process default** for `ChatOptions.tools_disabled`, read where that model is built
-    #: (`agent/orchestrator.py`). A per-request `options.tools_disabled` always wins, which is how
-    #: §13.9's `no_structured_tools` ablation is driven; this is the knob that lets the same
-    #: filter be set once for a whole process, the way `RETRIEVAL_K` is.
+    #: Tool names this process withholds from the model on **every** turn, unioned with the
+    #: per-request `options.tools_disabled` in `agent/router.py::allowed_tools`. Additive, never a
+    #: default a request can drop: an empty `options.tools_disabled` asks for nothing and is
+    #: therefore unprivileged, so a default would have let any caller switch the operator's filter
+    #: off for their own turn. A request can withhold more tools (that is how §13.9's
+    #: `no_structured_tools` ablation is driven) and never fewer.
     mcp_tools_disabled: str = ""
     mcp_allowed_hosts: str = "127.0.0.1:*,localhost:*"
 

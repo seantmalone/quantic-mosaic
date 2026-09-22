@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict
 
 from hrmosaic.agent.client import RAG_TOOLS, DiscoveredCatalog
 from hrmosaic.core.llm.base import ToolSchema
+from hrmosaic.settings import settings
 
 #: The four intents. They answer one question — *what does this turn need?* — and the out-of-scope,
 #: sensitive and clarification cases are **flags** rather than intents, because a turn can be
@@ -193,14 +194,21 @@ def allowed_tools(
     disabled: Iterable[str] = (),
     reopened: bool = False,
 ) -> list[str]:
-    """The names this step may call — the gate, plus the per-turn `tools_disabled` ablation filter.
+    """The names this step may call — the gate, plus the `tools_disabled` filter of §13.9.
 
     `reopened` is the one-step recovery of §9.2: the full catalog, for one more act step.
+
+    The filter is the **union** of the operator's `MCP_TOOLS_DISABLED` (§12.3) and the per-turn
+    `disabled` a request asked for, so a request can withhold more tools and never fewer. Additive
+    rather than a default the request overrides, because `options.tools_disabled` is privileged only
+    when it is non-empty — an empty list is unprivileged by construction (it asks for nothing), so a
+    default would have let any caller switch the operator's filter off for their own turn by stating
+    `"tools_disabled": []`. The ablation arms of §13.9 only ever add, so they are unaffected.
     """
     names = list(catalog.names)
     if decision.rag_only and not reopened:
         names = [name for name in names if name in RAG_TOOLS]
-    blocked = set(disabled)
+    blocked = set(disabled) | set(settings.mcp_tools_disabled_list)
     return [name for name in names if name not in blocked]
 
 

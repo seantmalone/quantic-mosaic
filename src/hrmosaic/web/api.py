@@ -702,18 +702,18 @@ def _validated_id(value: str | None, field: str) -> str | None:
 
 
 def privileged_options_used(options: ChatOptions) -> list[str]:
-    """Which privileged fields **this request** set — `k` is never one of them (§11.1).
+    """Which privileged fields this request actually set — `k` is never one of them (§11.1).
 
-    `model_fields_set` is what makes that "the request" rather than "the resolved value", and it
-    matters for exactly one field: `tools_disabled` defaults to `MCP_TOOLS_DISABLED` (§12.3), so a
-    process configured to withhold a tool would otherwise read every ordinary web turn as a request
-    that asked for the ablation and answer it `403 ADMIN_REQUIRED` — the knob would break the chat
-    surface instead of filtering the catalogue.
+    Every field here carries an empty default, so an absent one and an unstated one are the same
+    thing. That is also why `MCP_TOOLS_DISABLED` is unioned into the filter in
+    `router.allowed_tools` rather than defaulted into `options.tools_disabled`: an empty list asks
+    for nothing and is unprivileged, so a caller stating `"tools_disabled": []` would otherwise have
+    dropped the operator's filter for their own turn without ever meeting this check.
     """
     used = []
     for name in PRIVILEGED_OPTIONS:
         value = getattr(options, name)
-        if name in options.model_fields_set and value not in (None, [], ""):
+        if value not in (None, [], ""):
             used.append(name)
     return used
 
