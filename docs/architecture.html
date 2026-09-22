@@ -307,8 +307,8 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="322" y="180">GET  /access &middot; POST /access &middot; POST /access/logout   (key page, open)</text>
             <text class="t-sub" x="322" y="196">POST /session/actor          (sets mosaic_actor)</text>
             <text class="t-sub" x="322" y="212">GET  /health &middot; GET /ready    (open, never gated)</text>
-            <text class="t-sub" x="322" y="228">GET  /dashboard/*            (11 pages, admin persona)</text>
-            <text class="t-sub" x="322" y="244">GET  /api/traces/* &middot; /api/eval/* &middot; /api/corpus/* &middot; /api/mcp/*   (admin)</text>
+            <text class="t-sub" x="322" y="228">GET  /dashboard/*            (11 pages, any persona)</text>
+            <text class="t-sub" x="322" y="244">GET  /api/traces/* &middot; /api/eval/* &middot; /api/corpus/* &middot; /api/mcp/*   (any persona)</text>
             <text class="t-sub" x="322" y="260">POST /api/mcp/rediscover &middot; /api/dev/reset-sandbox   (admin)</text>
             <text class="t-sub" x="322" y="276">GET  /static/*  (vendored htmx, Alpine, Chart.js &mdash; open)</text>
           </g>
@@ -497,10 +497,10 @@ footer .mono{font-size:12px}
   <div><b class="num">1</b><span>Render free web service, one container</span></div>
   <div><b class="num">9</b><span>MCP tools, discovered by <code>tools/list</code></span></div>
   <div><b class="num">14</b><span>policy documents in 4 formats</span></div>
-  <div><b class="num">~280</b><span>chunks in the read-only index</span></div>
+  <div><b class="num">204</b><span>chunks in the read-only index</span></div>
   <div><b class="num">6</b><span>guardrails, G1&ndash;G6</span></div>
   <div><b class="num">11</b><span>dashboard pages</span></div>
-  <div><b class="num">345 MB</b><span>peak RSS against a 512&nbsp;MB cap</span></div>
+  <div><b class="num">294.9 MB</b><span>measured RSS against a 512&nbsp;MB cap</span></div>
 </div>
 
 <section id="fig2">
@@ -1104,9 +1104,9 @@ footer .mono{font-size:12px}
           <g class="node fam-web" data-id="f4-c5" tabindex="0" aria-label="demo narration">
             <rect class="tile" x="770" y="488" width="394" height="88" rx="2"/>
             <text class="t-title" x="782" y="510">Demo narration</text>
-            <text class="t-sub" x="782" y="530">the live span rail names tools, arguments, outputs,</text>
-            <text class="t-sub" x="782" y="546">retrieved sources and the final answer&rsquo;s basis</text>
-            <text class="t-sub" x="782" y="562">dashboard_url on every response opens the waterfall</text>
+            <text class="t-sub" x="782" y="530">the chat page shows the answer and its Sources (n);</text>
+            <text class="t-sub" x="782" y="546">tool names, arguments and outputs are on the session</text>
+            <text class="t-sub" x="782" y="562">page, which dashboard_url opens on every response</text>
           </g>
 
           <g class="edge" data-id="f4-e-st" data-from="f4-sessions" data-to="f4-turns" tabindex="0" aria-label="sessions to turns">
@@ -1153,7 +1153,7 @@ footer .mono{font-size:12px}
 
 <div class="glance">
   <div><b class="num">3</b><span>ablation variants over identical items</span></div>
-  <div><b class="num">4</b><span>CI jobs: lint, test, docker, deploy</span></div>
+  <div><b class="num">5</b><span>CI jobs: lint, test, ux, docker, deploy</span></div>
   <div><b class="num">8</b><span>reference-labelled items for judge agreement</span></div>
   <div><b class="num">0.85</b><span>target strict pass rate</span></div>
   <div><b class="num">10</b><span>provider calls per minute, token bucket</span></div>
@@ -1335,7 +1335,7 @@ footer .mono{font-size:12px}
     <div class="figscroll">
       <figure>
         <svg class="dg" id="svg6" viewBox="0 0 1180 580" role="group"
-             aria-label="CI and deployment: pushes, pull requests and a manual dispatch trigger one workflow with lint, test, docker and deploy jobs; deploy needs test and docker and triggers the Render deploy API, which builds the image with the index baked in and starts the live service. GitHub secrets feed the deploy job and Render environment variables feed the running service.">
+             aria-label="CI and deployment: pushes, pull requests and a manual dispatch trigger one workflow with lint, test, ux, docker and deploy jobs; the ux job carries no needs and blocks nothing; deploy needs test and docker and triggers the Render deploy API, which builds the image with the index baked in and starts the live service. GitHub secrets feed the deploy job and Render environment variables feed the running service.">
 
           <g class="node fam-web" data-id="f6-t1" tabindex="0" aria-label="push to main">
             <rect class="tile" x="16" y="96" width="190" height="64" rx="2"/>
@@ -1346,8 +1346,8 @@ footer .mono{font-size:12px}
           <g class="node fam-web" data-id="f6-t2" tabindex="0" aria-label="pull request">
             <rect class="tile" x="16" y="176" width="190" height="64" rx="2"/>
             <text class="t-title" x="28" y="198">Pull request</text>
-            <text class="t-sub" x="28" y="218">runs lint, test, docker</text>
-            <text class="t-sub" x="28" y="232">and never deploys</text>
+            <text class="t-sub" x="28" y="218" style="font-size:9.5px">runs lint, test, ux, docker</text>
+            <text class="t-sub" x="28" y="232" style="font-size:9.5px">and never deploys</text>
           </g>
           <g class="node fam-web" data-id="f6-t3" tabindex="0" aria-label="manual dispatch">
             <rect class="tile" x="16" y="256" width="190" height="76" rx="2"/>
@@ -1359,7 +1359,7 @@ footer .mono{font-size:12px}
 
           <rect class="boxfill" x="266" y="64" width="520" height="330" rx="3"/>
           <rect class="box" x="266" y="64" width="520" height="330" rx="3"/>
-          <text class="gtitle" x="278" y="88">.GITHUB/WORKFLOWS/CI.YML &mdash; ONE FILE, FOUR JOBS</text>
+          <text class="gtitle" x="278" y="88">.GITHUB/WORKFLOWS/CI.YML &mdash; ONE FILE, FIVE JOBS</text>
 
           <g class="node fam-agent" data-id="f6-lint" tabindex="0" aria-label="lint job">
             <rect class="tile" x="280" y="106" width="234" height="110" rx="2"/>
@@ -1373,7 +1373,7 @@ footer .mono{font-size:12px}
             <rect class="tile" x="538" y="106" width="234" height="110" rx="2"/>
             <text class="t-title" x="550" y="128">test &mdash; LLM_PROVIDER=stub</text>
             <text class="t-sub" x="550" y="148">ingest --verify-manifest</text>
-            <text class="t-sub" x="550" y="164">pytest -q (the whole suite)</text>
+            <text class="t-sub" x="550" y="164">pytest -q (all but the ux suite)</text>
             <text class="t-sub" x="550" y="180">MCP discovery: stdio + HTTP</text>
             <text class="t-sub" x="550" y="196">app-start, remote MCP_SERVER_URL</text>
             <text class="t-sub" x="550" y="210" style="font-size:9.5px">pii_check.py &middot; check_facts.py</text>
@@ -1394,6 +1394,7 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="550" y="324">wait_for_deploy.py --timeout 900</text>
             <text class="t-sub" x="550" y="340">smoke_deployed.py</text>
           </g>
+          <text class="t-sub" x="292" y="382" style="font-size:9.5px">ux &mdash; the browser suite; needs: is absent, so it never blocks test or deploy</text>
 
           <g class="node fam-ext" data-id="f6-hook" tabindex="0" aria-label="Render deploy (API)">
             <rect class="tile" x="846" y="96" width="318" height="76" rx="2"/>
@@ -1504,7 +1505,7 @@ var D={};
 
 /* ---------- Figure 1: system overview ---------- */
 D["f1-chatui"]={t:"Chat UI",f:"web",p:"The single Jinja page at / where a grader asks a question, watches the agent work and confirms a write. It generates its own turn_id, subscribes to the span stream first, then posts.",
- k:[["Stack","Jinja2 3.1.6 + htmx 2.0.9 + Alpine 3.15.2, vendored"],["Route","GET /"],["Controls","act-as selector listing the 24 employees plus HR admin, citation chips, live span rail, Confirm / Cancel card, cold-start banner, two demo buttons"],["Persona","the selector POSTs /session/actor {actor}, which sets the mosaic_actor cookie; absent, the actor is E1042"],["Access","the page itself is gated \u2014 the mosaic_access cookie, or the tokenized ?access= link a grader opens once"],["Snapshot note","“Employee data as of 1 September 2026” under any answer whose tool results carry an as_of"]],
+ k:[["Stack","Jinja2 3.1.6 + htmx 2.0.9 + Alpine 3.15.2, vendored"],["Route","GET /"],["Controls","the conversation, the Sources (n) strip, the confirmation card and one status line; the cold-start banner; and in the quarantined demo panel the act-as selector listing the 24 employees plus HR admin, two demo-prompt buttons and the “Open this conversation in the dashboard” link"],["Not here","tool names, arguments and outputs — UX W2 deleted the chat page's span rail; the technical record has one home, /dashboard/sessions/{id}, reached by the dashboard_url every response carries"],["Persona","the selector POSTs /session/actor {actor}, which sets the mosaic_actor cookie; absent, the actor is E1042"],["Access","the page itself is gated \u2014 the mosaic_access cookie, or the tokenized ?access= link a grader opens once"],["Snapshot note","“Employee data as of 1 September 2026” under any answer whose tool results carry an as_of"]],
  c:["Web App — FastAPI (HTTPS JSON)","Web App — FastAPI (SSE span events)"]};
 D["f1-dash"]={t:"Observability dashboard",f:"web",p:"Eleven server-rendered pages over the same trace rows the API returns. One gate, not two (UX W1): every page \u2014 reads included \u2014 is open to any persona holding the access token, and the Chat | Dashboard switch in the shared masthead is rendered for all of them. The admin role gates the three write controls alone, enforced server-side.",
  k:[["Pages","/dashboard, sessions, sessions/{id}, turns, llm, retrieval, tools, safety, mcp, corpus, evals"],["Charts","Chart.js on pages 1, 8 and 11"],["Filters","htmx — date range, client_label, persona, outcome, intent, workflow, tool, rule, variant"],["Write controls","Reset sandbox, Re-discover now, Run smoke eval \u2014 the admin persona only; outside it each is rendered visibly disabled with the sentence that says so, never live-and-silently-refused"],["Authorisation","one gate, not two (UX W1): the access token opens every page and every /api/* read for any persona. The role is checked on the three write endpoints alone (POST /api/dev/reset-sandbox, POST /api/mcp/rediscover, POST /api/eval/runs), which answer 403 {\"code\": \"ADMIN_REQUIRED\"} outside the admin persona"],["Navigation","the shared masthead's Chat | Dashboard switch is on every authenticated page, in every persona"]],
@@ -1540,7 +1541,7 @@ D["f1-tools-write"]={t:"Gated write tools",f:"data",p:"The only two state-changi
  k:[["create_mock_hr_ticket","employee_id, queue (6 values), summary, details, priority"],["draft_hr_email","employee_id, recipient_role, purpose, key_points[], tone"],["Rejection","isError with {status, code, action, human_summary, arguments_preview} — and no token of any kind"],["Annotations","readOnlyHint: false, destructiveHint: false, idempotentHint: false"]],
  c:["Audit / trace store (mock_writes, written directly by the MCP server)"]};
 D["f1-index"]={t:"RAG index",f:"rag",p:"One read-only SQLite file holding the vectors, the full-text index, the chunks and the documents. It is built at Docker build time on the two-CPU builder, never at boot.",
- k:[["Path","data/index/hr_index.sqlite, opened file:...?mode=ro"],["Vectors","vec_chunks USING vec0(embedding float[384] distance_metric=cosine)"],["Lexical","chunks_fts USING fts5(text, doc_title, heading_path)"],["Contents","~280 chunks over 14 documents"],["Guard","open_index() raises IndexModelMismatch if embed_model, dim, distance_metric or query_convention differs from the running configuration"]],
+ k:[["Path","data/index/hr_index.sqlite, opened file:...?mode=ro"],["Vectors","vec_chunks USING vec0(embedding float[384] distance_metric=cosine)"],["Lexical","chunks_fts USING fts5(text, doc_title, heading_path)"],["Contents","204 chunks over 14 documents"],["Guard","open_index() raises IndexModelMismatch if embed_model, dim, distance_metric or query_convention differs from the running configuration"]],
  c:["Corpus / RAG tools 1–4 (SQL)"]};
 D["f1-embed"]={t:"Embedder",f:"rag",p:"The only module that touches fastembed, exposing exactly two functions because bge-small is asymmetric: passages and queries are embedded differently.",
  k:[["Model","BAAI/bge-small-en-v1.5, 384-dim ONNX, fastembed 0.8.0"],["Constants","batch_size = 8, threads = 1; parallel= appears nowhere under src/"],["Why","the default batch size peaked at 1,477 MB RSS in the probe against 334 MB at 8"],["Model file","baked into the image at /app/models (~64 MB), so a cold start mmaps rather than downloads"],["Functions","embed_passages(texts), embed_query(text)"]],
@@ -1566,8 +1567,8 @@ D["f1-turso"]={t:"Audit / trace store",f:"trace",p:"Render free has no persisten
 D["f1-inspector"]={t:"External MCP client",f:"ext",p:"The mounted endpoint is attachable, so a grader can see the catalog for themselves \u2014 with the bearer header, which MCP Inspector supports as a custom header, and with the client's Host on MCP_ALLOWED_HOSTS, which the live service carries: an external initialize answered HTTP 200 on 2026-09-11 20:32Z, and a fuller external session on 2026-09-12 — initialize 200, notifications/initialized, tools/list returning all nine tools, and a real search_policy_documents call answered from the deployed index — is pinned verbatim at docs/evidence/mcp-external-session-2026-09-12.txt. The confirmation-gate and no-bearer refusals from that session are reported by the 2026-09-12 01:45Z re-grade and are not pinned; the suite covers both gates independently. /dashboard/mcp and mcp/run_stdio.sh show the same nine tools.",
  k:[["Endpoint","ALL /mcp-server/mcp"],["Auth","Authorization: Bearer $APP_ACCESS_TOKEN; the mount is gated like every other non-open route"],["Exposure","every read tool returns only synthetic data"],["Writes","need a one-time confirmation token an external caller cannot obtain, and the rejection leaks nothing"],["Limit","a per-IP rate limit is FastAPI middleware on the mount, ACCESS_RATE_LIMIT_PER_MIN (default 30)"]],
  c:["Access gate","MCP server"]};
-D["f1-ci"]={t:"GitHub Actions — ci.yml",f:"ext",p:"One workflow with four jobs. Deployment is a job that needs test and docker, so a red suite skips it rather than racing it.",
- k:[["Jobs","lint, test, docker, deploy"],["Gate","deploy needs: [test, docker]"],["Trigger","POST /v1/services/$RENDER_SERVICE_ID/deploys with RENDER_API_KEY; curl -fsS -X POST $RENDER_DEPLOY_HOOK_URL when that secret exists"],["Platform","Render Auto-Deploy is off, so the deploy job is the only path from a commit to the service"]],
+D["f1-ci"]={t:"GitHub Actions — ci.yml",f:"ext",p:"One workflow with five jobs. Deployment is a job that needs test and docker, so a red suite skips it rather than racing it.",
+ k:[["Jobs","lint, test, ux, docker, deploy"],["Gate","deploy needs: [test, docker]"],["ux","the browser-based UX principle suite, in “its own job because it is the only thing in the repo that needs a browser binary, and needs: is deliberately absent — it must never block test or deploy”"],["Trigger","POST /v1/services/$RENDER_SERVICE_ID/deploys with RENDER_API_KEY; curl -fsS -X POST $RENDER_DEPLOY_HOOK_URL when that secret exists"],["Platform","Render Auto-Deploy is off, so the deploy job is the only path from a commit to the service"]],
  c:["Render web service (deploy API)"]};
 
 D["f1-e-guard"]={t:"Guardrails, applied in-line",f:"edge",p:"The guardrails are not a post-processing filter: G4 runs before and during the act loop, G1 before synthesis and G2, G3 over what synthesis produced. Each evaluation emits a guardrail span carrying its verdict.",
@@ -1576,9 +1577,9 @@ D["f1-e-mcpc"]={t:"Tool requests",f:"edge",p:"The orchestrator never touches the
  k:[["Stripping","any model-supplied confirmation_token is removed before the call leaves the orchestrator"],["Filtering","the intent filter is applied here, in the schema conversion — never as a global remove_tool on the shared server"]],c:["Agent Orchestrator","MCP Client"]};
 D["f1-e-http"]={t:"HTTPS JSON",f:"edge",p:"The browser posts a chat message and gets the whole turn back in one response — answer, citations, snippets and the concise trace.",
  k:[["Request","POST /chat {message, session_id?, turn_id?, employee_id, client_label, options}"],["Response","200 with answer, answer_blocks[], citations[], trace[], usage, timings, dashboard_url"],["Ids","client-supplied session_id and turn_id are validated and rejected with 409 if reused"],["Through the gate","the request must present the mosaic_access cookie (or Authorization: Bearer for an API client); the persona comes from X-Actor or the mosaic_actor cookie, default E1042"],["Rate limit","per-IP on POST /chat, ACCESS_RATE_LIMIT_PER_MIN, default 30"]],c:["Chat UI","Access gate","Web App — FastAPI"]};
-D["f1-e-sse"]={t:"SSE span events",f:"edge",p:"Spans, not tokens. On 0.1 CPU token streaming buys cosmetics, while a span rail makes the agentic layer visible on camera.",
+D["f1-e-sse"]={t:"SSE span events",f:"edge",p:"Spans, not tokens. On 0.1 CPU token streaming buys cosmetics, while span events let one plain status line say what the agent is doing right now — since UX W2 that line is all the stream writes to the chat page.",
  k:[["Route","GET /chat/stream?turn_id="],["Events","turn_started, span, turn_completed"],["Order","the UI subscribes before it posts, because POST /chat does not return until the turn is over"],["Fallback","if the browser subscribes late or drops, the UI renders trace[] from the POST response"],["Keepalive","a 15-second heartbeat"],["Through the gate","GET /chat/stream is gated like the rest; the EventSource carries the mosaic_access cookie automatically"]],c:["Web App — FastAPI","Access gate","Chat UI"]};
-D["f1-e-dash"]={t:"Dashboard reads",f:"edge",p:"Every page renders from a typed view-model produced by the same /api/* endpoint that serves its JSON, so the page and the export cannot disagree. Both halves need the admin persona, and the check is server-side on every route \u2014 hiding the nav link is presentation, not access control.",
+D["f1-e-dash"]={t:"Dashboard reads",f:"edge",p:"Every page renders from a typed view-model produced by the same /api/* endpoint that serves its JSON, so the page and the export cannot disagree. One gate, not two (UX W1): both halves are open to any persona holding the access token, and the role is checked server-side on the three write endpoints alone.",
  k:[["Pages","GET /dashboard/* \u2014 gated by the access token, open to every persona (UX W1)"],["JSON","GET /api/traces/*, /api/eval/*, /api/corpus/*, /api/mcp/* \u2014 same"],["Refusal","403 {\"code\": \"ADMIN_REQUIRED\"} on the three write endpoints when the resolved actor is not \"admin\"; an HTML navigation gets a themed page carrying the masthead, never a raw JSON body"],["Export","every page has an Export JSON button hitting its own endpoint"]],c:["Observability dashboard","Access gate","Web App — FastAPI"]};
 D["f1-e-curl"]={t:"curl scripts",f:"edge",p:"The same contract endpoint, driven from a shell so the demo is reproducible without the UI.",
  k:[["Body","client_label: \"demo\""],["Headers","Authorization: Bearer $APP_ACCESS_TOKEN, and X-Actor when the script needs a persona other than E1042"],["Privileged options","refused unless client_label is \"eval\" and the resolved persona is admin \u2014 on the deployed service that implies a valid access token"]],c:["curl / API client","Access gate","Web App — FastAPI"]};
@@ -1617,7 +1618,7 @@ D["f2-s4"]={t:"02 · MCP discovery",f:"mcp",p:"Discovery happens before the pre-
 D["f2-s5"]={t:"05 · Act loop",f:"mcp",p:"Model turns become tools/call requests; results become evidence. The workflow spec, not the model, decides when the turn is complete.",
  k:[["Budgets","≤ 6 steps, ≤ 12 tool calls, ≤ 90 s wall clock"],["Per call","a tool_call span with arguments, result, duration and the acting employee id"],["Repair","an isError schema violation gets exactly one repair round trip with the error appended, then degrades"],["Scan","G4 runs over every piece of new evidence"]],c:["Corpus / RAG tools 1–4","People-data tools 5–7","Gated write tools 8–9","06 · Gate & synthesize"]};
 D["f2-s6"]={t:"06 · Gate & synthesize",f:"agent",p:"The evidence gate runs before the model writes anything, and two more guardrails run over what it wrote.",
- k:[["G1","refuses when max_dense_score &lt; 0.32 or fewer than 2 chunks clear 0.26"],["Synthesis","one constrained-JSON llm_call → AnswerSchema {blocks[], next_steps[], rationale_summary}"],["G2","resolves every cited chunk_id against the real index; unresolvable citations are stripped and empty policy_fact blocks dropped"],["G3","a policy_fact with zero citations is relabelled recommendation"],["Prompt rule","evidence is fenced in &lt;document trust=\"data\"&gt; envelopes that are data, never instruction"]],c:["07 · Flush & respond"]};
+ k:[["G1","refuses when max_dense_score &lt; 0.60 or fewer than 2 chunks clear 0.45"],["Synthesis","one constrained-JSON llm_call → AnswerSchema {blocks[], next_steps[], rationale_summary}"],["G2","resolves every cited chunk_id against the real index; unresolvable citations are stripped and empty policy_fact blocks dropped"],["G3","a policy_fact with zero citations is relabelled recommendation"],["Prompt rule","evidence is fenced in &lt;document trust=\"data\"&gt; envelopes that are data, never instruction"]],c:["07 · Flush & respond"]};
 D["f2-s7"]={t:"07 · Flush & respond",f:"trace",p:"One batched write closes the turn, and the response carries the four rubric-named fields plus a projection of every span the turn produced.",
  k:[["Flush","all spans, all llm_messages rows and the closing UPDATE in one round trip"],["Rollups","llm_calls, tool_calls, retrievals, guardrail_hits, llm_ms, retrieval_ms, tool_ms, store_ms, rss_mb_at_end"],["Body","answer, answer_blocks[], citations[], trace[], usage, timings, cold_start, stream_url, dashboard_url"],["Asserted","the set of seq values in trace[] equals the set of the turn's span seq values"]],c:["Chat UI"]};
 D["f2-b-oos"]={t:"Branch — out of scope",f:"agent",p:"An out-of-scope question is refused and redirected without a single tool call, because a refusal that issued a list call would score zero tool precision for exemplary behaviour.",
@@ -1645,7 +1646,7 @@ D["f2-f1"]={t:"Failure — MCP server unavailable",f:"agent",p:"The turn degrade
 D["f2-f2"]={t:"Failure — unknown employee_id",f:"agent",p:"A domain miss is a successful result, not an error, so the agent can ask a sensible question about it.",
  k:[["Result","{status: not_found, code: EMPLOYEE_NOT_FOUND, hint: \"Employee ids look like E1042.\"}"],["Outcome","clarify"],["Not a guardrail","identity is carried for audit only; the rubric asks for no authorization model"],["Test","tests/integration/test_fault_unknown_employee.py"]],c:["05 · Act loop"]};
 D["f2-f3"]={t:"Failure — empty or low-score retrieval",f:"agent",p:"When the corpus does not answer the question, the system says so and names what it does cover.",
- k:[["Thresholds","MIN_EVIDENCE_SCORE 0.32, MIN_SUPPORT_SCORE 0.26, both env-configurable so the ablation can move them"],["Recorded","the guardrail span carries the observed scores"],["Measured","OverRefusalRate and MissedRefusalRate are first-class metrics — over-refusal is measured, not assumed"],["Test","tests/integration/test_fault_empty_retrieval.py"]],c:["06 · Gate & synthesize (G1)"]};
+ k:[["Thresholds","MIN_EVIDENCE_SCORE 0.60, MIN_SUPPORT_SCORE 0.45 — calibrated at P10 from the observed dense-score distribution, and both env-configurable so the ablation can move them"],["Recorded","the guardrail span carries the observed scores"],["Measured","OverRefusalRate and MissedRefusalRate are first-class metrics — over-refusal is measured, not assumed"],["Test","tests/integration/test_fault_empty_retrieval.py"]],c:["06 · Gate & synthesize (G1)"]};
 D["f2-f4"]={t:"Failure — ambiguous request",f:"agent",p:"Asking rather than guessing, and doing it before spending a tool call.",
  k:[["Set by","the router's needs_clarification field"],["Cost","no tool call, no act loop"],["Judged","clarification_accuracy over the three ambiguous dataset items"],["Test","tests/integration/test_fault_ambiguous.py"]],c:["04 · Route"]};
 D["f2-e12"]={t:"Turn opened, MCP session ensured",f:"edge",p:"One small synchronous batch — the sessions upsert and the turns insert — and then the MCP session, before anything is routed. Its span is written every turn regardless, so a turn that never reaches the act loop still carries the MCP evidence.",k:[["Why synchronous","so /chat/stream and the dashboard can see a turn in flight"],["Span","mcp_discovery, exactly one per turn"]],c:["01 · Request","02 · MCP discovery"]};
@@ -1741,14 +1742,14 @@ D["f4-mockw"]={t:"mock_writes",f:"data",p:"The mock-action sandbox, written only
  k:[["id","MOCK-HR-000123 or MOCK-EMAIL-000045, allocated by the store"],["Columns","kind, created_at, session_id, turn_id, span_id, employee_id, payload_json"],["Constraint","confirmation_token NOT NULL REFERENCES confirmations(token)"],["Durability","retention never prunes a session owning a mock_writes row, nor a confirmations row one references"],["Reset","POST /api/dev/reset-sandbox \u2014 admin persona only; 403 {\"code\": \"ADMIN_REQUIRED\"} otherwise"]],c:["confirmations"]};
 D["f4-c1"]={t:"Reader 1 — POST /chat trace[]",f:"web",p:"The concise trace the contract endpoint returns is a projection of every span of the turn, with no kind filtered out.",
  k:[["Entry","{seq, kind, name, duration_ms, status, summary, args_preview?, result_preview?, detail_url}"],["Asserted","the set of seq values equals the set of the turn's span seq values — the concise trace and the dashboard are provably the same records"],["Selected tools","the plan span's selected_tools, then one tool_call entry each"],["Escalation","the guardrail entry with rule_id G5, verdict escalate"],["Gated turns","the first response's trace[] is a documented strict prefix; equality holds again on the resumed response"]],c:["spans"]};
-D["f4-c2"]={t:"Reader 2 — the SSE stream",f:"web",p:"Each closed span is fanned out to the subscribers of that turn as it happens, so the rail is real time without a second logging path.",
+D["f4-c2"]={t:"Reader 2 — the SSE stream",f:"web",p:"Each closed span is fanned out to the subscribers of that turn as it happens, so the chat page's status line is real time without a second logging path.",
  k:[["Registration","exactly one listener, registered during the app lifespan"],["Isolation","a raising subscriber affects neither persistence nor its peers"],["Enhancement","never a dependency — the UI falls back to trace[] from the POST response"]],c:["spans"]};
 D["f4-c3"]={t:"Reader 3 — the dashboard",f:"web",p:"Eleven pages, each specified as route, API, view-model, filters and charts — and each rendering the same JSON its API route serves.",
- k:[["Session detail","the full span waterfall with proportional duration bars"],["Safety page","verdict counts by rule, injection hits, the confirmation ledger and the mock-action log"],["MCP page","the live catalog with schemas, transport and handshake history"],["Corpus browser","documents and chunks, which is where a citation chip deep-links"],["Eval pages","runs, per-item detail, ablation compare and the latency block"]],c:["spans"]};
+ k:[["Session detail","the full span waterfall with proportional duration bars"],["Safety page","verdict counts by rule, injection hits, the confirmation ledger and the mock-action log"],["MCP page","the live catalog with schemas, transport and handshake history"],["Corpus browser","documents and chunks, which is where a cited chunk_id resolves"],["Eval pages","runs, per-item detail, ablation compare and the latency block"]],c:["spans"]};
 D["f4-c4"]={t:"Reader 4 — the eval scorers",f:"ext",p:"The scorers are deterministic assertions over these records, which is precisely why no eval framework is used — every library's result object fights this schema.",
  k:[["Tool metrics","computed from ok tool_call spans, with gated attempts counted separately"],["Groundedness","judged against the chunk text actually present in the synthesis prompt, read from the retrieval spans — no re-retrieval"],["Action safety","asserts every ok write span has an earlier confirmed confirmation span in the same turn"],["Link","eval_results.session_id and turn_id give one click from a score to its full trace"]],c:["spans"]};
-D["f4-c5"]={t:"Reader 5 — the demo narration",f:"web",p:"The five elements the demo has to show are each a named record, so narrating the video is reading the rail aloud.",
- k:[["Shown","tool names, arguments, outputs, retrieved sources, the final answer's basis"],["Hinge","dashboard_url on every response opens that same turn's waterfall"],["Beat","expanding a check_policy_compliance span on camera to show duration_days: 42 and met: false"]],c:["spans"]};
+D["f4-c5"]={t:"Reader 5 — the demo narration",f:"web",p:"The five elements the demo has to show are each a named record, so narrating the video is reading the session page aloud.",
+ k:[["Shown","tool names, arguments, outputs, retrieved sources, the final answer's basis — on /dashboard/sessions/{id}, not on the chat page, which since UX W2 is the conversation, the Sources (n) strip, the confirmation card and one status line"],["Hinge","dashboard_url on every response opens that same turn's waterfall, and the chat page's “Open this conversation in the dashboard” link is that URL"],["Beat","expanding a check_policy_compliance span on camera to show duration_days: 42 and met: false"]],c:["spans"]};
 D["f4-e-st"]={t:"1 : n",f:"edge",p:"A session holds an ordered list of turns, unique on (session_id, seq).",k:[["Index","ix_turns_session on (session_id, seq)"]],c:["sessions","turns"]};
 D["f4-e-ts"]={t:"1 : n",f:"edge",p:"Spans are ordered within their turn by seq, continued rather than restarted when a turn is reopened on confirmation.",k:[["Index","ix_spans_turn on (turn_id, seq)"]],c:["turns","spans"]};
 D["f4-e-sl"]={t:"1 : n — verbatim bytes",f:"edge",p:"Only llm_call spans have message rows, written in the same end-of-turn batch and pruned with their parent session.",k:[["Primary key","(span_id, seq)"]],c:["spans","llm_messages"]};
@@ -1814,7 +1815,7 @@ D["f6-deploy"]={t:"Job — deploy",f:"agent",p:"needs: [test, docker] is what ma
  k:[["Condition","a push on main, or a workflow_dispatch with deploy_only true"],["Step 1","curl -fsS -X POST https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys with RENDER_API_KEY; the deploy hook when RENDER_DEPLOY_HOOK_URL happens to be set"],["Step 2","python scripts/wait_for_deploy.py --url $DEPLOY_URL --timeout 900"],["Step 3","python scripts/smoke_deployed.py --url $DEPLOY_URL, which asserts GIT_SHA is not \"dev\" on the live instance"]],c:["Render deploy (API)"]};
 D["f6-hook"]={t:"Render deploy (API)",f:"ext",p:"Belt and braces: the CI gate makes the deploy conditional, and the platform setting makes this the only door.",
  k:[["Setting","autoDeploy: false in render.yaml"],["Secrets","RENDER_API_KEY and RENDER_SERVICE_ID, set by scripts/provision_render.py via gh secret set; RENDER_DEPLOY_HOOK_URL is optional, because no REST endpoint publishes it"],["Manual step","installing the Render GitHub App is the one thing no API can do"]],c:["Render build"]};
-D["f6-build"]={t:"Render build",f:"ext",p:"The index is built on the two-CPU builder and ships inside the image, so a cold start opens a file instead of indexing ~280 chunks.",
+D["f6-build"]={t:"Render build",f:"ext",p:"The index is built on the two-CPU builder and ships inside the image, so a cold start opens a file instead of indexing 204 chunks.",
  k:[["Base","python:3.12-slim; onnxruntime and numpy wheels are manylinux"],["Model","baked with a build step, about 64 MB — a cold start must never download it"],["Verify","python -m hrmosaic.rag.ingest --verify-manifest &amp;&amp; python -m hrmosaic.rag.index --selftest"],["Selftest","a fixed query must return tax-and-location-addendum at rank 1 with a real dense score, and the index chunk count must equal the committed manifest's line count"],["Start","sh -c so ${PORT} is expanded at run time, because Render injects it"]],c:["Live service"]};
 D["f6-live"]={t:"Live service",f:"web",p:"Degradation is a status string, never a 5xx, so a provider hiccup or a slow model load never makes the platform restart-loop the instance.",
  k:[["healthCheckPath","/health, always 200 while the process is up"],["/ready","503 until the ONNX model and the index are resident; warm-up issues one loopback tools/call, not a direct import"],["degradations[]","llm_api_key_missing, index_model_mismatch, mcp_disconnected, trace_store_unreachable, access_token_missing \u2014 exactly five possible strings"],["Reports","live rss_mb and rss_peak_mb; the dashboard plots turns.rss_mb_at_end"],["Spend","llm.agent.calls_today against llm.agent.daily_call_cap, so the remaining model budget is visible without opening the dashboard — reaching the cap is an outcome, not a sixth degradation string"],["Budgets","750 instance-hours per workspace per month and 500 build minutes; a script warns above 600 and 400"]],c:["Cold start"]};
@@ -1831,7 +1832,7 @@ D["f6-e-need1"]={t:"needs: test",f:"edge",p:"The literal mechanism behind the de
 D["f6-e-need2"]={t:"needs: docker",f:"edge",p:"The image must build and answer /health before anything is deployed from it.",k:[["Checked","mcp.connected, tool_count == 9, index.loaded, doc_count == 14"]],c:["docker job","deploy job"]};
 D["f6-e-hook"]={t:"POST the deploy",f:"edge",p:"One curl, then wait, then smoke-test the live URL.",k:[["Timeout","900 s on wait_for_deploy.py"],["Smoke","smoke_deployed.py asserts the live GIT_SHA is a real commit, not \"dev\""]],c:["deploy job","Render deploy (API)"]};
 D["f6-e-build"]={t:"Build the image",f:"edge",p:"Requirements are pinned exactly and installed from committed manifests; no curl-pipe-shell anywhere in the Dockerfile.",k:[["Copied in","src, mcp, corpus, mock_data, evaluation, the stub scripts and the committed chunk manifest"],["Not copied","requirements-dev.txt"]],c:["Render deploy (API)","Render build"]};
-D["f6-e-boot"]={t:"Boot — no indexing at start-up",f:"edge",p:"Indexing ~280 chunks took 15.8 s in the probe, which would dominate a free-tier cold start. Boot only opens the file and mmaps the model.",k:[["Boot cost","0.06–0.40 s for the model, plus opening a SQLite file"]],c:["Render build","Live service"]};
+D["f6-e-boot"]={t:"Boot — no indexing at start-up",f:"edge",p:"Embedding and verifying the 204 chunks took 107.6 s on the two-CPU builder, which would dominate a free-tier cold start. Boot only opens the file and mmaps the model.",k:[["Boot cost","0.06–0.40 s for the model, plus opening a SQLite file"]],c:["Render build","Live service"]};
 D["f6-e-idle"]={t:"15 minutes idle → spin-down",f:"edge",p:"The free tier sleeps, and the next request pays for it. The project measures that rather than hiding it behind a cron.",k:[["Measured by","scripts/measure_cold_start.py, idle ≥ 16 min then curl /health and /chat"],["Published in","deployed.md under ## Cold start"]],c:["Live service","Cold start"]};
 D["f6-e-sec"]={t:"Secrets into CI",f:"edge",p:"Set once at provisioning time by script, never pasted into a workflow file.",k:[["Command","gh secret set, driven by scripts/provision_render.py"],["Scanned","gitleaks runs over the full history on every lint job"]],c:["GitHub repository secrets","deploy job"]};
 D["f6-e-env"]={t:"Environment into the service",f:"edge",p:"Read only through one settings module, and scrubbed out of every trace payload before persistence.",
