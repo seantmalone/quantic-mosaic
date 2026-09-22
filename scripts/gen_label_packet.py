@@ -37,8 +37,14 @@ labeller drifts toward `not_grounded` and manufactures the very disagreement the
 to detect. So the packet states that a selection criterion exists and is withheld, and renders the
 items **in item-id order**, never in score order, so the ranking cannot leak through the sequence.
 
+The `traces` argument is the literal `auto` when the run was driven against the **deployed**
+service: its turns are then in the service's own store (Turso), not in a local sqlite file, and
+`auto` resolves through `hrmosaic.core.db.get_store()`, which builds whichever store the
+environment configures. Any other value is a path and stays a local `SqliteStore`, unchanged.
+
     python scripts/gen_label_packet.py <run.json> <traces.sqlite> <out.md>
     python scripts/gen_label_packet.py <run.json> <traces.sqlite> <out.md> --subset judge_lowest --n 8
+    python -m scripts.gen_label_packet <run.json> auto <out.md>   # deployed run: the service's store
 """
 
 from __future__ import annotations
@@ -65,9 +71,12 @@ from evaluation.schema import (  # noqa: E402
     load_dataset,
     reference_subset,
 )
-from hrmosaic.core.db import SqliteStore  # noqa: E402
+from hrmosaic.core.db import SqliteStore, Store, get_store  # noqa: E402
 
 SUBSETS = ("seed", "judge_lowest")
+
+#: The `traces` value that means "whichever store this environment configures" — see the docstring.
+AUTO_STORE = "auto"
 
 #: What the packet tells the labeller about how its items were chosen. Neither line contains a
 #: score, a verdict or an ordering — see the module docstring.
@@ -129,7 +138,14 @@ def select(subset: str, run: RunFile, dataset: Dataset, size: int) -> list[str]:
     raise SystemExit(f"unknown subset {subset!r}; expected one of {', '.join(SUBSETS)}")
 
 
-def render(run: RunFile, dataset: Dataset, store: SqliteStore, item_ids: Sequence[str], subset: str) -> str:
+def open_store(traces: str) -> Store:
+    """The trace store the run wrote: `auto` is the configured store, anything else is a path."""
+    if traces == AUTO_STORE:
+        return get_store()
+    return SqliteStore(Path(traces))
+
+
+def render(run: RunFile, dataset: Dataset, store: Store, item_ids: Sequence[str], subset: str) -> str:
     """The packet. Reads the served answers and the evidence; reads no score and no verdict."""
     by_id = {row.item_id: row for row in run.items if row.run_phase == "scored"}
     questions = {item.id: item.question for item in dataset.items}
@@ -175,7 +191,14 @@ def render(run: RunFile, dataset: Dataset, store: SqliteStore, item_ids: Sequenc
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run", help="path to evaluation/results/<run_id>.json")
-    parser.add_argument("traces", help="path to the trace store the run wrote (data/runtime/traces.sqlite)")
+    parser.add_argument(
+        "traces",
+        help=(
+            "path to the trace store the run wrote (data/runtime/traces.sqlite), or the literal "
+            f"{AUTO_STORE!r} to use the store this environment configures (a deployed run's turns "
+            "are in the service's store, not in a local file)"
+        ),
+    )
     parser.add_argument("out", help="path to write the packet to")
     parser.add_argument("--subset", default="seed", choices=SUBSETS, help="which §13.7 subset (default: seed)")
     parser.add_argument("--n", type=int, default=REFERENCE_SUBSET_SIZE, help="how many items (default: 8)")
@@ -183,7 +206,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     run = RunFile.model_validate(json.loads(Path(args.run).read_text(encoding="utf-8")))
     dataset = load_dataset()
-    store = SqliteStore(Path(args.traces))
+    store = open_store(args.traces)
     item_ids = select(args.subset, run, dataset, args.n)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
