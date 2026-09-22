@@ -1,0 +1,60 @@
+{
+  "scenario": "draft_email_confirm",
+  "_note": "A confirmed `draft_hr_email` — the manager-message ask, from the confirmation card to the answer that names the draft. The first three completions are the **deployed** build's own (session 3de0ea69a1d09447ce36fa0398e19cab, turn 87992de4dc8a7844370b5ed49b9a555d, build e85305b): the router picks `check_pto_balance` + `draft_hr_email`, the first act step reads the balance and the second proposes the write, which the gate parks. The fourth is authored rather than recorded, because that live turn never made it: G1 refused the resumed turn for want of policy evidence — a 'draft me an email' ask retrieves nothing — and the reader was told the policy library held nothing about a draft that existed (MOCK-EMAIL-000018). Drives tests/integration/test_draft_email_confirmed_is_narrated.py.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\":\"action\",\"workflow\":\"pto_request\",\"multi_doc\":false,\"needs_employee_data\":true,\"needs_clarification\":false,\"out_of_scope\":false,\"sensitive\":false,\"target_employee_id\":\"E1042\",\"selected_tools\":[\"check_pto_balance\",\"draft_hr_email\"],\"rationale_summary\":\"Draft approval email for 3-day PTO request (6–8 Oct 2026). Requires balance check to confirm availability before drafting.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1696,
+      "completion_tokens": 115
+    },
+    {
+      "purpose": "act",
+      "response_text": "I'll help you draft that email. First, let me check your PTO balance to confirm you have sufficient days available for this request.",
+      "tool_calls": [
+        {
+          "id": "toolu_draft_balance",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 3909,
+      "completion_tokens": 89
+    },
+    {
+      "purpose": "act",
+      "response_text": "Good news—you have 13.5 remaining PTO days as of 2026-09-01, so three days is well within your balance. Now I'll draft the email to your manager Dana for approval.",
+      "tool_calls": [
+        {
+          "id": "toolu_draft_email",
+          "name": "draft_hr_email",
+          "args": {
+            "employee_id": "E1042",
+            "recipient_role": "manager",
+            "purpose": "Request approval for three days of PTO from Tuesday 6 October to Thursday 8 October 2026",
+            "key_points": [
+              "I am requesting three days of paid time off from Tuesday, 6 October through Thursday, 8 October 2026",
+              "I currently have 13.5 PTO days available (as of 1 September 2026)",
+              "Please let me know if you have any questions or concerns about these dates"
+            ],
+            "tone": "warm"
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4259,
+      "completion_tokens": 267
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"recommendation\", \"text\": \"The draft is addressed to Dana Whitfield and asks for the three days from 6 to 8 October 2026.\", \"citations\": []}], \"next_steps\": [\"Let me know if you would like the wording changed.\"], \"rationale_summary\": \"Drafted the approval email once the balance covered the three days.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 4610,
+      "completion_tokens": 92
+    }
+  ]
+}

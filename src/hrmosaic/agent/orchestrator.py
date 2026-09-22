@@ -1209,7 +1209,18 @@ class Orchestrator:
             return parked
 
         # -- 3. G1 over the accumulated chunk set ---------------------------------------
-        verdict = g1.check(turn.citable(), turn=turn.buffer)
+        # A turn that has already performed its write is grounded by that write (G5, gap 21). The
+        # gate asks whether there is enough retrieved policy to ground an answer *about policy*; the
+        # answer to a plain "draft me an email to my manager" is an account of the draft the reader
+        # just authorised, and its evidence is the write's own result. Live turn
+        # `87992de4dc8a7844370b5ed49b9a555d` minted `MOCK-EMAIL-000018` and then arrived here with
+        # `candidates: 0` — that ask retrieves nothing — and closed `refused` on *"no policy
+        # evidence was retrieved for this question"*: the draft existed and the reader was told the
+        # library held nothing about it. A refusal is also the one answer that cannot name the
+        # reference, so the side effect went unreported with it. Step 5e states the write, and step
+        # 5n still refuses an answer that carries no supported claim at all.
+        performed = outcome_consistency.performed_write(turn.envelopes)
+        verdict = g1.check(turn.citable(), turn=turn.buffer, grounded_by_write=performed is not None)
         if not verdict.passed and decision.rag_only and not turn.reopened:
             # §9.2's one-step recovery: the full catalog, one more act step, and a plan span
             # that says so. The step counts against AGENT_MAX_STEPS.

@@ -71,6 +71,14 @@ OUT_OF_SCOPE = "the question is not about Mosaic Robotics HR policy or your own 
 CONFIRMATION_INVALID = "the confirmation could not be validated"
 CONFIRMATION_MISSING = "there is no gated tool call on this turn to confirm"
 
+#: …and the one turn the evidence clauses do not decide (G5, gap 21): the write the reader
+#: authorised has already been performed, so the turn is grounded whatever the retrieval did. Live
+#: turn `87992de4dc8a7844370b5ed49b9a555d` drafted `MOCK-EMAIL-000018` and was then refused here at
+#: `candidates: 0`, because "draft me an email to my manager" searches nothing — and a refusal is
+#: the one answer that cannot name the reference the reader needs. The measured clause is kept
+#: behind this one, so the span still says what the retrieval was worth.
+PERFORMED_WRITE = "the write this turn performed is the evidence for the answer"
+
 #: The refusal a person reads **when the turn actually searched**. One admission, one boundary —
 #: no score, no threshold, no tool count. The redirect that follows it is `next_steps`, built from
 #: the real index by `coverage()`.
@@ -125,8 +133,13 @@ def evaluate(
     *,
     min_evidence_score: float | None = None,
     min_support_score: float | None = None,
+    grounded_by_write: bool = False,
 ) -> Verdict:
-    """The pure rule of §7.4 row G1. Touches no store and emits nothing."""
+    """The pure rule of §7.4 row G1. Touches no store and emits nothing.
+
+    `grounded_by_write` is the one exemption (G5, gap 21): set on a turn whose gated write has
+    already been performed, so the two evidence clauses are measured and recorded but do not decide.
+    """
     min_evidence_score = default_settings.min_evidence_score if min_evidence_score is None else min_evidence_score
     min_support_score = default_settings.min_support_score if min_support_score is None else min_support_score
     scores = [float(candidate.dense_score) for candidate in candidates]
@@ -150,8 +163,13 @@ def evaluate(
         reason = f"{WEAK_EVIDENCE}: {supporting} {passages} at or above {min_support_score:.2f}, 2 required"
     else:
         reason = f"evidence-gate score {top:.2f}, {supporting} supporting {passages}"
+    passed = bool(scores) and top >= min_evidence_score and supporting >= 2
+    if not passed and grounded_by_write:
+        # The exemption keeps the measurement in front of it, so the span still says what the
+        # retrieval was worth on a turn the retrieval did not decide.
+        passed, reason = True, f"{PERFORMED_WRITE}: {reason}"
     return Verdict(
-        passed=bool(scores) and top >= min_evidence_score and supporting >= 2,
+        passed=passed,
         reason=reason,
         max_dense_score=top,
         supporting=supporting,
@@ -168,9 +186,15 @@ def check(
     evidence_span_ids: Sequence[str] = (),
     min_evidence_score: float | None = None,
     min_support_score: float | None = None,
+    grounded_by_write: bool = False,
 ) -> Verdict:
     """Evaluate and emit the one `guardrail` span. The observed scores ride on the span (§9.5)."""
-    verdict = evaluate(candidates, min_evidence_score=min_evidence_score, min_support_score=min_support_score)
+    verdict = evaluate(
+        candidates,
+        min_evidence_score=min_evidence_score,
+        min_support_score=min_support_score,
+        grounded_by_write=grounded_by_write,
+    )
     emit(
         turn,
         "G1",
@@ -267,6 +291,7 @@ __all__ = [
     "NO_EVIDENCE",
     "OUT_OF_SCOPE",
     "OUT_OF_SCOPE_REFUSAL",
+    "PERFORMED_WRITE",
     "REFUSAL_COPY",
     "USER_REFUSAL",
     "WEAK_EVIDENCE",
