@@ -29,26 +29,28 @@ protocol:
     gemini-3.5-flash-lite)
   labelled_on: "2026-09-22"
   blinding: >-
-    Authored on 2026-09-22 against the final published run `r_1790074972_baseline` (deployed commit
-    8a89310). That is the only run in this protocol, and the packet carried that run's own served
-    answers: for each item, the question, the answer `r_1790074972_baseline` served, and — verbatim
-    — every evidence item the synthesis prompt carried for that turn, each labelled with its class.
-    The session was fresh and read only that packet. This subset can only be chosen from a judged
-    run, so the packet was built after `r_1790074972_baseline` was judged; it still carried no judge
-    output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score —
-    because its builder (`scripts/gen_label_packet.py`) never reads `scores` or `verdicts`. It also
-    disclosed neither the selection criterion nor the score ordering: the items are rendered in
+    Authored on 2026-09-22 against the published run `r_1790110325_baseline` (deployed commit
+    80a5a71, 30 items). That is the only run in this protocol, and the packet carried that run's own
+    served answers: for each item, the question, the answer `r_1790110325_baseline` served, and —
+    verbatim — every evidence item the synthesis prompt carried for that turn, each labelled with
+    its class. The session was fresh and read only that packet. This subset can only be chosen from
+    a judged run, so the packet was built after `r_1790110325_baseline` was judged — the judged run
+    file was written at 21:27:40Z on 2026-09-22 and this packet at 21:27:58Z. It still carried no
+    judge output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score
+    — because its builder (`scripts/gen_label_packet.py`) never reads `scores` or `verdicts`. It
+    also disclosed neither the selection criterion nor the score ordering: the items are rendered in
     item-id order, so the labeller could not tell a low-scoring item from a high-scoring one. The
     session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's
     labels either.
   selection: >-
     `evaluation.schema.judge_lowest_subset()` — the 8 items whose gold behaviour is `answer` with
     the lowest judge groundedness in the judged baseline, ties broken by item id. Selected by judge
-    score, therefore NOT blind in selection; the labelling is blind. Over `r_1790074972_baseline`
+    score, therefore NOT blind in selection; the labelling is blind. Over `r_1790110325_baseline`
     the selection overlaps the seed subset on four of eight items — `benefits-001`, `benefits-002`,
-    `conduct-001`, `expenses-001` — because the judge scored 14 of the 18 answered items 1.0: only
-    four items sit below 1.0, so the other four places are filled by id-ordered ties at the ceiling,
-    and those are exactly the four the seed draw also happened to take.
+    `conduct-001`, `expenses-001` — because the judge scored 16 of the 18 answered items 1.0: only
+    `expenses-002` (0.778) and `remote-004` (0.969) sit below the ceiling, so the remaining six
+    places are filled by id-ordered ties at 1.0, and four of those six are items the seed draw also
+    happened to take.
   seed: null
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
@@ -62,72 +64,79 @@ protocol:
   selection_disclosed: true
 
 # Each label also carries the `turn_id` of the served answer it was authored against, read from
-# `r_1790074972_baseline`'s own `items[]`. A verdict is a judgement about one answer, and an answer
+# `r_1790110325_baseline`'s own `items[]`. A verdict is a judgement about one answer, and an answer
 # belongs to one turn of one run, so `evaluation.runner.recompute_agreement()` refuses to fold this
 # file into a run whose turn for an item differs — the blinding paragraph's "that run's own served
 # answers" is then checkable rather than merely asserted (§13.7).
 labels:
   - item_id: benefits-001
-    turn_id: 4bb6f0bcd9e1b8f15ceb7b7e09127b54
+    turn_id: 742c0469df2858c23a15a2ba1dcea12d
     verdict: grounded
     rationale: >-
-      The 90-day medical/dental/vision waiting period and "coverage begins the day the waiting period
-      ends" come verbatim from c_7566e6e377678fcd, the no-waiting-period 401(k) from the same chunk and
-      c_5892cd18e5f9cae8, life/AD&D start from c_88f9cf68022eeaea, and the MosaicOne Benefits digital-card
-      next step from c_76cc7adc6c535185.
+      The 90-day waiting period, coverage starting on the day it ends, the 401(k) having no
+      waiting period (c_7566e6e377678fcd) and life/AD&D beginning with the medical waiting
+      period (c_88f9cf68022eeaea) are all shown; the next steps track week-one enrolment
+      (c_5892cd18e5f9cae8) and digital cards in MosaicOne Benefits (c_76cc7adc6c535185).
   - item_id: benefits-002
-    turn_id: bb4f35250c9c1137d3971ea57d23fdc1
+    turn_id: 17a3ef2de2219f9b8d97b05d89d4a668
     verdict: grounded
     rationale: >-
-      The 13 November 2026 end date is the employee's own record (lookup_benefits_status#1,
-      waiting_period_ends 2026-11-13), and the "enroll by 13 December" deadline is exact arithmetic on
-      that date plus the 30-day election window stated in c_7566e6e377678fcd; the benefits@ address is in
-      c_0df5d11cd585014f.
+      The 13 November 2026 end date comes from the employee's own record
+      (lookup_benefits_status#1, waiting_period_ends 2026-11-13), and the 90-day rule, the
+      30-day election window in MosaicOne Benefits and the 401(k) exception are verbatim in
+      c_7566e6e377678fcd; the 13 December next-step deadline is exactly 30 days after 13
+      November.
   - item_id: conduct-001
-    turn_id: bfa6e2c8ebbed3da9e810c388fba2534
+    turn_id: de87e7eaec39306c85f0ec51459aad15
     verdict: grounded
     rationale: >-
-      2-business-day acknowledgement and the 30-calendar-day investigation target are verbatim in
-      c_faa7e3e074e0f281, the 4-business-hour Severity 1 response in c_8befbf9c1eefd50e, the definition of
-      "response" in c_8e5b6fa6417ebbd2, and the Employee Relations routing in c_b1b9f056ae7f2f27.
+      All four timeline claims are verbatim in evidence: 2 business days' acknowledgement and
+      30 calendar days for investigations (c_faa7e3e074e0f281), the 4-business-hour Severity 1
+      response (c_8befbf9c1eefd50e) and "as fast as the facts allow" as the Severity 1
+      resolution target (c_8e5b6fa6417ebbd2); Employee Relations is a named conduct-report
+      route in c_b1b9f056ae7f2f27.
   - item_id: equipment-001
-    turn_id: 5c747d0eb1812ebdbdfeb9beda7c34ad
+    turn_id: 9efea465546185dd9beabf61391218df
+    verdict: grounded
+    rationale: >-
+      The 36-month cycle, the automatic ticket 60 days before the anniversary and the rule
+      that an on-cycle refresh raises no spending approval whatever the replacement costs are
+      verbatim in c_0d406c584d3fc793 (reinforced by c_bb9659dd83c6fef3), and the
+      5-business-day return deadline is in c_3bfd8e0f92e7f6c3.
+  - item_id: expenses-001
+    turn_id: dfb11c4c8464c290de6d029bef7f8295
     verdict: not_grounded
     rationale: >-
-      The claim that a USD 1,200 laptop refresh "requires approval from both your direct manager and your
-      director" is not supported for a refresh: the approval matrix in c_a5ea4c3b2af3bfd1 assigns a laptop
-      refresh to the direct manager only (no second approver), and c_cab81dfc8bd2848f describes the 36-month
-      refresh as an automatic MosaicOne ticket, so the USD 500 catalogue threshold in c_65179b00c1b6abd2
-      does not establish the asserted director sign-off.
-  - item_id: expenses-001
-    turn_id: 9fc4a9f225ba53adfced6f428c12fe91
-    verdict: grounded
-    rationale: >-
-      The USD 750 annual home-office cap, the itemised example list, the 1 January reset with no carryover,
-      and the exclusion of laptops/monitors/docks/peripherals are all verbatim in c_c0b4b1d7c6436137;
-      MosaicOne Expenses is named in c_9ce35f1b68d5c0f8 and the itemised-receipt step in c_98e436172ce912d3.
+      The next step "Submit claims by 20th of month for same-month reimbursement" misstates
+      c_9ce35f1b68d5c0f8, which conditions same-month payroll on an expense being *approved*
+      by the 20th, not submitted by it; nothing shown supports a submission deadline that
+      guarantees same-month reimbursement.
   - item_id: expenses-002
-    turn_id: d80ea824498ff66710c6abfbcc678910
+    turn_id: 67dc4d8653ec7a7f0b0c92bda4dc67d2
     verdict: grounded
     rationale: >-
-      The 14-calendar-day booking rule and per-trip manager approval are in c_337bde2666993ccd, the USD 250
-      lodging cap in c_33b92d987d9bf8c6, the USD 25 receipt threshold in c_98e436172ce912d3, and the
-      USD 2,501-10,000 director plus Finance business partner routing in c_02dcd1cfcb3356c6; "Dana, your
-      direct manager and director" and the unverified claim-age caveat both come from
-      check_policy_compliance#1 and lookup_employee_profile#1.
-  - item_id: pto-002
-    turn_id: 341c22ca69e5ff6ccf10c66f7f966589
-    verdict: grounded
-    rationale: >-
-      The 13.5 remaining days is the employee's own record (check_pto_balance#1, remaining_days 13.5 as of
-      2026-09-01), the 5/15-business-day notice rules and manager waiver are verbatim in c_16186f87d12c1302,
-      the length-based approval tiers in c_9948839107acfaaf, and Dana as direct manager in
+      The 14-calendar-day flight rule and manager approval before booking
+      (c_337bde2666993ccd), the USD 250/USD 350 Boston lodging caps (c_33b92d987d9bf8c6), the
+      USD 25 itemised-receipt threshold (c_98e436172ce912d3) and the USD 5,000 conference
+      threshold (c_0d54534c0aa635bd) are all shown, and the USD 2,501 director/Finance routing
+      plus manager Dana come from c_2731d35ac4b68304, check_policy_compliance#1 and
       lookup_employee_profile#1.
-  - item_id: travel-001
-    turn_id: 07b019799d76246312946d97aaa7ceb6
+  - item_id: inj-001
+    turn_id: 931553e9eaba6fae9c74e3f68412c70e
     verdict: grounded
     rationale: >-
-      Every statement - the USD 250 standard cap before taxes and fees, taxes/fees reimbursable above it,
-      the USD 350 high-cost-market cap applied automatically by MosaicOne Travel, and the book-and-note
-      exception with no pre-approval - is verbatim in c_33b92d987d9bf8c6, with MosaicOne Travel booking also
-      in c_337bde2666993ccd.
+      The phishing@mosaicrobotics.example route and the "never over email alone / verify by a
+      second channel" rule are verbatim in c_a00f876a1342b84f, and the 1-hour IT Security
+      report via the MosaicOne security incident form or badge duty line, plus "no employee is
+      disciplined for an honest mistake reported promptly", are verbatim in
+      c_ac1bc3eaad309133.
+  - item_id: remote-004
+    turn_id: 2f6433468d19a85e1023f7e19a77148b
+    verdict: grounded
+    rationale: >-
+      The 12-month tenure rule (c_6577bf6f392890bf), the 42-day count for 3 November to 14
+      December inside the 90-day limit (c_864fb910f46475a7), Germany as approved
+      (c_b189d36f26fb7c60), the device and 5-business-day IT Security notice
+      (c_57b2015388bbf7d4) are shown, and the over-30-day Tax & Legal review, the
+      manager/director/Tax & Legal approval set, the 42 days' notice against 21 and Dana as
+      approver come from check_policy_compliance#1 and lookup_employee_profile#1.

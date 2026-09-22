@@ -1,29 +1,29 @@
 {
- "generated_at": "2026-09-22T15:56:50Z",
- "note": "Zero-LLM sweep (\u00a713.9): retrieval only, scored on DocRecall against every dataset item that names expected_docs (n=20), k=5. Each index was built into a temporary directory; data/index/chunks.manifest.jsonl is untouched.",
+ "generated_at": "2026-09-22T20:12:02Z",
+ "note": "Zero-LLM sweep (\u00a713.9): retrieval only, scored on DocRecall against every dataset item that names expected_docs (n=19), k=5. Each index was built into a temporary directory; data/index/chunks.manifest.jsonl is untouched.",
  "k": 5,
- "dataset_sha": "642c578e0a524d7795b17bafc98e7cf30d03cdad84e9d05e468d27581f47cee3",
+ "dataset_sha": "2c8973147744a3513899f55107ab0f0db489d7d5f7463bcfde06c19ade2d5577",
  "variants": [
   {
    "chunk_chars": 700,
-   "doc_recall_mean": 0.9,
-   "n_questions": 20,
+   "doc_recall_mean": 0.8947,
+   "n_questions": 19,
    "n_chunks": 237,
-   "build_s": 44.6
+   "build_s": 34.7
   },
   {
    "chunk_chars": 1100,
-   "doc_recall_mean": 0.9,
-   "n_questions": 20,
+   "doc_recall_mean": 0.8947,
+   "n_questions": 19,
    "n_chunks": 205,
-   "build_s": 40.5
+   "build_s": 32.0
   },
   {
    "chunk_chars": 1600,
-   "doc_recall_mean": 0.9,
-   "n_questions": 20,
+   "doc_recall_mean": 0.8947,
+   "n_questions": 19,
    "n_chunks": 180,
-   "build_s": 42.9
+   "build_s": 33.5
   }
  ]
 }

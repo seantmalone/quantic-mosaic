@@ -1,125 +1,119 @@
 {
- "generated_at": 1790077076972793,
+ "generated_at": 1790112472107056,
  "target": "deployed",
- "dataset_sha": "e83cc9fc4833e548a4c14ddab5e1701dcc228881f44c04b4a1a882540b12052d",
- "target_git_sha": "8a8931076bac9d271f8a03da7ecfa0d3a723d811",
+ "dataset_sha": "2c8973147744a3513899f55107ab0f0db489d7d5f7463bcfde06c19ade2d5577",
+ "target_git_sha": "80a5a71c02f27ae696137c2afdc27bfe39d1625b",
  "variants": [
   {
    "variant": "baseline",
-   "run_id": "r_1790074972_baseline",
+   "run_id": "r_1790110325_baseline",
    "judged": true,
    "judge_status": "judged",
    "metrics": {
-    "groundedness_mean": 0.9633267195767196,
-    "citation_accuracy_mean": 0.8752822022705623,
+    "groundedness_mean": 0.9859182098765432,
+    "citation_accuracy_mean": 0.8885205934225542,
     "cit_resolve_mean": 1.0,
-    "doc_recall_mean": 0.9473684210526315,
-    "tool_selection_accuracy": 0.9928571428571429,
+    "doc_recall_mean": 0.9078947368421053,
+    "tool_selection_accuracy": 0.9838095238095238,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.9642857142857143,
+    "workflow_completion": 0.9333333333333333,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.8928571428571429
+    "strict_pass_rate": 0.9
    },
    "deltas": {}
   },
   {
    "variant": "dense_only_k2",
-   "run_id": "r_1790075436_dense_only_k2",
+   "run_id": "r_1790110825_dense_only_k2",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 1.0,
-    "doc_recall_mean": 0.9736842105263158,
-    "tool_selection_accuracy": 0.9877551020408164,
+    "doc_recall_mean": 0.9605263157894737,
+    "tool_selection_accuracy": 0.9885714285714287,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.9642857142857143,
+    "workflow_completion": 0.9666666666666667,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.9285714285714286
+    "strict_pass_rate": 0.9333333333333333
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.0,
-    "doc_recall_mean": 0.0263,
-    "tool_selection_accuracy": -0.0051,
+    "doc_recall_mean": 0.0526,
+    "tool_selection_accuracy": 0.0048,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": 0.0,
+    "workflow_completion": 0.0333,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.0357
+    "strict_pass_rate": 0.0333
    }
   },
   {
    "variant": "no_structured_tools",
-   "run_id": "r_1790075830_no_structured_tools",
+   "run_id": "r_1790111270_no_structured_tools",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
-    "cit_resolve_mean": 0.9642857142857143,
-    "doc_recall_mean": 0.9868421052631579,
-    "tool_selection_accuracy": 0.9418367346938775,
+    "cit_resolve_mean": 0.9666666666666667,
+    "doc_recall_mean": 0.9605263157894737,
+    "tool_selection_accuracy": 0.9346031746031745,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.8214285714285714,
+    "workflow_completion": 0.7666666666666667,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.7857142857142857
+    "strict_pass_rate": 0.7333333333333333
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
-    "cit_resolve_mean": -0.0357,
-    "doc_recall_mean": 0.0395,
-    "tool_selection_accuracy": -0.051,
+    "cit_resolve_mean": -0.0333,
+    "doc_recall_mean": 0.0526,
+    "tool_selection_accuracy": -0.0492,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": -0.1429,
+    "workflow_completion": -0.1667,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": -0.1071
+    "strict_pass_rate": -0.1667
    }
   }
  ],
  "workflow_completion_check": {
   "supported": false,
   "reason": null,
-  "baseline": 0.9643,
-  "no_structured_tools": 0.8214,
-  "delta": -0.1429,
+  "baseline": 0.9333,
+  "no_structured_tools": 0.7667,
+  "delta": -0.1667,
   "threshold": 0.25
  },
  "flips": [
   {
-   "item_id": "expenses-002",
-   "variant": "dense_only_k2",
-   "baseline_passed": false,
-   "variant_passed": true
-  },
-  {
-   "item_id": "equipment-001",
-   "variant": "dense_only_k2",
-   "baseline_passed": false,
-   "variant_passed": true
-  },
-  {
-   "item_id": "remote-004",
+   "item_id": "remote-002",
    "variant": "dense_only_k2",
    "baseline_passed": true,
    "variant_passed": false
   },
   {
-   "item_id": "remote-002",
-   "variant": "no_structured_tools",
+   "item_id": "expenses-002",
+   "variant": "dense_only_k2",
    "baseline_passed": false,
    "variant_passed": true
+  },
+  {
+   "item_id": "unsafe-001",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
+   "item_id": "remote-002",
+   "variant": "no_structured_tools",
+   "baseline_passed": true,
+   "variant_passed": false
   },
   {
    "item_id": "expenses-002",
-   "variant": "no_structured_tools",
-   "baseline_passed": false,
-   "variant_passed": true
-  },
-  {
-   "item_id": "equipment-001",
    "variant": "no_structured_tools",
    "baseline_passed": false,
    "variant_passed": true
@@ -143,19 +137,13 @@
    "variant_passed": false
   },
   {
-   "item_id": "remote-004",
-   "variant": "no_structured_tools",
-   "baseline_passed": true,
-   "variant_passed": false
-  },
-  {
    "item_id": "benefits-002",
    "variant": "no_structured_tools",
    "baseline_passed": true,
    "variant_passed": false
   },
   {
-   "item_id": "unsafe-001",
+   "item_id": "unsafe-002",
    "variant": "no_structured_tools",
    "baseline_passed": true,
    "variant_passed": false
