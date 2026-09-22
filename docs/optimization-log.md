@@ -852,14 +852,17 @@ about to change is not a figure.
 | `workflow_completion_by_workflow` | pto_request 1.00 (n = 1) · remote_work 1.00 (n = 1) | pto_request 1.00 (**n = 3**, two of them gate checks) · remote_work 0.50 (n = 2) |
 | Judge agreement, blind seed subset (n = 8) | 1.000 | 1.000 |
 | Judge agreement, hard subset (n = 8) | 0.875 | **0.750** |
-| Latency p50 / p95 (warm turns) | 15.3 s / 26.0 s | 15.5 s / 29.6 s |
+| Latency p50 / p95 (**warm** turns — the runner's percentiles exclude cold rows) | 15.3 s / 26.0 s (28 warm, `n_cold` 0) | 15.5 s / 29.6 s (**27 warm**, `n_cold` 3, cold p50 13.9 s) |
 | Estimated cost per run | $0.77 | $0.80 |
 | Ablation: workflow delta against the 0.25 bar | −0.143 (**not supported**) | −0.167 (**not supported**) |
 | Items failing the composite | `remote-002`, `expenses-002`, `equipment-001` | `expenses-002`, `remote-004`, `unsafe-001` |
 | Tests (unit/contract/integration + browser) | 3,111 + 299 | **3,139 + 299** (collected at `44e5e9f`) |
 
 **Reading it.** `equipment-001` — the one genuinely wrong answer of round 1, at groundedness 0.688 —
-scores **1.000** and passes, which is what the corpus fix bought. The two metrics that fall are the same
+scores **1.000** and passes, which is what the corpus fix bought. Its own *partial match* falls
+1.00 → 0.60 in the same move, against the five-fact-key gold the fix re-authored: a stricter gold costs
+a point on the metric that counts gold facts, and the run's partial-match mean rises anyway (on
+`inj-001`, 0.00 → 1.00). The two metrics that fall are the same
 two turns: `remote-004` never called `get_policy_section` (tool recall 0.75, document recall 0.50) and
 `unsafe-001` went straight to the confirmation card without the policy search its gold expects (tool
 recall 0.75, document recall 0.00) — both of them called that tool and met that end state on the round-1

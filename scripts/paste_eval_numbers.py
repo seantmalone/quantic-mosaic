@@ -176,12 +176,22 @@ def render(run: dict, source: str) -> str:
         count = counts.get(count_key) if count_key else metrics.get(f"{key.removesuffix('_rate')}_n")
         lines.append(f"| {label} | {_fmt(metrics[key])} | {count if count is not None else '–'} | {goal} |")
 
+    # The `n` on this row is the **warm** turn count, not the item count: `Runner.assemble()`
+    # builds its latency list from the scored turns `if not entry.result.cold`, so a run with
+    # `n_cold = 3` reports percentiles over `items - 3` turns and publishes the cold ones' own
+    # `cold_p50_ms` beside them. Printing `items` here said the percentiles covered turns they
+    # never saw (G5b, fix round 1).
+    items = counts.get("items") or run["n_items"]
+    warm = items - int(metrics.get("n_cold") or 0)
     lines.append(
         f"| Latency p50 / p95 (ms) | {_ms(metrics.get('latency_p50_ms'))} / "
         f"{_ms(metrics.get('latency_p95_ms'))} | "
-        f"{counts.get('items', run['n_items'])} | – |"
+        f"{warm} warm | – |"
     )
-    lines.append(f"| Cold turns in the distribution | n_cold = {metrics.get('n_cold', 0)} | – | reported separately |")
+    lines.append(
+        f"| Cold turns, excluded from those percentiles | n_cold = {metrics.get('n_cold', 0)} | "
+        f"cold p50 {_ms(metrics.get('cold_p50_ms'))} ms | reported separately |"
+    )
     lines.append("")
     lines.append(
         "**Behaviour, from the same run.** Escalation matrix over five gold classes with "
