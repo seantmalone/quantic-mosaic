@@ -50,8 +50,9 @@ Phases P2 ∥ P3 ∥ P6 ran in **parallel git worktrees** on separate branches a
 coordinating session.
 
 P0–P12 built the system; the same loop then ran to **P29**. P13 onward were quality, review-fix,
-performance and deployment waves rather than new subsystems, and `docs/process/sdd/` carries the
-brief and the report for each of them through P27.
+performance and deployment waves rather than new subsystems, and `docs/process/sdd/` carries a brief
+and a report for almost all of them through P27 — two are absent, `P19-brief.md` and
+`P27-report.md`, and `docs/process/sdd/README.md` says why in each case.
 
 **4 — Blind labelling by separate sessions (2026-09-10).** The judge-agreement figures in
 `design-and-evaluation.md` come from a fresh **Claude Opus 5** session: the **same vendor as the
@@ -82,9 +83,10 @@ plan of **15 principles, each with a mechanical detection rule**
 (`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md`, screens under
 `docs/evidence/ux-audit-2026-09-14/`). Waves W0–W7 implemented it, and after each batch a **fresh
 read-only session re-captured every screen and re-scored the plan itself** — four independent
-re-audits, each dispatched with the plan, the previous re-audit's report and the new capture, and
-never with the implementing session's account of what it had fixed. The first (48 agents) verified
-**138 of the 155** findings fixed and failed its own gate; the second (45 agents) reached **150 of
+re-audits, each dispatched with the plan, the wave briefs and the owner rulings, the previous
+re-audit's report and a fresh capture, and each required to score the 15 principles off the renders
+rather than off the implementing session's account of what it had fixed. The first (48 agents)
+verified **138 of the 155** findings fixed and failed its own gate; the second (45 agents) reached **150 of
 155** and 8 of the 15 principles; the fourth reached **9 of 15**. Every wave and every measure is in
 `docs/optimization-log.md` (sections dated 2026-09-14 → 15 and 2026-09-15), with before/after screens
 committed under `docs/evidence/ux-w*` and `ux-final` and the audit reports themselves at
@@ -115,9 +117,10 @@ verification and recorded as checked rather than worked on. The fixes then ran i
 phases had used: one Opus implementer per task, an independently dispatched Opus reviewer after it,
 and a fix-and-re-review loop until the reviewer had nothing open — the wave's measurement and
 documentation tasks follow the same pattern. The plan is committed at
-`docs/superpowers/plans/2026-09-21-grade-5.md`; the grade report and the ranked gap list sit in this
-session's `.superpowers/` working directory, which is git-ignored — see *Where the process is
-auditable* below for what that means for a reader.
+`docs/superpowers/plans/2026-09-21-grade-5.md`, and the grade card and its ranked gap list are
+committed verbatim as [`docs/evidence/grade-card-2026-09-21.md`](docs/evidence/grade-card-2026-09-21.md)
+and `docs/evidence/grade-card-2026-09-21-gaps.json`, beside the earlier `grade-card-2026-09-11.md`,
+so the verdict and every gap behind this wave can be read rather than taken on trust.
 
 ## What worked well
 
@@ -155,11 +158,11 @@ auditable* below for what that means for a reader.
   macOS-only assumption fails immediately rather than at deploy time.
 - **Auditing the rendered artifact rather than the code.** The interface and demo-path reviews were
   given screenshots, DOM dumps, overflow measurements and captured turns, told the repository was
-  read-only, and scored the plan's principles themselves; they were not given the implementing
-  session's report. That is what produced findings no code review had produced — unrounded numbers on
-  human surfaces, span kinds and guardrail names in chat prose, screens that scrolled sideways at
-  390 px, a completed ticket rendered as advice — and it is why each re-audit kept catching the
-  previous wave's own regressions rather than confirming them fixed.
+  read-only, and required to score the plan's principles off those renders rather than off the
+  implementing session's report. That is what produced findings no code review had produced —
+  unrounded numbers on human surfaces, span kinds and guardrail names in chat prose, screens that
+  scrolled sideways at 390 px, a completed ticket rendered as advice — and it is why each re-audit
+  kept catching the previous wave's own regressions rather than confirming them fixed.
 - **Refuting a finding before acting on it.** The audit waves and the 2026-09-21 grading pass both put
   each serious finding to a separate session whose job was to overturn it against the artifact.
   Several were overturned — one on arithmetic the flagging session had not done, one on a truncation
@@ -293,8 +296,11 @@ and the independent grade card — and the design history is in `docs/superpower
 2026-09-14 → 16 are recorded differently, because they were not phases: their method, measures and
 open follow-ups are in `docs/optimization-log.md`, the plan they implemented and the plan for the
 2026-09-21 grade-and-fix pass are under `docs/superpowers/plans/`, and the audit and re-audit reports
-are committed verbatim under `docs/evidence/` beside the before/after screens they scored. The commit
-history carries one commit per phase with the requirement ids it satisfies in the trailer.
+are committed verbatim under `docs/evidence/` beside the before/after screens they scored. The two
+independent grade cards live there too — `grade-card-2026-09-11.md`, and `grade-card-2026-09-21.md`
+with its ranked gap list `grade-card-2026-09-21-gaps.json`, which is the list this wave worked
+through. The commit history carries one commit per phase with the requirement ids it satisfies in
+the trailer.
 (They are produced in `.superpowers/`, which is git-ignored; `docs/process/sdd/README.md` says what
 was copied, what was not, and how it was scanned for secrets first.)
 
@@ -303,12 +309,12 @@ history, and the split is not random: of the 160 commits through `5b1bd51`, **12
 `Claude Opus 5 (1M context)`** — every phase commit from `P0`'s `ad593a3` onward, because an
 implementer or reviewer subagent wrote them — **35 carry `Claude Fable 5.1`**, the coordinating
 session's own commits (the spec, the roadmap, the optimization log, the merges of adjudicated
-rulings), and **3 are branch merges** with no trailer at all. The rule is the same in all three
-cases: **the trailer names the model that actually wrote the commit.** That census is a **snapshot at
-`5b1bd51`**, not a running total: the anchor is fixed so the figures can be recounted rather than
-trusted, and the audit waves and the grade-and-fix pass sit after it. Every commit since carries a
-trailer under the same rule, in the same mix — subagent commits for the waves and the per-task fixes,
-coordinating-session commits for the plans, the rulings and the documents.
+rulings), and **3 are branch merges** with no trailer at all. The rule is the same in all three cases,
+and it held for every commit through 2026-09-16: **the trailer names the model that actually wrote the
+commit.** That census is a **snapshot at `5b1bd51`**, not a running total: the anchor is fixed so the
+figures can be recounted rather than trusted. The 85 wave commits of 2026-09-14 → 16 sit after it and
+follow the same rule — 56 carry an Opus trailer because an implementer or reviewer subagent wrote them,
+29 carry `Claude Fable 5.1` for the coordinating session's own plans, rulings and documents.
 `docs/process/sdd/constraints.md` line 14 said it as a fixed string until 2026-09-11 and now says
 it as that rule, which is what the history has done since P0. None of those four figures is typed
 from memory: `tests/contract/test_docs_completeness.py` recounts them from `git log` at the commit
@@ -317,3 +323,12 @@ fourteen commits before anyone noticed. That recount needs the history, so CI's 
 out at `fetch-depth: 0` like its `lint` job; the test skips only where the commit genuinely cannot
 be present (no `git`, or a shallow clone) and **fails** rather than skipping in a full clone that
 does not have it, because a silent skip is how this guard went inert the first time.
+
+**From 2026-09-21 the trailer means something narrower, and a reader should know it.** Every commit of
+the grade-and-fix wave carries `Claude Fable 5.1`, including the ones whose diffs an Opus implementer
+subagent wrote, because that wave's plan fixes the trailer to the coordinating session's model on every
+commit (`docs/superpowers/plans/2026-09-21-grade-5.md`, global constraints), following the same
+harness-is-authoritative clause of `constraints.md` line 14. So for those commits the trailer names
+**the session that coordinated the commit, not the model that wrote it**, and the recount above stops
+being a check on authorship: which model implemented each task and which reviewed it is recorded in
+that wave's ledger and per-task reports instead of in the history.
