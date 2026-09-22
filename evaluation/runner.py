@@ -870,9 +870,27 @@ class Runner:
             by_kind["tool_ms"] += entry.turn.tool_ms
             by_kind["store_ms"] += entry.turn.store_ms
 
+        # The committed labels belong to the run they were authored against (§13.7, gap 9). Folding
+        # them into *this* run unchecked is how a fresh drive — or a `--judge` over an older run —
+        # would publish an agreement rate computed against another run's served answers, and
+        # `write_report` would put it in REPORT.md. A mismatch here is not a refusal: a drive has
+        # already been paid for, so the figure is left uncomputed and the note says what to do.
         agreement_rate, agreement_n, disagreements = (None, 0, [])
         labels = load_reference_labels()
-        if labels is not None and self._judge_enabled:
+        stale_labels = (
+            _mismatched_turns({entry.result.item_id: entry.result.turn_id for entry in scored}, labels)
+            if labels is not None and self._judge_enabled
+            else []
+        )
+        if stale_labels:
+            self.notes.append(
+                "judge_agreement_rate is not computed on this run: the committed reference labels "
+                "were authored against other served answers — "
+                + "; ".join(stale_labels)
+                + ". Re-author the packet against this run and fold the labels in with "
+                "`--recompute-agreement` (§13.7)."
+            )
+        elif labels is not None and self._judge_enabled:
             agreement_rate, agreement_n, disagreements = det.judge_agreement(
                 labels.labels,
                 {entry.item.id: entry.groundedness for entry in run_phase_scored},
@@ -2133,6 +2151,26 @@ def _judge_pass_note(previous: str | None, judged: RunFile) -> str:
     return f"{stripped} {note}".strip() if stripped else note
 
 
+def _mismatched_turns(turns: Mapping[str, str | None], labels: ReferenceLabels) -> list[str]:
+    """The labels whose `turn_id` is not the turn this run served for that item, named for a message.
+
+    `turns` is **every driven item's** turn, not only the scored ones: an item dropped to
+    `unavailable` or driven as a cold probe still carries the turn whose answer a packet would have
+    rendered, so holding the label to it catches a stale packet that the scored-only map would miss.
+
+    Two cases are deliberately not mismatches. A label with `turn_id: null` was authored before the
+    field existed and is compared on the old terms. A label whose `item_id` this run never drove is
+    already outside `judge_agreement()`'s denominator, so it cannot move the rate; calling it a
+    mismatch would only stop a legitimate label set from being used on a run over a subset of the
+    dataset.
+    """
+    return [
+        f"{label.item_id} (label {label.turn_id}, run {turns[label.item_id] or 'no turn recorded'})"
+        for label in labels.labels
+        if label.turn_id is not None and label.item_id in turns and label.turn_id != turns[label.item_id]
+    ]
+
+
 def _refuse_labels_from_another_turn(run: RunFile, labels: ReferenceLabels, source: Path) -> None:
     """Refuse to score labels authored against one run's answers over another run's answers.
 
@@ -2141,17 +2179,11 @@ def _refuse_labels_from_another_turn(run: RunFile, labels: ReferenceLabels, sour
     and a turn belongs to exactly one run. A mismatch means the verdict was written about text this
     run never served, which is a wrong figure rather than a noisy one, so it is a refusal.
 
-    Two cases are deliberately *not* errors. A label with `turn_id: null` was authored before the
-    field existed and is compared on the old terms. A label whose `item_id` this run never drove is
-    already outside `judge_agreement()`'s denominator, so it cannot move the rate; refusing would
-    only stop a legitimate label set from being folded into a run over a subset of the dataset.
+    A refusal is right *here* — nothing has been spent and the operator is folding one file into one
+    run — and wrong during a drive, where the same mismatch leaves the figure uncomputed instead
+    (`Runner.assemble`). Both read the same `_mismatched_turns()`.
     """
-    turns = {item.item_id: item.turn_id for item in run.items}
-    mismatched = [
-        f"{label.item_id} (label {label.turn_id}, run {turns[label.item_id] or 'no turn recorded'})"
-        for label in labels.labels
-        if label.turn_id is not None and label.item_id in turns and label.turn_id != turns[label.item_id]
-    ]
+    mismatched = _mismatched_turns({item.item_id: item.turn_id for item in run.items}, labels)
     if mismatched:
         raise SystemExit(
             f"{source} was authored against different served answers than {run.run_id}: "

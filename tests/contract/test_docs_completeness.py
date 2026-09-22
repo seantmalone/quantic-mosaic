@@ -452,25 +452,32 @@ def test_the_reports_protocol_paragraphs_are_the_label_files_own_words():
 
     report = _text(EVAL_REPORT)
     rendered = [line for line in report.splitlines() if line.startswith("Protocol: labeller `")]
-    expected = [load_reference_labels(metric.labels_path) for metric in AGREEMENT_METRICS.values()]
-    assert len(rendered) == len([labels for labels in expected if labels is not None]), (
+    # Only the metrics whose label file is committed: an absent one renders a stated absence and no
+    # protocol paragraph, which `tests/unit/test_hard_case_agreement_subset.py` owns. Filtered
+    # *before* the zip, so a missing file cannot turn this into a length error instead.
+    committed = [
+        (name, metric, labels)
+        for name, metric in AGREEMENT_METRICS.items()
+        if (labels := load_reference_labels(metric.labels_path)) is not None
+    ]
+    assert committed, "neither label file is committed; there is no protocol to hold the report to"
+    assert len(rendered) == len(committed), (
         "evaluation/REPORT.md must carry exactly one protocol paragraph per committed label file; "
-        f"it carries {len(rendered)}"
+        f"it carries {len(rendered)} for {len(committed)} files"
     )
 
-    for (metric_name, metric), labels, paragraph in zip(AGREEMENT_METRICS.items(), expected, rendered, strict=True):
-        assert labels is not None, f"{metric.labels_path.name} is missing"
+    for (metric_name, metric, labels), paragraph in zip(committed, rendered, strict=True):
         protocol = labels.protocol
         assert f"`{protocol.labeller}`" in paragraph, (
             f"REPORT.md's {metric_name} protocol paragraph does not carry "
             f"{metric.labels_path.name}'s `protocol.labeller` verbatim; regenerate the report"
         )
-        assert f"labelled {protocol.labelled_on}." in paragraph, (
-            f"REPORT.md states a different labelling date than {metric.labels_path.name}"
-        )
-        assert paragraph.endswith(protocol.blinding), (
+        # One `endswith` over date *and* blinding: two separate assertions would let a sentence be
+        # inserted between them, which is precisely the drift gap 9 published.
+        assert paragraph.endswith(f"labelled {protocol.labelled_on}. {protocol.blinding}"), (
             f"REPORT.md's {metric_name} protocol paragraph does not end with "
-            f"{metric.labels_path.name}'s `protocol.blinding` verbatim; regenerate the report"
+            f"{metric.labels_path.name}'s labelling date followed by its `protocol.blinding` "
+            "verbatim, with nothing between them; regenerate the report"
         )
 
 

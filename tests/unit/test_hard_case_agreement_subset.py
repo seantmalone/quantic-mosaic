@@ -25,6 +25,7 @@ import json
 import pytest
 
 import evaluation.runner as runner
+from evaluation import deterministic as det
 from evaluation.schema import (
     AGREEMENT_METRICS,
     REFERENCE_SUBSET_SIZE,
@@ -345,8 +346,51 @@ def judged_run_with_turns(tmp_path):
     return run
 
 
-def test_labels_authored_against_another_runs_answers_are_refused(tmp_path, judged_run_with_turns, no_report):
-    """The wrong-run figure gap 9 names: a verdict on text this run never served."""
+def _driven_row(item_id: str, turn_id: str) -> runner.ScoredItem:
+    """One finished, judged drive row — the shape `Runner.assemble()` folds labels into."""
+    item = load_dataset().by_id(item_id)
+    assert item is not None
+    usage = det.ToolUsage(called=list(item.expected_tools), gated=[], failed=[], ok_spans=[])
+    return runner.ScoredItem(
+        result=ItemResult(
+            id=f"r_drive::{item_id}",
+            item_id=item_id,
+            category=item.category,
+            session_id="s" * 32,
+            turn_id=turn_id,
+            run_phase="scored",
+            answer="an answer",
+            latency_ms=3000,
+            cold=0,
+            scores={"cit_resolve": 1.0, "outcome": "answered", "tools_called": list(item.expected_tools)},
+            verdicts=None,
+            passed=1,
+        ),
+        item=item,
+        turn=None,
+        gold_behavior=item.expected_behavior,
+        predicted_behavior="answer",
+        tool=det.tool_scores(item, usage),
+        doc_recall=1.0,
+        workflow=1.0,
+        groundedness=1.0,
+        citation_accuracy=1.0,
+        partial_match=1.0,
+        clarification=None,
+        cost_usd=0.0,
+    )
+
+
+def test_labels_authored_against_another_runs_answers_are_refused(
+    tmp_path, judged_run_with_turns, no_report, store, monkeypatch
+):
+    """The wrong-run figure gap 9 names: a verdict on text this run never served.
+
+    Both directions the labels can meet a run are asserted here, because the right answer differs.
+    `--recompute-agreement` has spent nothing and is folding one file into one run, so it **refuses**.
+    A drive — or a `--judge` over an older run — has already been paid for, so `assemble()` leaves
+    the figure uncomputed and names the items instead; a `SystemExit` there would throw the run away.
+    """
     labels = tmp_path / "reference_labels_hard.yaml"
     labels.write_text(
         LABELS_HARD_BOUND.replace("turn_id: turn-inj-001", "turn_id: turn-from-an-older-run"), encoding="utf-8"
@@ -366,6 +410,24 @@ def test_labels_authored_against_another_runs_answers_are_refused(tmp_path, judg
     assert no_report == [], "a refused fold-in does not rewrite REPORT.md"
     on_disk = json.loads((tmp_path / f"{judged_run_with_turns.run_id}.json").read_text(encoding="utf-8"))
     assert on_disk["metrics"]["judge_agreement_rate_hard"] is None, "and writes no figure to the run file"
+
+    # The drive-time fold-in, with the same stale labels: uncomputed, not wrong, and not fatal.
+    monkeypatch.setattr(runner, "load_reference_labels", lambda *_, **__: load_reference_labels(labels))
+    drive = runner.Runner(
+        runner.RunOptions(variant="baseline", base_url="http://127.0.0.1:8000", judge=False),
+        store=store,
+        dataset=load_dataset(),
+        judge=None,
+    )
+    drive._judge_enabled = True
+
+    built = drive.assemble([_driven_row("inj-001", "t" * 32)], duration_s=1.0)
+
+    assert built.metrics.judge_agreement_rate is None, "a figure over another run's answers is no figure"
+    assert built.metrics.judge_agreement_n == 0
+    assert built.notes is not None
+    assert "inj-001 (label turn-from-an-older-run, run tttttttttttttttttttttttttttttttt)" in built.notes
+    assert "--recompute-agreement" in built.notes, "the note says how to put the figure back"
 
 
 def test_labels_whose_turn_matches_the_run_are_folded_in(tmp_path, judged_run_with_turns, no_report):
