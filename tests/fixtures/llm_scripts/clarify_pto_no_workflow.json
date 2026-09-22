@@ -1,0 +1,12 @@
+{
+  "_note": "G5, gap 4b — a time-off question the router asks to clarify without naming a workflow, and with a rationale that names **no** slot at all. Before the topic inference this turn served `CLARIFY_FALLBACK`, which names nothing; the topic words of the question and the rationale point at `pto_request`, whose order asks for the dates and the day count.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"A time off request cannot be scored without more detail from the employee.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1098,
+      "completion_tokens": 86
+    }
+  ]
+}

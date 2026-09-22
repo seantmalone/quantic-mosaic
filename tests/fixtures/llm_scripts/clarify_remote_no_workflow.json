@@ -1,0 +1,12 @@
+{
+  "_note": "G5, gap 4b — `amb-002`'s routing exactly as the deployed run `r_1790062696_baseline` recorded it: intent `policy_qa`, workflow **null**, `needs_clarification` true, and a rationale that names the topic (remote work eligibility) and one slot (the destination). With no workflow there was no slot order to walk, so the question named the destination alone and the judge scored `named_missing_information` false. One completion is the whole script: there is nothing after a clarification.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"Remote work eligibility requires location: 'there' is unspecified. Clarify the destination country or city.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1120,
+      "completion_tokens": 94
+    }
+  ]
+}

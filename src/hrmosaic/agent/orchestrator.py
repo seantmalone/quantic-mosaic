@@ -285,6 +285,23 @@ CLARIFY_INTENT_ORDER: dict[str, tuple[str, ...]] = {
     "employee_data": ("identity", "employee_data"),
 }
 
+#: …and which workflow a clarification is **about** when the router named none (G5, gap 4b). The
+#: deployed run routed `amb-002` — *"Am I allowed to work from there for a while?"* — `policy_qa`
+#: with `workflow: null`, so neither slot order above applied and the turn fell through to the
+#: rationale words, which named the destination alone: it was asked where and never for how long.
+#: The topic is what the rationale and the question do say, so it is read from both and mapped to one
+#: of the three closed workflow names — as **data**, never as an instruction; nothing else is taken
+#: from the prose. The order is the order it is tested in: "work from" decides before "leave", so a
+#: remote-work question that mentions taking leave is still a remote-work question.
+CLARIFY_TOPIC_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "remote_work_eligibility",
+        ("remote work", "work from", "working from", "abroad", "another country", "another state"),
+    ),
+    ("pto_request", ("time off", "pto", "leave", "vacation", "days off")),
+    ("expense_claim", ("expense", "reimburse", "claim")),
+)
+
 #: When the router named no workflow. Still one question, still in the first person.
 CLARIFY_FALLBACK = "Happy to help — could you tell me a little more about what you are after?"
 
@@ -360,6 +377,26 @@ def rationale_slot(rationale: str) -> str | None:
     """
     lowered = rationale.lower()
     return next((slot for slot, words in RATIONALE_SLOT_WORDS if any(word in lowered for word in words)), None)
+
+
+def clarify_topic_workflow(*texts: str) -> str | None:
+    """Which workflow a clarification is about, from the topic words of the prose (G5, gap 4b).
+
+    The router names a workflow on most turns; when it does not, `CLARIFY_SLOT_ORDER` has nothing to
+    key on and the question could only be built from whichever single slot `rationale_slot` happened
+    to match — `amb-002` was asked for the destination and never for how long, because that is all
+    its rationale named. Both the rationale and the user's own question say what the turn is *about*,
+    so the topic is read from them and the workflow's whole slot order is walked instead.
+
+    Read as **data**: the only thing taken from either string is which of the three closed workflow
+    names its topic words point at, first match wins, and a string that points at none returns
+    `None` so the caller keeps the rationale-word fallback.
+    """
+    lowered = " ".join(text.lower() for text in texts if text)
+    return next(
+        (workflow for workflow, words in CLARIFY_TOPIC_WORDS if any(word in lowered for word in words)),
+        None,
+    )
 
 
 def clarify_slot_of(question: str) -> str | None:
@@ -2822,21 +2859,37 @@ class Orchestrator:
         the judge scored `named_missing_information` false on both and clarification accuracy 1 of 3
         with n = 3. The opening question is still one question; every other empty slot is named after
         it, and a turn with no workflow now walks its intent's order before the rationale.
+
+        Gap 4b closes the other half of `amb-002`: the deployed run routed it with `workflow: null`,
+        so there was no slot order at all and the rationale words named the destination alone. A turn
+        with no workflow and no intent order now **infers** the workflow from the topic words of the
+        rationale and the question (`clarify_topic_workflow`) and walks that order; the rationale-word
+        path is what is left when no topic matches.
         """
         workflow = turn.workflow
         has_record = bool(EMPLOYEE_ID.match(turn.request.employee_id or ""))
         decision = turn.decision
+        known = session.known(turn.history)
         slots = unfilled_slots(
             workflow.name if workflow is not None else None,
-            known=session.known(turn.history),
+            known=known,
             has_record=has_record,
             intent=decision.intent if decision is not None else None,
         )
         if not slots and decision is not None:
-            # No workflow and no intent order to walk — but the router was told to name every missing
-            # detail in its rationale, and until W10 nothing read it (ruling 9, scenario 12).
-            found = rationale_slot(decision.rationale_summary or "")
-            slots = (found,) if found is not None and (found != "identity" or not has_record) else ()
+            # No workflow and no intent order to walk. The topic is still there to be read, in the
+            # rationale and in the question itself (G5, gap 4b): the deployed run routed `amb-002`
+            # `policy_qa` with no workflow, and its rationale — *"Remote work eligibility requires
+            # location…"* — names the topic even though it names one slot. Inferring the workflow
+            # walks the whole order, so the turn asks for the destination **and** the dates.
+            inferred = clarify_topic_workflow(decision.rationale_summary or "", turn.request.message)
+            if inferred is not None:
+                slots = unfilled_slots(inferred, known=known, has_record=has_record)
+            else:
+                # The router was told to name every missing detail in its rationale, and until W10
+                # nothing read it (ruling 9, scenario 12).
+                found = rationale_slot(decision.rationale_summary or "")
+                slots = (found,) if found is not None and (found != "identity" or not has_record) else ()
         turn.clarify_slot = slots[0] if slots else None
         return clarification_question(slots)
 
@@ -3361,6 +3414,7 @@ __all__ = [
     "clarification_question",
     "clarify_chips",
     "clarify_slot_of",
+    "clarify_topic_workflow",
     "rationale_slot",
     "unfilled_slots",
     "Timings",

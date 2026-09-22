@@ -1,5 +1,5 @@
 {
-  "_note": "G5, gap 4 — `amb-002`'s routing, as the published run recorded it: intent `policy_qa`, workflow `remote_work_eligibility`, `needs_clarification` true, and a rationale that names both missing details because route.j2 rule on needs_clarification tells it to. One completion is the whole script: there is nothing after a clarification. The served question used to name the destination alone, and the judge scored `named_missing_information` false.",
+  "_note": "G5, gap 4 — `amb-002`'s routing with the workflow named: intent `policy_qa`, workflow `remote_work_eligibility`, `needs_clarification` true, and a rationale that names both missing details because route.j2's rule on needs_clarification tells it to. One completion is the whole script: there is nothing after a clarification. The served question used to name the destination alone, and the judge scored `named_missing_information` false. What the deployed run `r_1790062696_baseline` actually recorded for amb-002 was `workflow: null` — that shape is `clarify_remote_no_workflow.json` (gap 4b); this one pins the path where the router does name it.",
   "completions": [
     {
       "purpose": "route",

@@ -1,0 +1,12 @@
+{
+  "_note": "G5, gap 4b — an expense question the router asks to clarify without naming a workflow, with a rationale that names only the amount. The inferred `expense_claim` order and the rationale-word fallback agree here: the amount is the one slot still missing, and the served question has to name it either way.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"The amount was not given, so the claim cannot be scored against the thresholds.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1104,
+      "completion_tokens": 88
+    }
+  ]
+}
