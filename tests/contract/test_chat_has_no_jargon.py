@@ -269,6 +269,10 @@ async def test_the_apps_own_copy_and_every_agent_written_string_use_plain_langua
         *(chip for chips in orchestrator.CLARIFY_CHIPS.values() for chip in chips),
         *orchestrator.CLARIFY_FALLBACK_CHIPS,
         orchestrator.WRITE_FAILED_NOTE,
+        # The two receipts a refusal now serves on their own (G5, gap 21 fix round 1), so the
+        # sentence a cancelled or failed turn is reduced to is judged like the rest of the copy.
+        orchestrator.WRITE_FAILED_RECEIPT,
+        orchestrator.CANCELLED_NOTICE,
         api.INTERNAL_ERROR_TEXT,
         api.INTERNAL_ESCALATION_TEXT,
         api.SUGGESTION_FOOTNOTE,

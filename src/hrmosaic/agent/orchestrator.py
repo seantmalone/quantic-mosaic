@@ -499,6 +499,14 @@ WRITE_FAILED_NOTE = (
     "Here is what I established; try again or contact the owning team."
 )
 
+#: The same receipt on a turn with **nothing** under it (G5, gap 21 fix round 1). `_refuse` serves
+#: the receipt alone, and *"Here is what I established"* would be a promise of an answer that is not
+#: there.
+WRITE_FAILED_RECEIPT = (
+    "The confirmation was accepted but the action itself did not complete, so nothing was created. "
+    "Try again, or contact the owning team."
+)
+
 #: The one deterministic reminder the act loop is allowed to inject (§9.1 step 2, P8's live check).
 #: It is a loop mechanism: §9.3 supplies the *gap* — its completion predicate — and says nothing
 #: about telling the model. The workflow spec already knows what the turn still needs; before this,
@@ -1236,7 +1244,15 @@ class Orchestrator:
                 return self._degraded(turn, str(exc), cold_start=cold_start)
             if turn.pending is not None:
                 return self._park(turn, cold_start=cold_start)
-            verdict = g1.check(turn.citable(), turn=turn.buffer)
+            # The same exemption on the re-check, re-read rather than carried: the recovery step
+            # runs the act loop again, and a gate that means one thing before it and another after
+            # is the trap. (It cannot in fact perform a write — a gated call parks the turn — so
+            # this is the same `None` the first call saw.)
+            verdict = g1.check(
+                turn.citable(),
+                turn=turn.buffer,
+                grounded_by_write=outcome_consistency.performed_write(turn.envelopes) is not None,
+            )
         if not verdict.passed:
             return self._refuse(turn, verdict.reason, cold_start=cold_start)
 
@@ -2950,9 +2966,36 @@ class Orchestrator:
         return self._finish(turn, answer, outcome="refused", stop_reason="refused", cold_start=cold_start)
 
     def _refuse(self, turn: _Turn, reason: str, *, cold_start: bool) -> ChatResponse:
+        """§7.4's refuse-and-redirect — **under the turn's own receipt**, where it has one (G5, gap 21
+        fix round 1).
+
+        A turn that cancelled its card, or whose authorised write failed, or whose write its own
+        compliance verdict forbade, has something to tell the reader that the evidence gate knows
+        nothing about — and the ledes that say it are built at step 5l, which a refusal never
+        reaches. So a **cancelled** "draft me an email to my manager" turn, which retrieves nothing,
+        served `USER_REFUSAL` and nothing else: the reader clicked Cancel and was told the policy
+        library had nothing for them, never that nothing had been created. `_unsupported` exempts
+        those same three turns from the no-supported-claim refusal for the same reason.
+
+        The receipt **replaces** the refusal's sentence rather than sitting above it: a search that
+        did not happen is not why the reader is looking at this answer, and *"I could not find
+        anything in Mosaic's policy library"* over *"Cancelled — nothing was created"* is two
+        accounts of one turn. The redirect `next_steps` are kept, and `rationale_summary` still
+        carries the gate's own reason, so the record says why the turn had no answer to keep.
+        """
+        answer = g1.refusal(reason)
+        receipts = [
+            *([WRITE_FAILED_RECEIPT] if turn.write_failed else []),
+            *([turn.write_blocked] if turn.write_blocked else []),
+            *([CANCELLED_NOTICE] if turn.declined else []),
+        ]
+        if receipts:
+            answer = answer.model_copy(
+                update={"blocks": [AnswerBlock(type=NOTICE, text=text, citations=[]) for text in receipts]}
+            )
         return self._finish(
             turn,
-            g1.refusal(reason),
+            answer,
             outcome="refused",
             stop_reason="refused",
             cold_start=cold_start,

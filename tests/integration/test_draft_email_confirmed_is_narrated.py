@@ -15,6 +15,13 @@ cannot name the reference the reader needs.
 and the answer still ended 'I cannot open PTO requests on your behalf'"). Nothing pinned it for
 `draft_hr_email`, because every `evaluation/dataset.yaml` item lists that tool under
 `forbidden_tools`. This file is that pin, in the style of `test_confirm_resume_lifecycle.py`.
+
+**And the two other ways this ask can end** (fix round 1). A no-retrieval turn that is *cancelled*,
+or whose authorised write *fails*, still reaches the same gate — it performed no write, so it is not
+exempt and must not be — and the refusal it produced threw away the receipt: the ledes that say
+*"Cancelled — nothing was created"* and *"the action itself did not complete"* are built at step 5l,
+which a refusal never reaches. A grader who clicked Cancel on this very ask read that the policy
+library had nothing for them and was never told nothing had been created.
 """
 
 from __future__ import annotations
@@ -49,8 +56,14 @@ async def drafted(web, store):
         yield {"parked": card, "confirmed": response.json()}
 
 
-async def test_the_ask_reaches_a_draft_hr_email_card_and_writes_nothing(drafted, store):
-    """The premise: the write is gated, and nothing exists while the card is on the screen."""
+async def test_the_ask_reaches_a_draft_hr_email_card_with_no_token(drafted, store):
+    """The premise: the write is gated behind a card, and the card carries no token.
+
+    That nothing is written *while* the card is on the screen is
+    `test_confirm_resume_lifecycle.py::test_nothing_is_written_while_a_turn_is_awaiting_confirmation`
+    for the ticket, and the cancelled turn below for this one — by the time this test runs its
+    fixture has already confirmed.
+    """
     parked = drafted["parked"]
 
     assert parked["outcome"] == "awaiting_confirmation"
@@ -104,3 +117,63 @@ async def test_the_evidence_gate_never_refuses_a_turn_whose_write_has_happened(d
     assert g1.NO_EVIDENCE in gates[0]["reason"]
     assert gates[0]["details"]["candidates"] == 0
     assert store.execute("SELECT outcome FROM turns WHERE id = ?", (turn_id,)).scalar() == "answered"
+
+
+# --------------------------------------------------------------------------------------
+# The other two endings of the same ask (fix round 1)
+# --------------------------------------------------------------------------------------
+
+
+async def test_a_cancelled_draft_is_answered_by_its_receipt_and_not_by_an_evidence_refusal(web, store):
+    """Cancel is not a failed policy search, and the reader has to be told nothing was created."""
+    from hrmosaic.agent import orchestrator
+
+    async with web("draft_email_confirm.json") as client:
+        parked = (await client.post("/chat", json={"message": QUESTION, "client_label": "demo"})).json()
+        assert parked["outcome"] == "awaiting_confirmation"
+        assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0, "nothing yet"
+        response = await client.post(
+            "/chat/confirm",
+            json={"session_id": parked["session_id"], "turn_id": parked["turn_id"], "decision": "declined"},
+        )
+
+    assert response.status_code == 200, response.text
+    answer = response.json()["answer"]
+    assert orchestrator.CANCELLED_NOTICE in answer, "the receipt is the answer"
+    assert g1.USER_REFUSAL not in answer, "and not a report of a search that never ran"
+    assert g1.OUT_OF_SCOPE_REFUSAL not in answer
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0, "and nothing was created"
+    # The redirect survives — it is the only other thing this turn has to offer.
+    assert all(topic in answer for topic in g1.example_topics())
+
+
+async def test_a_write_that_fails_after_the_confirmation_says_so_rather_than_refusing(web, store, monkeypatch):
+    """The same defect on §9.4's other partial: the token validated and the draft still did not exist.
+
+    Fault injection at the shipped gate's last step, as `test_resume_rehydrates_from_the_store.py`
+    does it: `confirm.consume` is what touches `mock_writes`, so making it raise produces a genuine
+    `isError` from the real server over the real transport.
+    """
+    import sqlite3
+
+    from hrmosaic.agent import orchestrator
+    from hrmosaic.mcpserver import confirm as confirm_gate
+
+    def explode(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    async with web("draft_email_confirm.json") as client:
+        parked = (await client.post("/chat", json={"message": QUESTION, "client_label": "demo"})).json()
+        assert parked["outcome"] == "awaiting_confirmation"
+        monkeypatch.setattr(confirm_gate, "consume", explode)
+        response = await client.post(
+            "/chat/confirm",
+            json={"session_id": parked["session_id"], "turn_id": parked["turn_id"], "decision": "confirmed"},
+        )
+
+    assert response.status_code == 200, response.text
+    answer = response.json()["answer"]
+    assert orchestrator.WRITE_FAILED_RECEIPT in answer, "the reader is told the action did not complete"
+    assert g1.USER_REFUSAL not in answer
+    assert "MOCK-EMAIL-" not in answer, "no reference was allocated, so none is named"
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0

@@ -64,6 +64,33 @@ def test_an_empty_candidate_set_refuses():
     assert verdict.max_dense_score == 0.0
 
 
+def test_a_performed_write_grounds_a_turn_the_evidence_clauses_would_refuse():
+    """G5, gap 21: the exemption passes the verdict and keeps the measurement in the reason.
+
+    `MOCK-EMAIL-000018` existed and its turn was refused here at `candidates: 0`, because "draft me
+    an email to my manager" searches nothing.
+    """
+    verdict = g1.evaluate([], grounded_by_write=True)
+
+    assert verdict.passed
+    assert verdict.reason == f"{g1.PERFORMED_WRITE}: {g1.NO_EVIDENCE}"
+    assert (verdict.max_dense_score, verdict.supporting, verdict.candidates) == (0.0, 0, 0)
+    # The weak-evidence clause keeps its arithmetic behind the exemption too.
+    weak = g1.evaluate([Candidate(0.58), Candidate(0.57)], grounded_by_write=True)
+    assert weak.passed
+    assert weak.reason.startswith(g1.PERFORMED_WRITE)
+    assert "evidence-gate score 0.58 < 0.60" in weak.reason
+
+
+def test_the_exemption_changes_nothing_when_it_is_not_set():
+    """The flag defaults off, and a passing set is not relabelled by it."""
+    assert g1.evaluate([]) == g1.evaluate([], grounded_by_write=False)
+    assert not g1.evaluate([], grounded_by_write=False).passed
+
+    strong = [Candidate(0.71), Candidate(0.64)]
+    assert g1.evaluate(strong) == g1.evaluate(strong, grounded_by_write=True), "no clause failed to exempt"
+
+
 def test_a_bm25_only_candidate_is_judged_on_its_dense_score_not_its_rrf_score():
     """§7.1's fill step scores BM25-only arrivals, so the rule is total (§7.4 row G1).
 
