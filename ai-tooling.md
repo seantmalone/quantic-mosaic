@@ -330,5 +330,9 @@ subagent wrote, because that wave's plan fixes the trailer to the coordinating s
 commit (`docs/superpowers/plans/2026-09-21-grade-5.md`, global constraints), following the same
 harness-is-authoritative clause of `constraints.md` line 14. So for those commits the trailer names
 **the session that coordinated the commit, not the model that wrote it**, and the recount above stops
-being a check on authorship: which model implemented each task and which reviewed it is recorded in
-that wave's ledger and per-task reports instead of in the history.
+being a check on authorship. What the history no longer carries, the tracked plan does:
+`docs/superpowers/plans/2026-09-21-grade-5.md` states the wave's shape as an Opus implementer per task
+with a reviewer per task, and `CLAUDE.md` pins `model: "opus"` on every delegated call. Which session
+took which task, and what each reviewer found, is in that wave's ledger and per-task reports, and
+those are in the git-ignored `.superpowers/sdd/` working directory until the wave's process trail is
+copied into `docs/process/sdd/` the way P0–P27's was.
