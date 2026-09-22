@@ -160,8 +160,12 @@ def test_a_topic_search_that_comes_back_short_is_filled_from_the_whole_corpus():
     """`equipment` has almost nothing to say about parental leave; the corpus has plenty."""
     query = "parental leave pay continuation"
     # A threshold above §7.1's default, so the topic under-fills without needing a nonsense query:
-    # the point is a real search whose topic is simply too narrow for what was asked.
-    strict = 0.55
+    # the point is a real search whose topic is simply too narrow for what was asked. It is a
+    # calibration, not a contract: 0.55 stopped under-filling when `equipment-and-asset.md` gained a
+    # chunk (the G5b wave's refresh-vs-additional-equipment scoping), so it moved up to the next gap
+    # in the score distribution — 0.58 leaves 3 of 5 slots empty, and the sixth-best equipment chunk
+    # for this query scores 0.5717.
+    strict = 0.58
     hard = retrieve(
         query, k=5, topic="equipment", min_dense_score=strict, strategy="hybrid_rrf", connection=DEPS.index()
     )

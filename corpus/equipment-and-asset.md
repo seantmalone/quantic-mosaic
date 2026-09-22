@@ -41,7 +41,9 @@ footwear, cut-resistant gloves. PPE is replaced on demand and is never charged t
 ## Refresh Cycle
 
 Company laptops are refreshed on a 36-month cycle. MosaicOne opens a refresh ticket automatically 60 days before the anniversary, and IT arranges the
-swap at a time the employee chooses.
+swap at a time the employee chooses. A refresh that falls due on the cycle is an IT ticket and nothing else: no spending approval is raised, whatever
+the replacement machine costs, because a refresh replaces standard issue rather than adding to it. A refresh taken early, before the 36-month
+anniversary, is the exception and needs the direct manager's approval, which is where the Manager Approval Matrix routes it.
 
 Monitors, docks and peripherals are refreshed on a 60-month cycle or on failure, whichever comes first. Mobile phones are refreshed on a 30-month
 cycle. Test instruments follow the calibration and service intervals set by Engineering Operations, which are shorter and are not negotiable.
@@ -58,7 +60,9 @@ Additional equipment is requested through the MosaicOne equipment catalogue. Ite
 and a lead time, and the request is routed for approval automatically.
 
 Equipment requests above USD 500 require director approval in addition to manager approval. Requests at or below USD 500 need only the direct manager,
-and requests for catalogue items marked *standard replacement* — a failed keyboard, a lost adapter, a worn headset — need no approval at all.
+and requests for catalogue items marked *standard replacement* — a failed keyboard, a lost adapter, a worn headset — need no approval at all. The
+threshold governs additional equipment: a scheduled laptop refresh is not an additional-equipment request, so the price of the replacement machine
+never routes it to a director, and the Refresh Cycle section above governs it instead.
 
 Requests for items not on the catalogue take longer, because IT reviews them for security, supportability and licence implications before Procurement
 sources them. Employees should allow 15 business days for an off-catalogue request and should not buy the item themselves in the meantime: personal

@@ -390,16 +390,22 @@ scenarios:
     title: "Requesting or returning company equipment"
     topics: [equipment, approvals]
     escalate_to: "IT — it-help@mosaicrobotics.example"
+    # `request_type` takes three values: `new` for a request for additional or upgraded equipment,
+    # `refresh` for a device on (or before) its 36-month anniversary, and `separation` for a return.
+    # The USD 500 threshold is guarded on the first of them because the corpus scopes it there: a
+    # scheduled refresh is an IT ticket at any price (`Refresh Cycle`), and pricing a refresh into the
+    # director threshold is the conflation the 2026-09-21 grade card found in a published answer.
     requirements:
       - id: equipment.director_threshold
-        text: "Equipment requests above USD 500 need director approval as well as manager approval."
+        text: "A request for additional equipment above USD 500 needs director approval as well as manager approval."
         label: "equipment cost, in US dollars"
         fact_key: equipment.request.director_threshold_usd
         doc_id: equipment-and-asset
         heading_path: "Requesting Additional Equipment"
+        applies_when: "parameter_eq:request_type:new"
         check: {subject: parameters.amount_usd, operator: lte}
       - id: equipment.refresh_eligibility
-        text: "Company laptops are refreshed on a 36-month cycle."
+        text: "Company laptops are refreshed on a 36-month cycle, and a refresh that falls due on it is an IT ticket at any price."
         label: "device age, in months"
         fact_key: equipment.refresh_cycle_months
         doc_id: equipment-and-asset
@@ -419,7 +425,12 @@ scenarios:
         reason: "Catalogue items up to USD 500 are a direct-manager decision."
         doc_id: manager-approval-matrix
         heading_path: "Equipment"
-        applies_when: always
+        applies_when: "parameter_eq:request_type:new"
+      - role: "Direct manager"
+        reason: "An early laptop refresh, before the 36-month anniversary, is a direct-manager decision."
+        doc_id: manager-approval-matrix
+        heading_path: "Equipment"
+        applies_when: "unmet:equipment.refresh_eligibility"
       - role: "Director"
         reason: "Catalogue items above USD 500 additionally need director approval."
         doc_id: manager-approval-matrix
@@ -427,9 +438,13 @@ scenarios:
         applies_when: "unmet:equipment.director_threshold"
     next_steps:
       - text: "Raise the request through the MosaicOne equipment catalogue so it routes for approval automatically."
-        applies_when: always
+        applies_when: "parameter_eq:request_type:new"
       - text: "Allow 15 business days for an off-catalogue item, which IT reviews before Procurement sources it."
         applies_when: "unmet:equipment.director_threshold"
+      - text: "A refresh that falls due on the 36-month cycle needs no spending approval: IT raises the ticket and arranges the swap."
+        applies_when: "met:equipment.refresh_eligibility"
+      - text: "Ask your direct manager to approve an early refresh before the 36-month anniversary, then raise the ticket with IT."
+        applies_when: "unmet:equipment.refresh_eligibility"
 
   benefits_change:
     title: "Changing a benefits election"

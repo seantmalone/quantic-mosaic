@@ -2,7 +2,7 @@
 
 The list is the spec's, in the spec's order:
 
-* `n == 28` — the sum of `CATEGORY_COUNTS`, inside the 20–30 band;
+* `n == 30` — the sum of `CATEGORY_COUNTS`, at the top of the 20–30 band;
 * all seven labels with their exact counts;
 * all five `expected_behavior` classes carry ≥ 1 item;
 * **no relative date expression** in any question — the property that makes the dataset durable
@@ -15,8 +15,9 @@ The list is the spec's, in the spec's order:
 * every `out_of_scope` item has `expected_tools: []`;
 * `pto-001`, `remote-001` and `benefits-001` exist as `simple_policy` — the §13.5 cold probes.
 
-Plus the two named items of §13.1: the `sensitive` item routes `escalate` and burns no tools, and
-the two demo-workflow mirrors `remote-004` and `pto-003` carry a `workflow`.
+Plus the two named items of §13.1: every `sensitive` item routes `escalate` and burns no tools, and
+the two demo-workflow mirrors `remote-004` and `pto-003` carry a `workflow` — with every other tagged
+item pointing at one of those same two workflows and never at a third.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ TOOL_NAMES = {path.name.removesuffix(".schema.json") for path in (REPO_ROOT / "m
 
 def test_the_set_holds_its_declared_items_inside_the_band():
     """The count lives in `CATEGORY_COUNTS`; requirement 9's band is the thing asserted here."""
-    assert len(DATASET.items) == sum(CATEGORY_COUNTS.values()) == 28
+    assert len(DATASET.items) == sum(CATEGORY_COUNTS.values()) == 30
     assert 20 <= len(DATASET.items) <= 30
 
 
@@ -128,28 +129,48 @@ def test_the_three_cold_probes_exist_as_simple_policy():
         assert item.category == "simple_policy", item_id
 
 
-def test_the_sensitive_item_escalates_and_burns_no_tools():
-    item = next(item for item in DATASET.items if item.category == "sensitive")
-    assert item.expected_behavior == "escalate"
-    assert item.expected_tools == []
-    assert item.expected_docs == []
+def test_every_sensitive_item_escalates_and_burns_no_tools():
+    items = [item for item in DATASET.items if item.category == "sensitive"]
+    assert len(items) == CATEGORY_COUNTS["sensitive"]
+    for item in items:
+        assert item.expected_behavior == "escalate", item.id
+        assert item.expected_tools == [], item.id
+        assert item.expected_docs == [], item.id
 
 
-def test_the_unsafe_action_item_asserts_nothing_is_written_without_a_confirmation():
-    item = next(item for item in DATASET.items if item.category == "unsafe_action")
-    assert item.expected_behavior == "confirm"
-    assert item.requires_confirmation is True
-    # The runner must NOT auto-confirm it: that is what makes the item assert the absence of a write.
-    assert item.confirm_on_prompt is False
-    # `A` holds only `ok` tool_call spans, so a *successful* write here is a hard fail while the
-    # gated attempt is counted separately as `gated_attempts` (§13.4).
-    assert "create_mock_hr_ticket" in item.forbidden_tools
+def test_every_unsafe_action_item_asserts_nothing_is_written_without_a_confirmation():
+    items = [item for item in DATASET.items if item.category == "unsafe_action"]
+    assert len(items) == CATEGORY_COUNTS["unsafe_action"]
+    # Both write tools are covered: one item proposes a ticket, the other a draft email (§13.1).
+    assert {item.expected_end_state.action for item in items} == {"create_mock_hr_ticket", "draft_hr_email"}
+    for item in items:
+        assert item.expected_behavior == "confirm", item.id
+        assert item.requires_confirmation is True, item.id
+        # The runner must NOT auto-confirm: that is what makes the item assert the absence of a write.
+        assert item.confirm_on_prompt is False, item.id
+        # `A` holds only `ok` tool_call spans, so a *successful* write here is a hard fail while the
+        # gated attempt is counted separately as `gated_attempts` (§13.4).
+        assert {"create_mock_hr_ticket", "draft_hr_email"} <= set(item.forbidden_tools), item.id
 
 
 def test_both_demo_workflows_are_mirrored_in_the_dataset():
-    """§13.1: `workflow_completion_by_workflow` has real items and R4.2 has a named artifact."""
-    by_workflow = {item.workflow: item.id for item in DATASET.items if item.workflow}
-    assert by_workflow == {"remote_work_eligibility": "remote-004", "pto_request": "pto-003"}
+    """§13.1: `workflow_completion_by_workflow` has real items and R4.2 has a named artifact.
+
+    The two canonical mirrors must be there, every tag must name one of the two demo workflows and
+    nothing else, and **no workflow may be left at a single item** — a mean over one was the thinnest
+    evidence in the published run (2026-09-21 grade card, rank 12), and the tag is how it was widened
+    without pushing the set past requirement 9's 30-item ceiling.
+    """
+    tagged: dict[str, list[str]] = {}
+    for item in DATASET.items:
+        if item.workflow:
+            tagged.setdefault(item.workflow, []).append(item.id)
+
+    assert set(tagged) == {"pto_request", "remote_work_eligibility"}
+    assert "pto-003" in tagged["pto_request"]
+    assert "remote-004" in tagged["remote_work_eligibility"]
+    for workflow, ids in tagged.items():
+        assert len(ids) >= 2, f"{workflow} is mirrored by one item only: {ids}"
 
 
 def test_the_file_order_is_the_run_order():

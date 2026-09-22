@@ -34,19 +34,22 @@ REFERENCE_LABELS_PATH = REPO_ROOT / "evaluation" / "reference_labels.yaml"
 REFERENCE_LABELS_HARD_PATH = REPO_ROOT / "evaluation" / "reference_labels_hard.yaml"
 REPORT_PATH = REPO_ROOT / "evaluation" / "REPORT.md"
 
-#: The seven §13.1 labels and the count each must carry.
+#: The seven §13.1 labels and the count each must carry. They sum to 30, the top of requirement 9's
+#: 20-30 band: the G5b wave widened the two n = 1 safety denominators the 2026-09-21 grade card named
+#: (`unsafe_action` and `sensitive` each went from 1 to 2) and the band has no room left, which is why
+#: the per-workflow denominators were widened with `workflow` tags on existing items instead.
 CATEGORY_COUNTS: dict[str, int] = {
     "simple_policy": 7,
     "multi_doc": 5,
     "tool_task": 6,
     "ambiguous": 3,
     "out_of_scope": 5,
-    "unsafe_action": 1,
-    "sensitive": 1,
+    "unsafe_action": 2,
+    "sensitive": 2,
 }
 
 #: The five gold behaviour classes. `confirm` is its own class because `awaiting_confirmation` is
-#: the correct outcome of the `unsafe_action` item and of demo task 2 (§13.1).
+#: the correct outcome of the two `unsafe_action` items and of demo task 2 (§13.1).
 Behavior = Literal["answer", "clarify", "confirm", "refuse", "escalate"]
 
 Category = Literal[
@@ -126,8 +129,12 @@ class EvalItem(BaseModel):
     persona: str
     question: str
     gold_answer_short: str
-    #: Set on `remote-004` and `pto-003` only — the two demo-workflow mirrors, which is where
-    #: `workflow_completion_by_workflow{}` comes from (§13.4).
+    #: The demo workflow this item mirrors, which is where `workflow_completion_by_workflow{}` comes
+    #: from (§13.4). `remote-004` and `pto-003` are the two canonical mirrors; `remote-003`,
+    #: `unsafe-001` and `unsafe-002` carry the tag too, because each *is* an instance of its workflow
+    #: (the under-30-day branch, and two PTO requests that end at the confirmation card), and a mean
+    #: over one item was the thinnest evidence in the published run (2026-09-21 grade card, rank 12).
+    #: Nothing in the agent reads this field: it is an evaluation label.
     workflow: str | None = None
     #: Bare `corpus/facts.yml` keys — never prefixed, never prose.
     gold_facts: list[str] = Field(default_factory=list)
@@ -138,8 +145,8 @@ class EvalItem(BaseModel):
     expected_end_state: ExpectedEndState | None = None
     expected_behavior: Behavior
     requires_confirmation: bool = False
-    #: The runner's auto-confirm switch. `false` on the `unsafe_action` item, which is what makes
-    #: it assert that nothing is written absent a confirmation (§13.1).
+    #: The runner's auto-confirm switch. `false` on both `unsafe_action` items, which is what makes
+    #: them assert that nothing is written absent a confirmation (§13.1).
     confirm_on_prompt: bool = False
     #: `ambiguous` only: what the clarifying question must name, for the judged sub-check of §13.4.
     clarification_expects: str | None = None

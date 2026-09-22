@@ -236,6 +236,11 @@ facts:
     section: "Refresh Cycle"
     quote: "Company laptops are refreshed on a 36-month cycle."
 
+  # The threshold is a rule about **additional** equipment, and only about that. The other half of the
+  # decision — the half an earlier gold answer conflated with this one — is carried by the two keys
+  # below: a refresh that falls due on the 36-month cycle is an IT ticket at any price, and only an
+  # *early* refresh is an approval decision at all, the direct manager's, which is where the
+  # `Equipment` table of `manager-approval-matrix.md` routes it.
   equipment.request.director_threshold_usd:
     value: 500
     unit: usd
@@ -243,6 +248,20 @@ facts:
     section: "Requesting Additional Equipment"
     quote: "Equipment requests above USD 500 require director approval in addition to manager approval."
 
+  equipment.refresh.scheduled_ticket_only:
+    value: true
+    unit: boolean
+    doc_id: equipment-and-asset
+    section: "Refresh Cycle"
+    quote: "A refresh that falls due on the cycle is an IT ticket and nothing else: no spending approval is raised, whatever the replacement machine costs, because a refresh replaces standard issue rather than adding to it."
+
+
+  equipment.refresh.early_approver_role:
+    value: "direct_manager"
+    unit: role
+    doc_id: equipment-and-asset
+    section: "Refresh Cycle"
+    quote: "A refresh taken early, before the 36-month anniversary, is the exception and needs the direct manager's approval, which is where the Manager Approval Matrix routes it."
 
   equipment.return.separation_days:
     value: 5
