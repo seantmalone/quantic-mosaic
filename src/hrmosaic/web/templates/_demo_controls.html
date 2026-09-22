@@ -63,10 +63,15 @@
     <div class="demo-group">
       <h3>Try a demo prompt — each one fills the question box above</h3>
       <div class="demo-actions">
-        {#- The label is short; the prompt is what lands in the composer (UX W6, dgc-re-3). -#}
-        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_1 }}"
+        {#- The label is short; the prompt is what lands in the composer (UX W6, dgc-re-3).
+
+            `data-demo` names which of the two this is. It is what `scripts/demo_prompt.py` keys on
+            so `scripts/demo_task_*.sh` can send the same self-dated wording as the button instead
+            of two frozen dates that stop producing the documented verdicts (gap 7); nothing on the
+            page reads it, and the click handler still keys on `.demo-button`. -#}
+        <button class="button demo-button" type="button" data-demo="demo_1" data-prompt="{{ demo_prompts.demo_1 }}"
                 title="{{ demo_prompts.demo_1 }}">{{ demo_prompt_labels.demo_1 }}</button>
-        <button class="button demo-button" type="button" data-prompt="{{ demo_prompts.demo_2 }}"
+        <button class="button demo-button" type="button" data-demo="demo_2" data-prompt="{{ demo_prompts.demo_2 }}"
                 title="{{ demo_prompts.demo_2 }}">{{ demo_prompt_labels.demo_2 }}</button>
       </div>
     </div>

@@ -6,10 +6,15 @@ date**, so §18.2's "three days of PTO from Tuesday 15 September" is a request w
 days' notice on any run after that week — the engine scores its own demo `unmet` on the notice
 requirement, and the headline path demonstrates a policy failure instead of the confirmation gate.
 
-The dates move on the page. The shell scripts keep the recorded wording and run against
-`MOCK_TODAY=2026-09-01`, and the two have to agree byte for byte — the test at the bottom parses
-the scripts, because the first version of it compared `DEMO_PROMPTS` with its own definition and
-`make demo2` shipped two business days of notice past it (W8 fix round, Critical 2).
+The dates move on the page. The shell scripts keep the recorded wording as the fallback they send
+when the instance cannot be read, and `make demo1` / `make demo2` run against `MOCK_TODAY=2026-09-01`,
+so the two have to agree byte for byte — the test below parses the scripts, because the first version
+of it compared `DEMO_PROMPTS` with its own definition and `make demo2` shipped two business days of
+notice past it (W8 fix round, Critical 2).
+
+What a run normally sends is the **served** prompt: the scripts ask the page for it, so the dates are
+the server's own (gap 7). `tests/contract/test_demo_scripts_send_the_served_prompt.py` owns that half
+against a running instance; the two tests at the bottom own the scripts' side of it as text.
 
 The questions, the personas and the two capabilities they show do not move.
 """
@@ -25,6 +30,7 @@ import pytest
 from hrmosaic.agent.dates import MONTHS
 from hrmosaic.mcpserver.rules import business_days_between
 from hrmosaic.web import api
+from scripts import demo_prompt
 
 #: Every starting day over four months, so no run of the demo is on a day the prompt is wrong
 #: for — including the two holiday-dense weeks the second-week formula alone gets wrong.
@@ -137,3 +143,30 @@ def test_the_recorded_date_gives_the_recorded_notice():
     start, _end = _dates(api.DEMO_PROMPTS["demo_2"])
     assert start == date(2026, 9, 15)
     assert business_days_between(api.RECORDED_TODAY, start, api._demo_holidays()) == 8
+
+
+#: `scripts/demo_prompt.py --base-url … --key demo_N`, as the two POSIX scripts invoke it.
+HELPER_CALL = 'demo_prompt.py" --base-url "$BASE_URL" --key demo_'
+
+
+@pytest.mark.parametrize("index", (1, 2))
+def test_each_script_asks_the_server_for_its_own_prompt(index: int):
+    """The fix for gap 7, as the script reads: the served prompt wins, the recorded line is the
+    fallback, and the key is this script's own — demo_task_2.sh asking for `demo_1` would run the
+    PTO demo on the Berlin question and fail nowhere near the cause."""
+    script = (SCRIPTS / f"demo_task_{index}.sh").read_text(encoding="utf-8")
+
+    assert f"{HELPER_CALL}{index}" in script
+    assert 'PROMPT="$SERVED"' in script, "the served wording is what gets sent"
+    assert script.index("PROMPT='") < script.index(HELPER_CALL), "the recorded line is the fallback"
+
+
+def test_an_unreachable_instance_falls_back_instead_of_failing_the_demo(capsys):
+    """`demo_prompt.py` exits 1 with a reason, which the scripts read as "send the recorded
+    wording". A demo that could not read the page is not a demo that failed."""
+    status = demo_prompt.main(["--base-url", "http://127.0.0.1:1", "--key", "demo_1"])
+
+    captured = capsys.readouterr()
+    assert status == 1
+    assert captured.out == "", "nothing on stdout is what the scripts test for"
+    assert "could not read http://127.0.0.1:1/" in captured.err

@@ -123,6 +123,11 @@ class Settings(BaseSettings):
     # --- MCP ------------------------------------------------------------------------------
     mcp_transport: Literal["http", "stdio"] = "http"
     mcp_server_url: str | None = None
+    #: The tool names withheld from the model on a request that does not say otherwise — the
+    #: **process default** for `ChatOptions.tools_disabled`, read where that model is built
+    #: (`agent/orchestrator.py`). A per-request `options.tools_disabled` always wins, which is how
+    #: §13.9's `no_structured_tools` ablation is driven; this is the knob that lets the same
+    #: filter be set once for a whole process, the way `RETRIEVAL_K` is.
     mcp_tools_disabled: str = ""
     mcp_allowed_hosts: str = "127.0.0.1:*,localhost:*"
 
@@ -209,6 +214,15 @@ class Settings(BaseSettings):
         allowed host is a host no request can carry: harmless, but it reads like a hole.
         """
         return [entry.strip() for entry in self.mcp_allowed_hosts.split(",") if entry.strip()]
+
+    @property
+    def mcp_tools_disabled_list(self) -> list[str]:
+        """`MCP_TOOLS_DISABLED` as `ChatOptions.tools_disabled` wants it — blanks dropped.
+
+        An untouched `.env.example` line leaves `MCP_TOOLS_DISABLED=` behind, and an empty tool
+        name is a tool no step can call: it would filter nothing, but it would read like one.
+        """
+        return [entry.strip() for entry in self.mcp_tools_disabled.split(",") if entry.strip()]
 
     @property
     def mcp_transport_effective(self) -> str:

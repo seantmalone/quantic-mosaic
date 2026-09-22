@@ -12,17 +12,32 @@
 #
 #   BASE_URL=https://mosaic-hr.onrender.com APP_ACCESS_TOKEN=… sh scripts/demo_task_2.sh
 #
-# The prompt below is the RECORDED wording, with its fixed dates. The rules engine measures notice
-# from the submission date (W8), so the server this script talks to must run with
-# `MOCK_TODAY=2026-09-01` — the mock data's own snapshot, and the one date that gives the recorded
-# 8 business days of notice to 15 September once Boston's Labor Day is excluded — for the recorded
-# expectations to hold; `make demo1` / `make demo2` set it. The chat page's own demo buttons carry
-# dates that move with the day instead (`web/api.py::demo_prompts`).
+# The `PROMPT=` line below is the RECORDED wording, with the fixed dates the committed stub scripts
+# were recorded against — and it is the **fallback**, not what a run normally sends. The rules engine
+# measures notice from the submission date (W8), so a fixed September 2026 date stops producing the
+# documented verdict the moment it is in the past: against the deployed service, which pins no
+# `MOCK_TODAY` (§12.3), this script used to narrate a rule the request failed.
+#
+# So before it asks anything it reads the prompt the chat page's own demo button carries
+# (`scripts/demo_prompt.py`, `web/api.py::demo_prompts`), which **the server** dates against its own
+# clock. `make demo2` pins `MOCK_TODAY=2026-09-01` — the mock data's own snapshot, and the one date
+# that gives the recorded 8 business days of notice to 15 September once Boston's Labor Day is
+# excluded — so the replay gets the recorded wording back byte for byte; the deployed service gets
+# dates that are still in the future. The documented verdicts hold against any instance.
 set -eu
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
 PYTHON="${PYTHON:-python3}"
 PROMPT='Can I take three days of PTO from Tuesday 15 September to Thursday 17 September 2026 — and can you open the request for me?'
+
+# The wording this run actually sends: the served, self-dated prompt when the instance can be read,
+# the recorded line above when it cannot (an unreachable page is not a failed demo — the request is).
+SERVED="$("$PYTHON" "$(dirname "$0")/demo_prompt.py" --base-url "$BASE_URL" --key demo_2 || true)"
+if [ -n "$SERVED" ]; then
+  PROMPT="$SERVED"
+else
+  echo "-- the page's Demo 2 prompt could not be read; sending the recorded wording" >&2
+fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT INT TERM

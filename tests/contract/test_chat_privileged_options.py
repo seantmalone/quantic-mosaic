@@ -11,6 +11,11 @@ quietly measuring the baseline three times.
 | 2 | employee | `eval` | off | **403** `ADMIN_REQUIRED` |
 | 3 | admin | `web` | off | **403** `PRIVILEGED_OPTION_REFUSED` naming the field |
 | 4 | — | — | on, no token | **401** at the gate |
+
+The matrix is about what a **request** states. `options.tools_disabled` also has a process default
+(`MCP_TOOLS_DISABLED`, §12.3), and the last test below is why that distinction is load-bearing: a
+resolved value read as a stated one would turn the tool-filter knob into a 403 on every ordinary
+turn.
 """
 
 from __future__ import annotations
@@ -112,3 +117,23 @@ async def test_retrieval_options_reach_the_tool(web, store):
         assert payload["strategy"] == "dense_only"
         assert payload["k"] == 2
         assert payload["k_source"] == "override"
+
+
+async def test_the_process_wide_tool_filter_is_not_read_as_a_privileged_request(web, store):
+    """`MCP_TOOLS_DISABLED` is the process default for `options.tools_disabled` (gap 20), and a
+    default is not something the caller asked for: an employee-persona `web` turn on a process that
+    sets it is answered, with the tool genuinely withheld — not refused `ADMIN_REQUIRED`."""
+    async with web("rag_only.json", mcp_tools_disabled="get_policy_section") as client:
+        response = await client.post("/chat", json={"message": QUESTION})
+
+    assert response.status_code == 200, response.text
+    offered = [
+        json.loads(row["payload_json"]).get("tools_offered") or []
+        for row in store.execute(
+            "SELECT payload_json FROM spans WHERE turn_id = ? AND kind = 'llm_call' ORDER BY seq",
+            (response.json()["turn_id"],),
+        ).dicts()
+    ]
+    assert any(offered), "the turn called the model with a catalogue"
+    assert all("get_policy_section" not in names for names in offered), "the filter withheld the tool"
+    assert any("search_policy_documents" in names for names in offered), "and withheld nothing else"

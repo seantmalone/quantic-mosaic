@@ -647,13 +647,21 @@ class ToolCallRepair(BaseModel):
 
 
 class ChatOptions(BaseModel):
-    """§11.1's `options`. Everything except `k` is privileged; `web/` enforces that, not this."""
+    """§11.1's `options`. Everything except `k` is privileged; `web/` enforces that, not this.
+
+    `tools_disabled` defaults to `MCP_TOOLS_DISABLED`, the process-wide form of the same filter
+    (§12.3), read at construction so the environment a process boots with is what an unstated
+    request gets — exactly as `RETRIEVAL_K` and `RETRIEVAL_STRATEGY` back `k` and
+    `retrieval_strategy` inside `rag.retrieve`. A request that states the field wins, including
+    when it states the empty list: that is the per-turn channel §13.9's ablation drives, and it
+    must be able to ask for the full catalogue on a process that withholds tools by default.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     k: int | None = Field(default=None, ge=1, le=10)
     retrieval_strategy: Literal["hybrid_rrf", "dense_only"] | None = None
-    tools_disabled: list[str] = Field(default_factory=list)
+    tools_disabled: list[str] = Field(default_factory=lambda: list(default_settings.mcp_tools_disabled_list))
     eval_run_id: str | None = None
     variant: str | None = None
 
