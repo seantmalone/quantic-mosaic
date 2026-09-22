@@ -883,13 +883,7 @@ class Runner:
             else []
         )
         if stale_labels:
-            self.notes.append(
-                "judge_agreement_rate is not computed on this run: the committed reference labels "
-                "were authored against other served answers — "
-                + "; ".join(stale_labels)
-                + ". Re-author the packet against this run and fold the labels in with "
-                "`--recompute-agreement` (§13.7)."
-            )
+            self.notes.append(_degraded_agreement_note(AGREEMENT_METRICS["judge_agreement_rate"].name, stale_labels))
         elif labels is not None and self._judge_enabled:
             agreement_rate, agreement_n, disagreements = det.judge_agreement(
                 labels.labels,
@@ -2278,6 +2272,44 @@ def rewrite_report(run_id: str, *, results_dir: Path = RESULTS_DIR, path: Path =
     return run
 
 
+#: The drive-path degradation note's last sentence, shared with the retraction below so that
+#: rewording the note cannot leave the retraction matching nothing.
+_DEGRADED_AGREEMENT_TAIL = (
+    "Re-author the packet against this run and fold the labels in with `--recompute-agreement` (§13.7)."
+)
+
+
+def _degraded_agreement_prefix(name: str) -> str:
+    """The stable opening words of one metric's "not computed" note — written and matched here."""
+    return f"{name} is not computed on this run:"
+
+
+def _degraded_agreement_note(name: str, mismatched: Sequence[str]) -> str:
+    """`Runner.assemble()`'s note for a metric whose committed labels belong to other turns."""
+    return (
+        f"{_degraded_agreement_prefix(name)} the committed reference labels were authored against "
+        "other served answers — " + "; ".join(mismatched) + f". {_DEGRADED_AGREEMENT_TAIL}"
+    )
+
+
+def _retract_degraded_agreement_note(previous: str, name: str) -> str:
+    """Drop the "not computed on this run" sentence for the metric that has just been computed.
+
+    Without this a `--recompute-agreement` fold-in published the figure *and* the note saying the
+    figure does not exist: REPORT.md prints `run.notes` verbatim, so the report contradicted itself
+    (`r_1790110325_baseline`, G5b). The sentence is one element of the drive pass's space-joined
+    notes paragraph rather than a line of its own, so the cut runs from the note's opening words to
+    its closing ones — or to the end of the line, if a hand-trimmed note has lost the tail — and
+    leaves the prose either side of it standing. Only the recomputed metric's note goes: the other
+    subset may still be genuinely uncomputed.
+    """
+    pattern = (
+        rf"\s*{re.escape(_degraded_agreement_prefix(name))}"
+        rf".*?(?:{re.escape(_DEGRADED_AGREEMENT_TAIL)}|$)"
+    )
+    return re.sub(pattern, "", previous, flags=re.MULTILINE)
+
+
 def _agreement_note(previous: str | None, slot: AgreementMetric, note: str) -> str:
     """Append this metric's note idempotently, leaving the *other* metric's note alone.
 
@@ -2287,8 +2319,11 @@ def _agreement_note(previous: str | None, slot: AgreementMetric, note: str) -> s
     rather than on a line of its own — hence `re.MULTILINE`, without which `$` anchors to the end
     of the whole string, the legacy note is never matched, and a fold-in stacks a second copy
     beside it instead of replacing it.
+
+    Computing a figure also **retracts** the drive-time note that said it was not computed.
     """
-    kept = [line for line in (previous or "").split("\n") if not line.startswith(f"{slot.name}=")]
+    retracted = _retract_degraded_agreement_note(previous or "", slot.name)
+    kept = [line for line in retracted.split("\n") if not line.startswith(f"{slot.name}=")]
     body = re.sub(rf"\s*{re.escape(slot.name)}=[^\n]*$", "", "\n".join(kept), flags=re.MULTILINE).strip()
     return f"{body}\n{note}".strip() if body else note
 

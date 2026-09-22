@@ -835,11 +835,38 @@ async def test_every_per_workflow_row_and_the_safety_rate_carry_their_own_sample
 
 
 async def test_a_headline_rate_under_the_threshold_prints_its_sample_on_the_list_page(seeded):
-    """npo5-05: fifteen bare "100.0%" for argument correctness, where the run page said 19 of 19."""
+    """npo5-05: fifteen bare "100.0%" for argument correctness, where the run page said 19 of 19.
+
+    P14's rule has a threshold, so the assertion reads it (`SMALL_SAMPLE`) instead of baking in the
+    denominators the committed runs happened to have: **below** it a rate must carry its `n`, at or
+    above it a bare percentage is the right rendering and a printed sample would be the defect. The
+    30-item dataset put `arg_correctness` at exactly n = 20 on the G5b runs, which is where a test
+    demanding a sample on *every* rate became unsatisfiable (task 5c, concern 1). Each cell is paired
+    with its own run's `n` from `/api/eval/runs` — the same numbers the page renders from — so this
+    still catches a rate that drops its denominator, and the final assertion keeps it non-vacuous.
+    """
+    from hrmosaic.web.dashboard import SMALL_SAMPLE
+
     body = (await seeded.client.get("/dashboard/evals")).text
-    cells = re.findall(r'data-col="arg_correctness_rate"[^>]*class="cell-num">\s*([^<]*?)\s*(<[^>]*>[^<]*)?<', body)
-    rated = [(value, tail) for value, tail in cells if "%" in value]
-    assert rated, body[:300]
-    for value, tail in rated:
-        sample = re.search(r'<span class="sample">(\d+) of (\d+) items?', tail or "")
-        assert sample and int(sample.group(2)) < 20, (value, tail)
+    scored = {
+        run["run_id"]: run["n_scored"].get("arg_correctness_rate")
+        for run in (await seeded.client.get("/api/eval/runs")).json()["runs"]
+    }
+    headline = body.split('id="eval-headline-table"', 1)[1].split("</table>", 1)[0]
+    checked, under_threshold = 0, 0
+    for row in headline.split("<tr")[1:]:
+        run_id = re.search(r'href="/dashboard/evals/([^"]+)"', row)
+        cell = re.search(r'data-col="arg_correctness_rate"[^>]*class="cell-num">\s*([^<]*?)\s*(<[^>]*>[^<]*)?<', row)
+        if run_id is None or cell is None or "%" not in cell.group(1):
+            continue
+        n = scored.get(run_id.group(1))
+        sample = re.search(r'<span class="sample">(\d+) of (\d+) items?', cell.group(2) or "")
+        assert n is not None, (run_id.group(1), "a rendered rate with no sample size in the view-model")
+        if n < SMALL_SAMPLE:
+            assert sample and int(sample.group(2)) == n, (run_id.group(1), n, cell.groups())
+            under_threshold += 1
+        else:
+            assert not sample, (run_id.group(1), n, "a rate at or above P14's threshold stands alone")
+        checked += 1
+    assert checked, body[:300]
+    assert under_threshold, f"no committed run scores argument correctness under n={SMALL_SAMPLE}; vacuous"

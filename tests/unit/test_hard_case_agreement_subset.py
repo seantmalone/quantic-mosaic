@@ -328,6 +328,11 @@ LABELS_HARD_BOUND = LABELS_HARD.replace(
     "  - item_id: inj-001\n", "  - item_id: inj-001\n    turn_id: turn-inj-001\n"
 ).replace("  - item_id: pto-003\n", "  - item_id: pto-003\n    turn_id: turn-pto-003\n")
 
+#: The same bound labels under the blind subset's declaration — the file the *seed* metric may read.
+LABELS_SEED_BOUND = LABELS_HARD_BOUND.replace("subset: judge_lowest_8", "subset: seed_1729_8").replace(
+    "selection_disclosed: true", "selection_disclosed: false"
+)
+
 
 @pytest.fixture
 def judged_run_with_turns(tmp_path):
@@ -431,8 +436,26 @@ def test_labels_authored_against_another_runs_answers_are_refused(
 
 
 def test_labels_whose_turn_matches_the_run_are_folded_in(tmp_path, judged_run_with_turns, no_report):
+    """And the fold-in **retracts** the drive-time note that said the figure was not computed.
+
+    The drive that produced `r_1790110325_baseline` found the committed labels bound to other turns,
+    so it left the blind figure uncomputed and said so in `notes`. Re-authoring the packet and
+    folding the labels in then wrote 1.000 and *kept the sentence*, because the retraction matched
+    only lines starting `judge_agreement_rate=` — and REPORT.md, which prints `run.notes` verbatim,
+    published the figure and "is not computed on this run" a hundred lines apart (G5b task 5d). The
+    retraction is per metric: recomputing the hard subset must leave the blind subset's note alone,
+    because that figure really is still uncomputed.
+    """
     labels = tmp_path / "reference_labels_hard.yaml"
     labels.write_text(LABELS_HARD_BOUND, encoding="utf-8")
+    path = tmp_path / f"{judged_run_with_turns.run_id}.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["notes"] = (
+        "A finding from the drive pass. "
+        + runner._degraded_agreement_note("judge_agreement_rate", ["inj-001 (label turn-older, run turn-inj-001)"])
+        + " Judged in a second pass on 2026-09-10."
+    )
+    path.write_text(json.dumps(body), encoding="utf-8")
 
     run = runner.recompute_agreement(
         judged_run_with_turns.run_id,
@@ -443,6 +466,28 @@ def test_labels_whose_turn_matches_the_run_are_folded_in(tmp_path, judged_run_wi
 
     assert run.metrics.judge_agreement_rate_hard == pytest.approx(2 / 3), "inj-001 is still the one disagreement"
     assert run.metrics.judge_agreement_n_hard == 3
+    assert run.notes is not None
+    assert "judge_agreement_rate is not computed" in run.notes, "the blind figure is still uncomputed"
+
+    seed_labels = tmp_path / "reference_labels.yaml"
+    seed_labels.write_text(LABELS_SEED_BOUND, encoding="utf-8")
+
+    run = runner.recompute_agreement(
+        judged_run_with_turns.run_id,
+        results_dir=tmp_path,
+        metric="judge_agreement_rate",
+        labels_path=seed_labels,
+    )
+
+    assert run.metrics.judge_agreement_rate == pytest.approx(2 / 3), "the blind figure is computed now"
+    assert run.metrics.judge_agreement_n == 3
+    assert run.notes is not None
+    assert "not computed" not in run.notes, "a computed figure cannot be published beside its own retraction"
+    assert "judge_agreement_rate=" in run.notes and "judge_agreement_rate_hard=" in run.notes
+    assert run.notes.startswith("A finding from the drive pass."), "the prose either side of the note stands"
+    assert "Judged in a second pass on 2026-09-10." in run.notes
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert "not computed" not in (on_disk["notes"] or ""), "and the retraction reaches the file REPORT.md reads"
 
 
 def test_labels_carrying_no_turn_id_are_compared_on_the_old_terms(tmp_path, judged_run_with_turns, no_report):
