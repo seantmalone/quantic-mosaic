@@ -38,8 +38,12 @@ two items both cards name as outside the repository — the video link and the d
 - [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
       `design-and-evaluation.md`'s results table from it. — **re-done 2026-09-22 on the final
-      build**, `r_1790074972_baseline` (28 items, judged, strict pass 0.893, driven and served by
-      `8a89310`, the commit the live `/health` reports); `paste_eval_numbers.py --check` exits 0.
+      build**, `r_1790074972_baseline` (28 items, judged, strict pass 0.893, measured on build
+      `8a89310`); `paste_eval_numbers.py --check` exits 0. Later commits on `main` are
+      documentation, evaluation tooling and tests only — `git diff 8a89310..HEAD -- src mcp
+      Dockerfile render.yaml requirements.txt` is empty — so the sha the live `/health` reports on
+      the day may differ while the application tree is identical; `deployed.md` carries the
+      reading and the ledger.
 - [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
       `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the

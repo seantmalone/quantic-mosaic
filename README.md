@@ -204,11 +204,18 @@ make ablation    # compare the committed baseline run against the two ablation v
 off by default, so a judge-provider outage cannot leave a half-judged run whose composite cannot be
 computed — which means groundedness, citation accuracy, partial match and clarification accuracy
 come back `null` until a second pass runs. The full sweep, in the order it was run for the published
-figures:
+figures. The exports come first and are **exported**, not prefixed onto one command: a
+`--variant` line that inherits `.env`'s local default drives `target: local`, and `make ablation`
+then refuses to compare a local arm with a deployed baseline.
 
 ```bash
-EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval                        # (a) drive   — APP_ACCESS_TOKEN
-.venv/bin/python -m evaluation.runner --judge <run_id>              # (b) judge   — JUDGE_API_KEY
+export EVAL_TARGET_BASE_URL="$DEPLOY_URL"   # the target every drive below talks to
+export APP_ACCESS_TOKEN="<the service's token>"
+export TURSO_DATABASE_URL="<the service's>" TURSO_AUTH_TOKEN="<the service's>"
+export JUDGE_API_KEY="<the judge project's key>"
+
+make eval                                                           # (a) drive the baseline
+.venv/bin/python -m evaluation.runner --judge <run_id>              # (b) judge it
 .venv/bin/python -m evaluation.runner --variant dense_only_k2       # arm 1, same build
 .venv/bin/python -m evaluation.runner --variant no_structured_tools # arm 2, same build
 make ablation                                                       # writes comparison.json
@@ -234,8 +241,12 @@ pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analys
 with their expected answers, the judge-agreement figures and the known limitations.
 
 **The published run** is `r_1790074972_baseline` (2026-09-22) — 28 items, `target: deployed`, judged
-by `gemini-3.5-flash-lite` over 268 judge calls, served by commit `8a89310`, which is the build the
-live service reports at `/health`. `evaluation/results/latest.json` names it, and
+by `gemini-3.5-flash-lite` over 268 judge calls, driven and served by build **`8a89310`**: the run
+file records that sha as its `target_git_sha`, and the live `/health` still reported it at 11:52Z
+that day. Later commits on `main` change documentation, evaluation tooling and tests only, so the
+sha `/health` reports may have moved on while the application tree is identical —
+`git diff 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is empty; `deployed.md`
+carries the reading and the ledger behind it. `evaluation/results/latest.json` names the run, and
 `python scripts/paste_eval_numbers.py --check` exits 0 against the design document's results
 table. Beside it is the pre-optimization deployed baseline `r_1789055103_baseline`, run on the same
 instance before any of the quality or performance work, over the 26 items the dataset held then:
@@ -251,8 +262,8 @@ instance before any of the quality or performance work, over the 26 items the da
 | Workflow completion | 0.769 | **0.964** (n = 28) |
 | Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
 | Latency p50 / p95 | 17.6 s / 47.7 s | 15.3 s / 26.0 s |
-| Judge agreement (blind seed subset) | 1.00 (n = 7) | 1.000 (n = 8) |
-| Judge agreement (hard subset, selection disclosed) | 1.00 (n = 8) | 0.875 (n = 8) |
+| Judge agreement (blind seed subset) | 1.000 (n = 7) | 1.000 (n = 8) |
+| Judge agreement (hard subset, selection disclosed) | 1.000 (n = 8) | 0.875 (n = 8) |
 
 Every judged row carries its own `n` because a judge that fails twice on an item records a `null`
 verdict and the item leaves that metric's denominator. The two metrics with the smallest

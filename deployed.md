@@ -70,14 +70,19 @@ before any of those runs is allowed to count, which is what keeps the two shas f
 The earlier `target: deployed` baselines stay committed as history; only the last row is the
 published run, and `evaluation/results/latest.json` names it.
 
-**What is serving right now.** `curl -s https://mosaic-hr-copilot.onrender.com/health`, read
-**2026-09-22 at 11:52Z**, reported `app.git_sha` `8a8931076bac9d271f8a03da7ecfa0d3a723d811`,
+**What was serving at 2026-09-22 11:52Z.** `curl -s https://mosaic-hr-copilot.onrender.com/health`,
+read at that minute, reported `app.git_sha` `8a8931076bac9d271f8a03da7ecfa0d3a723d811`,
 `status: ok`, `deploy_mode: render`, `mcp.connected: true` with 9 tools, 14 documents / 204
-chunks, `trace_store.backend: turso` and an empty `degradations[]`. That is the same commit the
-published run records as its `target_git_sha`, and the last commit to change application code:
-`git diff 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is empty at the time
-of writing, so any later sha on `/health` is a rebuild of the same application tree with the
-documentation on top.
+chunks, `trace_store.backend: turso` and an empty `degradations[]` — the same commit the published
+run records as its `target_git_sha`.
+
+**The live sha moves; the application tree does not.** Every push to `main` that is not filtered
+out by `ci.yml`'s `paths-ignore` triggers a build and a deploy, so `/health` reports whichever
+commit was last deployed rather than the one a document names. What matters is the relation, and
+it is checkable at any commit: `8a89310` is the last commit to change **application** code —
+`git diff 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is empty — so a later
+sha on `/health` is a rebuild of the identical application tree with documentation, evaluation
+tooling and tests on top, not a different build of the app the published run measured.
 
 **Rejected hosts**, and why (§14.1): Railway, Fly.io and Koyeb (no lasting free compute), Hugging
 Face Spaces (same), Google Cloud Run (the documented fallback — the *same image* runs there, but it
