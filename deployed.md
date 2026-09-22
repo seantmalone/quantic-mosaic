@@ -19,8 +19,8 @@ included. Each row below names the command whose output it is; the full sequence
 | The Turso database `mosaic-hr`, its token and the first live FK/parity answer | `python scripts/provision_turso.py` | 2026-09-10 |
 | Measured cold start and warm turn on the live instance | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` | 2026-09-10 and 2026-09-11 (n=3) |
 | Free-tier hours and build minutes read from the account | `python scripts/check_render_hours.py` | 2026-09-11 |
-| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the two variants and `make ablation` | 2026-09-11 |
-| `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11 |
+| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the judge pass, the two variants and `make ablation` | 2026-09-11, re-driven 2026-09-16 and again 2026-09-22 on the final build |
+| `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11, re-pasted 2026-09-22 |
 
 `RENDER_DEPLOY_HOOK_URL` is **optional**: no REST endpoint publishes it, so CI's `deploy` job
 triggers production through `POST /v1/services/{id}/deploys` with `RENDER_API_KEY` and
@@ -46,7 +46,7 @@ instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"`, `autoDe
 **harness tree's** `git rev-parse HEAD` — the code that scored the run — and `target_git_sha` is
 what the target's own `/health` reported under `app.git_sha`, the build that answered the
 questions. `evaluation/REPORT.md` prints both. The published run records both as
-`34717b52eb01312097ec41fe8a07394843d215d6`: the harness ran from the same commit the service was
+`8a8931076bac9d271f8a03da7ecfa0d3a723d811`: the harness ran from the same commit the service was
 serving.
 
 **Runs recorded before 2026-09-11 carry neither.** Until P23 the harness took `git_sha` from
@@ -60,10 +60,24 @@ three runs the serving commit lives here, in prose, taken from the deploy ledger
 | `r_1789055103_baseline` | before optimization | `5419ec5` | no — prose only |
 | `r_1789069158_baseline` | after the quality fixes (P13) | `b24ad32` | no — prose only |
 | `r_1789086979_baseline` | after the performance waves | `da0dca2` | no — prose only |
-| **`r_1789166880_baseline`** | **published — after the model-behaviour wave** | **`34717b5`** | **yes — `target_git_sha` and `git_sha`** |
+| `r_1789166880_baseline` | published 2026-09-11 — after the model-behaviour wave | `34717b5` | yes — `target_git_sha` and `git_sha` |
+| `r_1789555212_baseline` | published 2026-09-16 — after the demo-path logic waves (W8–W10) | `bd4ac93` | yes |
+| `r_1790067656_baseline` | 2026-09-22 09:08Z — after the clarification fix; superseded the same day | `e85305b` | yes |
+| **`r_1790074972_baseline`** | **published — 2026-09-22 11:10Z, on the final build** | **`8a89310`** | **yes** |
 
 `scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
 before any of those runs is allowed to count, which is what keeps the two shas from being confused.
+The earlier `target: deployed` baselines stay committed as history; only the last row is the
+published run, and `evaluation/results/latest.json` names it.
+
+**What is serving right now.** `curl -s https://mosaic-hr-copilot.onrender.com/health`, read
+**2026-09-22 at 11:52Z**, reported `app.git_sha` `8a8931076bac9d271f8a03da7ecfa0d3a723d811`,
+`status: ok`, `deploy_mode: render`, `mcp.connected: true` with 9 tools, 14 documents / 204
+chunks, `trace_store.backend: turso` and an empty `degradations[]`. That is the same commit the
+published run records as its `target_git_sha`, and the last commit to change application code:
+`git diff 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is empty at the time
+of writing, so any later sha on `/health` is a rebuild of the same application tree with the
+documentation on top.
 
 **Rejected hosts**, and why (§14.1): Railway, Fly.io and Koyeb (no lasting free compute), Hugging
 Face Spaces (same), Google Cloud Run (the documented fallback — the *same image* runs there, but it
@@ -356,6 +370,28 @@ the last so `mcp/run_stdio.sh` and `mcp/run_http.sh`, whose default is a develop
 Two credentials are **operator** environment and belong to no runtime surface, so they are read
 with `os.environ` in the provisioning scripts and are in neither `Settings` nor `.env.example`:
 `RENDER_API_KEY` (gate 4) and `TURSO_PLATFORM_TOKEN` (gate 3).
+
+### The hosted trace store is a hard dependency of `/chat`
+
+`PERSIST_BACKEND` is left at its default `auto`, and `core/db.py::build_store()` resolves it
+**once at boot**: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are both set on the service, so
+every turn writes to Turso and there is no failover or later demotion. A turn's spans are
+buffered and flushed when the turn closes, so if Turso becomes unreachable mid-turn that flush
+raises and the composed answer is discarded: the reader gets the typed 200
+`INTERNAL_ERROR` turn — *"Something went wrong"* plus the People Operations escalation, never a
+5xx and never a stack trace — and the turn stays open in the store's eyes until the next boot's
+`sweep_stale_turns()`. `tests/contract/test_unmodelled_failure_is_graceful.py` pins that path by
+making `store.batch` raise. So the grading-window failure mode of a Turso outage is *"chat
+answers nothing useful"*, not *"traces are missing"*, and the repository has seen one real live
+Turso 502 during a probe (`docs/evidence/grade-card-2026-09-11.md`).
+
+**How a reader tells, and the one-variable recovery.** `/health` stays 200 and reports
+`trace_store.reachable: false` with its `last_error`, and `degradations[]` carries the soft
+`trace_store_unreachable` — that is the check to run first if answers start failing. Setting
+**`PERSIST_BACKEND=sqlite`** on the service is the recovery: one single-key PUT, and the next boot
+writes traces to the container's own `TRACE_DB_PATH` file instead, so `/chat` answers again.
+The cost is that the file is ephemeral — the dashboard's history and the imported eval runs are
+rebuilt from `evaluation/results/` at boot and everything else is lost on the next deploy.
 
 ## MCP transport
 

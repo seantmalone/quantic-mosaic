@@ -15,7 +15,7 @@ committed, and the only build step in the whole directory is `scripts/build_pdf.
 | File | What it is |
 |---|---|
 | 11 × `*.md`, 1 × `*.html`, 1 × `*.txt`, 1 × `*.pdf` (+ its `.src.md`) | the 14 policy documents |
-| `facts.yml` | ~56 checkable facts, each with a verbatim quote and a heading path |
+| `facts.yml` | **58** checkable facts, each with a verbatim quote and a heading path — the count `scripts/check_facts.py` prints |
 | `rules.yml` | the requirements behind `check_policy_compliance`'s seven scenarios |
 | `README.md` | this map: topics, outlines, conventions, format rationale |
 
@@ -252,7 +252,7 @@ real company would actually publish that document as, not to tick a box:
 
 ## `facts.yml` — the index
 
-Roughly fifty-six entries of the shape:
+**58** entries — the number `python scripts/check_facts.py` prints beside the document and rule counts — each of the shape:
 
 ```yaml
 pto.accrual.ft_3y_plus:

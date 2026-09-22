@@ -10,16 +10,21 @@ Tick each box only after the thing itself is done — not after it is planned.
 per id; it deliberately does **not** assert that a box is ticked, because a test that could tick
 its own box would prove nothing.
 
-**The independent assessment.** An independent, read-only grading pass against
-`docs/project-requirements.md` was run on 2026-09-11 and is committed verbatim as
-[`docs/evidence/grade-card-2026-09-11.md`](evidence/grade-card-2026-09-11.md). Its §4 is a
-checklist of what the recording has to show for the demo requirements to hold, and its §6 lists the
-things a grader is most likely to trip over. Read both before the take. The defects it found were
-fixed in two waves — P23 for the documentation and provenance items, P24 for the model-behaviour
-ones, whose effect is the published run's 0.893 strict pass — and the deployed MCP endpoint it
-flagged now accepts external clients (verified 2026-09-11 20:32Z). The two items it names as
-outside the repository — the video link and the dashboard submission — are the `DEMO.1` and
-`SUB.1` boxes below.
+**The independent assessments.** Two independent, read-only grading passes against
+`docs/project-requirements.md` are committed verbatim: the first from 2026-09-11 as
+[`docs/evidence/grade-card-2026-09-11.md`](evidence/grade-card-2026-09-11.md), the second from
+2026-09-21 as [`docs/evidence/grade-card-2026-09-21.md`](evidence/grade-card-2026-09-21.md),
+whose ranked gap list drove the 2026-09-22 grade-and-fix wave (`CHANGELOG.md`, entry **G5**).
+The 2026-09-11 card is the one written for the recording: its §4 is a checklist of what the
+recording has to show for the demo requirements to hold, and its §6 lists the things a grader is
+most likely to trip over. Read both before the take. The defects it found were fixed in two waves
+— P23 for the documentation and provenance items, P24 for the model-behaviour ones — and the
+deployed MCP endpoint it flagged now accepts external clients (verified 2026-09-11 20:32Z). The
+2026-09-21 card graded the build **band 4**, capped above all else because three graded documents
+published a superseded evaluation run, with a stale known-limitations list and an undocumented
+`make ingest` behind it. That is what the G5 wave closed; the run box below is its receipt. The
+two items both cards name as outside the repository — the video link and the dashboard submission
+— are the `DEMO.1` and `SUB.1` boxes below.
 
 ---
 
@@ -32,8 +37,9 @@ outside the repository — the video link and the dashboard submission — are t
       → HTTP 200. — **done 2026-09-11**, verified 20:32Z.
 - [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
-      `design-and-evaluation.md`'s results table from it. — **done 2026-09-11**,
-      `r_1789166880_baseline` (28 items, judged, strict pass 0.893).
+      `design-and-evaluation.md`'s results table from it. — **re-done 2026-09-22 on the final
+      build**, `r_1790074972_baseline` (28 items, judged, strict pass 0.893, driven and served by
+      `8a89310`, the commit the live `/health` reports); `paste_eval_numbers.py --check` exits 0.
 - [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
       `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the

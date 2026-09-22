@@ -198,8 +198,21 @@ build minutes. Push the results, then dispatch a deploy explicitly and check the
 
 ```sh
 gh workflow run ci.yml -f deploy_only=true
-curl -s "$DEPLOY_URL/health" | jq '.trace_store.eval_runs_imported'   # matches the committed count
+curl -s "$DEPLOY_URL/health" | jq '.trace_store.eval_runs_imported'   # ≥ the committed count
+ls evaluation/results/r_*.json | wc -l                                # the committed count
 ```
+
+**The two numbers are not equal, and that is expected.** `eval_runs_imported` counts the rows in
+the hosted store, which retains every drive the service has ever answered — including judged
+baselines whose run file was deliberately not committed, because the app changed under them and a
+second "newest baseline" on the dashboard is worse than none. Read 2026-09-22 at 11:52Z: **25
+imported against 22 committed run files**. The check is therefore *imported ≥ committed, and the
+published run among them*; `evaluation/results/latest.json` is what names the published one. The
+three drives with no committed file are `r_1790062696_baseline` (2026-09-22, the diagnostic drive
+on the build before this wave's clarification fixes) and `r_1789547562_baseline` (build `6355c41`)
+and `r_1789534779_baseline` (build `1a2a8fb`), both from 2026-09-16 and both predating the
+published build. None can be reconstructed into a run file: `GET /api/eval/runs/{run_id}` serves
+the dashboard's view-model, which carries neither `dataset_sha` nor `target_git_sha`.
 
 ### 5. Then record and submit
 
@@ -246,11 +259,11 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` | **done** 2026-09-10 — FKs enforced |
 | Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 and 2026-09-11 (n=3; median 71.0 s cold, 22.5 s warm) |
 | Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` | **done** 2026-09-11 — build minutes ~11.5 of 500; instance hours unavailable from the API |
-| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-11 — `r_1789166880_baseline`, judged, 28 items |
+| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-22 — `r_1790074972_baseline`, judged, 28 items, driven and served by `8a89310` (first published 2026-09-11; re-driven 2026-09-16 and 2026-09-22) |
 | `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` | **done** 2026-09-11 |
 | The deployed MCP endpoint reachable by an external client | 2b | one Environment entry (`MCP_ALLOWED_HOSTS`) | **done** 2026-09-11 — external `initialize` → HTTP 200 at 20:32Z |
 | Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` | **done** 2026-09-10 — demo 2 wrote `MOCK-HR-000001` behind the gate |
-| `/health.trace_store.eval_runs_imported` matching the committed count | 2 + 4 | the block in step 4 above | **done** 2026-09-10 |
+| `/health.trace_store.eval_runs_imported` at least the committed run-file count, with the published run among them | 2 + 4 | the block in step 4 above | **done** — 25 imported against 22 committed files, read 2026-09-22 11:52Z (see the note in step 4) |
 | The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above | **done** — all three committed |
 | The demo video, and therefore `README.md`'s `Demo video:` link | **6** | `docs/demo-script.md` | **open** |
 | The `quantic-grader` invitation confirmed as sent or accepted | **7** | `docs/pre-submission-checklist.md` `- [x] SUB.3` | **done** — accepted, re-verified 2026-09-11 |

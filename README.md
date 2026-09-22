@@ -8,7 +8,7 @@ State-changing actions are mock and pass a one-time human confirmation gate befo
 written.
 
 Deployed: https://mosaic-hr-copilot.onrender.com/?access=FaGQUENKinWIfcD5yp3XMzD-GqH9oxJDXesOIinFKcY
-Demo video: pending: gate 6 (record the walkthrough) — see [`docs/demo-script.md`](docs/demo-script.md)
+Demo video: pending: gate 6 — the walkthrough is recorded from [`docs/demo-script.md`](docs/demo-script.md) and its link is pasted on this line at submission
 Repo: https://github.com/seantmalone/quantic-mosaic
 
 Documentation: [`design-and-evaluation.md`](design-and-evaluation.md) (architecture, RAG and MCP
@@ -35,11 +35,23 @@ cp .env.example .env      # optional: no credential is needed to boot, lint or t
 ```
 
 `make setup` runs exactly those steps. Every dependency is pinned in `requirements.txt`, which is
-compiled from the authoritative `pyproject.toml` with `uv pip compile`.
+compiled from the authoritative `pyproject.toml` with `uv pip compile`. Then build the index:
+
+```bash
+make ingest       # python -m hrmosaic.rag.ingest — writes data/index/hr_index.sqlite
+```
+
+**The index is built, not committed.** `data/index/` is git-ignored apart from
+`chunks.manifest.jsonl`, the manifest CI re-verifies with `ingest --verify-manifest`, so a fresh
+clone has no `hr_index.sqlite` and `rag/index.py` raises rather than indexing on demand: without
+this step the app boots and `/health` answers 200, but every question comes back as a failed turn.
+It needs no credential: the embeddings are computed locally by the ONNX model fastembed
+downloads into `FASTEMBED_CACHE_PATH` on first use, so the first run is slower than the rest.
 
 ## Local Run
 
 ```bash
+make ingest       # build the index first — `make run` cannot answer without it
 make run          # uvicorn on http://127.0.0.1:8000
 make run-stdio    # the same MCP server over stdio, for MCP Inspector or the demo
 make lint         # ruff check . && ruff format --check .
@@ -48,7 +60,7 @@ make coverage     # the same suite under coverage, then the 90% gate and coverag
 ```
 
 **Tests and coverage.** `make test` runs the whole suite in one command — 3,410 tests as of
-2026-09-15, unit, contract, integration, architecture and e2e-with-stub, every one of them against
+2026-09-22, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. 299 of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
 and CI runs them in a job of their own that never blocks `test` or `deploy`. `make coverage` runs that same suite
@@ -76,7 +88,13 @@ BASE_URL=https://<app>.onrender.com APP_ACCESS_TOKEN=<key> sh scripts/demo_task_
 `make demo1` / `make demo2` each start their own server with their own recorded stub script, so
 they need no key. The scripts are plain `curl`, parameterised by `BASE_URL`, and print the answer,
 the citations, the full span trace and the `dashboard_url` for the turn. Every call sends
-`Authorization: Bearer $APP_ACCESS_TOKEN`.
+`Authorization: Bearer $APP_ACCESS_TOKEN`. Each one asks the instance for its own demo prompt
+before it starts, the same self-dated question the chat page's Demo 1 / Demo 2 buttons carry, so
+the dates are always far enough ahead for the notice rules to pass and the verdicts hold against
+the deployed service as well as against the pinned replays. `--recorded` (or `DEMO_RECORDED=1`)
+sends the frozen wording the stub scripts were recorded against instead; the `make` targets do
+not need it, because they pin `MOCK_TODAY=2026-09-01` on their own server and the prompt they
+fetch from it comes back byte for byte the recorded one.
 
 **Pinned evidence — both tasks run live against the deployed service on 2026-09-11**, transcripts
 committed with the bearer token redacted and nothing else edited:
@@ -175,36 +193,89 @@ next boot, and the workflow is stopped from the repository's **Actions** tab.
 ## Evaluation
 
 ```bash
-make eval        # the 28-item dataset against EVAL_TARGET_BASE_URL
-make ablation    # compares the baseline run against the two ablation variants
+make eval        # drive the 28-item dataset against EVAL_TARGET_BASE_URL — no judging
+make ablation    # compare the committed baseline run against the two ablation variants
 ```
+
+**The whole recipe, and the credential each step needs.** `make eval` is
+`python -m evaluation.runner --variant baseline`: it drives the 28 items as one
+`POST $EVAL_TARGET_BASE_URL/chat` each, carrying `Authorization: Bearer $APP_ACCESS_TOKEN` and
+`X-Actor: admin`, and scores every deterministic metric. It does **not** judge — `--judge-inline` is
+off by default, so a judge-provider outage cannot leave a half-judged run whose composite cannot be
+computed — which means groundedness, citation accuracy, partial match and clarification accuracy
+come back `null` until a second pass runs. The full sweep, in the order it was run for the published
+figures:
+
+```bash
+EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval                        # (a) drive   — APP_ACCESS_TOKEN
+.venv/bin/python -m evaluation.runner --judge <run_id>              # (b) judge   — JUDGE_API_KEY
+.venv/bin/python -m evaluation.runner --variant dense_only_k2       # arm 1, same build
+.venv/bin/python -m evaluation.runner --variant no_structured_tools # arm 2, same build
+make ablation                                                       # writes comparison.json
+.venv/bin/python -m evaluation.runner --report <run_id>             # re-render REPORT.md
+.venv/bin/python scripts/paste_eval_numbers.py                      # refresh the design doc's table
+```
+
+Both passes read the turn and its spans back out of **the same trace store the target wrote them
+to**, so against a deployed target the runner needs the service's own `TURSO_DATABASE_URL` and
+`TURSO_AUTH_TOKEN` and refuses the run when the target's `/health` reports a different backend. The
+judge is a second vendor on its own key — `JUDGE_PROVIDER`, `JUDGE_BASE_URL`, `JUDGE_MODEL`,
+`JUDGE_API_KEY` in `.env.example`. **Every drive rewrites
+[`evaluation/REPORT.md`](evaluation/REPORT.md)**, so finishing a sweep with an ablation arm leaves
+the report describing that arm; `--report <run_id>` restores the published one and spends nothing.
+Two more passes spend nothing either: `--cold-probes` runs the three cold-start probes, and
+`--recompute-agreement <run_id> --metric judge_agreement_rate[_hard]` folds a reference-label file
+into a judged run. `make ablation` only compares runs that already exist, and asserts they share
+`target`, `dataset_sha` and `target_git_sha` before it writes anything.
 
 Results are committed under `evaluation/results/` and rendered by the dashboard's evaluation
 pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analysis and
 [`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 28 questions
 with their expected answers, the judge-agreement figures and the known limitations.
 
-**The published run** is `r_1789166880_baseline` — 28 items, `target: deployed`, judged by
-`gemini-3.5-flash-lite`, served by commit `34717b5`. Beside it is the pre-optimization deployed
-baseline `r_1789055103_baseline`, run on the same instance before any of the quality or
-performance work, over the 26 items the dataset held then:
+**The published run** is `r_1790074972_baseline` (2026-09-22) — 28 items, `target: deployed`, judged
+by `gemini-3.5-flash-lite` over 268 judge calls, served by commit `8a89310`, which is the build the
+live service reports at `/health`. `evaluation/results/latest.json` names it, and
+`python scripts/paste_eval_numbers.py --check` exits 0 against the design document's results
+table. Beside it is the pre-optimization deployed baseline `r_1789055103_baseline`, run on the same
+instance before any of the quality or performance work, over the 26 items the dataset held then:
 
-| Metric | Before (`r_1789055103_baseline`) | Published (`r_1789166880_baseline`) |
+| Metric | Before (`r_1789055103_baseline`) | Published (`r_1790074972_baseline`) |
 |---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.692 | **0.893** |
-| Groundedness | 0.979 | 0.984 |
-| Citation accuracy | 0.847 | 0.905 |
-| Document recall | 0.855 | 0.961 |
-| Tool selection (F1) | 0.926 | 0.993 |
-| Workflow completion | 0.769 | **0.893** |
+| Groundedness | 0.979 | 0.963 (n = 18) |
+| Citation accuracy | 0.847 | 0.875 (n = 18) |
+| Citation resolvability | 0.923 | 1.000 (n = 28) |
+| Document recall | 0.855 | 0.947 (n = 19) |
+| Tool selection (F1) | 0.926 | 0.993 (n = 28) |
+| Workflow completion | 0.769 | **0.964** (n = 28) |
 | Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
-| Latency p50 / p95 | 17.6 s / 47.7 s | 19.1 s / 38.7 s |
-| Judge agreement (blind seed subset) | 1.00 (n = 7) | 0.875 (n = 8) |
+| Latency p50 / p95 | 17.6 s / 47.7 s | 15.3 s / 26.0 s |
+| Judge agreement (blind seed subset) | 1.00 (n = 7) | 1.000 (n = 8) |
 | Judge agreement (hard subset, selection disclosed) | 1.00 (n = 8) | 0.875 (n = 8) |
 
-The project's own ≥ 0.85 strict-pass target is met; the three items that still fail, and the clause
-each of them tripped, are named in [`evaluation/REPORT.md`](evaluation/REPORT.md) and
-[`design-and-evaluation.md`](design-and-evaluation.md).
+Every judged row carries its own `n` because a judge that fails twice on an item records a `null`
+verdict and the item leaves that metric's denominator. The two metrics with the smallest
+denominators are named rather than implied: clarification accuracy is **1.000 over the 3 ambiguous items**, and
+the action-safety pass rate is **1.000 over the 1 write item** — not over 28. The blind seed subset
+came back unanimous, so its 1.000 cannot discriminate a good judge from one that answers `grounded`
+to everything; the disclosed hard-case subset exists for that, and its one disagreement is
+`expenses-002`.
+
+The project's own ≥ 0.85 strict-pass target is met. Three of the 28 items still fail the composite,
+each recomputed by the same `deterministic.strict_pass_causes()` that decides the `passed` flag:
+`remote-002` (workflow completion 0.00 — its answer cites 2 distinct documents where that item's
+end state requires 3, and 2 of its 4 gold documents), `expenses-002` (groundedness 0.79 < 0.85) and
+`equipment-001` (groundedness 0.69 < 0.85).
+
+**The ablation, on the same build.** Both arms were re-driven on `8a89310` against the same dataset
+sha. Removing the structured tools costs **0.143 of workflow completion** (0.964 → 0.821) and 0.107
+of strict pass (0.893 → 0.786); narrowing retrieval to dense-only k=2 costs nothing measurable here
+(strict pass 0.929, workflow completion 0.964). The design's own prediction was that the first delta
+would exceed 0.25, so `evaluation/ablation.py`'s check reports **not supported** and `REPORT.md`
+prints that banner rather than softening the claim. The judged metrics are computed on `baseline`
+only, which is why two of the three strict-pass failures flip to a pass on both arms — a judged
+clause is vacuously true on an unjudged run.
 
 **How it got there — and what it cost — is in [`docs/optimization-log.md`](docs/optimization-log.md)**:
 every optimization question asked, the evidence gathered, the decision taken, and the run id that
