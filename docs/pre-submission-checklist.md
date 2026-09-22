@@ -52,9 +52,11 @@ republish. The two items every card names as outside the repository — the vide
       `80a5a71`); `paste_eval_numbers.py --check` exits 0. The commits after `80a5a71` are
       documentation, evaluation tooling and tests, so the sha the live `/health` reports on the day
       will differ while the application tree does not. That is checked by running the command, not
-      by trusting this line: `git diff 80a5a71..HEAD -- src mcp Dockerfile render.yaml
-      requirements.txt` printed nothing at `44e5e9f` on 2026-09-22, and `deployed.md` carries the
-      `/health` reading and the ledger.
+      by trusting this line: `git diff 80a5a71..HEAD -- src mcp/tools mcp/server_entrypoint.py
+      mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt` printed nothing at
+      `edd99a4` on 2026-09-22 — the pathspec is the shipped application, with `mcp/README.md` and
+      every other document deliberately outside it. `deployed.md` carries the `/health` reading, the
+      pathspec and the ledger.
 - [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
       `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the

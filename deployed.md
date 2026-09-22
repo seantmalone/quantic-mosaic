@@ -58,14 +58,19 @@ three runs the serving commit lives here, in prose, taken from the deploy ledger
 
 | Run | Column | Deployed commit that served it | Recorded in the run file |
 |---|---|---|---|
-| `r_1789055103_baseline` | before optimization | `5419ec5` | no — prose only |
-| `r_1789069158_baseline` | after the quality fixes (P13) | `b24ad32` | no — prose only |
-| `r_1789086979_baseline` | after the performance waves | `da0dca2` | no — prose only |
-| `r_1789166880_baseline` | published 2026-09-11 — after the model-behaviour wave | `34717b5` | yes — `target_git_sha` and `git_sha` |
-| `r_1789555212_baseline` | published 2026-09-16 — after the demo-path logic waves (W8–W10) | `bd4ac93` | yes |
-| `r_1790067656_baseline` | 2026-09-22 09:08Z — after the clarification fix; superseded the same day | `e85305b` | yes |
-| `r_1790074972_baseline` | published 2026-09-22 11:10Z — superseded that evening by the round-2 re-drive | `8a89310` | yes |
-| **`r_1790110325_baseline`** | **published — 2026-09-22 20:52Z, on the round-2 build, over the 30-item dataset** | **`80a5a71`** | **yes** |
+| `r_1789055103_baseline` | 2026-09-10 15:53:57Z — before optimization | `5419ec5` | no — prose only |
+| `r_1789069158_baseline` | 2026-09-10 19:49:28Z — after the quality fixes (P13) | `b24ad32` | no — prose only |
+| `r_1789086979_baseline` | 2026-09-11 00:44:19Z — after the performance waves | `da0dca2` | no — prose only |
+| `r_1789166880_baseline` | published 2026-09-11 22:57:30Z — after the model-behaviour wave | `34717b5` | yes — `target_git_sha` and `git_sha` |
+| `r_1789555212_baseline` | published 2026-09-16 10:49:27Z — after the demo-path logic waves (W8–W10) | `bd4ac93` | yes |
+| `r_1790067656_baseline` | 2026-09-22 09:08:05Z — after the clarification fix; superseded the same day | `e85305b` | yes |
+| `r_1790074972_baseline` | published 2026-09-22 11:10:12Z — superseded that evening by the round-2 re-drive | `8a89310` | yes |
+| **`r_1790110325_baseline`** | **published — 2026-09-22 20:59:49Z, on the round-2 build, over the 30-item dataset** | **`80a5a71`** | **yes** |
+
+Every time in that column is the run file's own `created_at` in UTC — the instant the drive closed and
+the file was written. A run **id** carries a different instant: `r_<epoch>` is the drive's *start*, so
+`r_1790110325` began at 20:52Z and closed at 20:59:49Z. Where a drive has no committed file (the four
+in `NEEDS-FROM-USER.md`'s import note) the id is the only timestamp there is, and that note says so.
 
 `scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
 before any of those runs is allowed to count, which is what keeps the two shas from being confused.
@@ -89,14 +94,23 @@ made minutes after this sentence moves it. What matters is the relation, and it 
 can run rather than a claim to take on trust:
 
 ```bash
-git diff 80a5a71..HEAD -- src mcp Dockerfile render.yaml requirements.txt   # empty
+git diff 80a5a71..HEAD -- \
+  src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt
 ```
 
-**It was empty at `44e5e9f`, checked 2026-09-22** — the commits after the measured build `80a5a71`
-are documentation, evaluation tooling and tests. Run it at whatever HEAD you have: while it prints
-nothing, a later sha on `/health` is a rebuild of the identical application tree, not a different
-build of the app the published run measured. If it ever prints a path, that path is the honest
-answer and this paragraph is the thing that is stale.
+**It printed nothing at `edd99a4`, checked 2026-09-22** — the commits after the measured build
+`80a5a71` are documentation, evaluation tooling and tests. Run it at whatever HEAD you have: while it
+prints nothing, a later sha on `/health` is a rebuild of the identical application tree, not a
+different build of the app the published run measured. If it ever prints a path, that path is the
+honest answer and this paragraph is the thing that is stale.
+
+**Why that pathspec and not `mcp` whole.** `mcp/` holds the nine committed tool schemas, the
+entrypoint and the two launch scripts — and `mcp/README.md`, which is a document. An earlier
+version of this check named the directory, so the first prose edit to that README made the command
+print a path and the sentence read as a falsified claim. The pathspec above is the shipped
+application: source, the MCP server's code and schemas, the image, the service manifest and the
+pinned dependencies. Documentation is deliberately outside it, because a documentation commit is
+exactly what this paragraph exists to account for.
 
 **Rejected hosts**, and why (§14.1): Railway, Fly.io and Koyeb (no lasting free compute), Hugging
 Face Spaces (same), Google Cloud Run (the documented fallback — the *same image* runs there, but it

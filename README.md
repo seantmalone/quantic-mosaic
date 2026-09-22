@@ -100,8 +100,8 @@ fetch from it comes back byte for byte the recorded one.
 
 **Pinned evidence — the newest three transcripts were run live against the deployed service on
 2026-09-22**, on `/health` sha `8782177` (a docs-only commit on top of the then-current app build
-`8a89310`: `git diff 8a89310..8782177 -- src mcp Dockerfile render.yaml requirements.txt` is
-empty). The round-2 fixes of later that day — the clarification question, the bare-balance rule and
+`8a89310`: `git diff 8a89310..8782177 -- src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt`
+is empty). The round-2 fixes of later that day — the clarification question, the bare-balance rule and
 the `Mcp-Session-Id` capture — took the app build on to `80a5a71`, which is what the published
 evaluation run measures; these transcripts are the record of what the service did on the earlier
 build and are not re-captured to keep up. Each is committed with the bearer token redacted and
@@ -268,9 +268,19 @@ with their expected answers, the judge-agreement figures and the known limitatio
 records that sha as its `target_git_sha`, and the live `/health` reported it at 21:58Z that day.
 Commits after it change documentation, evaluation tooling and tests only, so the sha `/health`
 reports moves on while the application tree does not, and the relation is a command rather than a
-promise: **`git diff 80a5a71..HEAD -- src mcp Dockerfile render.yaml requirements.txt` was empty at
-`44e5e9f` on 2026-09-22** — run it at whatever HEAD you are reading, and `deployed.md` carries the
-reading and the ledger behind it. `evaluation/results/latest.json` names the run, and
+promise:
+
+```bash
+git diff 80a5a71..HEAD -- src mcp/tools mcp/server_entrypoint.py \
+  mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt
+```
+
+**It printed nothing at `edd99a4`, checked 2026-09-22** — run it at whatever HEAD you are reading. The
+pathspec is the application tree and nothing else: `mcp/` holds the nine committed tool schemas, the
+entrypoint and the two launch scripts, and it also holds `mcp/README.md`, which is documentation — so
+naming the directory whole would make this check print a path on a prose edit and prove nothing.
+`deployed.md` carries the reading, the pathspec and the ledger behind it.
+`evaluation/results/latest.json` names the run, and
 `python scripts/paste_eval_numbers.py --check` exits 0 against the design document's results
 table. Beside it is the pre-optimization deployed baseline `r_1789055103_baseline`, run on the same
 instance before any of the quality or performance work, over the 26 items the dataset held then:
@@ -316,9 +326,15 @@ sha. Removing the structured tools costs **0.167 of workflow completion** (0.933
 of strict pass (0.900 → 0.733); narrowing retrieval to dense-only k=2 costs nothing measurable here
 (strict pass 0.933, workflow completion 0.967). The design's own prediction was that the first delta
 would exceed 0.25, so `evaluation/ablation.py`'s check reports **not supported** and `REPORT.md`
-prints that banner rather than softening the claim. The judged metrics are computed on `baseline`
-only, which is why `expenses-002` flips to a pass on both arms — a judged clause is vacuously true
-on an unjudged run — while `remote-002` flips the other way on both.
+prints that banner rather than softening the claim. `REPORT.md` lists **ten** items whose strict pass flips
+against `baseline`, and they are not all artefacts of the arms being unjudged. `expenses-002` flips to
+a pass on both arms because the judged metrics are computed on `baseline` only and a judged clause is
+vacuously true on an unjudged run; `remote-002` flips the other way on both; five more fail only on
+`no_structured_tools`, which is the arm's point. One flip is genuinely behavioural: `unsafe-001`
+**passes** on `dense_only_k2`, where the same turn also called `search_policy_documents` and so met
+the gold tool set it misses on `baseline` (tool recall 1.00 against 0.75) — it stopped at the
+confirmation card on both arms, so nothing about safety moved. Read the flip list as sampling
+variance plus the ablation, not as the ablation alone.
 
 **How it got there — and what it cost — is in [`docs/optimization-log.md`](docs/optimization-log.md)**:
 every optimization question asked, the evidence gathered, the decision taken, and the run id that

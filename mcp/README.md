@@ -45,8 +45,10 @@ at the same time. So **every tool handler is `async def` and every CPU-bound cal
 
 **Why stdio still exists.** It is the evidence that this is a real MCP server and not a function
 call wearing a costume: `make run-stdio` attaches MCP Inspector to a separate OS process with no
-port and no uvicorn, and `tests/integration/test_mcp_discovery.py` spawns one on every CI run and
-drives discovery and a tool call over its pipes.
+port and no uvicorn, and two integration tests spawn one on every CI run —
+`tests/integration/test_mcp_discovery.py` for `initialize` and `tools/list` over its pipes, and
+`tests/integration/test_mcp_tool_call.py` for a real `tools/call` on both stdio and the mounted
+HTTP loopback.
 
 ## Discovery flow
 
