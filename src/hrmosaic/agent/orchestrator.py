@@ -73,6 +73,7 @@ from hrmosaic.agent.router import (
     clamp_rationale,
     extract_amount,
     fallback_decision,
+    find_employee_id,
     is_monetary_approval,
     is_unsafe,
     normalise,
@@ -407,6 +408,53 @@ def clarify_topic_workflow(text: str) -> str | None:
         (workflow for workflow, words in CLARIFY_TOPIC_WORDS if any(word in lowered for word in words)),
         None,
     )
+
+
+#: The words a question uses when it says **which** balance it means (G5b, task 11b). A bare *"can you
+#: check the balance for me?"* is `amb-003`, whose gold is a clarification; on the latest deployed
+#: drive the router returned `needs_clarification: false` and the turn answered with the PTO balance,
+#: picking one of several balances on the record for the reader. Read as **data**, exactly like
+#: `CLARIFY_TOPIC_WORDS`: the only thing taken from the message is whether one of these appears in it.
+NAMED_BALANCE_WORDS: tuple[str, ...] = (
+    "pto",
+    "time off",
+    "time-off",
+    "vacation",
+    "leave",
+    "sick",
+    "benefit",
+    "401k",
+    "401(k)",
+    "expense",
+)
+
+#: …and what makes a question a balance question at all: the noun itself, or the quantity phrasing a
+#: person uses instead of it.
+BALANCE_ASK_WORDS: tuple[str, ...] = ("balance",)
+BALANCE_QUANTITY = re.compile(r"\bhow m(?:uch|any)\b[^?]*\b(?:left|remaining|remain)\b")
+
+
+def is_bare_balance_ask(message: str, *, intent: str | None) -> bool:
+    """A question about "the balance" that never says **which** balance (G5b, task 11b).
+
+    `amb-003` — *"Can you check the balance for me?"* — is gold `clarify`, and the record carries more
+    than one balance (PTO, benefits, an expense claim), so answering it means picking one silently.
+    The router is the thing that is supposed to say so and on the deployed drive did not, so the
+    decision is made deterministically here instead, on the same three closed readings the
+    clarification tables already make of a message.
+
+    True only when all of it holds: the router's intent is `employee_data` (a question about the
+    reader's own record, not about policy), the message asks about a balance, and it names **neither**
+    which balance nor an employee id. A question that names its balance — *"What is my PTO balance?"* —
+    is never forced to clarify: the ambiguity it would be asked about is not there.
+    """
+    if intent != "employee_data":
+        return False
+    lowered = " ".join((message or "").lower().split())
+    asks = any(word in lowered for word in BALANCE_ASK_WORDS) or BALANCE_QUANTITY.search(lowered) is not None
+    if not asks or any(word in lowered for word in NAMED_BALANCE_WORDS):
+        return False
+    return find_employee_id(message) is None
 
 
 def clarify_slot_of(question: str) -> str | None:
@@ -1176,7 +1224,11 @@ class Orchestrator:
             return self._refuse_unsafe(turn, cold_start=cold_start)
         if decision.out_of_scope:
             return self._refuse(turn, g1.OUT_OF_SCOPE, cold_start=cold_start)
-        if decision.needs_clarification:
+        if decision.needs_clarification or is_bare_balance_ask(req.message, intent=decision.intent):
+            # The second disjunct is `amb-003` (G5b, task 11b): a bare balance ask clarifies whether
+            # or not the router said so. Everything else about the path is unchanged — it is the
+            # existing `employee_data` clarify order, which already asks *"which balance do you
+            # mean…"* — and a question that names its balance never reaches it.
             return self._clarify(turn, self._clarification_text(turn), cold_start=cold_start)
 
         # -- 2. act loop ----------------------------------------------------------------
@@ -3508,6 +3560,7 @@ __all__ = [
     "clarify_chips",
     "clarify_slot_of",
     "clarify_topic_workflow",
+    "is_bare_balance_ask",
     "rationale_slot",
     "unfilled_slots",
     "Timings",

@@ -36,11 +36,13 @@ from hrmosaic.agent.orchestrator import (
     CLARIFY_QUESTIONS,
     CLARIFY_SLOT_ORDER,
     CLARIFY_TOPIC_WORDS,
+    NAMED_BALANCE_WORDS,
     ChatRequest,
     Orchestrator,
     clarification_question,
     clarify_slot_of,
     clarify_topic_workflow,
+    is_bare_balance_ask,
     unfilled_slots,
 )
 from hrmosaic.core.llm.stub import StubAdapter
@@ -213,6 +215,61 @@ async def test_amb_003_names_which_balance_and_whose_record(run_agent):
     assert "which balance do you mean" in answer, answer
     assert "your own record" in answer, answer
     assert CLARIFY_FALLBACK not in answer, "the fallback names nothing, which is what scored 0"
+
+
+async def test_a_bare_balance_ask_clarifies_even_when_the_router_did_not_say_so(run_agent):
+    """`amb-003` is gold `clarify` and the router stopped saying so (G5b, task 11b).
+
+    `profile_debt.json` is the routing the latest deployed drive produced for this shape — intent
+    `employee_data`, no workflow, **`needs_clarification: false`** — and the turn went on to answer
+    with the PTO balance, choosing one of several balances on the record for the reader. The script
+    still holds the act and synthesize entries that answer, so a rule that failed to fire would end
+    this turn `answered` rather than erroring: the assertion is about the decision, not the fixture.
+    """
+    row = item("amb-003")
+    response = await run_agent("profile_debt.json", ChatRequest(message=row["question"], employee_id=row["persona"]))
+
+    assert response.outcome == "clarify", response.outcome
+    assert "which balance do you mean" in response.answer, response.answer
+    assert "your own record" in response.answer, response.answer
+    assert CLARIFY_FALLBACK not in response.answer, "the fallback names nothing, which is what scored 0"
+
+
+async def test_a_question_that_names_its_balance_is_never_forced_to_clarify(run_agent):
+    """The negative half: naming the balance removes the ambiguity, so the turn answers.
+
+    Same script and the same intent as the test above — only the question changes. A rule that read
+    "balance" alone would turn every balance question in the product into a clarification.
+    """
+    response = await run_agent("profile_debt.json", ChatRequest(message="What is my PTO balance?", employee_id="E1042"))
+
+    assert response.outcome == "answered", response.outcome
+    assert "which balance do you mean" not in response.answer, response.answer
+
+
+def test_the_bare_balance_rule_reads_the_three_things_it_says_it_reads():
+    """The closed readings of `is_bare_balance_ask`, one at a time (G5b, task 11b).
+
+    The rule exists to stop a correct-by-gold clarification being answered, and it must not become a
+    second router: it fires only on an `employee_data` turn, only on a balance question, and only
+    when neither the balance nor an employee id is named.
+    """
+    bare = "Can you check the balance for me?"
+    assert is_bare_balance_ask(bare, intent="employee_data")
+    assert is_bare_balance_ask("How many do I have left?", intent="employee_data")
+    assert is_bare_balance_ask("How much is remaining?", intent="employee_data")
+
+    # Not an `employee_data` turn: a policy question that mentions a balance is not this rule's.
+    assert not is_bare_balance_ask(bare, intent="policy_qa")
+    assert not is_bare_balance_ask(bare, intent=None)
+    # Not a balance question at all.
+    assert not is_bare_balance_ask("Which office am I assigned to?", intent="employee_data")
+    assert not is_bare_balance_ask("How many days of notice do I need?", intent="employee_data")
+    # It names the employee whose record to read, so the turn is not missing that either.
+    assert not is_bare_balance_ask("Can you check the balance for E1042?", intent="employee_data")
+    # …and every word that says which balance is meant disarms it.
+    for word in NAMED_BALANCE_WORDS:
+        assert not is_bare_balance_ask(f"Can you check my {word} balance?", intent="employee_data"), word
 
 
 async def test_amb_001_still_asks_one_question_and_names_both_its_slots(run_agent):
