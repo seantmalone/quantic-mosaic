@@ -61,9 +61,12 @@ jobs:
       # is claim accuracy — and the way to fix a claim is to make it true on the run a grader opens.
       # Same pinned build, same `.gitleaks.toml`, and the invocation both committed gate logs used
       # (P17, P23); `detect` is the older spelling of what 8.30.1 also calls `gitleaks git`, and it is
-      # the one those logs recorded. Verified against this commit on 2026-09-22: **280 commits
-      # scanned, 13.22 MB, no leaks found**. `fetch-depth: 0` above is what gives it a history to walk
-      # — at the default depth of 1 it would scan one commit and report success.
+      # the one those logs recorded. Verified on 2026-09-22 against the history at **`2dee277`**:
+      # **280 commits scanned, 13.22 MB, no leaks found** — 280 is what
+      # `git rev-list --count --no-merges 2dee277` counts, and every commit after it adds to the
+      # number this step will print, so the figure belongs to that sha and not to HEAD.
+      # `fetch-depth: 0` above is what gives it a history to walk — at the default depth of 1 it
+      # would scan one commit and report success.
       - name: gitleaks over the whole history
         run: |
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \

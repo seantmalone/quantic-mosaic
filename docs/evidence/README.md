@@ -59,9 +59,22 @@ date rather than a service sha.
 | [`draft-hr-email-live-2026-09-22.txt`](draft-hr-email-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | the first live capture of `draft_hr_email`'s **two endings** — the same ask confirmed once and cancelled once — on the build carrying task 1c's fixes, so a cancelled write is answered by its receipt rather than by an evidence refusal |
 | [`grade-card-2026-09-22.md`](grade-card-2026-09-22.md) | 2026-09-22 | graded at `2dee277` | the **third** independent grade card — a 78-agent read-only grading workflow of the same shape as the second, run against the repository the first round of the grade-and-fix wave left: **band 4**, with 20 ranked gaps, led by a provenance command four documents printed that no longer held at HEAD. Its own header records what round two did about them |
 | [`grade-card-2026-09-22-gaps.json`](grade-card-2026-09-22-gaps.json) | 2026-09-22 | graded at `2dee277` | the machine twin of that card's ranked list — per gap: severity, section, why it costs marks, the evidence, a proposed fix and an effort estimate. The list round two worked through |
+| [`label-packet-seed-2026-09-22.md`](label-packet-seed-2026-09-22.md) | 2026-09-22, written 21:16:08Z | the published build `80a5a71` | **the labelling packet the blind seed session actually read**, byte for byte: the instructions, then the 8 `seed_1729_8` items with the question, the answer the deployed service served, and every evidence envelope the synthesis prompt carried, each labelled with its class. It carries **no** judge output of any kind — `scripts/gen_label_packet.py` never reads `scores` or `verdicts` — and no run file, report or changelog. The labels it produced are `evaluation/reference_labels.yaml`; the agreement it supports is `judge_agreement_rate` **1.000 (n = 8)** |
+| [`label-packet-hard-2026-09-22.md`](label-packet-hard-2026-09-22.md) | 2026-09-22, written 21:27:58Z | the published build `80a5a71` | the same for the disclosed-selection `judge_lowest_8` subset. Its header says a criterion chose the items and **withholds it**, and the items are rendered in item-id order rather than score order, so nothing in the packet separates a low-scoring item from a high-scoring one. The labels it produced are `evaluation/reference_labels_hard.yaml`; the agreement it supports is `judge_agreement_rate_hard` **0.750 (n = 8)**, with the two disagreements pointing in opposite directions |
 
 The three 2026-09-22 transcripts are the live re-capture the grade-and-fix wave's first round added;
-the two rows below them are its second round's grade card. Everything above predates the wave.
+the grade-card pair and the two labelling packets below them are its second round. Everything above
+predates the wave.
+
+**Why the packets are here.** *"The labeller was blind"* is the one claim in §13.7 that a reader
+cannot check from the outputs: the label files record a verdict and a rationale, and a packet that
+had leaked a judge score would produce exactly the same shape. So the inputs are published. Read
+them as evidence of **what was withheld** — no verdict, no per-claim verdict, no rationale, no
+groundedness score, no selection criterion in the hard packet, and no ordering hint — rather than as
+a transcript of the sessions, which is not what they are. They are copies of the files the two
+sessions were handed and have not been edited since, which is also why their answers are the
+**served** answers of `r_1790110325_baseline` and their evidence is the real envelope set of those
+turns. `design-and-evaluation.md`'s *Judge methodology* section points at these two files.
 
 **No `ux-w5/`.** The five-wave remediation's W5 was the accessibility pass (skip link, focus
 management, 44 px targets, token and painted contrast, dark-theme captures), and its evidence is the

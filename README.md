@@ -60,7 +60,7 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 3,438 tests as of
+**Tests and coverage.** `make test` runs the whole suite in one command — 3,439 tests as of
 2026-09-22, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. 299 of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
@@ -172,7 +172,7 @@ request and on `workflow_dispatch`, in **five jobs**: `lint` (`ruff check` + `ru
 then two gitleaks scans — the action's own scan of the pushed commits, and a whole-history
 `gitleaks detect --source .` run from the pinned 8.30.1 binary on **every** run, because the action
 is only unbounded on a manual dispatch and the claim is worth making literally true on the run a
-grader opens: 280 commits, 13.22 MB, no leaks, 2026-09-22), `test` (`check_facts.py`,
+grader opens: 280 commits, 13.22 MB, no leaks, read from the scan of `2dee277` on 2026-09-22 — `git rev-list --count --no-merges 2dee277` is that 280, and the history has grown since, so read the count off the run you are looking at), `test` (`check_facts.py`,
 `ingest --verify-manifest`, the whole non-browser suite against the stub provider including MCP tool
 discovery, under a **90% coverage gate**, then `pii_check.py`), `ux` (the 299 browser checks),
 `docker` (builds the image and asserts sqlite-vec loads and the templates and static assets ship),
@@ -271,14 +271,30 @@ reports moves on while the application tree does not, and the relation is a comm
 promise:
 
 ```bash
-git diff 80a5a71..HEAD -- src mcp/tools mcp/server_entrypoint.py \
-  mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt
+git diff --stat 80a5a71..HEAD -- src mcp/tools mcp/server_entrypoint.py \
+  mcp/run_stdio.sh mcp/run_http.sh corpus ':!corpus/README.md' \
+  data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt
 ```
 
-**It printed nothing at `edd99a4`, checked 2026-09-22** — run it at whatever HEAD you are reading. The
-pathspec is the application tree and nothing else: `mcp/` holds the nine committed tool schemas, the
-entrypoint and the two launch scripts, and it also holds `mcp/README.md`, which is documentation — so
-naming the directory whole would make this check print a path on a prose edit and prove nothing.
+**It printed nothing at `97177e5`, checked 2026-09-22 — and it is no longer only a claim: the suite
+runs it.** `tests/contract/test_published_run_commands.py` reads the measured build out of
+`evaluation/results/latest.json` → the run file's own `target_git_sha` and runs that exact pathspec as
+`git diff --quiet`, so a commit that moves the application tree fails a test and names the paths it
+moved instead of quietly falsifying this paragraph. Run it yourself at whatever HEAD you are reading.
+
+The pathspec is **what the deployed service answers from, and nothing else**. `src`, the MCP server's
+code and schemas, the two launch scripts, the image, the service manifest and the pinned dependencies
+are the obvious half. **`corpus` and `data/index/chunks.manifest.jsonl` are in it because they are
+baked into the image**: `Dockerfile` copies the corpus in and builds the sqlite-vec + FTS5 index from
+it at *build* time, holding the result to the committed manifest with `ingest --verify-manifest`
+(lines 41–53). A corpus edit or a re-chunk therefore changes the answers the deployed service gives
+exactly as a code change does — round 2 repaired the equipment policy and the chunk count moved 204 →
+205 — so leaving them out would have let the published run become a measurement of a different
+system. Documentation is deliberately outside it, which is why two README files are named out: `mcp/`
+holds the nine committed tool schemas, the entrypoint and the launch scripts *and* `mcp/README.md`,
+and `corpus/README.md` is the directory's map rather than one of the fourteen documents the index is
+built from — `NON_DOCUMENT_STEMS` in `src/hrmosaic/rag/parse/__init__.py` skips it by stem. Naming
+either directory whole would make this check print a path on a prose edit and prove nothing.
 `deployed.md` carries the reading, the pathspec and the ledger behind it.
 `evaluation/results/latest.json` names the run, and
 `python scripts/paste_eval_numbers.py --check` exits 0 against the design document's results

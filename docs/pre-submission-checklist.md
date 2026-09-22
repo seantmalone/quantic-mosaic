@@ -52,15 +52,30 @@ republish. The two items every card names as outside the repository — the vide
       `80a5a71`); `paste_eval_numbers.py --check` exits 0. The commits after `80a5a71` are
       documentation, evaluation tooling and tests, so the sha the live `/health` reports on the day
       will differ while the application tree does not. That is checked by running the command, not
-      by trusting this line: `git diff 80a5a71..HEAD -- src mcp/tools mcp/server_entrypoint.py
-      mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt` printed nothing at
-      `edd99a4` on 2026-09-22 — the pathspec is the shipped application, with `mcp/README.md` and
-      every other document deliberately outside it. `deployed.md` carries the `/health` reading, the
-      pathspec and the ledger.
+      by trusting this line: `git diff --stat 80a5a71..HEAD -- src mcp/tools
+      mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh corpus ':!corpus/README.md'
+      data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt` printed nothing at
+      `97177e5` on 2026-09-22, **and the suite runs that exact pathspec**
+      (`tests/contract/test_published_run_commands.py`, against the `target_git_sha` of the run
+      `latest.json` names), so this box cannot go stale without a red test. The pathspec is what the
+      image serves: the application tree plus `corpus` and `data/index/chunks.manifest.jsonl`, which
+      `Dockerfile` copies in and builds the index from at build time — with `mcp/README.md`,
+      `corpus/README.md` and every other document deliberately outside it. `deployed.md` carries the
+      `/health` reading, the pathspec and the ledger.
 - [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
       `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the
       instance is warm (open it a minute before the take).
+- [ ] **In the same `/health` body, read `llm.agent.calls_today` against `llm.agent.daily_call_cap`**
+      (1,500 as shipped) and make sure there is headroom for the take. The cap is counted from the
+      `llm_call` spans since **00:00 UTC** and resets at that minute, so a day of driving evaluation
+      runs is spent budget until midnight — the published run alone spent 266 judge calls on top of
+      everything its 30 turns spent.
+      This is on the list because **nothing warns you**: the five modelled `degradations[]` have no
+      value for an exhausted cap (`src/hrmosaic/web/api.py:2079–2099`), so `/health` still reads
+      `status: ok` with an empty `degradations[]` while the next chat turn ends
+      `error` / `daily_cap_reached`. A 200 and a green body are not the same thing as a service that
+      can answer.
 - [ ] **After the README demo-video commit** (the last commit before submitting, and the one that
       ticks `DEMO.1` / `SUB.1`): confirm its own CI run is green and that `/health.app.git_sha`
       equals `git rev-parse HEAD`. A repo-root `*.md` commit **does** run the suite and deploy —

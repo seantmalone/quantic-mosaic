@@ -298,13 +298,13 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 3,438 tests as of 2026-09-22, the count `pytest --collect-only -q` reports and the
+committed suite — 3,439 tests as of 2026-09-22, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 30-item evaluation whose real
 numbers, including the ones below target, are published with their causes — the published run
 `r_1790110325_baseline` drives all 30 of them against the deployed build `80a5a71`; security by
 secrets that exist only in environment variables, two `gitleaks` scans on every CI run (the
 action's own scan of the pushed commits, and a whole-history `gitleaks detect` from the pinned
-8.30.1 binary — 280 commits read clean on 2026-09-22), a PII check that fails the build, an entirely synthetic corpus
+8.30.1 binary — 280 commits read clean on 2026-09-22, that being the history at `2dee277`, which `git rev-list --count --no-merges 2dee277` counts; later runs scan more), a PII check that fails the build, an entirely synthetic corpus
 and dataset, and a write gate enforced at a boundary rather than in a prompt; integrity by this
 disclosure, by the fact that no third-party code was represented as my own, and by every vendored
 frontend asset carrying its version, upstream URL and full licence text in

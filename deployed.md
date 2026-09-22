@@ -94,23 +94,44 @@ made minutes after this sentence moves it. What matters is the relation, and it 
 can run rather than a claim to take on trust:
 
 ```bash
-git diff 80a5a71..HEAD -- \
-  src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt
+git diff --stat 80a5a71..HEAD -- \
+  src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh \
+  corpus ':!corpus/README.md' data/index/chunks.manifest.jsonl \
+  Dockerfile render.yaml requirements.txt
 ```
 
-**It printed nothing at `edd99a4`, checked 2026-09-22** — the commits after the measured build
+**It printed nothing at `97177e5`, checked 2026-09-22** — the commits after the measured build
 `80a5a71` are documentation, evaluation tooling and tests. Run it at whatever HEAD you have: while it
 prints nothing, a later sha on `/health` is a rebuild of the identical application tree, not a
 different build of the app the published run measured. If it ever prints a path, that path is the
 honest answer and this paragraph is the thing that is stale.
 
-**Why that pathspec and not `mcp` whole.** `mcp/` holds the nine committed tool schemas, the
-entrypoint and the two launch scripts — and `mcp/README.md`, which is a document. An earlier
+**And the suite runs it, so the paragraph cannot go stale quietly.**
+`tests/contract/test_published_run_commands.py` reads `evaluation/results/latest.json`, opens the run
+file it names, takes that file's own `target_git_sha` — `80a5a71`, not a sha typed into a document —
+and runs the pathspec above as `git diff --quiet`. A commit that moves the application tree turns that
+test red and the failure names the paths that moved. It skips only where the base sha is genuinely
+absent from the history, which CI is not: both the `lint` and the `test` jobs check out at
+`fetch-depth: 0`.
+
+**Why that pathspec and not `mcp` or `corpus` whole.** `mcp/` holds the nine committed tool schemas,
+the entrypoint and the two launch scripts — and `mcp/README.md`, which is a document. An earlier
 version of this check named the directory, so the first prose edit to that README made the command
-print a path and the sentence read as a falsified claim. The pathspec above is the shipped
-application: source, the MCP server's code and schemas, the image, the service manifest and the
-pinned dependencies. Documentation is deliberately outside it, because a documentation commit is
-exactly what this paragraph exists to account for.
+print a path and the sentence read as a falsified claim; `corpus/README.md` is the same shape — the
+directory's map, not one of the fourteen documents the index is built from, and
+`NON_DOCUMENT_STEMS` in `src/hrmosaic/rag/parse/__init__.py` skips it by stem — so it is excluded by
+name too, and by nothing broader than its name.
+
+**Why `corpus` and the chunk manifest are in it at all.** They are *baked into the image*.
+`Dockerfile` line 41 copies `corpus/` in, line 45 copies the committed
+`data/index/chunks.manifest.jsonl`, and line 53 builds the sqlite-vec + FTS5 index from that corpus at
+**build** time behind `python -m hrmosaic.rag.ingest --verify-manifest`, which refuses a build whose
+chunks do not match the manifest. So the corpus is not an input the running service reads later — it
+is compiled into the artifact the published run measured, and an edit to a policy document or a change
+of chunking moves the answers `/chat` gives exactly as a code change does. Round 2 is the proof: the
+equipment-policy repair took the live index from 204 chunks to 205 on a build change, and a pathspec
+that named only `src` would have called that the same application. Documentation stays outside,
+because a documentation commit is exactly what this paragraph exists to account for.
 
 **Rejected hosts**, and why (§14.1): Railway, Fly.io and Koyeb (no lasting free compute), Hugging
 Face Spaces (same), Google Cloud Run (the documented fallback — the *same image* runs there, but it

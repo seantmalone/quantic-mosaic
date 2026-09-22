@@ -339,7 +339,7 @@ mcp.server.mcpserver import MCPServer`), three transports from it:
 | Mode | `MCP_TRANSPORT` | Where used | Endpoint |
 |---|---|---|---|
 | **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; external clients also need a `Host` on `MCP_ALLOWED_HOSTS` (below) |
-| **stdio subprocess** | `stdio` | local dev, the demo video (a visibly separate OS process), the fast CI discovery test | `python mcp/server_entrypoint.py --stdio` |
+| **stdio subprocess** | `stdio` | local dev (`make run-stdio`, MCP Inspector) and the fast CI discovery test — a visibly separate OS process, and `make run-stdio` is where that property is demonstrated; the recorded walkthrough is driven entirely against the deployed URL, so it has no stdio beat | `python mcp/server_entrypoint.py --stdio` |
 | **remote** | any | proves requirement 7's separate-service path without paying for it | whatever `MCP_SERVER_URL` names; the session records `mcp_transport_effective = "remote"` |
 
 The mount is given an explicit `TransportSecuritySettings`: the SDK auto-enables DNS-rebinding
@@ -442,6 +442,42 @@ a write on a blocking row that is `unmet` **or** `not_stated` rather than only o
 `check_pto_balance` publishes `carryover_cap_days` and `projected_forfeit_on_31_dec`, so a
 forfeiture is printed rather than computed in prose.
 
+**A disclosed edge: an `unmet:` guard cannot tell "we checked and it failed" from "we could not
+check".** The engine has three requirement statuses — `met`, `unmet` and `not_stated` — and the
+published `unmet[]` list is careful to carry only the middle one
+(`src/hrmosaic/mcpserver/rules.py:832`). The `applies_when` vocabulary is not: a decided requirement
+is recorded as the single boolean `decision.met` (`rules.py:783`), a `not_stated` row carries
+`met: False` by construction (`rules.py:636`), and `unmet:<id>` is evaluated as `not decided[id]`
+(`rules.py:533`). So a row the engine *declined to decide* satisfies an `unmet:` guard exactly as a
+row it decided against does.
+
+What that costs, measured: `check_policy_compliance(scenario="equipment_request",
+parameters={"request_type": "refresh"})` with no `device_age_months` returns
+`verdict: insufficient_evidence` — correctly, because `equipment.refresh_eligibility` is `not_stated`
+and `unmet[]` is empty — and *also* attaches the early-refresh direct-manager approval
+(`corpus/rules.yml:433`) and its next step (`corpus/rules.yml:447`), both of which are guarded
+`unmet:equipment.refresh_eligibility` and are true statements only about a refresh known to be
+early. The reader is told the engine could not check the device's age and, in the same body, that
+their manager has to approve an early refresh. The tool's own `parameters` description
+(`mcp/tools/check_policy_compliance.schema.json:50`) names `request_type` and its three values but
+never names `device_age_months`, so a model has no catalog reason to supply the one field that would
+decide the row. The class is not new and not confined to this scenario: `request_type: "new"` with no
+`amount_usd` attaches the Director approval and the off-catalogue next step through
+`unmet:equipment.director_threshold` (`corpus/rules.yml:438`, `:443`) in exactly the same way.
+
+The **bound** is what makes this a disclosure rather than a defect list. The verdict is right, so no
+write can pass a blocking `not_stated` row — a caller refuses on the row, not on the verdict, which is
+why the effective `blocking` flag is published at all — and `agent/compliance.py` replaces any sentence
+that draws a conclusion from a `not_stated` row and says the row was unchecked in its own line. No
+item of the published run reaches it: `equipment-001` is the dataset's only equipment item,
+`check_policy_compliance` is an *allowed extra* rather than an expected tool for it
+(`evaluation/dataset.yaml:252–253`), and the answer it was served — which passes every clause, at
+groundedness 1.000 — names the refresh ticket and no approval at all. The **fix** is a three-value guard vocabulary (`unmet:` meaning
+`status == "unmet"`, with a separate `not_stated:` form) plus `device_age_months` in the schema
+description — changes to `corpus/rules.yml`, `src/` and a published tool schema, all three of which are
+inside the provenance pathspec above and therefore frozen for this commit. It is deferred to the next
+build and re-drive, deliberately, rather than made silently under a published run.
+
 ### Error semantics
 
 - **Schema violation** → the SDK returns `isError: true` carrying the validator's own text, and
@@ -541,9 +577,23 @@ was added for a failure that had been measured on a published run:
   the PTO balance. `is_bare_balance_ask` now decides it deterministically, and it is deliberately
   narrow: it fires only when the router named **no** workflow, the intent is `employee_data`, the
   message asks about a balance (the word, or *how much/many … left/remaining*), and it names neither
-  which balance (twelve closed words, `pto` through `fsa`/`hsa`) nor an employee id. A question that
-  says which balance it means — *"What is my PTO balance?"* — is never forced to clarify, and a named
+  which balance (twelve closed words, `pto` through `fsa`/`hsa`) nor an employee id, and a named
   workflow is the router's decision and is not second-guessed.
+
+  **Disclosed: "names which balance" means "uses one of twelve words".** The rule's own docstring says
+  *"a question that names its balance … is never forced to clarify"*
+  (`src/hrmosaic/agent/orchestrator.py:453–454`), and that overstates what the code does. The test is
+  substring membership in `NAMED_BALANCE_WORDS` (`orchestrator.py:418–434`), so a balance ask whose
+  noun is outside that list *is* asked which balance it means: *"How many days off do I have left?"*,
+  *"what's my holidays balance?"*, *"how much is left in my flexible spending account?"* — the last
+  one being the same account `fsa` was added for, spelled out. The **cost is one extra turn**, and the
+  bound is tight: the rule can only *add* a clarification and never remove one, it fires only on a turn
+  the router left workflow-less with intent `employee_data`, a clarification turn makes **no**
+  `tools/call` and reaches no write, and the follow-up answers the reader's real question. No dataset
+  item is affected — `amb-003` is the item this rule exists for and it clarifies as its gold asks, and
+  `clarification_accuracy` is 1.000 (n = 3) on the published run. The fix is a wider list, or
+  re-deciding this in the router where the reader's own noun can be read rather than matched;
+  `orchestrator.py` is inside the provenance pathspec above, so it waits for the next build.
 
 All three read the message as **data**, exactly as the guardrails do: the only things taken from it
 are which of three closed workflow names its topic words point at, and three booleans. The rules can
@@ -750,7 +800,7 @@ page 8, each with its own unit suite:
 
 | id | Rule | Trigger | Action |
 |---|---|---|---|
-| **G1** | `evidence_gate` | `max_dense_score` over the fused candidate set < `MIN_EVIDENCE_SCORE` (0.60), **or** fewer than two chunks ≥ `MIN_SUPPORT_SCORE` (0.45) | **Refuse and redirect**, naming what the corpus *does* cover, read from the real document list. **No `tools/call` is made.** Never answer from parametric knowledge. **One exemption (G5):** on a turn whose confirmed write has already been performed the receipt is the evidence, so the turn is answered — G1 still runs once and still records its measured figures, with the reason prefixed `PERFORMED_WRITE` |
+| **G1** | `evidence_gate` | `max_dense_score` over the fused candidate set < `MIN_EVIDENCE_SCORE` (0.60), **or** fewer than two chunks ≥ `MIN_SUPPORT_SCORE` (0.45). **At the shipped defaults the second clause is a second line of defence rather than an independent threshold:** `search_policy_documents` applies `MIN_SUPPORT_SCORE` itself when `min_dense_score` is omitted — and the agent always omits it — so the set the gate is handed is *already* floored at 0.45 and the clause reduces to *fewer than two candidates at all*. It becomes a threshold in its own right only when a call supplies a lower `min_dense_score`, which is a published parameter a model may set. Both clauses are still measured and recorded separately on the span | **Refuse and redirect**, naming what the corpus *does* cover, read from the real document list. **No `tools/call` is made.** Never answer from parametric knowledge. **One exemption (G5):** on a turn whose confirmed write has already been performed the receipt is the evidence, so the turn is answered — G1 still runs once and still records its measured figures, with the reason prefixed `PERFORMED_WRITE` |
 | **G2** | `citation_resolvability` | a cited `chunk_id` is unknown, its displayed metadata mismatches the real chunk, the snippet is not a whitespace-normalised substring of the chunk text, or the chunk is quarantined | Strip the citation; if a `policy_fact` block loses all citations, drop the block; if all blocks drop, refuse. Resolution reads the **real index**, not the retrieved set |
 | **G3** | `fact_vs_recommendation` | a `policy_fact` block with zero citations | Relabel it `recommendation`; the UI renders the two distinctly |
 | **G4** | `injection_shield` | imperative-to-assistant patterns only | Mark the chunk `quarantined`: shown with a warning banner, **uncitable**, matched pattern logged |
@@ -939,7 +989,7 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, then **two** secret scans: `gitleaks-action@v2`'s own scan of the **pushed commits** (it is unbounded only on a dispatch), and an explicit `gitleaks detect --source . --config .gitleaks.toml` over the **whole history on every run** — same pinned 8.30.1 build, reading the full clone `fetch-depth: 0` gives it |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole non-browser suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact. `pyproject.toml`'s `addopts` carries `-m "not ux"`, so this job runs **3,139** of the 3,438 tests collected as of 2026-09-22; the other 299 are the browser checks the `ux` job runs |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole non-browser suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact. `pyproject.toml`'s `addopts` carries `-m "not ux"`, so this job runs **3,140** of the 3,439 tests collected as of 2026-09-22; the other 299 are the browser checks the `ux` job runs |
 | `ux` | the browser suite — `pytest -q -m ux`, the **299** real-browser checks against the rendered pages in a cached chromium at the three audited viewports, plus a dark-mode and a reduced-motion context. It is the only job needing a browser binary. It still carries **no `needs:` of its own** — nothing has to finish before a browser can start — but since G5b **`deploy` needs it** |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker, ux]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
@@ -1448,6 +1498,18 @@ sessions read no run file, no `REPORT.md`, no `CHANGELOG.md`, no phase report, a
 labels. Both label files record `labelled_on: 2026-09-22` against the published run
 `r_1790110325_baseline`, deployed commit `80a5a71`, 30 items.
 
+**And both packets are committed, so the blinding is inspectable rather than asserted.**
+[`docs/evidence/label-packet-seed-2026-09-22.md`](docs/evidence/label-packet-seed-2026-09-22.md) and
+[`docs/evidence/label-packet-hard-2026-09-22.md`](docs/evidence/label-packet-hard-2026-09-22.md) are
+the two files the sessions were handed, byte for byte and unedited since. *"The labeller was blind"*
+is the one claim in this section a reader cannot check from the outputs — a leaked score would leave
+labels of exactly the same shape — so the inputs are published and the claim is checkable in the
+direction that matters: what is **absent**. There is no verdict, no per-claim verdict, no rationale
+and no groundedness score anywhere in either file; the hard packet's header says a criterion chose its
+eight items and withholds it, and renders them in item-id order rather than score order. What is
+present is the question, the served answer and the real evidence envelopes with their classes. Read
+them as the packets they are, not as transcripts of the sessions, which they are not.
+
 **Two subsets, published side by side and never merged.**
 
 | Subset | Rate | n | Selection | Labelling |
@@ -1779,6 +1841,40 @@ decides the `passed` flag — not off an earlier one:
     span and nothing added to the write ledger. The fix is a dedicated `TurnOutcome` value carried
     through the store, the `/chat` contract and the dashboard's labels — a schema change, and
     deliberately not made in this wave.
+13. **Also not a run figure: the rules engine reads "could not check" as "checked and failed" when an
+    `applies_when` guard asks.** The three statuses are honoured everywhere a reader sees them — the
+    published `unmet[]` carries only real `unmet` rows (`src/hrmosaic/mcpserver/rules.py:832`) — but the
+    guard vocabulary is a boolean: `decided[id]` is `decision.met` (`rules.py:783`), a `not_stated` row
+    is `met: False` (`rules.py:636`), and `unmet:<id>` is `not decided[id]` (`rules.py:533`). So
+    `check_policy_compliance(scenario="equipment_request", parameters={"request_type": "refresh"})`
+    with no `device_age_months` returns `verdict: insufficient_evidence` — right, and `unmet[]` is
+    empty — while still attaching the **early**-refresh direct-manager approval
+    (`corpus/rules.yml:433`) and its next step (`corpus/rules.yml:447`), which are true only of a
+    refresh known to be early. The tool's `parameters` description
+    (`mcp/tools/check_policy_compliance.schema.json:50`) names `request_type` and its three values and
+    never names `device_age_months`, so nothing in the catalog tells a model to send the field that
+    would decide the row. The class pre-exists on `equipment.director_threshold`, where
+    `request_type: "new"` without `amount_usd` attaches the Director approval the same way
+    (`corpus/rules.yml:438`, `:443`). Bounded: the verdict is correct, a blocking `not_stated` row still
+    refuses a write, `agent/compliance.py` replaces any sentence that concludes from such a row and says
+    in its own line that the row was unchecked, and no item of the published run reaches it. The fix is
+    a three-value guard vocabulary plus one schema description — `corpus/rules.yml`, `src/` and a
+    published tool schema, all inside the provenance pathspec this document prints, so it is deferred to
+    the next build and re-drive rather than slipped in under a published run. Written out in full under
+    *The nine tools* above.
+14. **The bare-balance clarification rule keys on a twelve-word list, so an unlisted noun buys one
+    extra turn.** `is_bare_balance_ask` decides `amb-003` deterministically and its docstring claims a
+    question that names its balance is *"never forced to clarify"*
+    (`src/hrmosaic/agent/orchestrator.py:453–454`). What it actually tests is substring membership in
+    `NAMED_BALANCE_WORDS` (`orchestrator.py:418–434`), so *"How many days off do I have left?"*,
+    *"what's my holidays balance?"* and *"how much is left in my flexible spending account?"* are each
+    asked which balance the reader means — the last of them naming, in words, the account `fsa` was
+    added to the list for. The cost is one turn and nothing else: the rule can only add a
+    clarification, a clarification turn makes no `tools/call` and can reach no write, and the follow-up
+    answers the real question. No dataset item is affected and `clarification_accuracy` is 1.000
+    (n = 3) on the published run. The docstring is the part that is wrong today; the fix is a wider
+    list, or reading the noun in the router instead of matching it, and `orchestrator.py` is inside the
+    frozen pathspec. Written out in full under *Clarification* above.
 
 **Limitations that were on this list and are now closed, with the wave that closed them.** The
 **confirmation-card miss** — `unsafe-001` answering where the turn should have stopped at the card,

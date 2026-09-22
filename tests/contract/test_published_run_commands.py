@@ -16,6 +16,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPARISON = REPO_ROOT / "evaluation" / "results" / "comparison.json"
 
@@ -173,3 +175,120 @@ def test_docs_evidence_holds_the_capturable_screenshots_and_nothing_unnamed():
     committed = {path.name for path in EVIDENCE_DIR.glob("*.png")}
     assert committed <= EXPECTED_SCREENSHOTS, sorted(committed - EXPECTED_SCREENSHOTS)
     assert CAPTURABLE_SCREENSHOTS <= committed, sorted(CAPTURABLE_SCREENSHOTS - committed)
+
+
+# --------------------------------------------------------------------------------------
+# `git diff 80a5a71..HEAD -- <the application tree>` — the provenance command five documents print
+# --------------------------------------------------------------------------------------
+
+#: The pathspec of the published provenance command, as **one** definition. Five documents print it
+#: (README, `deployed.md`, `docs/pre-submission-checklist.md`, `docs/requirements-traceability.md`
+#: and the `CHANGELOG.md` entry for the wave), the test below runs it, and neither can drift from the
+#: other because both read this tuple.
+#:
+#: What is in it is *what the image serves*. `src`, the MCP server's code and schemas, the two launch
+#: scripts, the image, the service manifest and the pinned dependencies are the obvious half.
+#: `corpus` and `data/index/chunks.manifest.jsonl` are the half that is easy to forget and matters
+#: just as much: `Dockerfile` copies the corpus into the image and builds the sqlite-vec + FTS5 index
+#: from it at **build** time behind `ingest --verify-manifest`, so a policy edit or a re-chunk changes
+#: the answers the deployed service gives exactly as a code change does — this wave's own
+#: equipment-policy repair moved the live index from 204 chunks to 205.
+#:
+#: What is **out** of it is documentation, by name and by nothing broader: `mcp/README.md` and
+#: `corpus/README.md`. Naming either directory whole would make the published command print a path on
+#: the first prose edit — which is exactly how the round-1 version of this command falsified itself,
+#: and `corpus/README.md` had already moved by the time round 2 widened the pathspec. `corpus/README.md`
+#: is the directory's map, not one of the fourteen documents the index is built from:
+#: `NON_DOCUMENT_STEMS` in `src/hrmosaic/rag/parse/__init__.py` skips it by stem.
+APPLICATION_PATHSPEC = (
+    "src",
+    "mcp/tools",
+    "mcp/server_entrypoint.py",
+    "mcp/run_stdio.sh",
+    "mcp/run_http.sh",
+    "corpus",
+    ":!corpus/README.md",
+    "data/index/chunks.manifest.jsonl",
+    "Dockerfile",
+    "render.yaml",
+    "requirements.txt",
+)
+
+#: The single-line form a reader copies. Quoted where a shell needs it — `:!…` is a git pathspec, not
+#: a glob, and an unquoted `!` is history expansion in an interactive shell.
+PUBLISHED_PATHSPEC_LINE = "git diff --stat 80a5a71..HEAD -- " + " ".join(
+    f"'{entry}'" if entry.startswith(":") else entry for entry in APPLICATION_PATHSPEC
+)
+
+#: Every document that prints that command. A document may wrap it over several lines, with or
+#: without a trailing `\\`, so the comparison is against whitespace-normalised text.
+PROVENANCE_DOCUMENTS = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "deployed.md",
+    REPO_ROOT / "docs" / "pre-submission-checklist.md",
+    REPO_ROOT / "docs" / "requirements-traceability.md",
+    REPO_ROOT / "CHANGELOG.md",
+)
+
+LATEST = REPO_ROOT / "evaluation" / "results" / "latest.json"
+
+
+def test_the_application_tree_has_not_moved_since_the_measured_build():
+    """The provenance command is executed, not asserted (G5b, final round).
+
+    Five documents tell a reader that the commits after the published run's build are documentation,
+    evaluation tooling and tests — that `/health`'s sha moves while the application tree does not —
+    and print a command to prove it. A claim like that expires silently, and the round-1 version of
+    it *had* expired by the time a grade card read it. So the suite runs the command.
+
+    The base is not a sha typed into a document: it is `target_git_sha` from the run file
+    `evaluation/results/latest.json` points at — the sha the service's own `/health` reported while
+    that run was being driven. The pathspec is `APPLICATION_PATHSPEC`, which the same documents print.
+    If the two ever disagree, the second assertion here is the one that fails.
+
+    The skip is earned rather than assumed, the same way `test_docs_completeness.py`'s commit census
+    earns its own: a checkout that cannot resolve the base sha has to *prove* it could not hold it
+    (no git at all, or a shallow clone) or this fails. CI is not that checkout — both the `lint` and
+    the `test` job in `ci.yml` check out at `fetch-depth: 0` — so in CI this test always runs.
+    """
+    run_id = json.loads(LATEST.read_text(encoding="utf-8"))["run_id"]
+    run_file = REPO_ROOT / "evaluation" / "results" / f"{run_id}.json"
+    base = json.loads(run_file.read_text(encoding="utf-8"))["target_git_sha"]
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+
+    try:
+        resolved = git("cat-file", "-e", f"{base}^{{commit}}").returncode == 0
+    except OSError:  # pragma: no cover - no git binary on this machine
+        resolved = False
+        shallow = "true"
+    else:
+        shallow = git("rev-parse", "--is-shallow-repository").stdout.strip()
+    if not resolved:
+        assert shallow == "true", (
+            f"the published run {run_id} records `target_git_sha` {base}, and this full clone has no "
+            "such commit. Either the run file names a build this history does not have or the history "
+            "was rewritten; a skip would hide both."
+        )
+        pytest.skip(f"git cannot resolve {base}; the application tree cannot be compared in this checkout")
+
+    changed = git("diff", "--name-only", base, "HEAD", "--", *APPLICATION_PATHSPEC)
+    assert changed.returncode == 0, changed.stderr
+    moved = changed.stdout.split()
+    assert git("diff", "--quiet", base, "HEAD", "--", *APPLICATION_PATHSPEC).returncode == 0, (
+        f"the application tree has moved since the measured build {base[:7]}, so the published run "
+        f"{run_id} no longer measures what this repository would deploy. Changed: {moved}. Either "
+        "re-drive the run against the new build and repoint `latest.json`, or stop printing "
+        f"`{PUBLISHED_PATHSPEC_LINE}` as evidence that nothing changed."
+    )
+
+    stale = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in PROVENANCE_DOCUMENTS
+        if PUBLISHED_PATHSPEC_LINE not in " ".join(path.read_text(encoding="utf-8").replace("\\\n", " ").split())
+    ]
+    assert stale == [], (
+        f"these documents no longer print the pathspec this test runs (`{PUBLISHED_PATHSPEC_LINE}`), "
+        f"so the command a reader copies is not the command the suite executes: {stale}"
+    )
