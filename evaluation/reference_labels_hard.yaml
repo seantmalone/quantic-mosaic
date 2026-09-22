@@ -27,22 +27,28 @@ protocol:
     vendor as the agent (Anthropic claude-haiku-4-5), a different model, in an independent session
     that read only the packet — and a different vendor and family from the judge (Google
     gemini-3.5-flash-lite)
-  labelled_on: "2026-09-16"
+  labelled_on: "2026-09-22"
   blinding: >-
-    Authored on 2026-09-16 for the final published run `r_1789555212_baseline` (deployed commit
-    bd4ac93) in a fresh session that read only the labelling packet: for each item, the question,
-    the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
-    each labelled with its class. The packet carried no judge output of any kind — no verdict, no
-    per-claim verdict, no rationale, no groundedness score — and it did not disclose the selection
-    criterion or the ordering, so the labeller could not tell a low-scoring item from a high-scoring
-    one. The session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first
-    subset's labels either.
+    Authored on 2026-09-22 against the final published run `r_1790074972_baseline` (deployed commit
+    8a89310). That is the only run in this protocol, and the packet carried that run's own served
+    answers: for each item, the question, the answer `r_1790074972_baseline` served, and — verbatim
+    — every evidence item the synthesis prompt carried for that turn, each labelled with its class.
+    The session was fresh and read only that packet. This subset can only be chosen from a judged
+    run, so the packet was built after `r_1790074972_baseline` was judged; it still carried no judge
+    output of any kind — no verdict, no per-claim verdict, no rationale, no groundedness score —
+    because its builder (`scripts/gen_label_packet.py`) never reads `scores` or `verdicts`. It also
+    disclosed neither the selection criterion nor the score ordering: the items are rendered in
+    item-id order, so the labeller could not tell a low-scoring item from a high-scoring one. The
+    session read no run file, no REPORT.md, no CHANGELOG, no phase report and not the first subset's
+    labels either.
   selection: >-
     `evaluation.schema.judge_lowest_subset()` — the 8 items whose gold behaviour is `answer` with
     the lowest judge groundedness in the judged baseline, ties broken by item id. Selected by judge
-    score, therefore NOT blind in selection; the labelling is blind. Over the final run the
-    selection overlaps the seed subset on five of eight items because the judge scored 25 of 26
-    answered items 1.0.
+    score, therefore NOT blind in selection; the labelling is blind. Over `r_1790074972_baseline`
+    the selection overlaps the seed subset on four of eight items — `benefits-001`, `benefits-002`,
+    `conduct-001`, `expenses-001` — because the judge scored 14 of the 18 answered items 1.0: only
+    four items sit below 1.0, so the other four places are filled by id-ordered ties at the ceiling,
+    and those are exactly the four the seed draw also happened to take.
   seed: null
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
@@ -59,73 +65,56 @@ labels:
   - item_id: benefits-001
     verdict: grounded
     rationale: >-
-      The 90-day medical/dental/vision waiting period and the "coverage begins on the day the
-      waiting period ends, not on the first of the following month" wording are verbatim in
-      c_7566e6e377678fcd, which also states the 401(k) has no waiting period and contributions may
-      start from the first payroll run (repeated in c_5892cd18e5f9cae8). The next steps are
-      supported too: week-one benefits enrolment by c_5892cd18e5f9cae8 and
-      benefits@mosaicrobotics.example by c_0df5d11cd585014f. No claim goes beyond the passages.
+      The 90-day medical/dental/vision waiting period and "coverage begins the day the waiting period
+      ends" come verbatim from c_7566e6e377678fcd, the no-waiting-period 401(k) from the same chunk and
+      c_5892cd18e5f9cae8, life/AD&D start from c_88f9cf68022eeaea, and the MosaicOne Benefits digital-card
+      next step from c_76cc7adc6c535185.
   - item_id: benefits-002
     verdict: grounded
     rationale: >-
-      The dated claim — waiting period ends 13 November 2026 — comes straight from the employee
-      record lookup_benefits_status#1 ("waiting_period_ends": "2026-11-13"), which the packet
-      counts as supporting evidence. The 90-day rule, the coverage start date, the 30-day election
-      window and the employee-only default enrolment are all stated in c_7566e6e377678fcd, and the
-      13 December 2026 deadline is simple arithmetic on those two shown values (13 Nov + 30 days).
+      The 13 November 2026 end date is the employee's own record (lookup_benefits_status#1,
+      waiting_period_ends 2026-11-13), and the "enroll by 13 December" deadline is exact arithmetic on
+      that date plus the 30-day election window stated in c_7566e6e377678fcd; the benefits@ address is in
+      c_0df5d11cd585014f.
   - item_id: conduct-001
     verdict: grounded
     rationale: >-
-      Acknowledgement within 2 business days and the 30-calendar-day investigation target are
-      verbatim in c_faa7e3e074e0f281; the Severity 1 response time of 4 business hours is verbatim
-      in c_8befbf9c1eefd50e; and "as fast as the facts allow" as the Severity 1 target resolution
-      time is verbatim in c_8e5b6fa6417ebbd2. The Employee Relations routing in the next steps is
-      supported by c_b1b9f056ae7f2f27.
+      2-business-day acknowledgement and the 30-calendar-day investigation target are verbatim in
+      c_faa7e3e074e0f281, the 4-business-hour Severity 1 response in c_8befbf9c1eefd50e, the definition of
+      "response" in c_8e5b6fa6417ebbd2, and the Employee Relations routing in c_b1b9f056ae7f2f27.
   - item_id: equipment-001
-    verdict: grounded
+    verdict: not_grounded
     rationale: >-
-      The 36-month refresh cycle, the automatic ticket 60 days before the anniversary and the
-      employee-chosen swap are verbatim in c_cab81dfc8bd2848f; the 5-business-day return window,
-      the prepaid tracked label for remote employees and the local IT desk hand-off are verbatim in
-      c_b19a2fde3708fa93. "An early laptop refresh requires direct manager approval" is the exact
-      row in the approval-matrix table c_a5ea4c3b2af3bfd1. The answer arguably applies the wrong
-      row for a USD 1,200 purchase (c_65179b00c1b6abd2 puts requests above USD 500 at director plus
-      manager), but that is a completeness/selection issue — every statement it makes is present in
-      the shown evidence, so it is grounded.
+      The claim that a USD 1,200 laptop refresh "requires approval from both your direct manager and your
+      director" is not supported for a refresh: the approval matrix in c_a5ea4c3b2af3bfd1 assigns a laptop
+      refresh to the direct manager only (no second approver), and c_cab81dfc8bd2848f describes the 36-month
+      refresh as an automatic MosaicOne ticket, so the USD 500 catalogue threshold in c_65179b00c1b6abd2
+      does not establish the asserted director sign-off.
   - item_id: expenses-001
     verdict: grounded
     rationale: >-
-      The USD 750 per plan year home-office furniture allowance and the illustrative list (desk,
-      chair, lamp, footrest, adjustable monitor arm, acoustic treatment, small filing cabinet) are
-      verbatim in c_c0b4b1d7c6436137. The answer makes no other claim, so nothing is unsupported.
+      The USD 750 annual home-office cap, the itemised example list, the 1 January reset with no carryover,
+      and the exclusion of laptops/monitors/docks/peripherals are all verbatim in c_c0b4b1d7c6436137;
+      MosaicOne Expenses is named in c_9ce35f1b68d5c0f8 and the itemised-receipt step in c_98e436172ce912d3.
   - item_id: expenses-002
     verdict: grounded
     rationale: >-
-      The 14-calendar-day flight booking rule and the manager/above-USD-10,000 director approval
-      line are in c_337bde2666993ccd; the USD 250/USD 350 lodging caps in c_33b92d987d9bf8c6; the
-      USD 25 itemised-receipt threshold in c_98e436172ce912d3; and the USD 2,501-10,000 director
-      plus Finance business partner tier in c_02dcd1cfcb3356c6 and c_2731d35ac4b68304. The
-      employee-specific lines are backed by check_policy_compliance#1 (expense.manager_limit:
-      amount 3000 vs policy 2500; expense.submission_window not_stated because claim_age_days was
-      not supplied) and the manager name Dana by its approvers block and lookup_employee_profile#1.
-  - item_id: remote-004
+      The 14-calendar-day booking rule and per-trip manager approval are in c_337bde2666993ccd, the USD 250
+      lodging cap in c_33b92d987d9bf8c6, the USD 25 receipt threshold in c_98e436172ce912d3, and the
+      USD 2,501-10,000 director plus Finance business partner routing in c_02dcd1cfcb3356c6; "Dana, your
+      direct manager and director" and the unverified claim-age caveat both come from
+      check_policy_compliance#1 and lookup_employee_profile#1.
+  - item_id: pto-002
     verdict: grounded
     rationale: >-
-      Tenure of 3 years 9 months against the 12-month minimum comes from lookup_employee_profile#1
-      and c_6577bf6f392890bf; the 42-day count for 3 November to 14 December is stated explicitly
-      in c_864fb910f46475a7, Germany's approved status in c_b189d36f26fb7c60, and the
-      director-plus-Tax-&-Legal requirement with 21 calendar days' notice in c_c502ccd2ba5028f5,
-      c_64fbd63786de81d4 and c_0d2c84e4df38b6a0. The 48 calendar days' notice, the
-      no-contract-signing rule and the unverified device check are all requirement entries in
-      check_policy_compliance#1; "typically takes 21 days" is entailed by c_b189d36f26fb7c60's
-      "typically takes 30 calendar days rather than 21" for unlisted destinations; the
-      device/VPN and 5-business-day IT Security notice are in c_57b2015388bbf7d4.
+      The 13.5 remaining days is the employee's own record (check_pto_balance#1, remaining_days 13.5 as of
+      2026-09-01), the 5/15-business-day notice rules and manager waiver are verbatim in c_16186f87d12c1302,
+      the length-based approval tiers in c_9948839107acfaaf, and Dana as direct manager in
+      lookup_employee_profile#1.
   - item_id: travel-001
     verdict: grounded
     rationale: >-
-      Every figure and caveat — USD 250 standard cap before taxes and fees, room rate only with
-      occupancy taxes/resort fees/service charges reimbursable above it, the USD 350 cap for
-      Boston, New York, San Francisco, London, Zurich and Tokyo plus conference-inflated markets,
-      and the "book the most reasonable available option and note the reason, no pre-approval" rule
-      — is verbatim in c_33b92d987d9bf8c6. Booking through MosaicOne Travel is supported by
-      c_337bde2666993ccd.
+      Every statement - the USD 250 standard cap before taxes and fees, taxes/fees reimbursable above it,
+      the USD 350 high-cost-market cap applied automatically by MosaicOne Travel, and the book-and-note
+      exception with no pre-approval - is verbatim in c_33b92d987d9bf8c6, with MosaicOne Travel booking also
+      in c_337bde2666993ccd.

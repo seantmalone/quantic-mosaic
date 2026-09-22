@@ -1,20 +1,20 @@
 {
- "generated_at": 1790069659682188,
+ "generated_at": 1790077076972793,
  "target": "deployed",
  "dataset_sha": "e83cc9fc4833e548a4c14ddab5e1701dcc228881f44c04b4a1a882540b12052d",
- "target_git_sha": "e85305b6a764a295a00ef9579c9499623751874e",
+ "target_git_sha": "8a8931076bac9d271f8a03da7ecfa0d3a723d811",
  "variants": [
   {
    "variant": "baseline",
-   "run_id": "r_1790067656_baseline",
+   "run_id": "r_1790074972_baseline",
    "judged": true,
    "judge_status": "judged",
    "metrics": {
-    "groundedness_mean": 0.9745370370370371,
-    "citation_accuracy_mean": 0.8707288374924034,
+    "groundedness_mean": 0.9633267195767196,
+    "citation_accuracy_mean": 0.8752822022705623,
     "cit_resolve_mean": 1.0,
-    "doc_recall_mean": 0.9605263157894737,
-    "tool_selection_accuracy": 0.9877551020408164,
+    "doc_recall_mean": 0.9473684210526315,
+    "tool_selection_accuracy": 0.9928571428571429,
     "arg_correctness_rate": 1.0,
     "workflow_completion": 0.9642857142857143,
     "over_refusal_rate": 0.0,
@@ -24,7 +24,7 @@
   },
   {
    "variant": "dense_only_k2",
-   "run_id": "r_1790068135_dense_only_k2",
+   "run_id": "r_1790075436_dense_only_k2",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
@@ -42,8 +42,8 @@
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.0,
-    "doc_recall_mean": 0.0132,
-    "tool_selection_accuracy": 0.0,
+    "doc_recall_mean": 0.0263,
+    "tool_selection_accuracy": -0.0051,
     "arg_correctness_rate": 0.0,
     "workflow_completion": 0.0,
     "over_refusal_rate": 0.0,
@@ -52,7 +52,7 @@
   },
   {
    "variant": "no_structured_tools",
-   "run_id": "r_1790068520_no_structured_tools",
+   "run_id": "r_1790075830_no_structured_tools",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
@@ -60,22 +60,22 @@
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.9642857142857143,
     "doc_recall_mean": 0.9868421052631579,
-    "tool_selection_accuracy": 0.9239795918367346,
+    "tool_selection_accuracy": 0.9418367346938775,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.7857142857142857,
+    "workflow_completion": 0.8214285714285714,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.75
+    "strict_pass_rate": 0.7857142857142857
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": -0.0357,
-    "doc_recall_mean": 0.0263,
-    "tool_selection_accuracy": -0.0638,
+    "doc_recall_mean": 0.0395,
+    "tool_selection_accuracy": -0.051,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": -0.1786,
+    "workflow_completion": -0.1429,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": -0.1429
+    "strict_pass_rate": -0.1071
    }
   }
  ],
@@ -83,11 +83,17 @@
   "supported": false,
   "reason": null,
   "baseline": 0.9643,
-  "no_structured_tools": 0.7857,
-  "delta": -0.1786,
+  "no_structured_tools": 0.8214,
+  "delta": -0.1429,
   "threshold": 0.25
  },
  "flips": [
+  {
+   "item_id": "expenses-002",
+   "variant": "dense_only_k2",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
   {
    "item_id": "equipment-001",
    "variant": "dense_only_k2",
@@ -95,7 +101,19 @@
    "variant_passed": true
   },
   {
+   "item_id": "remote-004",
+   "variant": "dense_only_k2",
+   "baseline_passed": true,
+   "variant_passed": false
+  },
+  {
    "item_id": "remote-002",
+   "variant": "no_structured_tools",
+   "baseline_passed": false,
+   "variant_passed": true
+  },
+  {
+   "item_id": "expenses-002",
    "variant": "no_structured_tools",
    "baseline_passed": false,
    "variant_passed": true
@@ -125,13 +143,13 @@
    "variant_passed": false
   },
   {
-   "item_id": "benefits-002",
+   "item_id": "remote-004",
    "variant": "no_structured_tools",
    "baseline_passed": true,
    "variant_passed": false
   },
   {
-   "item_id": "amb-003",
+   "item_id": "benefits-002",
    "variant": "no_structured_tools",
    "baseline_passed": true,
    "variant_passed": false

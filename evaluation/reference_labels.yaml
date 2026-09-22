@@ -23,22 +23,27 @@ protocol:
     vendor as the agent (Anthropic claude-haiku-4-5), a different model, in an independent session
     that read only the packet — and a different vendor and family from the judge (Google
     gemini-3.5-flash-lite)
-  labelled_on: "2026-09-16"
+  labelled_on: "2026-09-22"
   blinding: >-
-    Authored on 2026-09-16 for the final published run `r_1789555212_baseline` (deployed commit bd4ac93) in a fresh session that read only the labelling packet: for each item, the question,
-    the answer the agent served, and — verbatim — every evidence item the synthesis prompt carried,
-    each labelled with its class. The packet was built from run `r_1789166880_baseline` (the final published run, deployed
-    commit 34717b5) at 22:57:33Z on 2026-09-11 while it was still `judge_status: pending`, so no judge output existed anywhere upstream of it: no verdict, no
-    per-claim verdict, no rationale, no groundedness score. The session read no run file, no
-    REPORT.md, no CHANGELOG and no phase report.
+    Authored on 2026-09-22 against the final published run `r_1790074972_baseline` (deployed commit
+    8a89310). That is the only run in this protocol, and the packet carried that run's own served
+    answers: for each item, the question, the answer `r_1790074972_baseline` served, and — verbatim
+    — every evidence item the synthesis prompt carried for that turn, each labelled with its class.
+    The session was fresh and read only that packet. The packet is judge-free by construction of its
+    builder: `scripts/gen_label_packet.py` reads the dataset, the run file's `item_id` → `turn_id`
+    mapping and served answer, and the trace store's spans, and it never reads `scores` or
+    `verdicts` — so no verdict, no per-claim verdict, no rationale and no groundedness score was in
+    front of the labeller. The judged run file was not written until 04:37:44Z on 2026-09-22, after
+    this packet was built at 04:25:16Z. The session read no run file, no REPORT.md, no CHANGELOG and
+    no phase report.
   selection: >-
     `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer` — a
     refusal, a clarification and an escalation carry no policy claims to ground.
   seed: 1729
   subset: seed_1729_8
-  # The sample was fixed by SEED before any judge verdict existed, so no judge output — not even
-  # the ordering of one — informed which items are in it. The hard-case subset of
-  # `reference_labels_hard.yaml` is the opposite and says so.
+  # The sample is a seeded draw over the gold-`answer` population and consumes no judge output at
+  # all, so no judge output — not even the ordering of one — informed which items are in it. The
+  # hard-case subset of `reference_labels_hard.yaml` is the opposite and says so.
   selection_disclosed: false
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
@@ -53,68 +58,55 @@ labels:
   - item_id: benefits-001
     verdict: grounded
     rationale: >-
-      The 90-day medical/dental/vision waiting period and the "coverage begins on the day the waiting
-      period ends, not the first of the following month" rule are stated verbatim in c_7566e6e377678fcd,
-      which also states the 401(k) has no waiting period and contributions may start from the first
-      payroll run (repeated in c_5892cd18e5f9cae8). The next steps are supported too: week-one benefits
-      enrolment in MosaicOne comes from c_5892cd18e5f9cae8 and benefits@mosaicrobotics.example from
-      c_0df5d11cd585014f. No claim in the answer goes beyond the shown passages.
+      The 90-day waiting period, coverage starting the day it ends, the 401(k) having no waiting
+      period and life/AD&D beginning with the medical waiting period all appear in c_7566e6e377678fcd
+      and c_88f9cf68022eeaea; the next steps (enrol in week one, digital cards in MosaicOne Benefits)
+      come from c_5892cd18e5f9cae8 and c_76cc7adc6c535185.
   - item_id: benefits-002
     verdict: grounded
     rationale: >-
-      The specific date "13 November 2026" is the employee's own record value
-      (lookup_benefits_status#1, waiting_period_ends 2026-11-13), so it is grounded rather than invented.
-      The 90-day period, the coverage-start rule, the 30-day election window and the employee-only default
-      enrolment are all stated in c_7566e6e377678fcd, and the 13 December 2026 election deadline is
-      arithmetic on the shown values (13 Nov 2026 + 30 days). Nothing in the answer contradicts the
-      structured record.
+      The 13 November 2026 end date is taken directly from lookup_benefits_status#1
+      ("waiting_period_ends": "2026-11-13"), and the 30-day election window plus default
+      employee-only enrolment come from c_7566e6e377678fcd, making the 13 December deadline correct
+      arithmetic on shown operands; benefits@mosaicrobotics.example appears in c_0df5d11cd585014f.
   - item_id: conduct-001
     verdict: grounded
     rationale: >-
-      The 2-business-day acknowledgement and the 30-calendar-day investigation target are stated verbatim
-      in c_faa7e3e074e0f281; the Severity 1 response target of 4 business hours is stated in
-      c_8befbf9c1eefd50e; and "as fast as the facts allow" as the Severity 1 target resolution time is
-      stated in c_8e5b6fa6417ebbd2. The routing of harassment, discrimination and retaliation reports to
-      Employee Relations is supported by c_b1b9f056ae7f2f27. Every number and target in the answer matches
-      the evidence exactly.
+      The 2-business-day acknowledgement and 30-calendar-day investigation target are verbatim in
+      c_faa7e3e074e0f281, the 4-business-hour Severity 1 response in c_8befbf9c1eefd50e, the
+      definition of "response" in c_8e5b6fa6417ebbd2, and the Employee Relations routing in
+      c_b1b9f056ae7f2f27.
   - item_id: expenses-001
     verdict: grounded
     rationale: >-
-      c_c0b4b1d7c6436137 states the USD 750 per-plan-year home office furniture and accessories allowance
-      and lists exactly the example items the answer repeats (desk, chair, lamp, footrest, adjustable
-      monitor arm, acoustic treatment, small filing cabinet). The answer adds no cap, exclusion or
-      condition beyond that passage, and does not conflict with the USD 750 HSA figure in
-      c_093305ba196720bd.
+      The USD 750 annual home-office allowance, the itemised examples, the 1 January reset with no
+      carry-over, and the exclusion of laptops/monitors/docks are all verbatim in c_c0b4b1d7c6436137;
+      MosaicOne Expenses is named in c_9ce35f1b68d5c0f8 and the itemised-receipt requirement in
+      c_98e436172ce912d3.
   - item_id: pto-001
     verdict: grounded
     rationale: >-
-      c_e178629918c7cd96 states that full-time employees with three or more years of service accrue 1.50
-      days of PTO per month, which is the answer's only claim. No qualifier or additional rule is asserted,
-      so nothing else needs support.
+      The claim that full-time employees with three or more years of service accrue 1.50 days per
+      month is stated verbatim in c_e178629918c7cd96.
   - item_id: remote-001
     verdict: grounded
     rationale: >-
-      Every sentence of the answer — the at-least-3-days-per-week onsite requirement for hybrid employees
-      assigned to a hub office, the days being set by the team rather than the individual, and the
-      Tuesday/Wednesday/Thursday anchor — appears verbatim in c_cf43ea100f30ec65. No unsupported number or
-      rule is added.
+      The 3-days-per-week hub requirement, the team (not individual) setting the days, and the
+      Tuesday/Wednesday/Thursday anchor are stated verbatim in c_cf43ea100f30ec65.
   - item_id: remote-002
     verdict: grounded
     rationale: >-
-      The Tax & Legal review trigger above 30 consecutive days, its scope (shadow payroll, certificate of
-      coverage, permanent-establishment exposure), the 21-calendar-day filing deadline with destination,
-      exact dates, workspace address and work description, and the director-approval plus three-separate-
-      records rule all come from c_c502ccd2ba5028f5. The right-to-work, letter-of-assignment and
-      no-visa-sponsorship claims come from c_cceb27b487508cbd; the 12-month tenure, good-standing and
-      ineligible-role claims from c_6577bf6f392890bf; the device, VPN and 5-business-day IT Security
-      notification from c_57b2015388bbf7d4 and c_21fb57a686af7f30.
+      The Tax & Legal review for stays over 30 days, the 21-calendar-day filing with destination,
+      dates, workspace address and work description, and the three separate approval records are
+      verbatim in c_c502ccd2ba5028f5; the right-to-work/letter-of-assignment/no-visa-sponsorship
+      claim is in c_cceb27b487508cbd, the device and 5-business-day IT Security notice in
+      c_57b2015388bbf7d4, and the rolling 90-day limit in c_864fb910f46475a7.
   - item_id: remote-003
     verdict: grounded
     rationale: >-
-      The 30-day threshold rule and "nothing further from Tax & Legal" are from c_4142a3cd62ef49dd; the
-      20-day duration for 1–20 October 2026 matches check_policy_compliance#1 (duration_days 20) and the
-      inclusive counting rule; Ireland as an approved destination is from c_b189d36f26fb7c60; the
-      direct-manager approver with 21 calendar days' notice is the matrix row in c_0d2c84e4df38b6a0 and
-      c_64fbd63786de81d4; the laptop/VPN and 5-business-day IT Security notification from c_57b2015388bbf7d4.
-      "Dana, your direct manager" and the unverified-device caveat are both taken from
-      check_policy_compliance#1 (approvers entry and the remote.intl.device requirement marked not_stated).
+      The 20-day duration for 1-20 October 2026 follows the inclusive counting rule in
+      c_4142a3cd62ef49dd and is confirmed by check_policy_compliance#1 ("duration_days": 20);
+      Ireland's approved status is in c_b189d36f26fb7c60, the direct-manager decision with 21
+      calendar days' notice in c_0d2c84e4df38b6a0 and c_64fbd63786de81d4 (which also names the
+      MosaicOne "Work from another country" request), and manager Dana appears in
+      lookup_employee_profile#1.

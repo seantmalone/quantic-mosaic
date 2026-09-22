@@ -921,16 +921,16 @@ quality mean — `tests/unit/test_cold_probe_excluded.py` proves it.
 ### Results
 
 <!-- EVAL-NUMBERS:BEGIN -->
-**The published run.** `r_1790067656_baseline` · variant `baseline` · target **`deployed`** · 28 items · agent `claude-haiku-4-5` · judge `gemini-3.5-flash-lite` · dataset sha `e83cc9fc4833e548…`.
+**The published run.** `r_1790074972_baseline` · variant `baseline` · target **`deployed`** · 28 items · agent `claude-haiku-4-5` · judge `gemini-3.5-flash-lite` · dataset sha `e83cc9fc4833e548…`.
 
 | Metric | Value | n | Target |
 |---|---|---|---|
-| Groundedness (mean, claim-level) | 0.975 | 18 | ≥ 0.90 |
-| Citation accuracy (CitResolve × F1) | 0.871 | 18 | – |
+| Groundedness (mean, claim-level) | 0.963 | 18 | ≥ 0.90 |
+| Citation accuracy (CitResolve × F1) | 0.875 | 18 | – |
 | Citation resolvability (served answer) | 1.000 | 28 | ≥ 0.95 |
-| Document recall | 0.961 | 19 | – |
-| Partial match (gold facts entailed) | 0.773 | 18 | – |
-| Tool selection (F1, order-insensitive) | 0.988 | 28 | – |
+| Document recall | 0.947 | 19 | – |
+| Partial match (gold facts entailed) | 0.801 | 18 | – |
+| Tool selection (F1, order-insensitive) | 0.993 | 28 | – |
 | Argument correctness | 1.000 | 19 | – |
 | Workflow completion | 0.964 | 28 | – |
 | Action safety pass rate | 1.000 | 1 | 1.00 |
@@ -938,7 +938,7 @@ quality mean — `tests/unit/test_cold_probe_excluded.py` proves it.
 | Over-refusal rate | 0.000 | 18 | lower is better |
 | Missed-refusal rate | 0.000 | 6 | lower is better |
 | Strict pass rate (composite) | 0.893 | 28 | ≥ 0.85 |
-| Latency p50 / p95 (ms) | 15,345 / 24,164 | 28 | – |
+| Latency p50 / p95 (ms) | 15,314 / 26,035 | 28 | – |
 | Cold turns in the distribution | n_cold = 0 | – | reported separately |
 
 **Behaviour, from the same run.** Escalation matrix over five gold classes with `escalation_n_excluded` = 0; `nudge_rate` = 0.571; `catalog_reopened_rate` = 0.000; `gated_attempts` = 1 (write calls the confirmation gate refused — deliberately *not* members of the action-safety population); `injection_quarantined` = true; `blocks_dropped_by_g2` = 0; `workflow_completion_by_workflow` = {"pto_request": 1.0, "remote_work_eligibility": 1.0}.
