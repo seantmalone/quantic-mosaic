@@ -574,7 +574,8 @@ published numbers below are from the run after both.
 | Tool selection | 0.993 | 0.981 |
 | Workflow completion | 0.893 | 0.964 |
 | Over-refusal / missed-refusal | 0 / 0 | 0 / 0 |
-| Action safety | 1.00 | 1.00 |
+| Action safety | 1.00 | 1.00 (n = 1 — the denominator narrowed to items with a write at stake) |
+| Clarification accuracy (n = 3) | 0.667 | **0.333** (added 2026-09-21; see below) |
 | Judge agreement, blind seed subset (n = 8) | 0.875 | 1.000 |
 | Judge agreement, hard subset (n = 8) | 0.875 | 0.875 |
 | Latency p50 / p95 | 19.1 s / 38.7 s | 19.2 s / 35.7 s |
@@ -592,6 +593,12 @@ recalls where the model skips a lookup on a policy question; one judge score of 
 get: the UX gate itself, which still fails on residuals each audit finds in the previous wave's fixes —
 diminishing but non-zero — and 100% of the persona scenarios; both are listed as follow-ups.
 
+**And one row this table did not carry until 2026-09-21.** Clarification accuracy fell **0.667 → 0.333**
+(n = 3) on the same run. `strict_pass` has no clarification clause, so nothing failed and the 0.893
+headline hid it; the figure lived in `REPORT.md` and on the dashboard and in no narrative document. It
+is in the table above now because a table of thirteen measures that drops the one that got worse is
+selective reporting, whatever the intent. The cause and the fix are in the 2026-09-21 entry below.
+
 
 **Follow-ups recorded, not scheduled.** From the final scenario re-check: compliance arguments validated
 against the scenario's schema (a `days` that disagrees with the dates is an argument error); the verdict
@@ -602,6 +609,150 @@ slots; one retrieval before any out-of-scope refusal. From the fourth UX audit: 
 and denominators, keyboard reach of scroll containers, the `projected_forfeit_on_31_dec` field naming, and
 the eval fixture's own denominators. One prose glitch visible on the live Berlin answer ("alongside your
 manager Dana approval") belongs to the approver-substitution item.
+
+---
+
+## 2026-09-21 to 2026-09-22 — The grade-and-fix pass: an independent grading, three baseline drives, and what the fixes measured
+
+**Question.** The submission was complete and the deployed build warm. Graded against the rubric by
+an *independent* reader rather than by its author, where does it actually stand, and which of the
+findings are real defects rather than taste?
+
+**Evidence.** An 82-agent grading workflow read the repository and the live service read-only at
+`98c893f` — assessors over grouped rubric sections, one adversarial skeptic per flagged finding, one
+synthesising grader — and returned **band 4, top of the band**, with 27 confirmed gaps ranked by what
+they cost. The card and its machine twin are committed:
+[`docs/evidence/grade-card-2026-09-21.md`](evidence/grade-card-2026-09-21.md) and
+[`grade-card-2026-09-21-gaps.json`](evidence/grade-card-2026-09-21-gaps.json). What capped the grade
+was not capability but the final publish pass:
+
+* `scripts/paste_eval_numbers.py --check` exited **1**. `latest.json` and `REPORT.md` published
+  `r_1789555212_baseline`; `README.md`, `design-and-evaluation.md`, `deployed.md` and three more
+  published `r_1789166880_baseline`, with eight headline figures different — four of them more
+  flattering in the graded documents.
+* `REPORT.md` contradicted itself: its ablation baseline column came from a **different run** than
+  its own headline, under the sentence *"Every figure below comes from that one run."*
+* **Clarification accuracy 0.333 (n = 3)** appeared in `REPORT.md` and the dashboard and in no
+  narrative document — the one metric of the 2026-09-16 run that had got worse, while the last
+  clarification figure this log carried was the **1.000** of the P13 column above.
+* *Known limitations* in `design-and-evaluation.md` described a superseded run's failures, and the
+  action-safety row still read `n = 28` where the run scored it on `n = 1`.
+
+**Decision (Sean, 2026-09-21): fix the code defects, re-measure on the shipped build, and disclose the
+rest.** The rule for the wave was that no document is repaired by hand where a measurement can be
+re-taken, and no figure is quoted from a run the deployed build did not produce. Each task ran as an
+Opus implementer with an independent reviewer per task and adversarial verification of each finding.
+
+**The code changes that could move a metric.**
+
+* **Clarification** (gaps 4a, 4b). `_clarification_text` now joins **every** unfilled slot instead of
+  the first, `CLARIFY_QUESTIONS` gained an `employee_data` question, and — after the first re-drive
+  showed the real cause — the workflow is inferred from the turn's topic words when the router names
+  **none**, so a turn the router classes as policy QA still asks for the slots its topic needs.
+* **Profile debt** (gap 11). `_profile_outstanding` keys on the recorded *arguments* of the tools that
+  need a profile rather than on an `employee_id` in the result body, so a `check_policy_compliance`
+  call for the actor raises the debt. This is what closed `remote-003`'s four-run tool-recall miss.
+* **The write path** (gaps 19, 21, and two defects found by driving the live demo rather than the
+  suite). A *confirmed* `draft_hr_email` had been narrated as an evidence refusal — the draft existed,
+  `MOCK-EMAIL-000018`, and the reader was told the policy library had nothing — because "draft me an
+  email to my manager" searches nothing and G1 saw `candidates: 0`. G1 gained one exemption: a turn
+  whose gated write has been performed is grounded by its receipt, and the clauses are still measured
+  and recorded with the reason prefixed `PERFORMED_WRITE`. A cancelled or failed write now carries its
+  own receipt instead of a refusal, and neither renders under "You approved this — it went ahead". A
+  refused confirmation token gets `CONFIRMATION_REFUSAL` copy — *nothing was created or sent* — rather
+  than the policy-search sentence.
+* **Guards, so the same class cannot drift green again.** `make ablation` refuses to write a
+  comparison whose arms do not share a `target_git_sha`; the contract suite pins the published run id
+  inside the EVAL-NUMBERS markers to `latest.json`; the operator's MCP tool filter is additive, so no
+  request can state its way past it.
+
+**Three baseline drives, each on the build that was live at the time.** The dataset, the judge model
+and the 28 items are identical across all three; only the app build differs.
+
+| Drive | Build | Strict pass | Clarification (n = 3) | Workflow completion | Doc recall | Groundedness | p50 / p95 | Kept? |
+|---|---|---|---|---|---|---|---|---|
+| `r_1790062696_baseline` | `82994ce` (pre-fix) | **0.964** | 0.667 | 1.000 | 0.987 | 0.983 | 15.2 s / 28.6 s | no — diagnostic |
+| `r_1790067656_baseline` | `e85305b` | 0.893 | **1.000** | 0.964 | 0.961 | 0.975 | 15.3 s / 24.2 s | yes — history |
+| `r_1790074972_baseline` | `8a89310` | 0.893 | **1.000** | 0.964 | 0.947 | 0.963 | 15.3 s / 26.0 s | **published** |
+
+**The highest-scoring drive is not the published one, and that is the point.** `r_1790062696` scored
+0.964 on the build *before* the clarification fixes — it is the drive that exposed the defect (its
+`amb-002` turn named only the destination and never asked for the dates) — so publishing it would mean
+publishing a figure the shipped build did not produce. Its file was not committed; its numbers are in
+this table. `r_1790074972` is published because `latest.json` points at it, its `target_git_sha`
+equals the deployed sha, and the blind labels describe its own served answers. Re-driving until a
+better sample appeared would have been cherry-picking. **The spread is real and it is one item wide**:
+0.964 against 0.893 on the same dataset is a single item, and the three drives put a number on that
+variance rather than hiding it.
+
+**The ablation, re-driven twice.** The arms were re-driven on `e85305b` and then again on `8a89310`
+when the write-path fix changed the app, because a comparison whose arms come from a different build
+than its headline is exactly the defect being fixed. The published trio —
+`r_1790074972_baseline`, `r_1790075436_dense_only_k2`, `r_1790075830_no_structured_tools` — shares
+`target_git_sha` `8a89310` and dataset sha `e83cc9fc4833e548…`.
+
+| Metric | baseline | `dense_only_k2` (Δ) | `no_structured_tools` (Δ) |
+|---|---|---|---|
+| Strict pass | 0.893 | 0.929 (**+0.036**) | 0.786 (**−0.107**) |
+| Workflow completion | 0.964 | 0.964 (0.000) | 0.821 (**−0.143**) |
+| Tool selection | 0.993 | 0.988 (−0.005) | 0.942 (**−0.051**) |
+| Document recall | 0.947 | 0.974 (+0.026) | 0.987 (+0.040) |
+| Citation resolvability | 1.000 | 1.000 (0.000) | 0.964 (−0.036) |
+
+**Still a null result, and `dense_only_k2`'s "+0.036" is not a win.** The pre-registered claim is
+`workflow_completion(no_structured_tools) < baseline − 0.25`; the observed delta is **−0.143**, so
+`workflow_completion_check` records `supported: false` and the report writes the banner. And the arms
+are unjudged by design (judging all three would triple judge volume), so the two items that fail the
+baseline on *groundedness* — `expenses-002` and `equipment-001` — "pass" on both arms for want of a
+judge: that is the whole of `dense_only_k2`'s higher strict pass.
+
+**Cost and wall clock.** The two committed trios cost **$2.19** (`e85305b`: 0.7475 + 0.6171 + 0.8263)
+and **$2.24** (`8a89310`: 0.7731 + 0.6400 + 0.8244) in agent spend, each trio about 21–22 minutes of
+wall clock; the two judge passes made 252 and 268 calls at **≈ $0.16–$0.18** each. The discarded
+diagnostic drive is not in a committed file, so its cost is not quoted here. The whole wave's
+measurement bill is therefore about **$5** — the price of refusing to publish a number the shipped
+build did not produce.
+
+**Published measurements (run `r_1790074972_baseline`, build `8a89310`, 2026-09-22).**
+
+| Measure | Published 2026-09-16 (`r_1789555212`) | Final (`r_1790074972`) |
+|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.893 (25/28) | 0.893 (25/28) |
+| Groundedness (judge) | 0.975 | 0.963 |
+| Citation accuracy | 0.883 | 0.875 |
+| Partial match (gold facts) | 0.796 | 0.801 |
+| Document recall | 0.921 | 0.947 |
+| Tool selection | 0.981 | 0.993 |
+| Workflow completion | 0.964 | 0.964 |
+| Clarification accuracy (n = 3) | **0.333** | **1.000** |
+| Over-refusal / missed-refusal | 0 / 0 | 0 / 0 |
+| Action safety (n = 1) | 1.00 | 1.00 |
+| Judge agreement, blind seed subset (n = 8) | 1.000 | 1.000 |
+| Judge agreement, hard subset (n = 8) | 0.875 | 0.875 |
+| Latency p50 / p95 | 19.2 s / 35.7 s | 15.3 s / 26.0 s |
+| Estimated cost per run | $0.72 | $0.77 |
+| Ablation: workflow delta against the 0.25 bar | arms not re-driven | −0.143 (**not supported**) |
+| Items failing the composite | `remote-003`, `remote-004`, `unsafe-001` | `remote-002`, `expenses-002`, `equipment-001` |
+| Tests (unit/contract/integration + browser) | 3,040 + 299 | 3,111 + 299 |
+
+**Reading it.** The headline held at the target — 0.893 here, as on the two published runs before it —
+while two long-standing failures closed (`remote-003`'s declined lookup and `unsafe-001`'s tool
+recall) and one metric outside the composite was recovered from 0.333 to 1.000. The three items that now fail are
+all multi-document policy questions: `remote-002` cited two documents against an end state asking for
+three (and met that end state on the previous published run, so some of it is single-search variance);
+`expenses-002` lost one claim of seven to a `contradicted` verdict the blind labeller disagreed with;
+and `equipment-001` is a genuine wrong answer on a conflict inside the corpus — the USD 500 director
+threshold belongs to *Requesting Additional Equipment*, while the approval matrix routes a laptop
+*refresh* to the direct manager alone, and the dataset's own gold answer makes the same conflation.
+That last one is the most useful finding of the wave, because no prompt change fixes it: the corpus
+has to decide what a priced refresh is.
+
+**What we did not get.** The ablation hypothesis is still unsupported after five sweeps (−0.154,
+−0.192, −0.231, −0.143, −0.143 against a 0.25 bar). The blind agreement subset came back unanimous
+again, so judge validation still rests on the single discriminating cell the hard subset supplies.
+Action safety, escalation and each per-workflow indicator still rest on one dataset item each; the
+denominators are published with their `n` rather than widened, because widening them means new items
+and another drive.
 
 ---
 
