@@ -56,10 +56,18 @@ would rather narrate the cold start honestly on camera, do it deliberately in th
 where `deployed.md`'s numbers are already on screen; do not let it happen by accident in the middle
 of task 1.
 
-**In the same warm-up, open `/dashboard/evals` and confirm the Runs table fronts
-`r_1790074972_baseline`** — the evaluation segment speaks that run's figures, and this deployment's
-store can hold later dashboard-only drives whose tiles would not match the script. Check it before
-the take, not on camera.
+**In the same warm-up, open `/dashboard/evals` and check the Runs table two ways.** First: the newest
+**baseline · deployed** row is `r_1790110325_baseline`, the run the evaluation segment speaks.
+Second: no later dashboard-driven smoke run sits above the three published arms. The table is ordered
+newest-first and `evaluation/ablation.py` always drives the arms after the baseline, so the row that
+legitimately fronts it reads **no structured tools · deployed**, carries **no** in its **Judged**
+column, and shows **not judged** against the judged metrics in the **Headline metrics** table under
+it — that is the published set in the order it was driven, not a fault, and it is **not** what the
+script reads figures off. What *would* break the segment is a fourth, later run this
+deployment's store picked up: the **Compare** tab pairs the newest run of each variant, so one stray
+drive changes the arms on screen. The segment opens the run detail by URL —
+`/dashboard/evals/r_1790110325_baseline` — never by clicking row 1. Check both before the take, not
+on camera.
 
 ---
 
@@ -69,13 +77,13 @@ the take, not on camera.
 |---|---|---|---|
 | **0:00–0:45** | Intro, on camera, full frame | You, then the browser address bar showing the deployed URL | Your name; **hold the government ID still for ≥ 3 s at ~0:15**; one line on the project — *"an agentic HR assistant for a fictional 420-person robotics company: policy RAG over 14 documents, nine MCP tools, and a full audit trail of every step."* Then shrink the webcam to the persistent overlay and **leave it there** |
 | **0:45–1:25** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Name the seven components as you point at them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. Make the one point that matters: *"the MCP server is mounted inside the app that consumes it, and the client speaks real JSON-RPC over a real loopback socket — these are not function calls dressed up as tools."* Mention the single trace model: one writer, five readers |
-| **1:25–3:40** | **Task 1 live** — international remote-work eligibility | Chat page (≈ 1:15), then the session record in the second tab (≈ 0:45), then the policy reader (≈ 0:15) | Click **Working from Berlin for six weeks** to fill the composer, read the dates it filled in aloud, press **Send**. While the turn runs, narrate the one progress line — *"Looking up your employee record… Checking this request against the rules… Searching the policy library…"* — and say what it is: plain language for a person, with the technical record kept elsewhere on purpose. Then the answer, the **Sources (n)** strip, and the demo panel's *"How this answer was produced"* line. Then switch to the record for DEMO.6 ①–③ (sub-checklist below) — **the observability beat is said here**, with the waterfall open, because this is the page that shows it — and come back through one citation into the **policy reader**. Budget the turn itself at ~45 s: the pinned live run took 46.8 s over 35 spans |
+| **1:25–3:40** | **Task 1 live** — international remote-work eligibility | Chat page (≈ 1:15), then the session record in the second tab (≈ 0:45), then the policy reader (≈ 0:15) | Click **Working from Berlin for six weeks** to fill the composer, read the dates it filled in aloud, press **Send**. While the turn runs, narrate the one progress line — *"Looking up your employee record… Checking this request against the rules… Searching the policy library…"* — and say what it is: plain language for a person, with the technical record kept elsewhere on purpose. Then the answer, the **Sources (n)** strip, and the demo panel's *"How this answer was produced"* line. Then switch to the record for DEMO.6 ①–③ (sub-checklist below) — **the observability beat is said here**, with the waterfall open, because this is the page that shows it — and come back through one citation into the **policy reader**. Budget the turn itself at ~40 s: the run pinned on this build took **38.2 s over 39 spans**; an earlier 2026-09-15 run took 46.8 s, so allow up to 50 s before you start narrating the wait |
 | **3:40–6:00** | **Task 2 live** — PTO request through the confirmation gate | Chat page and the confirmation card (≈ 1:20), then the session record (≈ 0:40), then **Guardrails** (≈ 0:20) | Click **Three days of PTO, opened for me**, press **Send**. The turn stops at **Confirm before anything is written**. Land the safety beat (below) with that card on screen, then press **Don't open it** and read the cancelled receipt; ask again; press **Open the request** and read the *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`"* lede. Then the record for ①–③, including the **paused for confirmation** row; then **Guardrails** for the `declined` and `confirmed` rows and the new **Simulated writes** row. Beat ⑦ of the optimization story goes here, while the answer is streaming and the progress line is naming each step |
 | **6:00–6:25** | Dashboard tour | `/dashboard/mcp` → `/dashboard/llm` | The **Tool server** page (page 9): nine **Discovered tools** with their JSON Schemas, the **Server** block's transport, and **Handshake history**. Then **Model calls** (page 5) in one line — *"the same model calls, aggregated across every session: purpose, token counts, first-token and streamed, and a **Turn** chip back into the record."* **The observability beat is not narrated here** — page 5 is two tables, not a waterfall; that beat belongs on the session record inside a task segment (see below). Use the `Chat \| Dashboard` switch — no persona change is needed anywhere in this segment |
-| **6:25–7:10** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count`, `rss_mb`. Then the measured numbers: about **300 MB** against a hard 512 MB cap — **293.6 MB** on Render's own instance on 2026-09-10, **294.9 MB** under the local gate, and `rss_mb` is right there on the payload, so read the number on screen. **This is the only place the cold/warm split is narrated**, because the published evaluation run has `n_cold = 0`: a median **71.0 s** cold to first answer over three probes (67.5–77.6 s), **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it three times with nothing pinging it, published the spread, and only then turned on a ten-minute keep-alive, which has been running on the service since the eleventh — it costs 744 of our 750 free hours, so it is the last step, not the way we made the number look good."* Beat ⑥ of the optimization story belongs here |
-| **7:10–7:50** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. **Five jobs:** `lint` (ruff + gitleaks over full history), `test` (the suite under coverage, offline, with no API keys, behind a `--fail-under=90` gate), `ux` (the browser suite — the only thing in the repo that needs a chromium binary), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. **Read the test count off the screen:** `pytest`'s default `addopts` carry `-m "not ux"`, so the `test` job collects **3,139 of 3,438** and the browser tests are the **299 deselected**; `ux` runs exactly those 299. Then the gate: **`deploy` declares `needs: [test, docker]`**, and Render's own auto-deploy is off, so CI is the only path to production. Say why `ux` is deliberately **not** in that list — *"a browser suite must never be able to block a deploy, so it is its own job with no `needs:` and nothing needing it; it reports, it does not gate."* Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
-| **7:50–8:50** | Evaluation | `/dashboard/evals` → the run detail → the **Compare** tab | No persona change — the dashboard is open to any persona holding the token. The run on screen covers 28 items across all seven categories — the dataset is 30 items now and a re-drive on it follows — run `r_1790074972_baseline` on build `8a89310`, judged by a different vendor's model. Walk the metric tiles and say the `n` with each one: groundedness **0.963** (n=18), citation accuracy **0.875** (n=18), document recall **0.947** (n=19), tool selection **0.993** (n=28), workflow completion **0.964** (n=28), clarification accuracy **1.000** (n=3), action safety **1.000** (n=**1** — one item, not a rate), strict pass **0.893** against our own 0.85 bar. Open `equipment-001`'s **Verdicts** disclosure: eight claims, `c4 contradicted`, `c5 unsupported`, groundedness 0.69 — one of the three items the run reports as failing. Say what that disclosure is and is not: it carries the judge's **per-claim verdicts** and the judge model, not a paragraph of prose. Then its **Trace** chip → the turn that produced it. Then the **Compare** tab: *"Ablation — three variants over the identical items"*, whose **Build measured** column shows all three arms on `8a89310`. If the *"These arms were measured on different builds"* notice ever appears, read it out — the tab pairs the newest run of each variant in this deployment's store, which need not be the committed comparison. Beats ①–③ of the optimization story land here, on screen |
-| **8:50–9:15** | Close — **the optimization story**, then the limitations | `docs/optimization-log.md`'s measurement table, then `design-and-evaluation.md`'s *Known limitations*, then the repo | Tell the story from the beat list below (④⑤⑧ fit here; the others are seeded earlier where the screen already shows them). Then be straight about the numbers: *"strict pass 0.893 against our own 0.85 target, with the three items that still fail named by the clause each tripped — and the `no_structured_tools` ablation moved workflow completion by 0.143 where we had pre-registered 0.25, so the tool prints 'NOT supported by this run' and we read it that way."* Then the repo link |
+| **6:25–7:10** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count` (**205** chunks over the 14 documents — CI's `ingest --verify-manifest` step checks the built index against the committed manifest), `rss_mb`. Then the measured numbers: about **300 MB** against a hard 512 MB cap — **293.6 MB** on Render's own instance on 2026-09-10, **294.9 MB** under the local gate, and `rss_mb` is right there on the payload, so read the number on screen. **This is the only place the cold/warm split is narrated**, because nothing in the published run measures a wake-up: the three turns it flags cold (`n_cold = 3`) came in at a cold p50 of **13.9 s**, *below* the run's own **15.5 s** p50, so not one of them is a spin-up — the spin-up figure has to come from the deliberate probes instead. A median **71.0 s** cold to first answer over three of those (67.5–77.6 s), **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it three times with nothing pinging it, published the spread, and only then turned on a ten-minute keep-alive, which has been running on the service since the eleventh — it costs 744 of our 750 free hours, so it is the last step, not the way we made the number look good."* Beat ⑥ of the optimization story belongs here |
+| **7:10–7:50** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. **Five jobs:** `lint` (ruff, then gitleaks **twice**: the action scans the pushed commits, and a second step runs `gitleaks detect` on the same pinned 8.30.1 binary over the **whole history, on every run** — read its commit count off the log, **280 commits / 13.22 MB / no leaks** when it was last checked on 2026-09-22), `test` (the suite under coverage, offline, with no API keys, behind a `--fail-under=90` gate), `ux` (the browser suite — the only thing in the repo that needs a chromium binary), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. **Read the test count off the screen:** `pytest`'s default `addopts` carry `-m "not ux"`, so the `test` job collects **3,139 of 3,438** and the browser tests are the **299 deselected**; `ux` runs exactly those 299. Then the gate: **`deploy` declares `needs: [test, docker, ux]`** — the browser suite is inside that list, so all 3,438 have to be green before anything ships and a red `ux` skips the deploy exactly as a red `test` does — and Render's own auto-deploy is off, so CI is the only path to production. One line on the trigger: it ignores only the three paths a published *result* lands in (`evaluation/results/**`, `evaluation/REPORT.md`, `docs/**`), so a root-level markdown edit runs the whole suite — which matters, because the last commit before submission is exactly that, `README.md` carrying this video's URL. Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
+| **7:50–8:50** | Evaluation | `/dashboard/evals/r_1790110325_baseline` (typed, not clicked) → the **Compare** tab | No persona change — the dashboard is open to any persona holding the token. Open the run **by URL**, so the newest-first Runs table cannot put you on an ablation arm: `r_1790110325_baseline` on build `80a5a71`, **30 items** across all seven categories — 7 simple policy, 5 multi-document, 6 tool task, 3 ambiguous, 5 out of scope, 2 unsafe action, 2 sensitive — judged by a different vendor's model. Walk the metric tiles and say the `n` with each one: groundedness **0.986** (n=18), citation accuracy **0.889** (n=18), document recall **0.908** (n=19), tool selection **0.984** (n=30), workflow completion **0.933** (n=30), clarification accuracy **1.000** (n=3), action safety **1.000** (n=**2** — two items, not a rate), and strict pass **0.900** — 27 of 30 — against our own 0.85 bar. Open `expenses-002`'s **Verdicts** disclosure: nine claims, `c6` `contradicted` and `c7` `partially_supported`, groundedness **0.78** — one of the three items the run reports as failing. Say what that disclosure is and is not: it carries the judge's **per-claim verdicts** and the judge model, not a paragraph of prose. Then its **Trace** chip → the turn that produced it. Then the **Compare** tab: *"Ablation — three variants over the identical items"*, whose **Build measured** column shows all three arms on `80a5a71`. If the *"These arms were measured on different builds"* notice ever appears, read it out — the tab pairs the newest run of each variant in this deployment's store, which need not be the committed comparison. Finish on **Workflow completion — the pre-registered check** under that chart, where **Delta** reads **−16.7 %** against a **Pre-registered bar** of *a drop past 25.0 %* and **Claim supported** reads **no**: the null is printed on the page, not left to the narration. Beats ①–③ of the optimization story land here, on screen |
+| **8:50–9:15** | Close — **the optimization story**, then the limitations | `docs/optimization-log.md`'s measurement table, then `design-and-evaluation.md`'s *Known limitations*, then the repo | Tell the story from the beat list below (④⑤⑧ fit here; the others are seeded earlier where the screen already shows them). Then be straight about the numbers: *"strict pass 0.900 — 27 of 30 — against our own 0.85 target, with the three items that still fail named by the clause each tripped, and the `no_structured_tools` ablation moved workflow completion by 0.167 where we had pre-registered 0.25, so the tool prints 'NOT supported by this run' and we read it out as the null it is."* Then the repo link |
 
 Sum: 0:45 + 0:40 + 2:15 + 2:20 + 0:25 + 0:45 + 0:40 + 1:00 + 0:25 = **9:15**.
 
@@ -122,12 +130,12 @@ the number and the run id, then move.
 
 - **① One instance, re-measured at every wave.** *"We measured the same live service again after
   each wave — the quality fixes, the performance work, the model-behaviour wave, and this one.
-  Strict pass 0.692 at the start, 0.893 from the fourth measurement on, and 0.893 again on the
-  published run. p50 was 22.6 s at its worst and is 15.3 s now."*
+  Strict pass 0.692 at the start, 0.893 from the fourth measurement on, and **0.900** on the
+  published run. p50 was 22.6 s at its worst and is **15.5 s** now."*
 - **② Every claim has a run id.** *"Each column is a committed run file, and the dashboard shows the
   same traces the analysis used — nothing here is a remembered number."*
 - **③ The quality fixes cost latency, and we say so.** *"The breadth reminder fires on most turns
-  now — `nudge_rate` 0.115 → 0.577, and 0.571 on the published run — and each of those turns spends
+  now — `nudge_rate` 0.115 → 0.577, and 0.533 on the published run — and each of those turns spends
   an extra step. That is the five seconds the middle column lost; the performance wave is what won
   them back."*
 - **④ "Is it the CPU?" — the intuitive answer was wrong.** *"We assumed the 0.1 vCPU was the
@@ -143,14 +151,17 @@ the number and the run id, then move.
 - **⑦ One wave was about the wait, not the score.** *"Streaming and the step narration do not move a
   single metric in that table — the harness waits for the whole answer. They change what a person
   experiences, which is why they were worth doing anyway."*
-- **⑧ What is still short.** *"0.893 clears our 0.85 bar, and three items still fail, each with its
-  failing clause named: `remote-002` on workflow completion, `expenses-002` at groundedness 0.79 and
-  `equipment-001` at 0.69, both under the 0.85 clause. And the `no_structured_tools` ablation moved
-  workflow completion from 0.964 to 0.821 — a delta of 0.143 against a pre-registered 0.25, so the
-  bar was **not** met and the report says so in the banner it generates. Removing the structured
-  tools does cost accuracy — tool selection 0.993 → 0.942, strict pass 0.893 → 0.786 — but not by
-  the margin we predicted, and we say that the arm's meaning changed when we made the PTO workflow
-  require the profile lookup."*
+- **⑧ What is still short.** *"0.900 — 27 of 30 — clears our 0.85 bar, and three items still fail,
+  each with its failing clause named: `expenses-002` at groundedness 0.78, under the 0.85 clause, and
+  its workflow-completion clause at 0.00 as well; `remote-004` on tool recall 0.75, because it never
+  called `get_policy_section`, which that item's expected-tools list names, plus workflow completion
+  0.00; and `unsafe-001` on tool recall 0.75 — no `search_policy_documents` on a turn that otherwise
+  did the right thing and stopped at the confirmation gate. And the `no_structured_tools` ablation
+  moved workflow completion from 0.933 to 0.767 — a delta of 0.167 against a pre-registered 0.25, so
+  the bar was **not** met: the dashboard's own check prints **Claim supported: no**, and the report
+  generates the banner rather than the narrative. Removing the structured tools does cost accuracy —
+  tool selection 0.984 → 0.935, strict pass 0.900 → 0.733 — but not by the margin we predicted, and
+  we say that the arm's meaning changed when we made the PTO workflow require the profile lookup."*
 
 ---
 
@@ -186,9 +197,12 @@ Tick all five on camera. ④ and ⑤ are on the chat page; ①–③ are on the 
       as [`docs/evidence/demo-task-1-live-2026-09-22.txt`](evidence/demo-task-1-live-2026-09-22.txt)
       cited **8 passages across four documents** (`remote-and-hybrid-work`, `tax-and-location-addendum`,
       `manager-approval-matrix`, `security-acceptable-use`); on the published run
-      (`r_1790074972_baseline`) this prompt's dataset twin `remote-004` **passed**, with document recall
-      0.75 — three of its four expected documents — and no block dropped by the citation guardrail
-      (`blocks_dropped_by_g2` = 0). **Read off the references that are actually on screen.** Then follow
+      (`r_1790110325_baseline`) this prompt's dataset twin `remote-004` is one of the three items that
+      **fail** the composite, and breadth is why — document recall **0.50**, two of its four expected
+      documents, alongside tool recall 0.75 — while its groundedness was 0.97 and the citation
+      guardrail dropped nothing (`blocks_dropped_by_g2` = 0). The pinned live turn is the better of
+      the two outcomes, at four documents after one bounded repair attempt; say which one you are
+      looking at. **Read off the references that are actually on screen.** Then follow
       **"Open <the document's title>"** on one: since UX W1 a citation lands in the **policy reader** at
       `/policy/{doc_id}#{chunk_id}`, which highlights the 30-day section in the document a person would
       read, not in a chunk inspector.
@@ -214,14 +228,21 @@ opening on its payload.
 
 - [ ] **① Tool names** — read them off the waterfall in `seq` order: `mcp_discovery` (**"9 tools
       discovered over http"**), then `lookup_employee_profile`, `search_policy_documents`,
-      `get_policy_section`, `check_policy_compliance`, then a burst of further
-      `search_policy_documents` calls as the breadth reminder pushes the turn back into the loop.
-      Say *"the array of tools handed to the model is the `tools/list` response converted — there is
-      no hard-coded list anywhere in the agent"*, and prove it on the `llm_call` rows, whose
-      payloads carry `tools_offered` by name.
+      `check_policy_compliance`, then a burst of further `search_policy_documents` calls as the
+      breadth reminder pushes the turn back into the loop — **six** more in the pinned run, each with
+      its own `retrieval` row directly under it, for nine tool calls and seven retrievals over 39
+      spans.
+      `get_policy_section` **may or may not appear at all**: the pinned run never called it, and not
+      calling it is exactly the tool recall 0.75 that fails the dataset twin `remote-004` on the
+      published run — so read the names on screen rather than off this page. Say *"the array of tools
+      handed to the model is the `tools/list` response converted — there is no hard-coded list
+      anywhere in the agent"*, and prove it on the `llm_call` rows, whose payloads carry
+      `tools_offered` by name.
 - [ ] **② Tool-call arguments** — open the `check_policy_compliance` row and point at the shape:
       `scenario: "international_remote"`, `employee_id: "E1042"`, and the nested
-      `parameters: { destination_country: "Germany", start_date: "2026-11-03", duration_days: 42 }`.
+      `parameters: { destination_country: "Germany", start_date: "2026-11-03", end_date: … }` — the
+      two dates, not a duration: the tool's own schema says `duration_days` and `days` are *derived*
+      from `start_date` and `end_date`, and the submission date is the server's own.
       Note that the tool normalises `"Germany"` to the ISO 3166-1 code `"DE"` at the wire boundary
       while the span keeps the caller's own bytes. Open one `search_policy_documents` row too — its
       `query` and `topic` are the model's words, and the `retrieval` row directly under it is the
@@ -254,9 +275,11 @@ Tick all five on camera. ④ and ⑤ are on the chat page; ①–③ are on the 
       Chain — and `manager-approval-matrix` — Time Off), while the 2026-09-15 run cited three passages
       from `pto-and-holidays` alone with **no** `search_policy_documents` call at all. Name what is
       there and click one through to the notice-requirement sentence in the policy reader. On the
-      published run (`r_1790074972_baseline`) this prompt's dataset twin `pto-003` **passed** on every
-      clause, and workflow completion for the `pto_request` workflow is **1.00** — over n = 1, one
-      tagged item, so call it an indicator rather than a rate.
+      published run (`r_1790110325_baseline`) this prompt's dataset twin `pto-003` **passed** on every
+      clause, and workflow completion for the `pto_request` workflow is **1.00** — 3 of 3, but say what
+      the three are: `pto-003` and the two `unsafe_action` items, both of which end at the confirmation
+      card, so two thirds of that denominator are gate checks rather than completed writes. Name the
+      `n` and what is in it rather than reading it as a rate.
 - [ ] **⑤ Final answer and action** — the answer **opens with the write**, in its own block above
       the facts: *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`. Your
       manager Dana's written approval is the next step."* — the lede the 2026-09-22 run served, with
@@ -329,7 +352,7 @@ The ninth tool, `draft_hr_email`, runs through the **same** gate and is worth on
 clock allows — *"ask it to message your manager instead and the identical machinery applies: the
 same card, the same one-time token, and a confirmed draft narrates itself as **'Done — the email
 draft is ready for <name>. Reference `MOCK-EMAIL-…`'** rather than as a refusal."* Cancelling it
-gives the same cancelled receipt. Deployed in `8a89310` and captured live on 2026-09-22 —
+gives the same cancelled receipt. On the live build since `8a89310` and captured live on 2026-09-22 —
 [`docs/evidence/draft-hr-email-live-2026-09-22.txt`](evidence/draft-hr-email-live-2026-09-22.txt):
 `MOCK-EMAIL-000020` confirmed, then the cancelled receipt with no write. It is a bonus, not a
 requirement: the two tasks above are the spine, and this beat is the first thing to cut.
@@ -345,7 +368,7 @@ requirement: the two tasks above are the spine, and this beat is the first thing
 | A tool call returns `isError` | Keep going. Graceful degradation is a graded behaviour: the turn still answers at HTTP 200 with a caveat block, and the `failed` flag is right there on the span row |
 | The model takes a path different from this script | Expected, and fine. The expectation records assert the **outcome** — the profile, the corpus, the deterministic verdict, the cited documents — not one exact path. Narrate what it actually did, reading the tool names off the waterfall rather than off this page |
 | A **write control** answers `{"code": "ADMIN_REQUIRED"}` (Reset sandbox, Re-discover now, Run smoke eval) | Those three endpoints are the only ones that need HR admin. Choose **HR admin** in the demo panel at the foot of the chat page, then reload. Nothing this script does needs them, and **reading any dashboard page needs no persona change** |
-| Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. Breadth is not deterministic, and the published run records `remote-002` failing its workflow-completion clause with document recall 0.50 — say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
+| Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. Breadth is not deterministic, and the published run records this very prompt's dataset twin `remote-004` failing its tool-recall and workflow-completion clauses, with document recall 0.50 — say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
 | More citation chips than an earlier run showed | Also expected: a multi-document answer that cites fewer documents than its evidence spans gets one bounded repair attempt, which is why the pinned task-1 run cites four documents where an earlier one cited three. Narrate the chips on screen, not the number in this script |
 | The session record shows no rows for a turn | You are looking at an imported evaluation run, not a live session. The **Items** table on a run detail says so in as many words; the live turn you just ran is under `/dashboard/sessions` |
 | You run past 10:00 | Cut the dashboard tour (6:00–6:25) to 10 seconds and drop the optional `draft_hr_email` beat; the tour is the only segment whose content appears elsewhere in the recording. Do **not** cut either task's dashboard frame — that is where DEMO.6 ①–③ are evidenced |
