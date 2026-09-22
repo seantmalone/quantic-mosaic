@@ -12,10 +12,10 @@
 #   BASE_URL=https://mosaic-hr.onrender.com APP_ACCESS_TOKEN=… sh scripts/demo_task_1.sh
 #
 # The `PROMPT=` line below is the RECORDED wording, with the fixed dates the committed stub scripts
-# were recorded against — and it is the **fallback**, not what a run normally sends. The rules engine
-# measures notice from the submission date (W8), so a fixed September 2026 date stops producing the
-# documented verdict the moment it is in the past: against the deployed service, which pins no
-# `MOCK_TODAY` (§12.3), this script used to narrate a rule the request failed.
+# were recorded against — and it is what `--recorded` sends, not what a run normally sends. The
+# rules engine measures notice from the submission date (W8), so a fixed September 2026 date stops
+# producing the documented verdict the moment it is in the past: against the deployed service, which
+# pins no `MOCK_TODAY` (§12.3), this script used to narrate a rule the request failed.
 #
 # So before it asks anything it reads the prompt the chat page's own demo button carries
 # (`scripts/demo_prompt.py`, `web/api.py::demo_prompts`), which **the server** dates against its own
@@ -23,19 +23,31 @@
 # that gives the recorded 8 business days of notice to 15 September once Boston's Labor Day is
 # excluded — so the replay gets the recorded wording back byte for byte; the deployed service gets
 # dates that are still in the future. The documented verdicts hold against any instance.
+#
+# The recorded wording is **opt-in**, `--recorded` (or `DEMO_RECORDED=1`), and a fetch that fails is
+# a failed run: a script that quietly fell back would send September dates to the deployed service
+# and report the result as a green demo, which is precisely the failure this replaced. The helper
+# waits for a cold instance the way `scripts/wait_for_health.py` does, so a spun-down free instance
+# is a wait, not a downgrade.
 set -eu
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
 PYTHON="${PYTHON:-python3}"
 PROMPT='I want to work from Berlin from 3 November to 14 December 2026 — can I?'
 
-# The wording this run actually sends: the served, self-dated prompt when the instance can be read,
-# the recorded line above when it cannot (an unreachable page is not a failed demo — the request is).
-SERVED="$("$PYTHON" "$(dirname "$0")/demo_prompt.py" --base-url "$BASE_URL" --key demo_1 || true)"
-if [ -n "$SERVED" ]; then
-  PROMPT="$SERVED"
-else
-  echo "-- the page's Demo 1 prompt could not be read; sending the recorded wording" >&2
+# The wording this run actually sends: the instance's own, unless `--recorded` asked for the frozen
+# one. `set -e` makes an unreadable page a non-zero exit, and the `if` is only here to say why.
+RECORDED="${DEMO_RECORDED:-0}"
+if [ "${1:-}" = "--recorded" ]; then
+  RECORDED=1
+fi
+if [ "$RECORDED" = "1" ]; then
+  echo "-- --recorded: sending the wording the stub script was recorded against" >&2
+elif ! PROMPT="$("$PYTHON" "$(dirname "$0")/demo_prompt.py" --base-url "$BASE_URL" --key demo_1)"; then
+  echo "demo task 1 did not run: ${BASE_URL} served no demo prompt (add --recorded to send the" >&2
+  echo "recorded wording instead — it only reproduces the documented verdicts against a server" >&2
+  echo "pinned to MOCK_TODAY=2026-09-01)" >&2
+  exit 1
 fi
 
 WORK="$(mktemp -d)"

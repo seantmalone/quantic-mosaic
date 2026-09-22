@@ -151,22 +151,44 @@ HELPER_CALL = 'demo_prompt.py" --base-url "$BASE_URL" --key demo_'
 
 @pytest.mark.parametrize("index", (1, 2))
 def test_each_script_asks_the_server_for_its_own_prompt(index: int):
-    """The fix for gap 7, as the script reads: the served prompt wins, the recorded line is the
-    fallback, and the key is this script's own — demo_task_2.sh asking for `demo_1` would run the
-    PTO demo on the Berlin question and fail nowhere near the cause."""
+    """The fix for gap 7, as the script reads: the served prompt is what gets sent, the key is this
+    script's own — demo_task_2.sh asking for `demo_1` would run the PTO demo on the Berlin question
+    and fail nowhere near the cause — and a page it cannot read ends the run."""
     script = (SCRIPTS / f"demo_task_{index}.sh").read_text(encoding="utf-8")
 
-    assert f"{HELPER_CALL}{index}" in script
-    assert 'PROMPT="$SERVED"' in script, "the served wording is what gets sent"
-    assert script.index("PROMPT='") < script.index(HELPER_CALL), "the recorded line is the fallback"
+    assert f'elif ! PROMPT="$("$PYTHON" "$(dirname "$0")/{HELPER_CALL}{index})"; then' in script
+    assert script.index("PROMPT='") < script.index(HELPER_CALL), "the recorded line is only the opt-in"
+    assert "exit 1" in script.split(HELPER_CALL, 1)[1], "an unreadable page is a failed run"
 
 
-def test_an_unreachable_instance_falls_back_instead_of_failing_the_demo(capsys):
-    """`demo_prompt.py` exits 1 with a reason, which the scripts read as "send the recorded
-    wording". A demo that could not read the page is not a demo that failed."""
-    status = demo_prompt.main(["--base-url", "http://127.0.0.1:1", "--key", "demo_1"])
+@pytest.mark.parametrize("index", (1, 2))
+def test_the_recorded_wording_is_opt_in_and_never_a_silent_downgrade(index: int):
+    """Fix round 1, Important 1. A script that fell back on its own sent September dates to the
+    deployed service and reported a green demo — which is what the frozen prompt cost in the first
+    place. So the frozen wording needs `--recorded` (or `DEMO_RECORDED=1`) and says so when used."""
+    script = (SCRIPTS / f"demo_task_{index}.sh").read_text(encoding="utf-8")
+
+    assert 'RECORDED="${DEMO_RECORDED:-0}"' in script
+    assert '[ "${1:-}" = "--recorded" ]' in script
+    assert "--recorded: sending the wording the stub script was recorded against" in script
+    assert "|| true" not in script.split("set -eu", 1)[1], "no command in this script may swallow a failure"
+
+
+def test_an_unreachable_instance_is_a_loud_failure(capsys):
+    """`demo_prompt.py` exits 1 with a reason on stderr and nothing on stdout, which is what makes
+    the caller's `set -e` end the run instead of sending the recorded dates."""
+    status = demo_prompt.main(["--base-url", "http://127.0.0.1:1", "--key", "demo_1", "--timeout", "0"])
 
     captured = capsys.readouterr()
     assert status == 1
-    assert captured.out == "", "nothing on stdout is what the scripts test for"
-    assert "could not read http://127.0.0.1:1/" in captured.err
+    assert captured.out == "", "nothing on stdout is what the scripts read"
+    assert "could not read demo_1 from http://127.0.0.1:1/" in captured.err
+
+
+def test_the_key_is_required(capsys):
+    """Fix round 1, Minor 4: it defaulted to `demo_1`, so a forgotten flag ran the wrong demo."""
+    with pytest.raises(SystemExit) as refused:
+        demo_prompt.main(["--base-url", "http://127.0.0.1:1"])
+
+    assert refused.value.code == 2
+    assert "--key" in capsys.readouterr().err

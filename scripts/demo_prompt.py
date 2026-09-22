@@ -20,8 +20,10 @@ for two strings is not worth an endpoint), so the prompt is read off the demo bu
 `data-prompt` attribute, keyed by `data-demo`. Standard library only: the two demo scripts run
 under whatever `python3` is on the PATH, not necessarily the project's venv.
 
-Exit status is 0 with the prompt on stdout, 1 with a one-line reason on stderr — which the callers
-treat as "fall back to the recorded wording", never as a failed demo.
+Exit status is 0 with the prompt on stdout, 1 with a one-line reason on stderr. A failure is a
+**failure**: the callers stop on it rather than quietly sending the recorded wording, because a
+quiet downgrade is the very thing this exists to remove — it looked like a green demo and asked for
+PTO in the past. The recorded wording is opt-in, `sh scripts/demo_task_2.sh --recorded`.
 """
 
 from __future__ import annotations
@@ -29,13 +31,30 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 
 #: What `_demo_controls.html` renders, and what `demo_prompts()` keys its pair by.
 KEYS = ("demo_1", "demo_2")
-TIMEOUT_S = 15.0
+
+#: One request's own timeout, and how long the whole attempt may take. The free Render instance
+#: spins down, and the project's measured cold start is 43–52 s to the first `/health` 200 — so a
+#: single 15 s request against the deployed service is a fetch that fails on exactly the instance
+#: the demo is most often run against. `--timeout` is the total, and it is the same 120 s
+#: `make demo1` gives `scripts/wait_for_health.py`.
+REQUEST_TIMEOUT_S = 15.0
+DEFAULT_TIMEOUT_S = 120.0
+
+#: The retry: half a second, doubling, never waiting more than five seconds between attempts.
+FIRST_INTERVAL_S = 0.5
+MAX_INTERVAL_S = 5.0
+
+#: A waking instance answers through its proxy before it answers for itself. These are worth
+#: another attempt; every other HTTP status is the instance saying something definite (401 is a
+#: token that is wrong, 404 is a URL that is wrong) and is reported immediately.
+RETRYABLE_STATUS = frozenset({408, 429, 502, 503, 504})
 
 
 class _DemoButtons(HTMLParser):
@@ -66,34 +85,75 @@ def prompts_of(page: str) -> dict[str, str]:
     return parser.prompts
 
 
+class Refused(Exception):  # noqa: N818 - it is the instance's answer, not this script's failure mode
+    """The instance answered something definite that is not the page: no retry will change it."""
+
+
 def fetch(base_url: str, *, token: str | None = None) -> str:
-    """`GET /`, with the access token when the gate is on. Raises `OSError` on any failure."""
+    """One `GET /`, with the access token when the gate is on.
+
+    Raises `Refused` on an HTTP status the instance means (401 with a wrong token, 404 with a wrong
+    URL) and `OSError` on the ones a waking instance produces — which the caller retries.
+    """
     request = urllib.request.Request(f"{base_url.rstrip('/')}/")  # noqa: S310 - http(s) URL from the caller
     if token:
         request.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:  # noqa: S310
-        if response.status != 200:
-            raise OSError(f"GET / answered HTTP {response.status}")
-        charset = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(charset, errors="replace")
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_S) as response:  # noqa: S310
+            charset = response.headers.get_content_charset() or "utf-8"
+            return response.read().decode(charset, errors="replace")
+    except urllib.error.HTTPError as error:
+        if error.code in RETRYABLE_STATUS:
+            raise OSError(f"HTTP {error.code}") from error
+        raise Refused(f"HTTP {error.code}") from error
+
+
+def read_prompt(base_url: str, key: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> str:
+    """The instance's own `key` prompt, waiting for it the way `scripts/wait_for_health.py` waits.
+
+    A free instance spins down, and the first request to a cold one is answered somewhere between
+    43 and 52 seconds later (§14.4's measurement). Without this the fetch timed out against exactly
+    the deployment the demo scripts are advertised for.
+    """
+    deadline = time.monotonic() + timeout_s
+    interval, last = FIRST_INTERVAL_S, "no attempt was made"
+    while True:
+        try:
+            page = fetch(base_url, token=os.environ.get("APP_ACCESS_TOKEN"))
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            last = str(error) or error.__class__.__name__
+        else:
+            prompt = prompts_of(page).get(key, "")
+            if prompt:
+                return prompt
+            # A page without the pair is a page that is not the chat page — a status screen, a
+            # redirect target, a template that dropped `data-demo`. None of that improves by waiting.
+            raise Refused(f"the page carries no {key} demo prompt")
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"{base_url}/ did not answer within {timeout_s:.0f}s ({last})")
+        time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
+        interval = min(interval * 2, MAX_INTERVAL_S)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base-url", default="http://127.0.0.1:8000", help="base URL of the instance")
-    parser.add_argument("--key", default="demo_1", choices=KEYS, help="which demo prompt to print")
+    # Required: the default was `demo_1`, so a caller that forgot the flag — or misspelt it — ran
+    # the PTO demo on the Berlin question and failed a long way from the cause.
+    parser.add_argument("--key", required=True, choices=KEYS, help="which demo prompt to print")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT_S,
+        help="seconds to keep trying while the instance wakes",
+    )
     arguments = parser.parse_args(argv)
 
     try:
-        page = fetch(arguments.base_url, token=os.environ.get("APP_ACCESS_TOKEN"))
-    except (urllib.error.URLError, OSError, ValueError) as error:
-        print(f"could not read {arguments.base_url}/: {error}", file=sys.stderr)
+        print(read_prompt(arguments.base_url, arguments.key, timeout_s=arguments.timeout))
+    except (Refused, TimeoutError) as error:
+        print(f"could not read {arguments.key} from {arguments.base_url}/: {error}", file=sys.stderr)
         return 1
-    prompt = prompts_of(page).get(arguments.key, "")
-    if not prompt:
-        print(f"{arguments.base_url}/ carries no {arguments.key} demo prompt", file=sys.stderr)
-        return 1
-    print(prompt)
     return 0
 
 

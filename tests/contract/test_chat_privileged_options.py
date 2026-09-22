@@ -119,6 +119,28 @@ async def test_retrieval_options_reach_the_tool(web, store):
         assert payload["k_source"] == "override"
 
 
+async def test_a_stated_tools_disabled_is_privileged_in_the_employee_persona(web):
+    """The negative half of the row below (fix round 1, Important 2). `privileged_options_used` was
+    narrowed to what the request *states*, so the thing that must still be refused is a request that
+    states it: an employee persona asking for the tool filter is `403 ADMIN_REQUIRED`, whatever the
+    process default happens to be — the ablation is admin-plus-`eval` and nothing else (§11.1)."""
+    async with web() as client:
+        refused = await client.post(
+            "/chat",
+            json={"message": QUESTION, "client_label": "eval", "options": {"tools_disabled": ["draft_hr_email"]}},
+        )
+        as_admin_on_the_wrong_label = await client.post(
+            "/chat",
+            json={"message": QUESTION, "client_label": "web", "options": {"tools_disabled": ["draft_hr_email"]}},
+            headers=ADMIN,
+        )
+
+    assert refused.status_code == 403
+    assert refused.json() == {"code": "ADMIN_REQUIRED"}
+    assert as_admin_on_the_wrong_label.status_code == 403
+    assert as_admin_on_the_wrong_label.json() == {"code": "PRIVILEGED_OPTION_REFUSED", "field": "tools_disabled"}
+
+
 async def test_the_process_wide_tool_filter_is_not_read_as_a_privileged_request(web, store):
     """`MCP_TOOLS_DISABLED` is the process default for `options.tools_disabled` (gap 20), and a
     default is not something the caller asked for: an employee-persona `web` turn on a process that
