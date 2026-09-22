@@ -653,16 +653,20 @@ page 8, each with its own unit suite:
 | **G5** | `sensitive_escalation` | harassment, discrimination, legal threat, medical or compensation-dispute topics | **Never answer directly**: emit an `escalation` block naming the People Ops contact and the cited process, and offer a mock HR case behind confirmation |
 | **G6** | `pii_secret_redaction` | every trace payload before persistence | `redact()` — key-name denylist, value regexes for `sk-ant-` / `sk-` / `AIza`, and an exact-match sweep over every `os.environ` value whose key ends `_KEY`/`_TOKEN`/`_SECRET` |
 
-**G1 runs on every turn, and there is exactly one turn it does not decide** (G5). A confirmed write
-is answered by its receipt: *"draft me an email to my manager"* searches nothing, so the two evidence
-clauses would refuse a turn that had just written a real `mock_writes` row — and a refusal is the one
-answer that cannot name the reference the reader needs. The live turn that found this drafted
-`MOCK-EMAIL-000018` and was then refused at `candidates: 0`. `g1.evaluate(...,
+**G1 decides every turn that reaches the gate — two refusals are decided before it, and one kind of
+turn it measures without deciding** (G5). The two that never reach it are out-of-scope refusals: one
+decided by the step-0 pre-filter and one by the router, each calling `_refuse` directly, so neither
+emits a `guardrail` span at all. The one it measures without deciding is a turn whose confirmed write
+has been performed: that turn is answered by its receipt. *"Draft me an email to my manager"* searches
+nothing, so the two evidence clauses would refuse a turn that had just written a real `mock_writes`
+row — and a refusal is the one answer that cannot name the reference the reader needs. The live turn
+that found this drafted `MOCK-EMAIL-000018` and was then refused at `candidates: 0`. `g1.evaluate(...,
 grounded_by_write=True)` is set **only** where `outcome.performed_write()` finds a performed write on
 this turn; the two clauses are still measured and the span still carries `max_dense_score`,
-`supporting` and `candidates`, with the reason prefixed **`PERFORMED_WRITE:`** so the dashboard says
-what the retrieval was worth on a turn the retrieval did not decide. Nothing else widens: a cancelled
-write and a failed write are **not** exempt, and each is answered by its own receipt on the refusal
+`supporting` and `candidates`, with the reason prefixed *"the write this turn performed is the
+evidence for the answer: …"* (`g1.PERFORMED_WRITE`), so the dashboard still says what the retrieval
+was worth on a turn the retrieval did not decide. Nothing else widens: a cancelled write and a failed
+write are **not** exempt, and each is answered by its own receipt on the refusal
 side instead (*"Cancelled — nothing was created"*), never by a sentence about a policy search.
 
 **Which sentence a refusal shows depends on which reason fired**, and two of the five reasons are not
@@ -981,7 +985,7 @@ quality mean — `tests/unit/test_cold_probe_excluded.py` proves it.
 
 ### Reading the six columns
 
-The published figures above are the **sixth** judged measurement against the same live instance.
+The published figures above are the **sixth** published measurement against the same live instance.
 Publishing only the last one would hide what the engineering actually bought, so all six columns
 are kept, each with the run id and the deployed commit that produced it:
 
@@ -1081,9 +1085,9 @@ it went ahead"*. G1's performed-write exemption and the receipt copy above close
 confirmation now says that nothing was created instead of borrowing the policy-search sentence. Both
 ablation arms were re-driven on the published build. The judged means move by less than a claim
 (groundedness 0.975 → 0.963, citation accuracy 0.883 → 0.875, document recall 0.921 → 0.947, tool
-selection 0.981 → 0.993) and strict pass and workflow completion hold. **The latency row is the
-lowest this project has measured** — p50 19.2 → 15.3 s, p95 35.7 → 26.0 s — and nothing in this wave
-targeted latency, so the honest reading is run-to-run spread on a shared 0.1-CPU instance rather than
+selection 0.981 → 0.993) and strict pass and workflow completion hold. **The p50 is the lowest of the
+six published columns** — 19.2 → 15.3 s, with p95 35.7 → 26.0 s (not a project low: the committed
+`r_1790067656_baseline` on `e85305b` measured 24.2 s) — and nothing in this wave targeted latency, so the honest reading is run-to-run spread on a shared 0.1-CPU instance rather than
 a win; the three drives below make that spread visible.
 
 **One thing the latency row is not.** The service's own token bucket was raised from `LLM_RPM=10`
@@ -1113,9 +1117,11 @@ file `r_1789069158_baseline.json` does carry a mechanically computed `judge_agre
 for another run's answers — which is precisely why that number is not published as column 2's
 agreement figure.
 
-**Where the published strict pass rate goes.** `strict_pass` is an AND over six clauses, so a
-failure always has a named cause. These are recomputed from the committed per-item scores by the
-same function that decides the flag:
+**Where the published strict pass rate goes.** `strict_pass` is an AND over six clauses — the tool
+clause can fail two ways, recall below 1.00 or a forbidden tool called, so `strict_pass_causes()`
+runs seven checks over those six; "six clauses" is the wording `evaluation/runner.py` generates into
+`REPORT.md` and this document keeps it. A failure always has a named cause, and these are recomputed
+from the committed per-item scores by the same function that decides the flag:
 
 | Item | Category | Clause(s) failed |
 |---|---|---|
@@ -1123,8 +1129,9 @@ same function that decides the flag:
 | `expenses-002` | multi_doc | groundedness 0.79 < 0.85 |
 | `equipment-001` | multi_doc | groundedness 0.69 < 0.85 |
 
-All three are **multi-document policy questions**, and no tool, argument, behaviour, safety or
-citation-resolvability clause fails anywhere in the run.
+All three are **multi-document policy questions**, and apart from `remote-002`'s workflow clause no
+clause fails anywhere in the run: tool recall is 1.00 on every item, no forbidden tool is called,
+`blocks_dropped_by_g2` is 0, action safety is 1.00 and the behaviour matrix is diagonal.
 
 `remote-002` is the breadth case: asked what must be in place to work from an approved country for
 more than 30 consecutive days, the model made **one** search, answered correctly and citably from
@@ -1132,7 +1139,8 @@ more than 30 consecutive days, the model made **one** search, answered correctly
 four `expected_docs` and workflow completion is 0.00, with tool recall and precision both 1.00. The
 bounded breadth repair exists for exactly this and did not fire widely enough here; the same item
 **met** its end state on the previous published run (`r_1789555212_baseline`) and missed it on both
-2026-09-22 drives, so part of this is router and sampling variance in how one search is issued.
+post-fix (committed) 2026-09-22 drives — the uncommitted diagnostic drive that morning scored it 1.00
+— so part of this is router and sampling variance in how one search is issued.
 
 `expenses-002` loses **one claim of seven** to a `contradicted` verdict (a contradicted claim is
 scored −0.5, which is why six supported claims of seven read 0.79 rather than 0.86). It is also the
@@ -1311,12 +1319,16 @@ and the dashboard renders it as "not judged on this variant".
 Twelve items flip their strict pass against baseline: `expenses-002`, `equipment-001` and
 `remote-004` on `dense_only_k2`; `remote-002`, `expenses-002`, `equipment-001`, `profile-001`,
 `pto-002`, `pto-003`, `remote-004`, `benefits-002` and `unsafe-001` on `no_structured_tools`.
-**Two of those flips are an artefact of the sentence above and must be read with it**: `expenses-002`
-and `equipment-001` fail the baseline on *groundedness*, and a judged clause is vacuously true on an
-unjudged arm, so both items "pass" on both arms for want of a judge rather than on merit. That is the
-whole of why `dense_only_k2` reads 0.929 against baseline's 0.893: it is not a better arm, it is an
-arm with two fewer scored clauses. Every `no_structured_tools` flip other than those two is a genuine
-pass that becomes a failure.
+**Two items across four of those flips are an artefact of the sentence above and must be read with
+it**: `expenses-002` and `equipment-001` fail the baseline on *groundedness*, and a judged clause is
+vacuously true on an unjudged arm, so both items "pass" on both arms for want of a judge rather than
+on merit. That is the whole of why `dense_only_k2` reads 0.929 against baseline's 0.893: it is not a
+better arm, it is an arm with two fewer scored clauses. **`remote-002`'s flip on
+`no_structured_tools` is a third gain, and that one is real**: `comparison.json` records it as
+baseline `false` → variant `true`, and on that arm the turn reaches document recall 1.00 and
+workflow completion 1.00 — with the structured tools gone the model kept searching and met the
+three-document end state it misses on baseline. Every other `no_structured_tools` flip is a pass
+that becomes a failure.
 
 A separate **zero-LLM chunk-size sweep** (`scripts/chunk_size_sweep.py`) rebuilds temporary
 indexes at three window sizes — never touching the committed manifest — and measures DocRecall

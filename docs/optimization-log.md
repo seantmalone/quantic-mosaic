@@ -704,7 +704,10 @@ than its headline is exactly the defect being fixed. The published trio —
 `workflow_completion_check` records `supported: false` and the report writes the banner. And the arms
 are unjudged by design (judging all three would triple judge volume), so the two items that fail the
 baseline on *groundedness* — `expenses-002` and `equipment-001` — "pass" on both arms for want of a
-judge: that is the whole of `dense_only_k2`'s higher strict pass.
+judge: that is the whole of `dense_only_k2`'s higher strict pass. The tools-removed arm carries one
+**real** gain beside those two, and it is worth naming: `remote-002` fails the baseline's workflow
+clause and passes on `no_structured_tools` at document recall 1.00 — with the structured tools gone
+the model kept searching and met the three-document end state it misses on baseline.
 
 **Cost and wall clock.** The two committed trios cost **$2.19** (`e85305b`: 0.7475 + 0.6171 + 0.8263)
 and **$2.24** (`8a89310`: 0.7731 + 0.6400 + 0.8244) in agent spend, each trio about 21–22 minutes of
