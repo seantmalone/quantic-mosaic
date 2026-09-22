@@ -736,7 +736,7 @@ build did not produce.
 | Estimated cost per run | $0.72 | $0.77 |
 | Ablation: workflow delta against the 0.25 bar | arms not re-driven | −0.143 (**not supported**) |
 | Items failing the composite | `remote-003`, `remote-004`, `unsafe-001` | `remote-002`, `expenses-002`, `equipment-001` |
-| Tests (unit/contract/integration + browser) | 3,040 + 299 | 3,111 + 299 |
+| Tests (unit/contract/integration + browser) | 3,040 + 299 | 3,111 + 299 (collected at `1660a13`) |
 
 **Reading it.** The headline held at the target — 0.893 here, as on the two published runs before it —
 while two long-standing failures closed (`remote-003`'s declined lookup and `unsafe-001`'s tool

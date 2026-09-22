@@ -1,9 +1,3 @@
-**What this is:** the independent grade card behind the 2026-09-21 grade-and-fix wave — a verbatim copy of the graded report, whose working copy lives in the git-ignored `.superpowers/` directory. The body below is unaltered; its ranked gap list is the machine twin [`grade-card-2026-09-21-gaps.json`](grade-card-2026-09-21-gaps.json).
-**Graded:** 2026-09-21, read-only, at HEAD `98c893f`, by an independent 82-agent grading workflow — assessors over grouped rubric sections, one adversarial skeptic per flagged finding, one synthesising grader.
-**What was done about it:** the wave's fixes landed as the `G5(…)` commits between `98c893f` and the tip of `main` — 26 of them through `e947ecd`, and `git log --oneline 98c893f..HEAD | wc -l` counts them at whatever the tip is when you read this — and the status of every ranked gap, closed, overturned on verification or deliberately deferred, is recorded in [`docs/process/sdd/G5-grade-5/progress.md`](../process/sdd/G5-grade-5/progress.md), the wave's ledger, beside the per-task briefs and reports copied next to it.
-
----
-
 # Mosaic HR Copilot — final grade against the Quantic rubric
 
 Graded 2026-09-21 against `docs/project-requirements.md` (Project Rubric band table), on the repository and deployment as they stand at `98c893f`. A solid demo video meeting every format requirement is assumed.

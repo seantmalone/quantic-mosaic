@@ -1,6 +1,6 @@
 # AI tooling — how Mosaic HR Copilot was actually built
 
-**Project:** `quantic-mosaic` · **Author:** Sean Malone · **Period:** 2026-09-08 → 2026-09-21
+**Project:** `quantic-mosaic` · **Author:** Sean Malone · **Period:** 2026-09-08 → 2026-09-22
 
 This is a dated, specific account of the AI tooling used to build this project, including the
 parts that went badly. It is not a summary of what the tools can do; it is what happened.
@@ -334,5 +334,8 @@ being a check on authorship. What the history no longer carries, the tracked pla
 `docs/superpowers/plans/2026-09-21-grade-5.md` states the wave's shape as an Opus implementer per task
 with a reviewer per task, and `CLAUDE.md` pins `model: "opus"` on every delegated call. Which session
 took which task, and what each reviewer found, is in that wave's ledger and per-task reports, and
-those are in the git-ignored `.superpowers/sdd/` working directory until the wave's process trail is
-copied into `docs/process/sdd/` the way P0–P27's was.
+those are committed — copied verbatim out of the git-ignored `.superpowers/sdd/` working directory
+into [`docs/process/sdd/G5-grade-5/`](docs/process/sdd/G5-grade-5/) the way P0–P27's trail was, with
+a `README.md` there naming what was left out of the copy and how every file was scanned for
+credentials first. The ledger records the models as well: every implementer, reviewer and re-reviewer
+subagent in the wave was dispatched with `model: opus`.

@@ -37,7 +37,7 @@ loopback Streamable HTTP — real JSON-RPC on a real socket, not an in-process f
 ```mermaid
 flowchart TB
     subgraph browser["Browser (employee / grader)"]
-        UI["Chat UI — Jinja2 + htmx<br/>act-as selector · citation chips<br/>live span rail (SSE) · confirm card"]
+        UI["Chat UI — Jinja2 + htmx<br/>act-as selector · Sources (n) strip<br/>status line + streamed answer (SSE) · confirm card"]
         DASH["Observability Dashboard<br/>11 pages · Chart.js · htmx filters"]
     end
     subgraph render["Render free web service — ONE process, ONE container (293.6 MB live / 512 MB)"]
@@ -115,7 +115,7 @@ readers, and they are the five surfaces this project is graded on:
 | Reader | Surface |
 |---|---|
 | `POST /chat`'s `trace[]` | the concise tool-call trace requirement 6 asks for |
-| `GET /chat/stream` (SSE) | the live span rail the demo narrates from |
+| `GET /chat/stream` (SSE) | the one in-flight status line, and the answer as it is written |
 | The 11-page dashboard | the full audit log for every session |
 | The evaluation scorers | every deterministic metric is an assertion over trace records |
 | The demo narration | tool names, arguments, outputs and citations, read off the same spans |
@@ -1500,6 +1500,20 @@ the `passed` flag — not off an earlier one:
     genuinely requires (P13's R5), so the movement is partly a definition change and is reported as
     one. Judged metrics are baseline-only, so two of the twelve strict-pass flips are absences of a
     judge rather than differences in behaviour.
+12. **Not a run figure but a live finding: a cancelled or failed confirmed write still closes the turn
+    as `refused`.** `TurnOutcome` has no value for *"the write did not happen because the person said
+    no"*, so a turn that retrieved nothing — which a *"draft me an email to my manager"* turn does not
+    need to — is closed by the evidence gate: `outcome: refused`, with a `guardrail` span carrying
+    `G1_evidence_gate verdict=refuse`. What the reader is served is correct, because the receipt
+    **replaces** the gate's sentence (*"Cancelled — nothing was created."*), but the turn is filed as
+    `refused` — in `turns.outcome`, in the `/chat` response and in the dashboard's outcome column and
+    filter — when nothing was refused to anyone.
+    [`docs/evidence/draft-hr-email-live-2026-09-22.txt`](docs/evidence/draft-hr-email-live-2026-09-22.txt)
+    pins both endings of the same ask on the published build, and the cancelled one shows exactly
+    that: `outcome: refused`, span 14 `verdict=refuse`, one `notice` block, no `draft_hr_email · ok`
+    span and nothing added to the write ledger. The fix is a dedicated `TurnOutcome` value carried
+    through the store, the `/chat` contract and the dashboard's labels — a schema change, and
+    deliberately not made in this wave.
 
 **Limitations that were on this list and are now closed, with the wave that closed them.** The
 **confirmation-card miss** — `unsafe-001` answering where the turn should have stopped at the card,
@@ -1709,6 +1723,7 @@ reproducible across processes, which nothing needed.
 
 | Artifact | What it proves |
 |---|---|
+| [`docs/evidence/README.md`](docs/evidence/README.md) | the index of every artifact in that directory: its date, the build it was captured on, and what it shows — and where *"the final build"* in an older header is reconciled against the build this document publishes |
 | [`docs/evidence/mcp-discovery-4-tools.png`](docs/evidence/mcp-discovery-4-tools.png) | the ablation's `tools/list` from a genuinely separate stdio server: 4 tools, the five structured-data and write tools absent from **discovery** |
 | [`docs/evidence/mcp-discovery-page.png`](docs/evidence/mcp-discovery-page.png) | `/dashboard/mcp` rendering live discovery: connected, protocol `2025-11-25`, 32 ms handshake, all nine tools with their JSON Schemas |
 | [`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png) | the recorded red CI run: `test` fails, `deploy` is **skipped — "dependent job failed"** |

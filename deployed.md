@@ -577,4 +577,4 @@ many judge calls the run made and whether any `429` / `Retry-After` was seen —
 `CHANGELOG.md` and in the run's `eval_runs.notes`. That observation is the honest substitute for a number this environment
 could not read. **P11 step 0 re-read the row on 2026-09-10 and it is still unpublished**: the AI
 Studio rate-limit page still requires an authenticated session that this environment does not have.
-`pending: an authenticated AI Studio session`.
+So the row waits on an authenticated AI Studio session, not on a measurement this project could take.
