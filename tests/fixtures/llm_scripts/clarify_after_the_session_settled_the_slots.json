@@ -1,0 +1,103 @@
+{
+  "_note": "G5, gap 4b fix round 1 — three turns of one session. Turn 1 is `followup_extend.json`'s first turn verbatim, which settles start_date and days, so the PTO slot order is fully settled for the two clarifications after it. Turn 2 is routed `pto_request` with needs_clarification and a message that mentions an expense: the topic words must NOT re-key it onto the expense order, because the router named a workflow. Turn 3 is routed with `workflow: null` and a rationale naming the destination country — a slot outside the inferred (pto) order, which the rationale fallback has to ask for once the inferred order comes back empty.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"multi_doc\": false, \"needs_employee_data\": true, \"needs_clarification\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_pto_balance\"], \"rationale_summary\": \"PTO request for E1042, 15-17 September.\"}",
+      "finish_reason": "end_turn",
+      "prompt_tokens": 1800,
+      "completion_tokens": 60
+    },
+    {
+      "purpose": "act",
+      "response_text": "Reading the record and the balance.",
+      "tool_calls": [
+        {
+          "id": "toolu_fx_1",
+          "name": "lookup_employee_profile",
+          "args": {
+            "employee_id": "E1042"
+          }
+        },
+        {
+          "id": "toolu_fx_2",
+          "name": "check_pto_balance",
+          "args": {
+            "employee_id": "E1042"
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
+    },
+    {
+      "purpose": "act",
+      "response_text": "Now the policy and the verdict.",
+      "tool_calls": [
+        {
+          "id": "toolu_fx_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO notice requirement business days advance",
+            "topic": "pto",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_fx_4",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "PTO manager approval requirement MosaicOne",
+            "topic": "approvals",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_fx_5",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "pto_request",
+            "employee_id": "E1042",
+            "parameters": {
+              "start_date": "2026-09-22",
+              "end_date": "2026-09-24",
+              "days": 3
+            }
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 90
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Three days, cited.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
+    },
+    {
+      "purpose": "repair",
+      "response_text": "{\"blocks\": [{\"type\": \"policy_fact\", \"text\": \"PTO requests must be submitted at least 5 business days in advance.\", \"citations\": [\"c_16186f87d12c1302\"]}, {\"type\": \"policy_fact\", \"text\": \"PTO requests of any length are approved by the employee's direct manager.\", \"citations\": [\"c_9948839107acfaaf\"]}], \"next_steps\": [\"Watch for your manager's approval in MosaicOne.\"], \"rationale_summary\": \"Three days, cited.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 9000,
+      "completion_tokens": 300
+    },
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"workflow\", \"workflow\": \"pto_request\", \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"The follow-up's intent is unclear, so it cannot be scored as submitted.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1180,
+      "completion_tokens": 92
+    },
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"The destination country was not given, so nothing can be scored against it.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1180,
+      "completion_tokens": 92
+    }
+  ]
+}

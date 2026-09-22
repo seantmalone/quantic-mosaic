@@ -2862,9 +2862,12 @@ class Orchestrator:
 
         Gap 4b closes the other half of `amb-002`: the deployed run routed it with `workflow: null`,
         so there was no slot order at all and the rationale words named the destination alone. A turn
-        with no workflow and no intent order now **infers** the workflow from the topic words of the
-        rationale and the question (`clarify_topic_workflow`) and walks that order; the rationale-word
-        path is what is left when no topic matches.
+        the router named **no** workflow for, and whose intent has no order either, now **infers** one
+        from the topic words of the rationale and the question (`clarify_topic_workflow`) and walks
+        that order. A named workflow is never second-guessed: the inference does not run at all when
+        the router named one, even if the session has settled every slot of it. The rationale words
+        are the last resort, for a turn with no order to walk and for one whose order is fully
+        settled — the rationale can name a slot outside it, and that is still what is missing.
         """
         workflow = turn.workflow
         has_record = bool(EMPLOYEE_ID.match(turn.request.employee_id or ""))
@@ -2876,20 +2879,28 @@ class Orchestrator:
             has_record=has_record,
             intent=decision.intent if decision is not None else None,
         )
-        if not slots and decision is not None:
-            # No workflow and no intent order to walk. The topic is still there to be read, in the
-            # rationale and in the question itself (G5, gap 4b): the deployed run routed `amb-002`
-            # `policy_qa` with no workflow, and its rationale — *"Remote work eligibility requires
-            # location…"* — names the topic even though it names one slot. Inferring the workflow
-            # walks the whole order, so the turn asks for the destination **and** the dates.
+        if not slots and decision is not None and workflow is None:
+            # The router named **no** workflow, so there is no slot order to walk — but the topic is
+            # still there to be read, in the rationale and in the question itself (G5, gap 4b): the
+            # deployed run routed `amb-002` `policy_qa` with no workflow, and its rationale —
+            # *"Remote work eligibility requires location…"* — names the topic even though it names
+            # one slot. Inferring the workflow walks the whole order, so the turn asks for the
+            # destination **and** the dates.
+            #
+            # Only when the router named none (fix round 1): a turn whose workflow **is** named and
+            # whose slots the session has all settled must not be re-keyed onto another workflow's
+            # order by a word in the reader's own message — a `pto_request` follow-up that mentions
+            # an expense is not an expense claim.
             inferred = clarify_topic_workflow(decision.rationale_summary or "", turn.request.message)
             if inferred is not None:
                 slots = unfilled_slots(inferred, known=known, has_record=has_record)
-            else:
-                # The router was told to name every missing detail in its rationale, and until W10
-                # nothing read it (ruling 9, scenario 12).
-                found = rationale_slot(decision.rationale_summary or "")
-                slots = (found,) if found is not None and (found != "identity" or not has_record) else ()
+        if not slots and decision is not None:
+            # The router was told to name every missing detail in its rationale, and until W10
+            # nothing read it (ruling 9, scenario 12). It is the fallback for a turn no order could
+            # be found for **and** for one whose inferred order the session has already settled: the
+            # rationale can name a slot outside that order, and it is still what is missing.
+            found = rationale_slot(decision.rationale_summary or "")
+            slots = (found,) if found is not None and (found != "identity" or not has_record) else ()
         turn.clarify_slot = slots[0] if slots else None
         return clarification_question(slots)
 

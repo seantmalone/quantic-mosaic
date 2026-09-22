@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from hrmosaic.agent.client import McpClient
 from hrmosaic.agent.orchestrator import (
     CLARIFY_ALSO,
     CLARIFY_FALLBACK,
@@ -36,11 +37,13 @@ from hrmosaic.agent.orchestrator import (
     CLARIFY_SLOT_ORDER,
     CLARIFY_TOPIC_WORDS,
     ChatRequest,
+    Orchestrator,
     clarification_question,
     clarify_slot_of,
     clarify_topic_workflow,
     unfilled_slots,
 )
+from hrmosaic.core.llm.stub import StubAdapter
 
 pytestmark = pytest.mark.anyio
 
@@ -130,6 +133,73 @@ async def test_a_time_off_question_with_no_workflow_names_the_dates_and_the_day_
     assert CLARIFY_ALSO["days"] in response.answer, response.answer
     assert CLARIFY_FALLBACK not in response.answer
     assert response.answer.count("?") == 1
+
+
+SETTLED = "Can I take three days of PTO from Tuesday 22 September to Thursday 24 September 2026?"
+MENTIONS_AN_EXPENSE = "Would the hotel for those days count as an expense?"
+MORE_TIME_OFF = "Could I take more time off in December as well?"
+
+
+@pytest.fixture
+async def clarifications_after_a_settled_session(writer, mounted_mcp_url):
+    """One session: a PTO turn that settles the slots, then the two clarifications after it.
+
+    Turn 1 is `followup_extend.json`'s first turn, so `start_date` and `days` are what the session
+    carries — the only way to reach a clarification whose workflow **is** named and whose slot order
+    is nonetheless empty, which is the branch fix round 1 is about.
+    """
+    from tests.conftest import LLM_SCRIPTS
+
+    orchestrator = Orchestrator(
+        client=McpClient(transport="http", url=mounted_mcp_url),
+        model=StubAdapter(script_path=LLM_SCRIPTS / "clarify_after_the_session_settled_the_slots.json"),
+    )
+    try:
+        first = await orchestrator.run_turn(ChatRequest(message=SETTLED, employee_id="E1042"))
+        assert first.outcome == "answered", first.outcome
+        named = await orchestrator.run_turn(
+            ChatRequest(message=MENTIONS_AN_EXPENSE, session_id=first.session_id, employee_id="E1042")
+        )
+        unnamed = await orchestrator.run_turn(
+            ChatRequest(message=MORE_TIME_OFF, session_id=first.session_id, employee_id="E1042")
+        )
+    finally:
+        await orchestrator.aclose()
+    return named, unnamed
+
+
+async def test_a_named_workflow_is_never_re_keyed_by_a_word_in_the_message(clarifications_after_a_settled_session):
+    """The inference fires only when the router named no workflow (G5, gap 4b, fix round 1).
+
+    The gate it was added behind — *"no slot order came back"* — is also true of a turn whose workflow
+    the router **did** name and whose every slot the session has settled. On that turn the topic words
+    would read the reader's own message and walk a different workflow's order: a `pto_request`
+    follow-up that says "expense" would be asked *"how much is the claim for?"*, a question about a
+    claim nobody made. A named workflow is the router's decision and is not second-guessed here.
+    """
+    named, _unnamed = clarifications_after_a_settled_session
+
+    assert named.outcome == "clarify", named.outcome
+    assert CLARIFY_QUESTIONS["amount_usd"] not in named.answer, named.answer
+    assert "how much" not in named.answer, named.answer
+    assert CLARIFY_FALLBACK in named.answer, named.answer
+
+
+async def test_the_rationale_still_asks_for_a_slot_outside_the_inferred_order(
+    clarifications_after_a_settled_session,
+):
+    """The rationale words are the fallback on an empty result, not only on no match (fix round 1).
+
+    This turn's topic is `pto_request` — whose two slots the session settled on turn 1 — and its
+    rationale names the destination country, which is in no PTO order at all. Were the inference an
+    `else`, the turn would serve the fallback that names nothing while the router had already said
+    what was missing.
+    """
+    _named, unnamed = clarifications_after_a_settled_session
+
+    assert unnamed.outcome == "clarify", unnamed.outcome
+    assert CLARIFY_QUESTIONS["destination_country"] in unnamed.answer, unnamed.answer
+    assert CLARIFY_FALLBACK not in unnamed.answer, unnamed.answer
 
 
 async def test_amb_003_names_which_balance_and_whose_record(run_agent):
