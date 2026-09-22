@@ -188,9 +188,11 @@ BUDGET_STOPS = ("max_steps", "max_tool_calls", "timeout")
 #: assistant message the request replays, and an unanswered `tool_use` is a 400 on the pinned model.
 NOT_RUN_YET = json.dumps({"status": "not_run", "hint": "an earlier call in this step was rejected"})
 
-#: The single question a clarification asks, keyed on **the first unfilled slot** (W8, C18). One
-#: question, never the slot list: `WorkflowSpec.required_slots` documents the completion predicate
-#: for the dashboard, and reading it aloud was the defect jargon-and-exposure-4 recorded.
+#: The question a clarification opens with, keyed on the **first** unfilled slot (W8, C18) — and
+#: since G5 (gap 4) every *other* unfilled slot is named after it, from `CLARIFY_ALSO`. Never the
+#: slot list as the workflow documents it: `WorkflowSpec.required_slots` documents the completion
+#: predicate for the dashboard, and reading that aloud was the defect jargon-and-exposure-4
+#: recorded. Naming what is missing is a different thing from reciting a predicate.
 #:
 #: Keyed on the workflow, it asked the wrong question. The admin turn of 2026-09-15 was asked
 #: *"which dates are you thinking of?"* by a message that had given the dates in full: what was
@@ -210,6 +212,31 @@ CLARIFY_QUESTIONS: dict[str, str] = {
     "destination_country": "Happy to check — where would you be working from?",
     "duration_days": "Happy to check — how long would you be there?",
     "amount_usd": "Happy to check — how much is the claim for?",
+    # The balance/identity ambiguity (G5, gap 4). `amb-003` — *"Can you check the balance for me?"* —
+    # is routed `employee_data` with no workflow, so it fell all the way through to
+    # `CLARIFY_FALLBACK`, which names nothing: the judge scored `named_missing_information` false and
+    # clarification accuracy 1 of 3. Which balance is the missing detail, and it is the reader's own
+    # record either way.
+    "employee_data": (
+        "Happy to check — which balance do you mean: your time off, or something else on your record? "
+        "If it is not your own record, tell me whose."
+    ),
+}
+
+#: How the **second and later** unfilled slots are named, after the question the first one asked
+#: (G5, gap 4). `_clarification_text` asked about the first unfilled slot and stopped: `amb-002` —
+#: *"Am I allowed to work from there for a while?"* — was asked only where, never for how long, and
+#: the judge's `named_missing_information` verdict was false on a turn whose whole purpose was to
+#: name what is missing. Fragments, not sentences: two questions in a row read as an interrogation,
+#: and the router is told to name every missing detail for exactly this line to spend.
+CLARIFY_ALSO: dict[str, str] = {
+    "identity": "which employee record to read this against",
+    "start_date": "the dates",
+    "days": "how many days that would be",
+    "destination_country": "where you would be working from",
+    "duration_days": "how long you would be there, and from when",
+    "amount_usd": "how much the claim is for",
+    "employee_data": "which balance you mean",
 }
 
 #: What the one next step of a clarification says (W10, ruling 9). *"Reply with the missing detail
@@ -222,6 +249,7 @@ CLARIFY_NEXT_STEPS: dict[str, str] = {
     "destination_country": "Reply with the destination and I will pick this up.",
     "duration_days": "Reply with how long you would be there and I will pick this up.",
     "amount_usd": "Reply with the amount and I will pick this up.",
+    "employee_data": "Reply with which balance you mean and I will pick this up.",
 }
 
 #: The fallback, for a clarification the router could not attach to a slot.
@@ -241,12 +269,20 @@ RATIONALE_SLOT_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("amount_usd", ("amount", "how much", "cost", "spend")),
 )
 
-#: Which slot a workflow asks about first when it holds none of them. The order is the order a
-#: person would be asked in, not the order `required_slots` documents.
+#: Which slots a workflow asks about when it holds none of them, in the order a person would be
+#: asked in — not the order `required_slots` documents. Every one of them that is still empty is
+#: named (G5, gap 4); the first one is the one the question is built from.
 CLARIFY_SLOT_ORDER: dict[str, tuple[str, ...]] = {
     "pto_request": ("identity", "start_date", "days"),
     "remote_work_eligibility": ("identity", "destination_country", "duration_days"),
     "expense_claim": ("identity", "amount_usd"),
+}
+
+#: …and which slots a turn the router attached to **no** workflow asks about, keyed on its intent
+#: (G5, gap 4). `amb-003` is an `employee_data` turn with no workflow and no slot order at all, so
+#: the one thing it could ask was the fallback that names nothing.
+CLARIFY_INTENT_ORDER: dict[str, tuple[str, ...]] = {
+    "employee_data": ("identity", "employee_data"),
 }
 
 #: When the router named no workflow. Still one question, still in the first person.
@@ -281,6 +317,10 @@ CLARIFY_CHIPS: dict[str, tuple[str, ...]] = {
     "amount_usd": (
         "About USD 3,000",
         "Under USD 100",
+    ),
+    "employee_data": (
+        "My time off balance",
+        "My benefits",
     ),
 }
 
@@ -329,25 +369,56 @@ def clarify_slot_of(question: str) -> str | None:
     path has to offer the same two quick replies the live turn did. The questions are a closed set,
     so the reverse lookup is exact — and it is the *stored text* that decides, not the workflow,
     which is the whole point of keying on the slot.
+
+    Since G5 (gap 4) the stored question can name more than one missing slot, so the match is on the
+    **opening** question: that is the slot the chips and the next step were keyed on live, and none
+    of the closed set is a prefix of another.
     """
-    return next((slot for slot, text in CLARIFY_QUESTIONS.items() if text == question.strip()), None)
+    text = question.strip()
+    return next((slot for slot, ask in CLARIFY_QUESTIONS.items() if text.startswith(ask)), None)
 
 
-def unfilled_slot(workflow: str | None, *, known: Collection[str], has_record: bool) -> str | None:
-    """The first slot this turn still needs, or `None` when the session already holds them all.
+def unfilled_slots(
+    workflow: str | None,
+    *,
+    known: Collection[str],
+    has_record: bool,
+    intent: str | None = None,
+) -> tuple[str, ...]:
+    """Every slot this turn still needs, in the order a person would be asked for them (G5, gap 4).
 
     `known` is what `agent/session.py` carried forward from the last three turns, so a follow-up is
     never asked for a detail the session settled — the other half of C12's defect, and the reason
     C18 keys on the slot rather than on the workflow.
+
+    A turn the router attached to no workflow falls back to `CLARIFY_INTENT_ORDER`, which is how an
+    `employee_data` turn with no workflow — `amb-003` — gets a question about its own missing detail
+    instead of the fallback that names nothing.
     """
-    for slot in CLARIFY_SLOT_ORDER.get(workflow or "", ()):
-        if slot == "identity":
-            if not has_record:
-                return slot
-            continue
-        if slot not in known:
-            return slot
-    return None
+    order = CLARIFY_SLOT_ORDER.get(workflow or "") or CLARIFY_INTENT_ORDER.get(intent or "", ())
+    return tuple(slot for slot in order if ((not has_record) if slot == "identity" else slot not in known))
+
+
+def unfilled_slot(workflow: str | None, *, known: Collection[str], has_record: bool) -> str | None:
+    """The first slot this turn still needs, or `None` when the session already holds them all."""
+    return next(iter(unfilled_slots(workflow, known=known, has_record=has_record)), None)
+
+
+def clarification_question(slots: Sequence[str]) -> str:
+    """The question a clarification opens with, naming **every** slot it is still missing (G5, gap 4).
+
+    The first slot asks the question; the rest are named after it as fragments. Two full questions in
+    a row read as an interrogation, and `amb-002`'s defect was not the wording of the first question
+    but that the second slot was never mentioned at all.
+    """
+    if not slots:
+        return CLARIFY_FALLBACK
+    first, rest = slots[0], [CLARIFY_ALSO[slot] for slot in slots[1:] if slot in CLARIFY_ALSO]
+    question = CLARIFY_QUESTIONS.get(first, CLARIFY_FALLBACK)
+    if not rest:
+        return question
+    also = rest[0] if len(rest) == 1 else f"{', '.join(rest[:-1])} and {rest[-1]}"
+    return f"{question} I will also need to know {also}."
 
 
 #: What the product will not do, said first and in its own voice (W8, C20, C17). It names the act
@@ -1426,12 +1497,23 @@ class Orchestrator:
         return next((phrase for phrase in OUT_OF_CORPUS_PHRASES if phrase in lowered), None)
 
     async def _route(self, turn: _Turn) -> RouteDecision:
+        """The router call of §9.2 — and the catalog it selects tools from (G5, gap 17).
+
+        `selected_tools` is described in `system` as chosen "from the offered catalog", and until
+        G5 the catalog never entered the prompt: the router call carries no `tools` array, because
+        it answers with JSON and calls nothing. The model therefore emitted category labels —
+        `["employee_data", "pto_request_write"]` — `normalise` dropped every one of them as unknown,
+        and 183 of 183 recorded real-model router spans wrote `selected_tools: []` while
+        `_requested_write` read that empty list. The names go in the `user` half, so the cached
+        `tools → system` prefix does not move.
+        """
         req = turn.request
         system, user = prompts.render(
             "route.j2",
             persona=prompts.persona_block(employee_id=req.employee_id, actor_source=req.actor_source),
             question=req.message,
             session_context=session.render(turn.history),
+            catalog_names=turn.catalog.names if turn.catalog is not None else (),
         )
         completion = await self.model().complete(
             [Message(role="system", content=system), Message(role="user", content=user)],
@@ -1825,10 +1907,19 @@ class Orchestrator:
     def _profile_outstanding(self, turn: _Turn) -> bool:
         """A verdict or a balance computed **for the acting employee** with the profile never read.
 
-        The `employee_id` test is on the result body, not merely on the tool name (W10 addendum,
-        Minor): a turn that scored somebody else's request — an approver checking a report's claim
-        — owes nothing about the reader's own profile, and reading it would spend a tool call on a
-        record the answer is not about.
+        The `employee_id` test is on the call's **arguments**, not merely on the tool name (W10
+        addendum, Minor): a turn that scored somebody else's request — an approver checking a
+        report's claim — owes nothing about the reader's own profile, and reading it would spend a
+        tool call on a record the answer is not about.
+
+        Arguments, not the result body, since G5 (gap 11). A body echoes its input only if the tool's
+        output model says so: `check_pto_balance` carries `employee_id` and `check_policy_compliance`
+        does not — `ComplianceOutput` declares no such field and `_compliance` round-trips through it,
+        so an extra key would be dropped. The one turn this repair was written for, `remote-003`, is a
+        `policy_qa`-routed eligibility question whose only profile-first tool **is** the compliance
+        engine: the debt could never fire, the profile was never read, and the published run scored it
+        tool recall 0.67 with workflow completion 0. Every call records what it was asked; that is the
+        question being asked here.
 
         **§9.2's router gate is deliberately not consulted** (W10 fix round, the live evaluation).
         That gate exists to stop the *model* wandering into people data on a corpus-only question,
@@ -1840,11 +1931,7 @@ class Orchestrator:
         actor = turn.request.employee_id or ""
         return (
             not turn.state.has(PROFILE_TOOL)
-            and any(
-                str((body or {}).get("employee_id") or "") == actor
-                for name in PROFILE_FIRST_TOOLS
-                for body in turn.state.results.get(name, ())
-            )
+            and any(turn.state.called_with(name, "employee_id", actor) for name in PROFILE_FIRST_TOOLS)
             and turn.tool_calls_made < self.settings.agent_max_tool_calls
             and bool(actor and EMPLOYEE_ID.match(actor))
         )
@@ -2402,7 +2489,7 @@ class Orchestrator:
         engine_scores: Mapping[str, float] | None = None,
     ) -> list[EvidenceChunk]:
         """Fold one successful tool result into the turn's state, evidence and prompt envelopes."""
-        turn.state.record(result.tool_name, result.body)
+        turn.state.record(result.tool_name, result.body, arguments=result.arguments)
         turn.envelopes.append(_ToolEnvelope(name=result.tool_name, result_json=result.text))
         fresh: list[EvidenceChunk] = []
         for payload in result.retrievals:
@@ -2708,7 +2795,8 @@ class Orchestrator:
     # ----------------------------------------------------------------------------------
 
     def _clarification_text(self, turn: _Turn) -> str:
-        """One question, about the slot that is actually empty (UX W2, jargon-and-exposure-4; W8, C18).
+        """The question, naming **every** slot that is actually empty (UX W2, jargon-and-exposure-4;
+        W8, C18; G5, gap 4).
 
         It used to read the router's `rationale_summary` aloud and then recite
         `WorkflowSpec.required_slots` — *"I need: employee profile, PTO balance, requested days,
@@ -2721,20 +2809,30 @@ class Orchestrator:
         2026-09-15 was asked *"which dates are you thinking of?"* by a message that had given the
         dates, when what `admin` lacks is an employee record. The key is the first unfilled slot,
         and the session's own history counts as filled (W8, C12).
+
+        G5 (gap 4) closes the half of that which was still asking about the first slot **only**. On
+        the published run `amb-002` — *"Am I allowed to work from there for a while?"* — was asked
+        where and never for how long, and `amb-003` fell through to the fallback that names nothing:
+        the judge scored `named_missing_information` false on both and clarification accuracy 1 of 3
+        with n = 3. The opening question is still one question; every other empty slot is named after
+        it, and a turn with no workflow now walks its intent's order before the rationale.
         """
         workflow = turn.workflow
         has_record = bool(EMPLOYEE_ID.match(turn.request.employee_id or ""))
-        turn.clarify_slot = unfilled_slot(
+        decision = turn.decision
+        slots = unfilled_slots(
             workflow.name if workflow is not None else None,
             known=session.known(turn.history),
             has_record=has_record,
+            intent=decision.intent if decision is not None else None,
         )
-        if turn.clarify_slot is None and turn.decision is not None:
-            # No workflow, so no slot order to walk — but the router was told to name every missing
+        if not slots and decision is not None:
+            # No workflow and no intent order to walk — but the router was told to name every missing
             # detail in its rationale, and until W10 nothing read it (ruling 9, scenario 12).
-            found = rationale_slot(turn.decision.rationale_summary or "")
-            turn.clarify_slot = found if found != "identity" or not has_record else None
-        return CLARIFY_QUESTIONS.get(turn.clarify_slot or "", CLARIFY_FALLBACK)
+            found = rationale_slot(decision.rationale_summary or "")
+            slots = (found,) if found is not None and (found != "identity" or not has_record) else ()
+        turn.clarify_slot = slots[0] if slots else None
+        return clarification_question(slots)
 
     def _clarify(self, turn: _Turn, question: str, *, cold_start: bool) -> ChatResponse:
         """`outcome="clarify"`, and the question names the missing slot (§9.6).
@@ -3089,7 +3187,9 @@ class Orchestrator:
                 if payload.get("error_code") == "CONFIRMATION_REQUIRED":
                     gated = payload
                     continue
-                turn.state.record(payload["tool_name"], body)
+                # The arguments travel with the body (G5, gap 11): `_profile_outstanding` reads them,
+                # and a resumed turn has to owe the same profile the live one did.
+                turn.state.record(payload["tool_name"], body, arguments=payload.get("arguments") or {})
                 # The same line `_absorb` runs live (P13 R7). Engine evidence is scored, never
                 # retrieved, so it was never written to a `retrieval` span and `_rehydrate_retrieval`
                 # cannot bring it back — and since R7 it counts towards `is_complete` and G1. Without
@@ -3156,7 +3256,9 @@ class Orchestrator:
     async def _resume(self, turn: _Turn, confirmation_token: str) -> ChatResponse:
         gated = turn.gated
         if not gated:
-            return self._refuse(turn, "there is no gated tool call on this turn to confirm", cold_start=False)
+            # Confirmation copy, not the policy-search refusal (G5, gap 19): this branch is a card
+            # that was already spent or has expired, and nothing about it is a question about evidence.
+            return self._refuse(turn, g1.CONFIRMATION_MISSING, cold_start=False)
         try:
             turn.catalog = await self._discover(turn)
         except McpUnavailable as exc:
@@ -3178,7 +3280,7 @@ class Orchestrator:
         turn.tool_calls_made += 1
         if result.confirmation_required:
             self._error(turn, "confirmation_rejected", "the confirmation token was refused", component="mcp")
-            return self._refuse(turn, "the confirmation could not be validated", cold_start=False)
+            return self._refuse(turn, g1.CONFIRMATION_INVALID, cold_start=False)
         if result.is_error:
             # The token validated and the write still failed. Mirroring `_act`: the body goes to the
             # synthesis envelopes so the answer can say what happened, and **nowhere near**
@@ -3250,9 +3352,11 @@ __all__ = [
     "ConfirmationCard",
     "EvidenceChunk",
     "Orchestrator",
+    "clarification_question",
     "clarify_chips",
     "clarify_slot_of",
     "rationale_slot",
+    "unfilled_slots",
     "Timings",
     "ToolCallRepair",
     "Usage",

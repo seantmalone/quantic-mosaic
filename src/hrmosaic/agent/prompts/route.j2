@@ -11,6 +11,14 @@
   `corpus_titles()`, the same `documents` table `list_policy_documents` reads — so the list cannot
   drift from the corpus, and `system` stays byte-stable because the corpus does. "and only covers"
   is load-bearing in the other direction: it is what keeps a genuinely out-of-scope turn refused.
+
+  CATALOG (added G5) is in `user`, not `system`: it is the turn's own discovered catalog, so it sits
+  after the cache breakpoint even though it rarely moves, and `system` stays byte-stable.
+  `selected_tools` told the router to choose "from the offered catalog" while the router prompt
+  carried no catalog at all — the router call has no `tools` array, since it answers with JSON and
+  calls nothing — so the model invented category labels (`employee_data`) that `normalise` then
+  dropped, and every real-model turn wrote `selected_tools: []`. The names are the ones `tools/list`
+  returned for this turn.
 -#}
 {%- block system -%}
 You are the router for the Mosaic Robotics HR Copilot. You classify one turn. You never answer it.
@@ -45,6 +53,10 @@ RULES
 {%- if session_context is defined and session_context %}
 
 {{ session_context }}
+{%- endif %}
+{%- if catalog_names is defined and catalog_names %}
+
+CATALOG — the tools offered on this turn, and the only names selected_tools may carry: {{ catalog_names | join(', ') }}.
 {%- endif %}
 
 QUESTION: {{ question }}

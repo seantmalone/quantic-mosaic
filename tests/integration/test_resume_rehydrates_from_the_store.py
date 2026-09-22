@@ -24,6 +24,7 @@ from unittest import mock
 import pytest
 
 from hrmosaic.agent.client import McpClient
+from hrmosaic.agent.guardrails import g1
 from hrmosaic.agent.orchestrator import ChatRequest, Orchestrator
 from hrmosaic.core.llm.stub import StubAdapter
 from hrmosaic.mcpserver import confirm
@@ -422,3 +423,55 @@ async def test_the_resumed_engine_scoring_does_not_run_on_the_event_loop(store, 
     assert scored_on, "the parked turn's engine evidence still has to be scored"
     assert all(thread != loop_thread for thread in scored_on), "and never on the thread running the loop"
     assert len(scored_on) == 1, "scored once, ahead of the walk — the walk is handed the result"
+
+
+# --------------------------------------------------------------------------------------
+# A confirmation that cannot be acted on says so (G5, gap 19)
+# --------------------------------------------------------------------------------------
+#
+# `_resume` passes two non-evidence reasons into `g1.refusal()`, and until G5 neither had any copy:
+# `refusal_text` fell through to `USER_REFUSAL`, so a reader who had just clicked **Confirm** was told
+# *"I could not find anything in Mosaic's policy library that answers this"* — about a search that
+# never ran, on a turn whose whole subject was a write. Neither branch had a test.
+
+
+async def test_a_refused_confirmation_is_not_reported_as_a_failed_policy_search(writer, store, mounted_mcp_url):
+    """Branch one: the token does not validate, so `create_mock_hr_ticket` gates the call again."""
+    orchestrator = Orchestrator(
+        client=McpClient(transport="http", url=mounted_mcp_url),
+        model=StubAdapter(script_path=LLM_SCRIPTS / "confirm_resume.json"),
+    )
+    try:
+        parked = await orchestrator.run_turn(ChatRequest(message=QUESTION, employee_id="E1042"))
+        assert parked.outcome == "awaiting_confirmation"
+        writer.reopen_turn(parked.turn_id, awaiting_ms=0)
+        resumed = await orchestrator.resume_turn(parked.session_id, parked.turn_id, "not-a-minted-token")
+    finally:
+        await orchestrator.aclose()
+
+    assert resumed.outcome == "refused"
+    assert resumed.answer_blocks[0].text == g1.CONFIRMATION_REFUSAL
+    assert g1.USER_REFUSAL not in resumed.answer, "nothing was searched, so nothing may say a search failed"
+    assert "policy library" not in resumed.answer
+    assert store.execute("SELECT count(*) FROM mock_writes").scalar() == 0, "and nothing was created"
+
+
+async def test_a_turn_with_nothing_to_confirm_says_that_instead_of_refusing_a_search(writer, mounted_mcp_url):
+    """Branch two: the card is spent or expired, so the resumed turn has no gated call to re-issue."""
+    orchestrator = Orchestrator(
+        client=McpClient(transport="http", url=mounted_mcp_url),
+        model=StubAdapter(script_path=LLM_SCRIPTS / "rag_only.json"),
+    )
+    try:
+        answered = await orchestrator.run_turn(
+            ChatRequest(message="How much PTO do full-time employees accrue each month?", employee_id="E1042")
+        )
+        assert answered.outcome == "answered", "a turn that never proposed a write"
+        writer.reopen_turn(answered.turn_id, awaiting_ms=0)
+        resumed = await orchestrator.resume_turn(answered.session_id, answered.turn_id, "a-token-for-nothing")
+    finally:
+        await orchestrator.aclose()
+
+    assert resumed.outcome == "refused"
+    assert resumed.answer_blocks[0].text == g1.CONFIRMATION_REFUSAL
+    assert g1.USER_REFUSAL not in resumed.answer

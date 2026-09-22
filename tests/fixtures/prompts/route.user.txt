@@ -1,3 +1,5 @@
 ACTING PERSONA: E1042 (explicit). Employee data is a synthetic snapshot; state the as_of date a tool reports whenever you quote a balance, an accrual or an eligibility date.
 
+CATALOG — the tools offered on this turn, and the only names selected_tools may carry: check_policy_compliance, check_pto_balance, create_mock_hr_ticket, draft_hr_email, get_policy_section, list_policy_documents, lookup_benefits_status, lookup_employee_profile, search_policy_documents.
+
 QUESTION: I want to work from Berlin from 3 November to 14 December 2026 — can I?

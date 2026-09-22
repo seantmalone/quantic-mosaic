@@ -39,6 +39,11 @@ GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "prompts"
 PERSONA = prompts.persona_block(employee_id="E1042", actor_source="explicit")
 QUESTION = "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
 
+#: The router's own catalog half (G5, gap 17): the nine committed tool schemas, in the sorted order
+#: `tools/list` returns them, read from `mcp/tools/` so the golden cannot drift from the server.
+TOOL_DIR = Path(__file__).resolve().parents[2] / "mcp" / "tools"
+CATALOG_NAMES = tuple(sorted(path.name.removesuffix(".schema.json") for path in TOOL_DIR.glob("*.schema.json")))
+
 #: `(doc_id, heading_path, dense_score, rrf_score, quarantined)` — the two chunks the golden pins,
 #: named by where they live rather than by id so the failure reads as "that heading moved".
 EVIDENCE = (
@@ -118,6 +123,8 @@ def chunks() -> tuple[EvidenceChunk, ...]:
 
 
 def context(template: str) -> dict:
+    if template == "route.j2":
+        return {"persona": PERSONA, "question": QUESTION, "catalog_names": CATALOG_NAMES}
     if template != "synthesize.j2":
         return {"persona": PERSONA, "question": QUESTION}
     return {
@@ -364,6 +371,31 @@ def test_the_model_is_told_the_engine_owns_the_verdict_and_the_approvers():
     assert "never relabel the engine's units" in system
     assert "Approvers are people" in system
     assert "self_approval_routed" in system
+
+
+def test_the_router_is_shown_the_catalog_it_selects_tools_from():
+    """G5, gap 17: `selected_tools` said "from the offered catalog" and no catalog was ever shown.
+
+    The router call carries no `tools` array — it answers with JSON and calls nothing — so the model
+    invented category labels, `normalise` dropped them as unknown names, and every real-model router
+    span wrote `selected_tools: []`. The names belong to the turn, so they go in the `user` half and
+    the cached `tools → system` prefix does not move.
+    """
+    system, user = prompts.render("route.j2", **context("route.j2"))
+
+    assert "CATALOG —" in user
+    for name in CATALOG_NAMES:
+        assert name in user
+    assert "CATALOG" not in system, "the per-turn catalog never enters the cacheable prefix"
+    assert user.index("CATALOG —") < user.index("QUESTION:"), "the question stays last (§7.2)"
+
+
+def test_the_router_prompt_renders_without_a_catalog():
+    """A turn whose discovery came back empty still gets a prompt, minus the CATALOG line."""
+    _, user = prompts.render("route.j2", **{**context("route.j2"), "catalog_names": ()})
+
+    assert "CATALOG" not in user
+    assert user.rstrip().endswith(QUESTION)
 
 
 def test_the_router_is_told_to_name_every_missing_detail():

@@ -1,0 +1,12 @@
+{
+  "_note": "G5, gap 4 — `amb-003`'s routing, as the published run recorded it: intent `employee_data`, **no workflow**, `needs_clarification` true. With no workflow there was no slot order to walk and the rationale named nothing either of the six workflow slots matched, so the turn served CLARIFY_FALLBACK — 'could you tell me a little more about what you are after?' — and the judge scored `named_missing_information` false. `CLARIFY_INTENT_ORDER` is what an intent with no workflow walks instead.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"employee_data\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"The request does not say which balance is meant.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1060,
+      "completion_tokens": 86
+    }
+  ]
+}

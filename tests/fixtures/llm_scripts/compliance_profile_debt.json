@@ -1,0 +1,64 @@
+{
+  "_note": "G5, gap 11 — `remote-003`'s exact shape: a `policy_qa`-routed eligibility turn whose only profile-first tool is the compliance engine. `check_policy_compliance` is one of the four RAG tools, so the §9.2 gate keeps it; `lookup_employee_profile` is NOT offered, and the model never asks for it. `ComplianceOutput` declares no `employee_id`, so the profile debt — which keyed on the result body — could not fire, and the published run scored the item tool recall 0.667 with workflow completion 0. Keyed on the call's arguments, the orchestrator reads the profile itself. The sequence is route, act, act, synthesize; the deterministic profile read costs no act step.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": false, \"needs_clarification\": false, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [\"check_policy_compliance\", \"search_policy_documents\"], \"rationale_summary\": \"Eligibility to work from Germany for six weeks; the corpus and the rules engine answer it.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1820,
+      "completion_tokens": 88
+    },
+    {
+      "purpose": "act",
+      "response_text": "Scoring the stay against the rules and reading the policy behind them.",
+      "tool_calls": [
+        {
+          "id": "toolu_cpd_1",
+          "name": "check_policy_compliance",
+          "args": {
+            "scenario": "international_remote",
+            "employee_id": "E1042",
+            "parameters": {
+              "destination_country": "Germany",
+              "start_date": "2026-11-03",
+              "duration_days": 42
+            }
+          }
+        },
+        {
+          "id": "toolu_cpd_2",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "stays exceeding 30 days tax legal review shadow payroll",
+            "k": 5
+          }
+        },
+        {
+          "id": "toolu_cpd_3",
+          "name": "search_policy_documents",
+          "args": {
+            "query": "international remote work tenure eligibility 12 months continuous service",
+            "k": 5
+          }
+        }
+      ],
+      "finish_reason": "tool_use",
+      "prompt_tokens": 4200,
+      "completion_tokens": 96
+    },
+    {
+      "purpose": "act",
+      "response_text": "I have the verdict and the tax review rule behind it.",
+      "finish_reason": "stop",
+      "prompt_tokens": 5400,
+      "completion_tokens": 18
+    },
+    {
+      "purpose": "synthesize",
+      "response_text": "{\"blocks\": [{\"type\": \"record\", \"text\": \"The rules engine scored this stay against your record as of the snapshot date.\", \"citations\": []}, {\"type\": \"recommendation\", \"text\": \"File the Tax & Legal review before you travel, and raise the request in MosaicOne with the exact dates.\", \"citations\": []}], \"next_steps\": [\"File the Tax & Legal review request before departure.\"], \"rationale_summary\": \"Verdict from the engine, review rule from the corpus.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 9200,
+      "completion_tokens": 110
+    }
+  ]
+}

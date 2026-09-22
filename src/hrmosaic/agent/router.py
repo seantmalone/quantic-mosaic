@@ -150,7 +150,9 @@ MONEY = re.compile(
 )
 
 #: The workflow a monetary approval question is routed to (W8 fix round, W7-review I2). The first
-#: version of this appended the compliance tool to `selected_tools`, a field nothing consumes.
+#: version of this appended the compliance tool to `selected_tools` — which at the time nothing
+#: consumed, and which since G5 (gap 17) `_requested_write` reads off a router that is finally shown
+#: the catalog it selects from. The routing decision is still made here, from the message.
 EXPENSE_WORKFLOW = "expense_claim"
 
 

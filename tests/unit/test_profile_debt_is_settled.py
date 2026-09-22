@@ -96,6 +96,61 @@ async def test_tool_recall_over_the_expected_set_is_whole(balance_without_profil
     assert expected <= called, expected - called
 
 
+# -- `remote-003`'s shape: the engine is the only profile-first tool called (G5, gap 11) -----------
+
+
+async def test_the_debt_fires_when_the_only_profile_first_tool_is_the_compliance_engine(
+    run_agent, mounted_mcp_url, store
+):
+    """G5, gap 11 — `remote-003`'s shape, and the one the repair was written for.
+
+    The other two shapes in this file reach the debt through `check_pto_balance`, whose result body
+    carries `employee_id`. The debt keyed on that body, and `check_policy_compliance` cannot carry it:
+    `ComplianceOutput` declares no such field and `_compliance` round-trips through the model, so an
+    extra key is dropped. A
+    `policy_qa`-routed eligibility turn whose only profile-first tool is the engine therefore never
+    owed the profile at all — the published run scored the item tool recall 0.667 and workflow 0 —
+    and no test exercised the deterministic path for this shape. The debt now keys on what the call
+    was **asked**, which `employee_id` is a required argument of.
+    """
+    response = await run_agent(
+        "compliance_profile_debt.json",
+        ChatRequest(
+            message="Am I allowed to work from Germany for six weeks from 3 November 2026?", employee_id="E1042"
+        ),
+        url=mounted_mcp_url,
+    )
+    spans = _spans(store, response.turn_id)
+    calls = _tool_calls(spans)
+
+    assert calls.count("lookup_employee_profile") == 1, calls
+    assert "check_pto_balance" not in calls, "the balance is what the old body test keyed on"
+    assert calls.index("check_policy_compliance") < calls.index("lookup_employee_profile")
+    nudges = [nudge for span in spans if span["kind"] == "plan" for nudge in span["payload"].get("nudges") or []]
+    assert "profile_read_deterministically" in nudges, nudges
+    acts = [span for span in spans if span["kind"] == "llm_call" and span["payload"].get("purpose") == "act"]
+    assert len(acts) == 2, "the two the script writes: the read costs no model step"
+
+
+async def test_a_verdict_scored_for_somebody_else_owes_nothing(run_agent, mounted_mcp_url, store):
+    """The other half of the `employee_id` test, and why the tool name alone is not enough.
+
+    An approver scoring a report's request has put *that* employee's record in play, not their own;
+    reading the actor's profile would spend a tool call on a record the answer is not about.
+    """
+    response = await run_agent(
+        "compliance_profile_debt.json",
+        ChatRequest(
+            message="Am I allowed to work from Germany for six weeks from 3 November 2026?", employee_id="E1007"
+        ),
+        url=mounted_mcp_url,
+    )
+    calls = _tool_calls(_spans(store, response.turn_id))
+
+    assert "check_policy_compliance" in calls
+    assert "lookup_employee_profile" not in calls, calls
+
+
 # -- `unsafe-001`'s shape: the card is proposed and the turn parks, never reaching `_answer` -------
 
 

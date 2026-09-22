@@ -40,6 +40,11 @@ class LoopState:
 
     #: Successful tool results, newest last, keyed by tool name.
     results: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: What each of those calls was **asked**, newest last, keyed by tool name (G5, gap 11). A
+    #: result body is the tool's own output model and need not echo its input: `check_policy_compliance`
+    #: declares no `employee_id`, so "was this computed for the acting employee?" is a question only
+    #: the arguments can answer. Written beside the result, so a failed call records neither.
+    arguments: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: Every chunk id the turn has seen as evidence, in first-seen order.
     evidence_chunk_ids: list[str] = field(default_factory=list)
     #: The documents those chunks came from — what "citations spanning ≥ 3 distinct doc_ids" counts.
@@ -47,8 +52,13 @@ class LoopState:
     #: `mock_writes` ids returned by a confirmed write tool.
     mock_write_ids: list[str] = field(default_factory=list)
 
-    def record(self, tool_name: str, body: dict[str, Any]) -> None:
+    def record(self, tool_name: str, body: dict[str, Any], *, arguments: Mapping[str, Any] | None = None) -> None:
         self.results.setdefault(tool_name, []).append(body)
+        self.arguments.setdefault(tool_name, []).append(dict(arguments or {}))
+
+    def called_with(self, tool_name: str, key: str, value: str) -> bool:
+        """Did a successful call to that tool carry `key == value` in its arguments (G5, gap 11)?"""
+        return any(str(args.get(key) or "") == value for args in self.arguments.get(tool_name, ()))
 
     def latest(self, tool_name: str) -> dict[str, Any] | None:
         results = self.results.get(tool_name)

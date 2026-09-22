@@ -63,6 +63,14 @@ NO_EVIDENCE = "no policy evidence was retrieved for this question"
 WEAK_EVIDENCE = "the retrieved policy evidence is below the evidence threshold"
 OUT_OF_SCOPE = "the question is not about Mosaic Robotics HR policy or your own HR data"
 
+#: The two ways a **confirmation** can fail, which are not verdicts about evidence at all (G5, gap
+#: 19). `_resume` passes both of these into `refusal()`, and until G5 neither had any copy: the reader
+#: clicked Confirm and was told *"I could not find anything in Mosaic's policy library that answers
+#: this"* — a sentence about a search that never ran — while the page above it said the write had gone
+#: ahead. Same shape as the other reasons: the span's diagnostic, and a reader's sentence beside it.
+CONFIRMATION_INVALID = "the confirmation could not be validated"
+CONFIRMATION_MISSING = "there is no gated tool call on this turn to confirm"
+
 #: The refusal a person reads **when the turn actually searched**. One admission, one boundary —
 #: no score, no threshold, no tool count. The redirect that follows it is `next_steps`, built from
 #: the real index by `coverage()`.
@@ -80,11 +88,22 @@ OUT_OF_SCOPE_REFUSAL = (
     "That is outside what I can help with here — I only answer from Mosaic policy and your own HR record."
 )
 
+#: …and the refusal for a confirmation that could not be acted on (G5, gap 19). It says the one thing
+#: the reader needs to know — **nothing was created** — and what to do instead. Neither branch is a
+#: search, so neither may borrow a sentence about one.
+CONFIRMATION_REFUSAL = (
+    "I could not act on that confirmation, so nothing was created or sent. A confirmation is good "
+    "for a few minutes and can only be used once — ask me again and I will put a fresh one in front "
+    "of you."
+)
+
 #: Which sentence each reason gets. The reason is the span's diagnostic; this is the reader's.
 REFUSAL_COPY: dict[str, str] = {
     NO_EVIDENCE: USER_REFUSAL,
     WEAK_EVIDENCE: USER_REFUSAL,
     OUT_OF_SCOPE: OUT_OF_SCOPE_REFUSAL,
+    CONFIRMATION_INVALID: CONFIRMATION_REFUSAL,
+    CONFIRMATION_MISSING: CONFIRMATION_REFUSAL,
 }
 
 
@@ -93,7 +112,10 @@ def refusal_text(reason: str) -> str:
 
     `reason` carries its diagnostic tail — *"…: evidence-gate score 0.42 < 0.60"* — so the match is
     on the prefix. An unrecognised reason keeps the searched-the-library wording, because every
-    reason that reaches here other than `OUT_OF_SCOPE` is a verdict about retrieved evidence.
+    reason that reaches here other than `OUT_OF_SCOPE` and the two `CONFIRMATION_*` reasons is a
+    verdict about retrieved evidence. Those two are why the fallback is not a safe default on its own
+    (G5, gap 19): `_resume` refuses with a reason about a confirmation, and the copy it fell through
+    to told the reader a policy search had come back empty on a turn that searched nothing.
     """
     return next((copy for prefix, copy in REFUSAL_COPY.items() if reason.startswith(prefix)), USER_REFUSAL)
 
@@ -237,6 +259,9 @@ def refusal(reason: str) -> AnswerSchema:
 
 
 __all__ = [
+    "CONFIRMATION_INVALID",
+    "CONFIRMATION_MISSING",
+    "CONFIRMATION_REFUSAL",
     "EXAMPLE_TOPICS",
     "EXAMPLE_TOPIC_COUNT",
     "NO_EVIDENCE",

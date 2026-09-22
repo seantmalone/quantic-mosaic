@@ -261,8 +261,10 @@ async def test_the_apps_own_copy_and_every_agent_written_string_use_plain_langua
 
     written = [
         g1.USER_REFUSAL,
+        g1.CONFIRMATION_REFUSAL,
         *g1.refusal(g1.OUT_OF_SCOPE).next_steps,
         *orchestrator.CLARIFY_QUESTIONS.values(),
+        *orchestrator.CLARIFY_ALSO.values(),
         orchestrator.CLARIFY_FALLBACK,
         *(chip for chips in orchestrator.CLARIFY_CHIPS.values() for chip in chips),
         *orchestrator.CLARIFY_FALLBACK_CHIPS,

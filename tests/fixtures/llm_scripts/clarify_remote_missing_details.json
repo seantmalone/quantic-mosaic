@@ -1,0 +1,12 @@
+{
+  "_note": "G5, gap 4 — `amb-002`'s routing, as the published run recorded it: intent `policy_qa`, workflow `remote_work_eligibility`, `needs_clarification` true, and a rationale that names both missing details because route.j2 rule on needs_clarification tells it to. One completion is the whole script: there is nothing after a clarification. The served question used to name the destination alone, and the judge scored `named_missing_information` false.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": \"remote_work_eligibility\", \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"Neither the destination country nor the dates were given, so eligibility cannot be scored.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1120,
+      "completion_tokens": 94
+    }
+  ]
+}
