@@ -5,10 +5,12 @@ screen set, a probe, an independent report. Several of the older headers call th
 **"the final build"** — `f5e86c3` on 2026-09-12, `bd4ac93` on 2026-09-16, `da0dca2` for the Waves 1–2
 cold-start probes. Each of those was true when it was written and none of them is now: read *"the
 final build"* in any header below as **final as of that date**. The build the **published evaluation
-run measures is `8a89310`** — run `r_1790074972_baseline`, driven 2026-09-22, the run
-`evaluation/results/latest.json` points at and the one `evaluation/REPORT.md`,
-`design-and-evaluation.md`, `README.md` and `deployed.md` publish. Transcripts and headers are never
-edited to keep up; this index is where the dates are reconciled instead.
+run measures is `80a5a71`** — run `r_1790110325_baseline`, driven 2026-09-22 at 20:52Z over the
+30-item dataset, the run `evaluation/results/latest.json` points at and the one
+`evaluation/REPORT.md`, `design-and-evaluation.md`, `README.md` and `deployed.md` publish. `8a89310`
+held that place for ten hours the same day, which is why three transcripts below name it.
+Transcripts and headers are never edited to keep up; this index is where the dates are reconciled
+instead.
 
 A `git log --diff-filter=A -1 -- docs/evidence/<name>` gives the commit any artifact landed in, which
 is how the *Build* column is filled for the screen sets, whose own captures record a harness and a
@@ -49,15 +51,17 @@ date rather than a service sha.
 | [`ux-reaudit-3-2026-09-16.md`](ux-reaudit-3-2026-09-16.md) | 2026-09-16 | captured on `16217b7`, added at `98c893f` | re-audit #3 over W7 and W8 — 71 screen ids × 3 viewports, 26 confirmed findings, four Criticals (the four `ux-w8/` closes) |
 | [`ux-reaudit-4-2026-09-16.md`](ux-reaudit-4-2026-09-16.md) | 2026-09-16 | the tree at `133e853`, added at `98c893f` | re-audit #4, scoring the redesign against the plan's 15 principles and the owner's three goals: 9 of 15 principles passing, two Criticals (the two `ux-w9/` closes) |
 | [`scenario-recheck-final-2026-09-16.md`](scenario-recheck-final-2026-09-16.md) | 2026-09-16 | the live build of that day, added at `98c893f` | the same 16 persona scenarios re-driven one turn at a time after W8: **13 of 16 logically right, was 5 of 16** — and no scenario shipping a contradicted write, a non-compliant filing or an unrefused unsafe request |
-| [`final-2026-09-16/`](final-2026-09-16/) | 2026-09-16 | `bd4ac93` — its README's *"the final build"* | six live Playwright screens plus `answer.txt`, against the deployed service with the grader key and one real model turn. `bd4ac93` was the build the **then**-published run `r_1789555212_baseline` measured; the run published now is `r_1790074972_baseline` on `8a89310` |
+| [`final-2026-09-16/`](final-2026-09-16/) | 2026-09-16 | `bd4ac93` — its README's *"the final build"* | six live Playwright screens plus `answer.txt`, against the deployed service with the grader key and one real model turn. `bd4ac93` was the build the **then**-published run `r_1789555212_baseline` measured; the run published now is `r_1790110325_baseline` on `80a5a71` |
 | [`grade-card-2026-09-21.md`](grade-card-2026-09-21.md) | 2026-09-21 | graded at `98c893f` | the **second** independent grade card — an 82-agent read-only grading workflow (assessors, one adversarial skeptic per finding, one synthesising grader): **band 4**, with 27 ranked gaps. Its own header records what the wave then did about them |
 | [`grade-card-2026-09-21-gaps.json`](grade-card-2026-09-21-gaps.json) | 2026-09-21 | graded at `98c893f` | the machine twin of that card's ranked gap list — per gap: severity, section, why it costs marks, the evidence, a proposed fix and an effort estimate. The list the grade-and-fix wave worked through |
-| [`demo-task-1-live-2026-09-22.txt`](demo-task-1-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310` | demo task 1 on the **published** build, and the first turn of a cold instance's life (`cold_start: true` before, `false` after): 38.2 s of turn time, verbatim stdout and stderr |
-| [`demo-task-2-live-2026-09-22.txt`](demo-task-2-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310` | demo task 2 on the published build, warm: the confirmation card, nothing written, then the confirmed write and its `performed` lede, with the served block text quoted from the store |
-| [`draft-hr-email-live-2026-09-22.txt`](draft-hr-email-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310` | the first live capture of `draft_hr_email`'s **two endings** — the same ask confirmed once and cancelled once — on the build carrying task 1c's fixes, so a cancelled write is answered by its receipt rather than by an evidence refusal |
+| [`demo-task-1-live-2026-09-22.txt`](demo-task-1-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | demo task 1 on the **published** build, and the first turn of a cold instance's life (`cold_start: true` before, `false` after): 38.2 s of turn time, verbatim stdout and stderr |
+| [`demo-task-2-live-2026-09-22.txt`](demo-task-2-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | demo task 2 on the published build, warm: the confirmation card, nothing written, then the confirmed write and its `performed` lede, with the served block text quoted from the store |
+| [`draft-hr-email-live-2026-09-22.txt`](draft-hr-email-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | the first live capture of `draft_hr_email`'s **two endings** — the same ask confirmed once and cancelled once — on the build carrying task 1c's fixes, so a cancelled write is answered by its receipt rather than by an evidence refusal |
+| [`grade-card-2026-09-22.md`](grade-card-2026-09-22.md) | 2026-09-22 | graded at `2dee277` | the **third** independent grade card — a 78-agent read-only grading workflow of the same shape as the second, run against the repository the first round of the grade-and-fix wave left: **band 4**, with 20 ranked gaps, led by a provenance command four documents printed that no longer held at HEAD. Its own header records what round two did about them |
+| [`grade-card-2026-09-22-gaps.json`](grade-card-2026-09-22-gaps.json) | 2026-09-22 | graded at `2dee277` | the machine twin of that card's ranked list — per gap: severity, section, why it costs marks, the evidence, a proposed fix and an effort estimate. The list round two worked through |
 
-The last three rows are the live re-capture the 2026-09-21 grade-and-fix wave added on the published
-build; every other row predates that wave.
+The three 2026-09-22 transcripts are the live re-capture the grade-and-fix wave's first round added;
+the two rows below them are its second round's grade card. Everything above predates the wave.
 
 **No `ux-w5/`.** The five-wave remediation's W5 was the accessibility pass (skip link, focus
 management, 44 px targets, token and painted contrast, dark-theme captures), and its evidence is the

@@ -30,7 +30,7 @@ transport carried the call.
 | Mode | `MCP_TRANSPORT` | Where it is used | Endpoint |
 |---|---|---|---|
 | **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; externally reachable only from a `Host` on `MCP_ALLOWED_HOSTS` — see *Native `Host` / `Origin` allowlist* below |
-| **stdio subprocess** | `stdio` | local dev, the demo video (a visibly separate OS process), the fast CI discovery test | `python mcp/server_entrypoint.py --stdio` |
+| **stdio subprocess** | `stdio` | local dev (`make run-stdio`, MCP Inspector) and the fast CI discovery test — a visibly separate OS process, which is where that property is demonstrated: the recorded walkthrough is driven entirely against the deployed URL, so it has no stdio beat | `python mcp/server_entrypoint.py --stdio` |
 | **Remote Streamable HTTP** | `http` + `MCP_SERVER_URL` | R7.3 — the same client against an external endpoint; CI tests it against a second local uvicorn on another port | any external MCP endpoint |
 
 **Why mounted in-process is the default.** The deployment is one 0.1-CPU Render instance. A second
@@ -43,9 +43,10 @@ synchronous SQLite read or an ONNX embed on that loop would stall `/chat`, `/hea
 at the same time. So **every tool handler is `async def` and every CPU-bound call is inside
 `await asyncio.to_thread(...)`**. That is the rule the whole topology rests on.
 
-**Why stdio still exists.** It is the demo's evidence that this is a real MCP server and not a
-function call wearing a costume: the video shows a separate OS process, and CI's discovery test
-spawns one with no port and no uvicorn.
+**Why stdio still exists.** It is the evidence that this is a real MCP server and not a function
+call wearing a costume: `make run-stdio` attaches MCP Inspector to a separate OS process with no
+port and no uvicorn, and `tests/integration/test_mcp_discovery.py` spawns one on every CI run and
+drives discovery and a tool call over its pipes.
 
 ## Discovery flow
 
@@ -62,10 +63,21 @@ spawns one with no port and no uvicorn.
    handler. The Anthropic Messages API rejects a root combinator, and that is handled on the wire by
    `AnthropicAdapter`, which strips `oneOf` / `allOf` / `anyOf` from the top level of what it sends
    and never rewrites what the server publishes (`core/llm/base.py::ToolSchema`).
-3. **Exactly one `mcp_discovery` span per turn.** The handshake is cached per process (re-run on
-   first use or after a failure); the *span* is emitted every turn, carrying the cached catalog plus
+3. **One `mcp_discovery` span per turn pass.** The handshake is cached per process (re-run on
+   first use or after a failure); the *span* is emitted every pass through the turn, carrying the
+   cached catalog plus
    `{cached, handshake_ms, discovered_at, catalog_sha, tool_count, mcp_session_id}`. Without that,
-   only the first turn after a boot would carry the primary RUBRIC5.2 evidence.
+   only the first turn after a boot would carry the primary RUBRIC5.2 evidence. A turn **resumed
+   after a confirmation** is a second pass and carries a second span: demo task 2 shows
+   `mcp_discovery` at seq 1 and again at seq 27 inside one 36-span turn
+   ([`docs/evidence/demo-task-2-live-2026-09-22.txt`](../docs/evidence/demo-task-2-live-2026-09-22.txt)),
+   because the resume re-discovers before it acts on the confirmed write. `mcp_session_id` is the
+   `Mcp-Session-Id` the server returns on the handshake, captured by a response event hook on the
+   client's own `httpx.AsyncClient`: `mcp` 2.2.0's `streamable_http_client` yields only
+   `(read, write)` and its `ClientSession` has no `session_id` attribute (see the 1.x → 2.x table
+   below), so the response header is the only seam there is. It is `null` on stdio, which has no
+   session id, and was `null` on the HTTP transport too until the hook landed on 2026-09-22 —
+   `docs/evidence/demo-task-1-live-2026-09-15-session.json` is a stored span from before that.
 4. Per turn the catalog is converted to OpenAI-shaped function schemas — **the array handed to the
    model is that conversion**, never a hard-coded list.
 5. `tools/call` carries `_meta` (below). Results are read from `structured_content` when present,
@@ -133,7 +145,8 @@ declares both (§10.2) and a second sibling key would be one more thing for a cl
 | Domain "not found" | a **successful** result: `{"status": "not_found", "code": "EMPLOYEE_NOT_FOUND", "hint": "Employee ids look like E1042."}` |
 | Bad selector on `get_policy_section` | `isError: true`, `{"code": "INVALID_ARGUMENTS", "fields": ["heading_path", "chunk_id"]}` |
 | Write tool without a valid token | `isError: true`, exactly `{"status", "code", "action", "human_summary", "arguments_preview"}` — **and no token of any kind** |
-| Transport failure | the client retries once, emits an `error` span, `/health` flips `mcp.connected = false`, and the turn degrades to a policy-only answer at HTTP 200 |
+| Transport failure at discovery | the client **re-discovers once** — one retry of the handshake, in the orchestrator's discovery step — then emits an `error` span, `/health` flips `mcp.connected = false`, and the turn degrades to a policy-only answer at HTTP 200 |
+| Transport failure on a `tools/call` | **no retry**: the failure degrades the turn immediately, with the same `error` span, `mcp.connected = false` and policy-only answer. A write is never re-sent, which is the fail-safe direction for a tool that may already have run |
 
 ## The confirmation gate is a wire-level check
 

@@ -15,7 +15,7 @@ committed, and the only build step in the whole directory is `scripts/build_pdf.
 | File | What it is |
 |---|---|
 | 11 × `*.md`, 1 × `*.html`, 1 × `*.txt`, 1 × `*.pdf` (+ its `.src.md`) | the 14 policy documents |
-| `facts.yml` | **58** checkable facts, each with a verbatim quote and a heading path — the count `scripts/check_facts.py` prints |
+| `facts.yml` | **60** checkable facts, each with a verbatim quote and a heading path — the count `scripts/check_facts.py` prints |
 | `rules.yml` | the requirements behind `check_policy_compliance`'s seven scenarios |
 | `README.md` | this map: topics, outlines, conventions, format rationale |
 
@@ -23,11 +23,14 @@ Three scripts operate on it:
 
 ```bash
 python scripts/check_facts.py     # quotes verbatim, heading paths real, every fact_key resolves
-python scripts/corpus_stats.py    # files, pages, words, per-format counts
+python scripts/corpus_stats.py    # files, pages, words, sections, per-format counts
 python scripts/build_pdf.py       # regenerate workplace-conduct.pdf from its .src.md
 ```
 
-`scripts/check_facts.py` runs in CI's `test` job alongside `pytest -q`.
+`scripts/check_facts.py` runs in CI's `test` job alongside `pytest -q`. Since 2026-09-22
+`corpus_stats.py` counts with `hrmosaic.rag.parse.parse_corpus` — the same parser the shipped index
+is built from — so its table cannot disagree with the live `/dashboard/corpus` page the way it did
+when it kept a reader of its own: **14 files · 63.9 pages · 30,938 words · 176 sections**.
 
 ## Conventions
 
@@ -145,8 +148,13 @@ Purpose and Scope · Standard Issue · Refresh Cycle · Requesting Additional Eq
 Peripherals · Damage, Loss and Theft · Return at Separation · Software and Licences · Asset Register and
 Audits · Contacts.
 
-The 36-month laptop refresh, the USD 500 director threshold, the 24-hour loss report and the 5-business-day
-return window. Draws the line between company assets and things bought with the home office allowance.
+The 36-month laptop refresh — an IT ticket and nothing else, whatever the replacement machine costs, because
+a refresh replaces standard issue rather than adding to it — the USD 500 director threshold, which governs
+**additional** equipment requests and therefore never routes a scheduled refresh to a director, the 24-hour
+loss report and the 5-business-day return window. Draws the line between company assets and things bought
+with the home office allowance. The refresh-versus-request boundary was made explicit on 2026-09-22: the two
+sections had read as a contradiction, and one evaluation item (`equipment-001`) was failing on the corpus
+rather than on the agent.
 
 ### 7. `benefits-and-open-enrollment.html` — Benefits and Open Enrollment Guide · `benefits`
 
@@ -252,7 +260,7 @@ real company would actually publish that document as, not to tick a box:
 
 ## `facts.yml` — the index
 
-**58** entries — the number `python scripts/check_facts.py` prints beside the document and rule counts — each of the shape:
+**60** entries — the number `python scripts/check_facts.py` prints beside the document and rule counts (14 documents · 60 facts · 7 rule scenarios · 34 requirements, read 2026-09-22) — each of the shape:
 
 ```yaml
 pto.accrual.ft_3y_plus:

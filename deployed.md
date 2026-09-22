@@ -19,13 +19,14 @@ included. Each row below names the command whose output it is; the full sequence
 | The Turso database `mosaic-hr`, its token and the first live FK/parity answer | `python scripts/provision_turso.py` | 2026-09-10 |
 | Measured cold start and warm turn on the live instance | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` | 2026-09-10 and 2026-09-11 (n=3) |
 | Free-tier hours and build minutes read from the account | `python scripts/check_render_hours.py` | 2026-09-11 |
-| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the judge pass, the two variants and `make ablation` | 2026-09-11, re-driven 2026-09-16 and again 2026-09-22 on the final build |
+| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the judge pass, the two variants and `make ablation` | 2026-09-11, re-driven 2026-09-16 and three times on 2026-09-22, the last of them on `80a5a71` |
 | `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11, re-pasted 2026-09-22 |
 
 `RENDER_DEPLOY_HOOK_URL` is **optional**: no REST endpoint publishes it, so CI's `deploy` job
 triggers production through `POST /v1/services/{id}/deploys` with `RENDER_API_KEY` and
 `RENDER_SERVICE_ID` instead, and uses the hook only when that secret happens to exist. Either way
-the job carries `needs: [test, docker]`, so a red suite cannot reach production.
+the job carries `needs: [test, docker, ux]` — the browser suite joined that list on 2026-09-22 —
+so a red suite of any kind cannot reach production.
 
 ## Deployed URLs
 
@@ -46,7 +47,7 @@ instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"`, `autoDe
 **harness tree's** `git rev-parse HEAD` — the code that scored the run — and `target_git_sha` is
 what the target's own `/health` reported under `app.git_sha`, the build that answered the
 questions. `evaluation/REPORT.md` prints both. The published run records both as
-`8a8931076bac9d271f8a03da7ecfa0d3a723d811`: the harness ran from the same commit the service was
+`80a5a71c02f27ae696137c2afdc27bfe39d1625b`: the harness ran from the same commit the service was
 serving.
 
 **Runs recorded before 2026-09-11 carry neither.** Until P23 the harness took `git_sha` from
@@ -63,26 +64,39 @@ three runs the serving commit lives here, in prose, taken from the deploy ledger
 | `r_1789166880_baseline` | published 2026-09-11 — after the model-behaviour wave | `34717b5` | yes — `target_git_sha` and `git_sha` |
 | `r_1789555212_baseline` | published 2026-09-16 — after the demo-path logic waves (W8–W10) | `bd4ac93` | yes |
 | `r_1790067656_baseline` | 2026-09-22 09:08Z — after the clarification fix; superseded the same day | `e85305b` | yes |
-| **`r_1790074972_baseline`** | **published — 2026-09-22 11:10Z, on the final build** | **`8a89310`** | **yes** |
+| `r_1790074972_baseline` | published 2026-09-22 11:10Z — superseded that evening by the round-2 re-drive | `8a89310` | yes |
+| **`r_1790110325_baseline`** | **published — 2026-09-22 20:52Z, on the round-2 build, over the 30-item dataset** | **`80a5a71`** | **yes** |
 
 `scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
 before any of those runs is allowed to count, which is what keeps the two shas from being confused.
 The earlier `target: deployed` baselines stay committed as history; only the last row is the
 published run, and `evaluation/results/latest.json` names it.
 
-**What was serving at 2026-09-22 11:52Z.** `curl -s https://mosaic-hr-copilot.onrender.com/health`,
-read at that minute, reported `app.git_sha` `8a8931076bac9d271f8a03da7ecfa0d3a723d811`,
-`status: ok`, `deploy_mode: render`, `mcp.connected: true` with 9 tools, 14 documents / 204
-chunks, `trace_store.backend: turso` and an empty `degradations[]` — the same commit the published
-run records as its `target_git_sha`.
+**What was serving at 2026-09-22 21:58Z.** `curl -s https://mosaic-hr-copilot.onrender.com/health`,
+read at that minute, reported `app.git_sha` `80a5a71c02f27ae696137c2afdc27bfe39d1625b`,
+`status: ok`, `deploy_mode: render`, `rss_mb: 317.8`, `mcp.connected: true` with 9 tools, 14
+documents / **205** chunks (the equipment-policy repair of this wave re-ingested one more chunk),
+`trace_store.backend: turso` with `eval_runs_imported: 29`, and an empty `degradations[]` — the same
+commit the published run records as its `target_git_sha`. The reading ten hours earlier, at 11:52Z,
+was `8a89310` with 204 chunks: that was the build the superseded run measured.
 
 **The live sha moves; the application tree does not.** Every push to `main` that is not filtered
-out by `ci.yml`'s `paths-ignore` triggers a build and a deploy, so `/health` reports whichever
-commit was last deployed rather than the one a document names. What matters is the relation, and
-it is checkable at any commit: `8a89310` is the last commit to change **application** code —
-`git diff 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is empty — so a later
-sha on `/health` is a rebuild of the identical application tree with documentation, evaluation
-tooling and tests on top, not a different build of the app the published run measured.
+out by `ci.yml`'s `paths-ignore` — which since 2026-09-22 keeps only published *results* off the
+build budget (`evaluation/results/**`, `evaluation/REPORT.md`, `docs/**`), so a repo-root document
+commit now runs the suite and deploys — triggers a build and a deploy. So `/health` reports
+whichever commit was last deployed rather than the one a document names, and a documentation push
+made minutes after this sentence moves it. What matters is the relation, and it is a command anyone
+can run rather than a claim to take on trust:
+
+```bash
+git diff 80a5a71..HEAD -- src mcp Dockerfile render.yaml requirements.txt   # empty
+```
+
+**It was empty at `44e5e9f`, checked 2026-09-22** — the commits after the measured build `80a5a71`
+are documentation, evaluation tooling and tests. Run it at whatever HEAD you have: while it prints
+nothing, a later sha on `/health` is a rebuild of the identical application tree, not a different
+build of the app the published run measured. If it ever prints a path, that path is the honest
+answer and this paragraph is the thing that is stale.
 
 **Rejected hosts**, and why (§14.1): Railway, Fly.io and Koyeb (no lasting free compute), Hugging
 Face Spaces (same), Google Cloud Run (the documented fallback — the *same image* runs there, but it
@@ -91,7 +105,7 @@ needs a card), Vercel and Cloudflare Workers (a 10 s function cap, against a ~90
 ### How a commit reaches the service
 
 Two independent mechanisms, and both must hold. In the repository, the `deploy` job declares
-`needs: [test, docker]` and runs only on a push to `main` (or an explicit dispatch). On the
+`needs: [test, docker, ux]` and runs only on a push to `main` (or an explicit dispatch). On the
 platform, Render Auto-Deploy is **off** (`autoDeploy: "no"`, `autoDeployTrigger: "off"`, read back
 from the live service), so Render never builds from a push on its own — the only path from a commit
 to the running service is the deploy that job triggers. It triggers it through
@@ -436,7 +450,7 @@ pass (249 to 296 calls, depending on how many answers the run had to decompose).
 | Turso database | **$0** — organisation `seantm` on the free **Starter** plan with `overages: false`, holding one database (`mosaic-hr`, group `default`, `aws-us-west-2`) | 2026-09-10 |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
 | Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.16–0.18 a judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates on the judge project since **2026-09-10**; the failover project is still on a free key. A pass is 249–296 calls over ~369k input / ~20k output tokens. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so the pass figure is stated from token counts | 2026-09-10 |
-| Agent (Anthropic `claude-haiku-4-5`) | **$6.84 across the twelve committed evaluation runs** (the sum of their `est_cost_usd`, agent plus judge spans as priced at write time), plus **≈ $0.09** for the two live demo turns — well inside §9.8's "under $10 all-in" | 2026-09-11 |
+| Agent (Anthropic `claude-haiku-4-5`) | **$16.25 across the 25 committed evaluation runs** — the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time), re-derived from the files on 2026-09-22 and ranging $0.42–$0.89 a drive — plus **≈ $0.09** for the two live demo turns of 2026-09-11; the live re-captures of 2026-09-22 (`docs/evidence/demo-task-*-live-2026-09-22.txt` and the `draft_hr_email` pair) are turns of the same order and are not separately priced. **This is past §9.8's "under $10 all-in" expectation, and the overrun is the honest number:** the row read $6.84 over twelve runs when it was written on 2026-09-11 and was never re-derived as ten more drives landed. Two further drives of the 2026-09-22 waves were discarded rather than committed and cost **$0.80** (`r_1790062696`) and **$0.83** (`r_1790106448`) by their own runner summaries, recorded in the wave ledger; the two 2026-09-16 drives that live only in the trace store carry no cost figure in any committed artifact. What took the total past $10 was re-driving the baseline **and both ablation arms** on every build that changed application code: the 25 files are **eight such trios plus one lone baseline**, and three of the trios were driven on 2026-09-22 alone, as each round of the grade-and-fix wave landed a new application build. An ablation whose arms sit on different commits measures the commits rather than the ablation, and `evaluation/ablation.py` refuses to compare them, so a code fix costs three drives and not one. That was accepted deliberately: the alternative was publishing a comparison the repository's own checker rejects. Nothing here is infrastructure spend, which is still $0, and `LLM_DAILY_CALL_CAP` (1,500 calls per UTC day) is what bounds it | re-derived 2026-09-22 |
 | GitHub Actions | **$0** — public repository, no minute cap | 2026-09-08 |
 
 **Build wall-clock, measured 2026-09-10** on the development machine (macOS arm64, Docker 29.6.1,

@@ -35,7 +35,8 @@ cp .env.example .env      # optional: no credential is needed to boot, lint or t
 ```
 
 `make setup` runs exactly those steps. Every dependency is pinned in `requirements.txt`, which is
-compiled from the authoritative `pyproject.toml` with `uv pip compile`. Then build the index:
+compiled from the authoritative `pyproject.toml` with `uv pip compile` — the three commands are the
+Makefile's `lock` target, which is what `pyproject.toml`'s comment points at. Then build the index:
 
 ```bash
 make ingest       # python -m hrmosaic.rag.ingest — writes data/index/hr_index.sqlite
@@ -63,7 +64,8 @@ make coverage     # the same suite under coverage, then the 90% gate and coverag
 2026-09-22, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. 299 of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them
-and CI runs them in a job of their own that never blocks `test` or `deploy`. `make coverage` runs that same suite
+and CI runs them in a job of their own — which, since 2026-09-22, the `deploy` job **needs**, so a
+red browser suite blocks production exactly like a red unit test. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
 `coverage report --fail-under=90`. Measured on 2026-09-22: **95% of statements and 88% of branches
 over 10,298 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
@@ -97,9 +99,13 @@ not need it, because they pin `MOCK_TODAY=2026-09-01` on their own server and th
 fetch from it comes back byte for byte the recorded one.
 
 **Pinned evidence — the newest three transcripts were run live against the deployed service on
-2026-09-22**, on `/health` sha `8782177` (a docs-only commit on top of the app build `8a89310`:
-`git diff 8a89310..8782177 -- src mcp Dockerfile render.yaml requirements.txt` is empty), each
-committed with the bearer token redacted and nothing else edited:
+2026-09-22**, on `/health` sha `8782177` (a docs-only commit on top of the then-current app build
+`8a89310`: `git diff 8a89310..8782177 -- src mcp Dockerfile render.yaml requirements.txt` is
+empty). The round-2 fixes of later that day — the clarification question, the bare-balance rule and
+the `Mcp-Session-Id` capture — took the app build on to `80a5a71`, which is what the published
+evaluation run measures; these transcripts are the record of what the service did on the earlier
+build and are not re-captured to keep up. Each is committed with the bearer token redacted and
+nothing else edited:
 [`docs/evidence/demo-task-1-live-2026-09-22.txt`](docs/evidence/demo-task-1-live-2026-09-22.txt)
 (8 citations across 4 documents, 39 spans, a `conditional` verdict, 38 s),
 [`docs/evidence/demo-task-2-live-2026-09-22.txt`](docs/evidence/demo-task-2-live-2026-09-22.txt)
@@ -154,7 +160,7 @@ what the tokens really measure.
 ## Deployment
 
 The service runs as a Docker image on Render's free tier, built from the committed `Dockerfile`
-and `render.yaml`, deployed only by a CI job that `needs: [test, docker]`.
+and `render.yaml`, deployed only by a CI job that `needs: [test, docker, ux]`.
 
 ```bash
 make docker            # build the image
@@ -162,13 +168,16 @@ make docker-run-512    # run it under the 512 MB memory gate
 ```
 
 **CI/CD.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on push to `main`, on pull
-request and on `workflow_dispatch`: `lint` (`ruff check` + `ruff format --check`, then a
-full-history gitleaks scan), `test` (`check_facts.py`, `ingest --verify-manifest`, the whole
-suite against the stub provider including MCP tool discovery, under a **90% coverage gate**, then
-`pii_check.py`),
+request and on `workflow_dispatch`, in **five jobs**: `lint` (`ruff check` + `ruff format --check`,
+then two gitleaks scans — the action's own scan of the pushed commits, and a whole-history
+`gitleaks detect --source .` run from the pinned 8.30.1 binary on **every** run, because the action
+is only unbounded on a manual dispatch and the claim is worth making literally true on the run a
+grader opens: 280 commits, 13.22 MB, no leaks, 2026-09-22), `test` (`check_facts.py`,
+`ingest --verify-manifest`, the whole non-browser suite against the stub provider including MCP tool
+discovery, under a **90% coverage gate**, then `pii_check.py`), `ux` (the 299 browser checks),
 `docker` (builds the image and asserts sqlite-vec loads and the templates and static assets ship),
-and `deploy`, which carries `needs: [test, docker]` so a red test or a broken image blocks the
-deploy — see the skipped-deploy run in
+and `deploy`, which carries `needs: [test, docker, ux]` so a red test, a red browser check or a
+broken image blocks the deploy — see the skipped-deploy run in
 [`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png) and the `### CI/CD`
 section of [`design-and-evaluation.md`](design-and-evaluation.md).
 
@@ -253,54 +262,63 @@ pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analys
 [`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 30 questions
 with their expected answers, the judge-agreement figures and the known limitations.
 
-**The published run** is `r_1790074972_baseline` (2026-09-22) — 28 items (the set as it stood
-that morning; a re-drive on the 30-item set follows), `target: deployed`, judged
-by `gemini-3.5-flash-lite` over 268 judge calls, driven and served by build **`8a89310`**: the run
-file records that sha as its `target_git_sha`, and the live `/health` still reported it at 11:52Z
-that day. Later commits on `main` change documentation, evaluation tooling and tests only, so the
-sha `/health` reports may have moved on while the application tree is identical —
-`git diff 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is empty; `deployed.md`
-carries the reading and the ledger behind it. `evaluation/results/latest.json` names the run, and
+**The published run** is `r_1790110325_baseline` (2026-09-22) — all 30 items of
+`evaluation/dataset.yaml` (sha `2c8973147744…`), `target: deployed`, judged by
+`gemini-3.5-flash-lite` over 266 judge calls, driven and served by build **`80a5a71`**: the run file
+records that sha as its `target_git_sha`, and the live `/health` reported it at 21:58Z that day.
+Commits after it change documentation, evaluation tooling and tests only, so the sha `/health`
+reports moves on while the application tree does not, and the relation is a command rather than a
+promise: **`git diff 80a5a71..HEAD -- src mcp Dockerfile render.yaml requirements.txt` was empty at
+`44e5e9f` on 2026-09-22** — run it at whatever HEAD you are reading, and `deployed.md` carries the
+reading and the ledger behind it. `evaluation/results/latest.json` names the run, and
 `python scripts/paste_eval_numbers.py --check` exits 0 against the design document's results
 table. Beside it is the pre-optimization deployed baseline `r_1789055103_baseline`, run on the same
 instance before any of the quality or performance work, over the 26 items the dataset held then:
 
-| Metric | Before (`r_1789055103_baseline`) | Published (`r_1790074972_baseline`) |
+| Metric | Before (`r_1789055103_baseline`) | Published (`r_1790110325_baseline`) |
 |---|---|---|
-| Strict pass rate (target ≥ 0.85) | 0.692 | **0.893** |
-| Groundedness | 0.979 | 0.963 (n = 18) |
-| Citation accuracy | 0.847 | 0.875 (n = 18) |
-| Citation resolvability | 0.923 | 1.000 (n = 28) |
-| Document recall | 0.855 | 0.947 (n = 19) |
-| Tool selection (F1) | 0.926 | 0.993 (n = 28) |
-| Workflow completion | 0.769 | **0.964** (n = 28) |
+| Strict pass rate (target ≥ 0.85) | 0.692 | **0.900** |
+| Groundedness | 0.979 | 0.986 (n = 18) |
+| Citation accuracy | 0.847 | 0.889 (n = 18) |
+| Citation resolvability | 0.923 | 1.000 (n = 30) |
+| Document recall | 0.855 | 0.908 (n = 19) |
+| Tool selection (F1) | 0.926 | 0.984 (n = 30) |
+| Workflow completion | 0.769 | **0.933** (n = 30) |
 | Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
-| Latency p50 / p95 | 17.6 s / 47.7 s | 15.3 s / 26.0 s |
+| Latency p50 / p95 | 17.6 s / 47.7 s | 15.5 s / 29.6 s |
 | Judge agreement (blind seed subset) | 1.000 (n = 7) | 1.000 (n = 8) |
-| Judge agreement (hard subset, selection disclosed) | 1.000 (n = 8) | 0.875 (n = 8) |
+| Judge agreement (hard subset, selection disclosed) | 1.000 (n = 8) | 0.750 (n = 8) |
 
 Every judged row carries its own `n` because a judge that fails twice on an item records a `null`
-verdict and the item leaves that metric's denominator. The two metrics with the smallest
-denominators are named rather than implied: clarification accuracy is **1.000 over the 3 ambiguous items**, and
-the action-safety pass rate is **1.000 over the 1 write item** — not over 28. The blind seed subset
-came back unanimous, so its 1.000 cannot discriminate a good judge from one that answers `grounded`
-to everything; the disclosed hard-case subset exists for that, and its one disagreement is
-`expenses-002`.
+verdict and the item leaves that metric's denominator. The metrics with the smallest denominators
+are named rather than implied: clarification accuracy is **1.000 over the 3 ambiguous items**, and
+the action-safety pass rate is **1.000 over the 2 write items** — not over 30. Those two
+denominators grew in this wave rather than being reweighted: a second unsafe-action item and a
+second sensitive item joined the dataset, so safety and escalation are each two observations now
+instead of one. `workflow_completion_by_workflow` is the same caution one level down: `pto_request`
+reads **1.00 over n = 3** and two of those three are confirmation-gate items, so it is one completed
+filing plus two turns that correctly stopped at the card, not three completions;
+`remote_work_eligibility` reads **0.50 over n = 2**. The blind seed subset came back unanimous, so
+its 1.000 cannot discriminate a good judge from one that answers `grounded` to everything; the
+disclosed hard-case subset exists for that, and it disagrees on two items in opposite directions —
+`expenses-001` (the labeller says not grounded, the judge says grounded) and `expenses-002` (the
+labeller says grounded, the judge scores 0.78).
 
-The project's own ≥ 0.85 strict-pass target is met. Three of the 28 items still fail the composite,
-each recomputed by the same `deterministic.strict_pass_causes()` that decides the `passed` flag:
-`remote-002` (workflow completion 0.00 — its answer cites 2 distinct documents where that item's
-end state requires 3, and 2 of its 4 gold documents), `expenses-002` (groundedness 0.79 < 0.85) and
-`equipment-001` (groundedness 0.69 < 0.85).
+The project's own ≥ 0.85 strict-pass target is met. Three of the 30 items still fail the composite,
+each cause recomputed by the same `deterministic.strict_pass_causes()` that decides the `passed`
+flag: `expenses-002` (groundedness 0.78 < 0.85 **and** workflow completion 0.00), `remote-004`
+(tool recall 0.75 < 1.00 and workflow completion 0.00 — its answer cites 2 distinct documents where
+that item's end state requires 3) and `unsafe-001` (tool recall 0.75 < 1.00; it stopped at the
+confirmation card as gold expects, and the clause it misses is a gold tool it did not call).
 
-**The ablation, on the same build.** Both arms were re-driven on `8a89310` against the same dataset
-sha. Removing the structured tools costs **0.143 of workflow completion** (0.964 → 0.821) and 0.107
-of strict pass (0.893 → 0.786); narrowing retrieval to dense-only k=2 costs nothing measurable here
-(strict pass 0.929, workflow completion 0.964). The design's own prediction was that the first delta
+**The ablation, on the same build.** Both arms were re-driven on `80a5a71` against the same dataset
+sha. Removing the structured tools costs **0.167 of workflow completion** (0.933 → 0.767) and 0.167
+of strict pass (0.900 → 0.733); narrowing retrieval to dense-only k=2 costs nothing measurable here
+(strict pass 0.933, workflow completion 0.967). The design's own prediction was that the first delta
 would exceed 0.25, so `evaluation/ablation.py`'s check reports **not supported** and `REPORT.md`
 prints that banner rather than softening the claim. The judged metrics are computed on `baseline`
-only, which is why two of the three strict-pass failures flip to a pass on both arms — a judged
-clause is vacuously true on an unjudged run.
+only, which is why `expenses-002` flips to a pass on both arms — a judged clause is vacuously true
+on an unjudged run — while `remote-002` flips the other way on both.
 
 **How it got there — and what it cost — is in [`docs/optimization-log.md`](docs/optimization-log.md)**:
 every optimization question asked, the evidence gathered, the decision taken, and the run id that

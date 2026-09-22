@@ -10,11 +10,14 @@ Tick each box only after the thing itself is done — not after it is planned.
 per id; it deliberately does **not** assert that a box is ticked, because a test that could tick
 its own box would prove nothing.
 
-**The independent assessments.** Two independent, read-only grading passes against
+**The independent assessments.** Three independent, read-only grading passes against
 `docs/project-requirements.md` are committed verbatim: the first from 2026-09-11 as
 [`docs/evidence/grade-card-2026-09-11.md`](evidence/grade-card-2026-09-11.md), the second from
 2026-09-21 as [`docs/evidence/grade-card-2026-09-21.md`](evidence/grade-card-2026-09-21.md),
-whose ranked gap list drove the 2026-09-22 grade-and-fix wave (`CHANGELOG.md`, entry **G5**).
+whose ranked gap list drove the 2026-09-22 grade-and-fix wave (`CHANGELOG.md`, entry **G5**), and
+the third from 2026-09-22 as
+[`docs/evidence/grade-card-2026-09-22.md`](evidence/grade-card-2026-09-22.md), which re-graded the
+result of that wave and drove round two of it (entry **G5b**).
 The 2026-09-11 card is the one written for the recording: its §4 is a checklist of what the
 recording has to show for the demo requirements to hold, and its §6 lists the things a grader is
 most likely to trip over. Read both before the take. The defects it found were fixed in two waves
@@ -22,8 +25,15 @@ most likely to trip over. Read both before the take. The defects it found were f
 deployed MCP endpoint it flagged now accepts external clients (verified 2026-09-11 20:32Z). The
 2026-09-21 card graded the build **band 4**, capped above all else because three graded documents
 published a superseded evaluation run, with a stale known-limitations list and an undocumented
-`make ingest` behind it. That is what the G5 wave closed; the run box below is its receipt. The
-two items both cards name as outside the repository — the video link and the dashboard submission
+`make ingest` behind it. That is what the G5 wave closed; the run box below is its receipt. A
+**third** pass then re-graded the fixed repository at `2dee277` — committed as
+[`docs/evidence/grade-card-2026-09-22.md`](evidence/grade-card-2026-09-22.md) with its ranked list as
+`grade-card-2026-09-22-gaps.json` — and returned **band 4 again, with 20 ranked gaps**, led this time
+by a provenance command four documents printed that no longer held at HEAD, a clarification defect
+sitting under a 1.000 metric, and two demo beats that described the wrong screen. Round two of the
+wave (`CHANGELOG.md`, entry **G5b**) closed those: the application fixes, a 30-item dataset in which
+safety and escalation no longer rest on one item each, a re-drive on build `80a5a71`, and this
+republish. The two items every card names as outside the repository — the video link and the dashboard submission
 — are the `DEMO.1` and `SUB.1` boxes below.
 
 ---
@@ -37,17 +47,25 @@ two items both cards name as outside the repository — the video link and the d
       → HTTP 200. — **done 2026-09-11**, verified 20:32Z.
 - [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
-      `design-and-evaluation.md`'s results table from it. — **re-done 2026-09-22 on the final
-      build**, `r_1790074972_baseline` (28 items, judged, strict pass 0.893, measured on build
-      `8a89310`); `paste_eval_numbers.py --check` exits 0. Later commits on `main` are
-      documentation, evaluation tooling and tests only — `git diff 8a89310..HEAD -- src mcp
-      Dockerfile render.yaml requirements.txt` is empty — so the sha the live `/health` reports on
-      the day may differ while the application tree is identical; `deployed.md` carries the
-      reading and the ledger.
+      `design-and-evaluation.md`'s results table from it. — **re-done 2026-09-22 on the round-2
+      build**, `r_1790110325_baseline` (all 30 items, judged, strict pass 0.900, measured on build
+      `80a5a71`); `paste_eval_numbers.py --check` exits 0. The commits after `80a5a71` are
+      documentation, evaluation tooling and tests, so the sha the live `/health` reports on the day
+      will differ while the application tree does not. That is checked by running the command, not
+      by trusting this line: `git diff 80a5a71..HEAD -- src mcp Dockerfile render.yaml
+      requirements.txt` printed nothing at `44e5e9f` on 2026-09-22, and `deployed.md` carries the
+      `/health` reading and the ledger.
 - [x] `README.md`'s `Deployed:` line carries the real tokenized `?access=` link, and
       `grep -c 'TBD-before-submission' README.md` is `0`. — **done 2026-09-10**.
 - [ ] `<DEPLOY_URL>/health` returns 200 with `mcp.connected: true` and `tool_count: 9`, and the
       instance is warm (open it a minute before the take).
+- [ ] **After the README demo-video commit** (the last commit before submitting, and the one that
+      ticks `DEMO.1` / `SUB.1`): confirm its own CI run is green and that `/health.app.git_sha`
+      equals `git rev-parse HEAD`. A repo-root `*.md` commit **does** run the suite and deploy —
+      `*.md` left `ci.yml`'s `paths-ignore` on 2026-09-22 for exactly this reason — so nothing has
+      to be dispatched by hand; what has to be checked is that the run finished. If it ever needs
+      forcing, `gh workflow run ci.yml -f deploy_only=true` on the tip does it, and never while
+      another deploy is in flight.
 - [ ] `docs/demo-script.md` rehearsed end to end at least once, with a timer.
 - [ ] Audio verified on a 20-second test clip.
 

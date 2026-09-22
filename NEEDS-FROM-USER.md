@@ -99,8 +99,9 @@ numbered against the gate it belongs to rather than renumbering the list.
       `gh api -X PUT repos/seantmalone/quantic-mosaic/collaborators/quantic-grader`, read back
       with `…/collaborators/quantic-grader/permission`. The repository was verified **already
       public** on 2026-09-08, and **no visibility change is ever made by script**. Your only
-      action is confirming at submission time that the invite shows as sent or accepted — that is
-      the `- [ ] SUB.3` line in `docs/pre-submission-checklist.md`.
+      action was confirming that the invite showed as sent or accepted, and it is done: the
+      `- [x] SUB.3` line in `docs/pre-submission-checklist.md` records the read-back of
+      2026-09-11, so nothing on this gate is waiting on you.
 
 **The access gate adds nothing to this list.** `scripts/provision_render.py` generates
 `APP_ACCESS_TOKEN` itself with `secrets.token_urlsafe(32)` and sets it on the service alongside
@@ -144,7 +145,7 @@ under `/v1/services/{id}` all answer 404 and `GET /v1/services/{id}` carries no 
 CI's deploy step curls `$RENDER_DEPLOY_HOOK_URL` when that secret exists and otherwise POSTs
 `/v1/services/$RENDER_SERVICE_ID/deploys` with `RENDER_API_KEY`, and `provision_render.py` sets
 `RENDER_SERVICE_ID` itself. The hook is an **optional alternative**, not a requirement, and R8.4 is
-unchanged: `needs: [test, docker]` still gates the job and Render Auto-Deploy is still off. Proven
+unchanged: `needs: [test, docker, ux]` still gates the job and Render Auto-Deploy is still off. Proven
 live on 2026-09-10 — deploy `dep-dahcukqfngtc7390n740`, `trigger: api`.
 
 ### 2. Verify the deployment
@@ -193,8 +194,10 @@ closed** without both — the privileged `/chat` options are admin-only by desig
 ### 4. Get the results onto the live dashboard, and prove they arrived
 
 A results commit deliberately does **not** trigger a rebuild (`ci.yml` carries `paths-ignore` for
-`evaluation/results/**`, `evaluation/REPORT.md`, `docs/**` and repo-root `*.md`), so it spends no
-build minutes. Push the results, then dispatch a deploy explicitly and check the import:
+`evaluation/results/**`, `evaluation/REPORT.md` and `docs/**`), so it spends no build minutes.
+Repo-root `*.md` left that list on 2026-09-22 — the last commit before submission is a README edit
+and it has to run the suite and deploy — so a commit that touches a root-level document does
+trigger a run. Push the results, then dispatch a deploy explicitly and check the import:
 
 ```sh
 gh workflow run ci.yml -f deploy_only=true
@@ -205,12 +208,14 @@ ls evaluation/results/r_*.json | wc -l                                # the comm
 **The two numbers are not equal, and that is expected.** `eval_runs_imported` counts the rows in
 the hosted store, which retains every drive the service has ever answered — including judged
 baselines whose run file was deliberately not committed, because the app changed under them and a
-second "newest baseline" on the dashboard is worse than none. Read 2026-09-22 at 11:52Z: **25
-imported against 22 committed run files**. The check is therefore *imported ≥ committed, and the
+second "newest baseline" on the dashboard is worse than none. Read 2026-09-22 at 21:58Z: **29
+imported against 25 committed run files**. The check is therefore *imported ≥ committed, and the
 published run among them*; `evaluation/results/latest.json` is what names the published one. The
-three drives with no committed file are `r_1790062696_baseline` (2026-09-22, the diagnostic drive
-on the build before this wave's clarification fixes) and `r_1789547562_baseline` (build `6355c41`)
-and `r_1789534779_baseline` (build `1a2a8fb`), both from 2026-09-16 and both predating the
+four drives with no committed file are `r_1790106448_baseline` (19:47Z, build `7ada32e`, 30 items,
+never judged — discarded because one item's gold expected a retrieval the task does not need) and
+`r_1790062696_baseline` (07:38Z, build `82994ce`, the diagnostic drive taken before that round's
+clarification fixes), both from 2026-09-22, and `r_1789547562_baseline` (build `6355c41`) and
+`r_1789534779_baseline` (build `1a2a8fb`), both from 2026-09-16 and both predating the
 published build. None can be reconstructed into a run file: `GET /api/eval/runs/{run_id}` serves
 the dashboard's view-model, which carries neither `dataset_sha` nor `target_git_sha`.
 
@@ -259,11 +264,11 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` | **done** 2026-09-10 — FKs enforced |
 | Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 and 2026-09-11 (n=3; median 71.0 s cold, 22.5 s warm) |
 | Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` | **done** 2026-09-11 — build minutes ~11.5 of 500; instance hours unavailable from the API |
-| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-22 — `r_1790074972_baseline`, judged, 28 items, driven and served by `8a89310` (first published 2026-09-11; re-driven 2026-09-16 and 2026-09-22) |
+| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-22 — `r_1790110325_baseline`, judged, all 30 items, driven and served by `80a5a71` (first published 2026-09-11; re-driven 2026-09-16 and three times on 2026-09-22, as each round of the grade-and-fix wave landed a new application build) |
 | `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` | **done** 2026-09-11 |
 | The deployed MCP endpoint reachable by an external client | 2b | one Environment entry (`MCP_ALLOWED_HOSTS`) | **done** 2026-09-11 — external `initialize` → HTTP 200 at 20:32Z |
 | Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` | **done** 2026-09-10 — demo 2 wrote `MOCK-HR-000001` behind the gate |
-| `/health.trace_store.eval_runs_imported` at least the committed run-file count, with the published run among them | 2 + 4 | the block in step 4 above | **done** — 25 imported against 22 committed files, read 2026-09-22 11:52Z (see the note in step 4) |
+| `/health.trace_store.eval_runs_imported` at least the committed run-file count, with the published run among them | 2 + 4 | the block in step 4 above | **done** — **29** imported against **25** committed files, read 2026-09-22 21:58Z. The four extras are drives kept in the store with no committed result file: `r_1790106448` (19:47Z, build `7ada32e`, never judged) and `r_1790062696` (07:38Z, build `82994ce`), both discarded by ruling during the grade-and-fix wave, plus `r_1789547562` and `r_1789534779` of 2026-09-16, which predate the published build. None can be reconstructed into a run file — `GET /api/eval/runs/{run_id}` serves the dashboard's view-model, which carries neither `dataset_sha` nor `target_git_sha` — so they are disclosed rather than committed (see the note in step 4) |
 | The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above | **done** — all three committed |
 | The demo video, and therefore `README.md`'s `Demo video:` link | **6** | `docs/demo-script.md` | **open** |
 | The `quantic-grader` invitation confirmed as sent or accepted | **7** | `docs/pre-submission-checklist.md` `- [x] SUB.3` | **done** — accepted, re-verified 2026-09-11 |
