@@ -177,3 +177,38 @@ async def test_a_write_that_fails_after_the_confirmation_says_so_rather_than_ref
     assert g1.USER_REFUSAL not in answer
     assert "MOCK-EMAIL-" not in answer, "no reference was allocated, so none is named"
     assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
+
+
+async def test_a_failed_write_is_never_rendered_as_having_gone_ahead(web, store, monkeypatch):
+    """The same turn on the **rendered** surface (fix round 2).
+
+    `chat_confirm` renders the decision line from what the reader clicked, and `resolved_decision`
+    suppressed it for the confirmation refusal only — so this turn put *"You approved this — it went
+    ahead."* directly above *"…the action itself did not complete, so nothing was created."* Asserted
+    on the htmx fragment, because that is the surface the contradiction is on.
+    """
+    import sqlite3
+
+    from hrmosaic.agent import orchestrator
+    from hrmosaic.mcpserver import confirm as confirm_gate
+    from hrmosaic.web import api
+
+    def explode(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    async with web("draft_email_confirm.json") as client:
+        parked = (await client.post("/chat", json={"message": QUESTION, "client_label": "demo"})).json()
+        assert parked["outcome"] == "awaiting_confirmation"
+        monkeypatch.setattr(confirm_gate, "consume", explode)
+        rendered = await client.post(
+            "/chat/confirm",
+            json={"session_id": parked["session_id"], "turn_id": parked["turn_id"], "decision": "confirmed"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert rendered.status_code == 200, rendered.text
+    html = rendered.text
+    assert api.DECISION_LINES["confirmed"] not in html, "nothing went ahead, so the page may not say so"
+    assert orchestrator.WRITE_FAILED_RECEIPT in html, "and the reader is told what did happen"
+    assert g1.USER_REFUSAL not in html
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0

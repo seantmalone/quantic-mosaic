@@ -1091,21 +1091,39 @@ DECISION_LINES = {
 }
 
 
-def resolved_decision(decision: str | None, response: ChatResponse) -> str | None:
-    """Which decision line a resolved card gets — **none**, when the confirmation was refused.
+#: Every sentence the agent closes a resolved card with to say **nothing was created**. Matched by
+#: equality against a whole block, never as a substring of prose: these are the product's own
+#: one-sentence receipts, and a block that merely mentions one of them is not one of them.
+#:
+#: Widened at G5 gap 21 fix round 2. The list was one string long — the confirmation refusal — so a
+#: Confirm whose write then *failed* still rendered *"You approved this — it went ahead."* above the
+#: receipt saying it had not, on both paths that can produce one: §9.4's `partial`
+#: (`WRITE_FAILED_NOTE`, which has shipped that way) and the refusal a no-retrieval turn closes with
+#: (`WRITE_FAILED_RECEIPT`).
+NOTHING_WAS_CREATED: tuple[str, ...] = (
+    g1.CONFIRMATION_REFUSAL,
+    agent.WRITE_FAILED_NOTE,
+    agent.WRITE_FAILED_RECEIPT,
+)
 
-    G5 (gap 19, fix round 1). `DECISION_LINES["confirmed"]` is a statement about the world — *"it
-    went ahead"* — and `chat_confirm` passed the reader's own decision straight into it, so a Confirm
-    whose token the gate then refused rendered *"You approved this — it went ahead."* directly above
-    *"I could not act on that confirmation, so nothing was created or sent."* The reader approved it;
-    nothing went ahead, and the line that says otherwise is the one that has to go. The turn's own
-    refusal copy is the whole account of what happened, so nothing replaces it: a second sentence
-    saying the same thing is chat-production-ux-9's defect.
+
+def resolved_decision(decision: str | None, response: ChatResponse) -> str | None:
+    """Which decision line a resolved card gets — **none**, when nothing was created.
+
+    G5 (gap 19, fix round 1; widened at gap 21 fix round 2). `DECISION_LINES["confirmed"]` is a
+    statement about the world — *"it went ahead"* — and `chat_confirm` passed the reader's own
+    decision straight into it, so a Confirm the gate then refused rendered *"You approved this — it
+    went ahead."* directly above *"I could not act on that confirmation, so nothing was created or
+    sent."*, and a Confirm whose write failed rendered it above *"the action itself did not
+    complete, so nothing was created."* The reader approved it; nothing went ahead, and the line that
+    says otherwise is the one that has to go. The turn's own receipt is the whole account of what
+    happened, so nothing replaces it: a second sentence saying the same thing is
+    chat-production-ux-9's defect.
+
+    Keyed on what the turn **says**, not on its `outcome`: the two write-failure paths close
+    `refused` and `partial` respectively, and both are the same fact on the page.
     """
-    refused = response.outcome == "refused" and any(
-        block.text == g1.CONFIRMATION_REFUSAL for block in response.answer_blocks
-    )
-    return None if refused else decision
+    return None if any(block.text in NOTHING_WAS_CREATED for block in response.answer_blocks) else decision
 
 
 #: What the one live region says when a turn finishes, by the outcome it finished with (UX W3).
@@ -2363,6 +2381,7 @@ __all__ = [
     "RECORDED_TODAY",
     "LABELLED_OUTCOMES",
     "LIVE_PROVIDER",
+    "NOTHING_WAS_CREATED",
     "PRODUCED_LEAD",
     "RECORDED_PROVIDER",
     "SIMULATED_WRITES",
