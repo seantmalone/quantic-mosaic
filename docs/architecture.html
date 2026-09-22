@@ -428,7 +428,7 @@ footer .mono{font-size:12px}
           <g class="node fam-ext" data-id="f1-ci" tabindex="0" aria-label="GitHub Actions">
             <rect class="tile" x="290" y="878" width="320" height="48" rx="2"/>
             <text class="t-title" x="302" y="898">GitHub Actions &mdash; ci.yml</text>
-            <text class="t-sub" x="302" y="916">lint &middot; test &middot; docker &middot; deploy</text>
+            <text class="t-sub" x="302" y="916">lint &middot; test &middot; ux &middot; docker &middot; deploy</text>
           </g>
 
           <g class="edge" data-id="f1-e-http" data-from="f1-chatui" data-to="f1-fastapi" tabindex="0" aria-label="HTTPS JSON">
@@ -1394,7 +1394,7 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="550" y="324">wait_for_deploy.py --timeout 900</text>
             <text class="t-sub" x="550" y="340">smoke_deployed.py</text>
           </g>
-          <text class="t-sub" x="292" y="382" style="font-size:9.5px">ux &mdash; the browser suite; needs: is absent, so it never blocks test or deploy</text>
+          <text class="t-sub" x="292" y="382" style="font-size:9.5px;paint-order:stroke;stroke:var(--fig-bg);stroke-width:3px;stroke-linejoin:round">ux &mdash; the browser suite; needs: absent, never blocks</text>
 
           <g class="node fam-ext" data-id="f6-hook" tabindex="0" aria-label="Render deploy (API)">
             <rect class="tile" x="846" y="96" width="318" height="76" rx="2"/>
@@ -1802,7 +1802,7 @@ D["f5-e-met"]={t:"Scored per item, aggregated per run",f:"edge",p:"Every judged 
 D["f6-t1"]={t:"Push to main",f:"web",p:"The only automatic deploy trigger, and it skips runs that changed nothing executable.",
  k:[["paths-ignore","evaluation/results/**, evaluation/REPORT.md, docs/**, *.md at the repo root"],["Not ignored","corpus/** stays gated"],["Why","a documentation commit should spend no build minutes out of the 500 per month"]],c:["test job"]};
 D["f6-t2"]={t:"Pull request",f:"web",p:"Everything runs, nothing deploys — Actions skips a job whose if-condition excludes it.",
- k:[["Runs","lint, test, docker"],["Also","docs checks that push skips run here, where test_docs_completeness.py is what matters"]],c:["test job"]};
+ k:[["Runs","lint, test, ux, docker"],["Also","docs checks that push skips run here, where test_docs_completeness.py is what matters"]],c:["test job"]};
 D["f6-t3"]={t:"workflow_dispatch",f:"web",p:"One input, used to carry a committed results set into the live image — and to record the red-run evidence.",
  k:[["Input","deploy_only, default 'false' — the only input the workflow accepts"],["Never skips","needs: [test, docker] still holds on a dispatch"],["Evidence","a branch with one deliberately failing test is dispatched with deploy_only true, so deploy shows as skipped with reason “dependent job failed”"]],c:["deploy job"]};
 D["f6-lint"]={t:"Job — lint",f:"agent",p:"One formatter, one linter, one secret scanner. No config drift.",
@@ -1825,9 +1825,9 @@ D["f6-ghsec"]={t:"GitHub repository secrets",f:"data",p:"Three, and none of them
  k:[["DEPLOY_URL","used by wait_for_deploy.py and smoke_deployed.py"],["RENDER_API_KEY","used by the deploy trigger and by check_render_hours.py, which warns and never fails"],["RENDER_SERVICE_ID","the service the deploy job POSTs to"],["RENDER_DEPLOY_HOOK_URL","optional — no REST endpoint publishes it, so the job POSTs /v1/services/{id}/deploys instead and uses the hook only if the secret exists"],["Set by","scripts/provision_render.py and provision_turso.py via gh secret set"],["Repo","public, which removes the private-repo Actions minute cap"]],c:["deploy job"]};
 D["f6-renv"]={t:"Render environment",f:"data",p:"Every variable appears in .env.example with a default, a REQUIRED or OPTIONAL marker and a signup URL — and that parity is itself a test in both directions.",
  k:[["Plain values","APP_ENV=render, LLM_PROVIDER=anthropic, LLM_MODEL=claude-haiku-4-5, OMP_NUM_THREADS=1; the fallback and judge base URLs and model ids default to Gemini in settings.py"],["sync: false","ANTHROPIC_API_KEY, LLM_FALLBACK_API_KEY, JUDGE_API_KEY, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, APP_ACCESS_TOKEN"],["LLM_DAILY_CALL_CAP","default 1500 Anthropic calls per UTC day; at the cap /chat still answers 200, with outcome error and error_kind daily_cap_reached"],["APP_ACCESS_TOKEN","required on the graded deployment; provision_render.py generates it with secrets.token_urlsafe(32) and sets it on Render, so there is no user step. Unset with APP_ENV=render, every gated route 403s and /health reports access_token_missing"],["ACCESS_RATE_LIMIT_PER_MIN","default 30, applied per IP on POST /chat and on the /mcp-server/mcp mount"],["Validation","structural checks at import fail fast; credentials are validated lazily at the point of use, so boot always succeeds"],["Missing key","the app boots, /health is 200 degraded, the dashboard is browsable, and /chat returns 200 with outcome configuration_required naming the variable"],["Deliberately absent","no SEED, no NOW_OVERRIDE, no EVAL_FIXED_NOW, no OTEL exporter endpoint"]],c:["Live service"]};
-D["f6-e-t1"]={t:"on: push",f:"edge",p:"Branches [main], with a paths-ignore list that keeps documentation commits off the build budget.",k:[["Runs","lint, test, docker, and then deploy"]],c:["Push to main","all four ci.yml jobs"]};
-D["f6-e-t2"]={t:"on: pull_request",f:"edge",p:"The same jobs, minus the deploy — the if-condition restricts deploys to main pushes and deliberate dispatches.",k:[["Effect","a pull request can never deploy"]],c:["Pull request","lint, test and docker"]};
-D["f6-e-t3"]={t:"workflow_dispatch",f:"edge",p:"Reaches the deploy job only after the suite it still depends on.",k:[["Input","deploy_only: true"],["Use","carrying a committed eval results set into the live image, verified by /health.trace_store.eval_runs_imported"]],c:["workflow_dispatch","lint, test and docker — deploy is reached only through needs"]};
+D["f6-e-t1"]={t:"on: push",f:"edge",p:"Branches [main], with a paths-ignore list that keeps documentation commits off the build budget.",k:[["Runs","lint, test, ux and docker, and then deploy"]],c:["Push to main","all five ci.yml jobs"]};
+D["f6-e-t2"]={t:"on: pull_request",f:"edge",p:"The same jobs, minus the deploy — the if-condition restricts deploys to main pushes and deliberate dispatches.",k:[["Effect","a pull request can never deploy"]],c:["Pull request","lint, test, ux and docker"]};
+D["f6-e-t3"]={t:"workflow_dispatch",f:"edge",p:"Reaches the deploy job only after the suite it still depends on.",k:[["Input","deploy_only: true"],["Use","carrying a committed eval results set into the live image, verified by /health.trace_store.eval_runs_imported"]],c:["workflow_dispatch","lint, test, ux and docker — deploy is reached only through needs"]};
 D["f6-e-need1"]={t:"needs: test",f:"edge",p:"The literal mechanism behind the deployment gate. A failed dependency means the job never runs.",k:[["Shown as","skipped with reason “dependent job failed”"]],c:["test job","deploy job"]};
 D["f6-e-need2"]={t:"needs: docker",f:"edge",p:"The image must build and answer /health before anything is deployed from it.",k:[["Checked","mcp.connected, tool_count == 9, index.loaded, doc_count == 14"]],c:["docker job","deploy job"]};
 D["f6-e-hook"]={t:"POST the deploy",f:"edge",p:"One curl, then wait, then smoke-test the live URL.",k:[["Timeout","900 s on wait_for_deploy.py"],["Smoke","smoke_deployed.py asserts the live GIT_SHA is a real commit, not \"dev\""]],c:["deploy job","Render deploy (API)"]};
