@@ -36,8 +36,13 @@
       of its own said the same two facts three times and took the table to 1,560px inside a 1,359px
       container (W8 fix round, M1 = npo4-06, and half of npo4-01 = I5). Both survive as the
       Variant filter above, in the run page's own facts list, and in Export JSON (P15). -#}
+  {#- CREATED stacks its date over its clock here (G5): nine columns measured 1,199.5px inside a
+      1,199px container, which fits only by a rounding, and the runs this wave published took it 1px
+      past its box on CI — not because anything printed is longer, but because a `nowrap` timestamp
+      that is not `tabular-nums` is as wide as its own digits. `cell-time-stacked` breaks the instant
+      between its two tokens; nothing about it is abbreviated. -#}
   {{ t.table('eval-runs-table', [
-      {'label': 'Created', 'key': 'created_at', 'kind': 'time'},
+      {'label': 'Created', 'key': 'created_at', 'kind': 'time', 'cls': 'cell-time-stacked'},
       {'label': 'Run', 'key': 'label', 'kind': 'run', 'href_prefix': '/dashboard/evals/', 'link_key': 'run_id'},
       {'label': 'Items', 'key': 'n_items', 'kind': 'num'},
       {'label': 'Judged', 'key': 'judged', 'kind': 'bool',

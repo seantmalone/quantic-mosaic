@@ -767,6 +767,17 @@ body.dashboard { font: var(--text-body); background: var(--paper); accent-color:
 .data-table td.cell-time, .data-table td.cell-bool, .data-table td.cell-id {
   white-space: nowrap;
 }
+/* …and where the table has no width left, a timestamp breaks between its two tokens (G5: the eval
+   runs table overflowed its box by 1px at 1280). A timestamp is a date *and* a time-of-day, not one
+   token, and `nowrap` over both made the column's width a function of which digits the data happens
+   to hold: CREATED is not `tabular-nums`, so it measured 185px over the runs published through W9
+   and 189px once this wave's runs — nothing longer, only wider figures — were committed. Nine
+   columns at 1,199.5px inside a 1,199px box passed on a rounding and failed on CI's fonts. Breaking
+   between the date and the clock leaves the table 110px of slack that no future run can spend, and
+   abbreviates nothing: every character of the instant is still painted, and where the table has
+   room to spare the column still takes one line. Opt-in, because a table that fits keeps its
+   one-line timestamps. */
+.data-table td.cell-time.cell-time-stacked { white-space: normal; }
 /* A prose column keeps a measure and breaks between words (UX W7, npo3-02): `anywhere` shredded
    the retrieval QUERY column into a 55px ribbon of word fragments once the humanised STRATEGY
    label beside it grew, and a badge column is never wider than its own content.
