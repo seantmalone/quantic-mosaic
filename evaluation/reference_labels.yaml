@@ -54,8 +54,14 @@ protocol:
     results the agent read (`structured_data`) — and a claim is supported if any item of any class
     supports it.
 
+# Each label also carries the `turn_id` of the served answer it was authored against, read from
+# `r_1790074972_baseline`'s own `items[]`. A verdict is a judgement about one answer, and an answer
+# belongs to one turn of one run, so `evaluation.runner.recompute_agreement()` refuses to fold this
+# file into a run whose turn for an item differs — the blinding paragraph's "that run's own served
+# answers" is then checkable rather than merely asserted (§13.7).
 labels:
   - item_id: benefits-001
+    turn_id: 4bb6f0bcd9e1b8f15ceb7b7e09127b54
     verdict: grounded
     rationale: >-
       The 90-day waiting period, coverage starting the day it ends, the 401(k) having no waiting
@@ -63,6 +69,7 @@ labels:
       and c_88f9cf68022eeaea; the next steps (enrol in week one, digital cards in MosaicOne Benefits)
       come from c_5892cd18e5f9cae8 and c_76cc7adc6c535185.
   - item_id: benefits-002
+    turn_id: bb4f35250c9c1137d3971ea57d23fdc1
     verdict: grounded
     rationale: >-
       The 13 November 2026 end date is taken directly from lookup_benefits_status#1
@@ -70,6 +77,7 @@ labels:
       employee-only enrolment come from c_7566e6e377678fcd, making the 13 December deadline correct
       arithmetic on shown operands; benefits@mosaicrobotics.example appears in c_0df5d11cd585014f.
   - item_id: conduct-001
+    turn_id: bfa6e2c8ebbed3da9e810c388fba2534
     verdict: grounded
     rationale: >-
       The 2-business-day acknowledgement and 30-calendar-day investigation target are verbatim in
@@ -77,6 +85,7 @@ labels:
       definition of "response" in c_8e5b6fa6417ebbd2, and the Employee Relations routing in
       c_b1b9f056ae7f2f27.
   - item_id: expenses-001
+    turn_id: 9fc4a9f225ba53adfced6f428c12fe91
     verdict: grounded
     rationale: >-
       The USD 750 annual home-office allowance, the itemised examples, the 1 January reset with no
@@ -84,16 +93,19 @@ labels:
       MosaicOne Expenses is named in c_9ce35f1b68d5c0f8 and the itemised-receipt requirement in
       c_98e436172ce912d3.
   - item_id: pto-001
+    turn_id: cffd52f958bc110e9fd8c9c4d9610db3
     verdict: grounded
     rationale: >-
       The claim that full-time employees with three or more years of service accrue 1.50 days per
       month is stated verbatim in c_e178629918c7cd96.
   - item_id: remote-001
+    turn_id: 3ab532a812363378a42d791e1911f2b6
     verdict: grounded
     rationale: >-
       The 3-days-per-week hub requirement, the team (not individual) setting the days, and the
       Tuesday/Wednesday/Thursday anchor are stated verbatim in c_cf43ea100f30ec65.
   - item_id: remote-002
+    turn_id: cd9f733985c4cac6090a69577aedd9a4
     verdict: grounded
     rationale: >-
       The Tax & Legal review for stays over 30 days, the 21-calendar-day filing with destination,
@@ -102,6 +114,7 @@ labels:
       claim is in c_cceb27b487508cbd, the device and 5-business-day IT Security notice in
       c_57b2015388bbf7d4, and the rolling 90-day limit in c_864fb910f46475a7.
   - item_id: remote-003
+    turn_id: e780294e07af32f4acd29cbe640edf50
     verdict: grounded
     rationale: >-
       The 20-day duration for 1-20 October 2026 follows the inclusive counting rule in

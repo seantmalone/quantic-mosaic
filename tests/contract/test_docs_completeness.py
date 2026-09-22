@@ -437,6 +437,43 @@ def test_no_graded_document_sells_the_labeller_as_a_third_model_family():
     )
 
 
+def test_the_reports_protocol_paragraphs_are_the_label_files_own_words():
+    """§13.7 / gap 9 — `evaluation/REPORT.md` renders `protocol.labeller` and `protocol.blinding`
+    verbatim, one paragraph per subset, so the published judge-validation provenance is whatever the
+    label files say and nothing else.
+
+    This is the one place in the documentation where prose *is* diffed, and it earns the exception:
+    the two paragraphs are generated, so a hand-edit of either label file leaves REPORT.md asserting
+    a protocol that no longer exists — which is exactly what happened when one file's blinding
+    paragraph named two different runs as "the final published run" and the report published the
+    contradiction. Regenerate with `python -m evaluation.runner --report <run_id>`.
+    """
+    from evaluation.schema import AGREEMENT_METRICS, load_reference_labels
+
+    report = _text(EVAL_REPORT)
+    rendered = [line for line in report.splitlines() if line.startswith("Protocol: labeller `")]
+    expected = [load_reference_labels(metric.labels_path) for metric in AGREEMENT_METRICS.values()]
+    assert len(rendered) == len([labels for labels in expected if labels is not None]), (
+        "evaluation/REPORT.md must carry exactly one protocol paragraph per committed label file; "
+        f"it carries {len(rendered)}"
+    )
+
+    for (metric_name, metric), labels, paragraph in zip(AGREEMENT_METRICS.items(), expected, rendered, strict=True):
+        assert labels is not None, f"{metric.labels_path.name} is missing"
+        protocol = labels.protocol
+        assert f"`{protocol.labeller}`" in paragraph, (
+            f"REPORT.md's {metric_name} protocol paragraph does not carry "
+            f"{metric.labels_path.name}'s `protocol.labeller` verbatim; regenerate the report"
+        )
+        assert f"labelled {protocol.labelled_on}." in paragraph, (
+            f"REPORT.md states a different labelling date than {metric.labels_path.name}"
+        )
+        assert paragraph.endswith(protocol.blinding), (
+            f"REPORT.md's {metric_name} protocol paragraph does not end with "
+            f"{metric.labels_path.name}'s `protocol.blinding` verbatim; regenerate the report"
+        )
+
+
 def test_design_document_references_all_three_evidence_screenshots():
     text = _text(DESIGN)
     missing = [name for name in EVIDENCE_SCREENSHOTS if name not in text]

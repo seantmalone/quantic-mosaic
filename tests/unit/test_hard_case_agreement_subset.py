@@ -12,6 +12,10 @@ scored exactly 1.000 — is only reproducible if the tie-break is specified. It 
 item_id)`. These tests pin that, pin the population it sorts, and pin the wiring that keeps the two
 figures apart: two metric names, two `n`s, two subset labels, two label files, and a refusal to
 publish one subset's labels under the other's name.
+
+The last section pins the other refusal, the turn binding: a label carries the `turn_id` of the
+served answer it was authored against, so labels written about one run's answers can never be scored
+against another run's.
 """
 
 from __future__ import annotations
@@ -69,12 +73,20 @@ ANSWER_ITEMS = [
 ]
 
 
-def _row(item_id: str, groundedness: float | None, *, run_phase: str = "scored", category: str = "simple_policy"):
+def _row(
+    item_id: str,
+    groundedness: float | None,
+    *,
+    run_phase: str = "scored",
+    category: str = "simple_policy",
+    turn_id: str | None = None,
+):
     return ItemResult(
         id=f"r_test::{item_id}",
         item_id=item_id,
         category=category,
         run_phase=run_phase,  # type: ignore[arg-type]
+        turn_id=turn_id,
         scores={"groundedness": groundedness},
     )
 
@@ -299,6 +311,118 @@ def test_an_unknown_metric_names_the_ones_that_exist(tmp_path, judged_run, no_re
         runner.recompute_agreement(judged_run.run_id, results_dir=tmp_path, metric="kappa")
 
     assert "judge_agreement_rate_hard" in str(raised.value)
+
+
+# --------------------------------------------------------------------------------------------
+# The turn binding (gap 9)
+# --------------------------------------------------------------------------------------------
+#
+# A reference label is a verdict on one served answer. Until `ReferenceLabel.turn_id` existed, the
+# only thing tying a verdict to the text it was written about was the prose in `protocol.blinding` —
+# so folding labels authored against run A into run B produced a figure that looked exactly like a
+# real one. These three pin the refusal, the accepted match, and the older files that carry no
+# binding at all.
+
+LABELS_HARD_BOUND = LABELS_HARD.replace(
+    "  - item_id: inj-001\n", "  - item_id: inj-001\n    turn_id: turn-inj-001\n"
+).replace("  - item_id: pto-003\n", "  - item_id: pto-003\n    turn_id: turn-pto-003\n")
+
+
+@pytest.fixture
+def judged_run_with_turns(tmp_path):
+    """The same run, with each item recording the turn whose answer it served."""
+    run = _run(
+        [
+            _row("inj-001", 0.83, turn_id="turn-inj-001"),
+            _row("pto-003", 0.93, turn_id="turn-pto-003"),
+            _row("conduct-001", 1.0, turn_id="turn-conduct-001"),
+        ],
+        judge_agreement_rate=1.0,
+        judge_agreement_n=7,
+        judge_agreement_subset="seed_1729_8",
+    )
+    (tmp_path / f"{run.run_id}.json").write_text(json.dumps(run.model_dump(mode="json")), encoding="utf-8")
+    return run
+
+
+def test_labels_authored_against_another_runs_answers_are_refused(tmp_path, judged_run_with_turns, no_report):
+    """The wrong-run figure gap 9 names: a verdict on text this run never served."""
+    labels = tmp_path / "reference_labels_hard.yaml"
+    labels.write_text(
+        LABELS_HARD_BOUND.replace("turn_id: turn-inj-001", "turn_id: turn-from-an-older-run"), encoding="utf-8"
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        runner.recompute_agreement(
+            judged_run_with_turns.run_id,
+            results_dir=tmp_path,
+            metric="judge_agreement_rate_hard",
+            labels_path=labels,
+        )
+
+    message = str(raised.value)
+    assert "inj-001" in message and "turn-from-an-older-run" in message and "turn-inj-001" in message
+    assert "pto-003" not in message, "only the mismatched label is named"
+    assert no_report == [], "a refused fold-in does not rewrite REPORT.md"
+    on_disk = json.loads((tmp_path / f"{judged_run_with_turns.run_id}.json").read_text(encoding="utf-8"))
+    assert on_disk["metrics"]["judge_agreement_rate_hard"] is None, "and writes no figure to the run file"
+
+
+def test_labels_whose_turn_matches_the_run_are_folded_in(tmp_path, judged_run_with_turns, no_report):
+    labels = tmp_path / "reference_labels_hard.yaml"
+    labels.write_text(LABELS_HARD_BOUND, encoding="utf-8")
+
+    run = runner.recompute_agreement(
+        judged_run_with_turns.run_id,
+        results_dir=tmp_path,
+        metric="judge_agreement_rate_hard",
+        labels_path=labels,
+    )
+
+    assert run.metrics.judge_agreement_rate_hard == pytest.approx(2 / 3), "inj-001 is still the one disagreement"
+    assert run.metrics.judge_agreement_n_hard == 3
+
+
+def test_labels_carrying_no_turn_id_are_compared_on_the_old_terms(tmp_path, judged_run_with_turns, no_report):
+    """Label files authored before the field existed keep working, binding or no binding."""
+    labels = tmp_path / "reference_labels_hard.yaml"
+    labels.write_text(LABELS_HARD, encoding="utf-8")
+
+    run = runner.recompute_agreement(
+        judged_run_with_turns.run_id,
+        results_dir=tmp_path,
+        metric="judge_agreement_rate_hard",
+        labels_path=labels,
+    )
+
+    assert run.metrics.judge_agreement_rate_hard == pytest.approx(2 / 3)
+    assert run.metrics.judge_agreement_n_hard == 3
+
+
+def test_the_committed_labels_are_bound_to_the_published_runs_own_turns():
+    """Both committed files, against `latest.json` — the binding the blinding paragraph claims.
+
+    Republishing a run without re-authoring the packet leaves these turn ids pointing at the old
+    run's answers, and this is where that is caught: `--recompute-agreement` would refuse, but only
+    if someone ran it.
+    """
+    pointer = runner.RESULTS_DIR / "latest.json"
+    if not pointer.exists():
+        pytest.skip("no published run yet; latest.json lands at P11")
+    run_id = json.loads(pointer.read_text(encoding="utf-8"))["run_id"]
+    published = RunFile.model_validate(json.loads((runner.RESULTS_DIR / f"{run_id}.json").read_text(encoding="utf-8")))
+    turns = {item.item_id: item.turn_id for item in published.items}
+
+    for metric in AGREEMENT_METRICS.values():
+        labels = load_reference_labels(metric.labels_path)
+        if labels is None:
+            continue
+        wrong = [
+            (label.item_id, label.turn_id, turns.get(label.item_id))
+            for label in labels.labels
+            if label.turn_id != turns.get(label.item_id)
+        ]
+        assert wrong == [], f"{metric.labels_path.name} is not bound to {run_id}'s turns: {wrong}"
 
 
 def test_each_metrics_note_is_idempotent_and_leaves_the_other_metrics_note_standing():

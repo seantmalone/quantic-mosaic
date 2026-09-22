@@ -2133,6 +2133,35 @@ def _judge_pass_note(previous: str | None, judged: RunFile) -> str:
     return f"{stripped} {note}".strip() if stripped else note
 
 
+def _refuse_labels_from_another_turn(run: RunFile, labels: ReferenceLabels, source: Path) -> None:
+    """Refuse to score labels authored against one run's answers over another run's answers.
+
+    The binding a label file claims in prose — "the packet carried that run's own served answers" —
+    is mechanical here: `ReferenceLabel.turn_id` records the turn whose answer the labeller read,
+    and a turn belongs to exactly one run. A mismatch means the verdict was written about text this
+    run never served, which is a wrong figure rather than a noisy one, so it is a refusal.
+
+    Two cases are deliberately *not* errors. A label with `turn_id: null` was authored before the
+    field existed and is compared on the old terms. A label whose `item_id` this run never drove is
+    already outside `judge_agreement()`'s denominator, so it cannot move the rate; refusing would
+    only stop a legitimate label set from being folded into a run over a subset of the dataset.
+    """
+    turns = {item.item_id: item.turn_id for item in run.items}
+    mismatched = [
+        f"{label.item_id} (label {label.turn_id}, run {turns[label.item_id] or 'no turn recorded'})"
+        for label in labels.labels
+        if label.turn_id is not None and label.item_id in turns and label.turn_id != turns[label.item_id]
+    ]
+    if mismatched:
+        raise SystemExit(
+            f"{source} was authored against different served answers than {run.run_id}: "
+            + "; ".join(mismatched)
+            + ". A reference label is a verdict on one answer, so it cannot be scored against "
+            "another run's (§13.7). Re-author the packet against this run, or fold these labels "
+            "into the run they were written for."
+        )
+
+
 def recompute_agreement(
     run_id: str,
     *,
@@ -2151,6 +2180,12 @@ def recompute_agreement(
     disclosed `judge_lowest_8` hard-case subset — and decides which three fields are written and
     which labels file is read. The labels file's own `protocol.subset` is checked against it, so
     passing the wrong `--labels` is an error rather than a silently mislabelled figure.
+
+    Each label's `turn_id` is checked against the run's turn for that item for the same reason
+    (§13.7, gap 9): a verdict is a judgement about one served answer, so scoring it against a
+    *different* run's answers is not a weaker figure, it is a wrong one — and nothing about the
+    output would have shown it. Labels with `turn_id: null` predate the field and are compared as
+    before.
     """
     slot = AGREEMENT_METRICS.get(metric)
     if slot is None:
@@ -2167,6 +2202,7 @@ def recompute_agreement(
             f"computes the {slot.subset!r} subset. Refusing to publish a figure under the wrong "
             "population (§13.7)."
         )
+    _refuse_labels_from_another_turn(run, labels, source)
     rate, n, disagreements = det.judge_agreement(
         labels.labels,
         {item.item_id: item.scores.get("groundedness") for item in run.items if item.run_phase == "scored"},

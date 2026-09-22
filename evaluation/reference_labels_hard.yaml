@@ -61,8 +61,14 @@ protocol:
   subset: judge_lowest_8
   selection_disclosed: true
 
+# Each label also carries the `turn_id` of the served answer it was authored against, read from
+# `r_1790074972_baseline`'s own `items[]`. A verdict is a judgement about one answer, and an answer
+# belongs to one turn of one run, so `evaluation.runner.recompute_agreement()` refuses to fold this
+# file into a run whose turn for an item differs — the blinding paragraph's "that run's own served
+# answers" is then checkable rather than merely asserted (§13.7).
 labels:
   - item_id: benefits-001
+    turn_id: 4bb6f0bcd9e1b8f15ceb7b7e09127b54
     verdict: grounded
     rationale: >-
       The 90-day medical/dental/vision waiting period and "coverage begins the day the waiting period
@@ -70,6 +76,7 @@ labels:
       c_5892cd18e5f9cae8, life/AD&D start from c_88f9cf68022eeaea, and the MosaicOne Benefits digital-card
       next step from c_76cc7adc6c535185.
   - item_id: benefits-002
+    turn_id: bb4f35250c9c1137d3971ea57d23fdc1
     verdict: grounded
     rationale: >-
       The 13 November 2026 end date is the employee's own record (lookup_benefits_status#1,
@@ -77,12 +84,14 @@ labels:
       that date plus the 30-day election window stated in c_7566e6e377678fcd; the benefits@ address is in
       c_0df5d11cd585014f.
   - item_id: conduct-001
+    turn_id: bfa6e2c8ebbed3da9e810c388fba2534
     verdict: grounded
     rationale: >-
       2-business-day acknowledgement and the 30-calendar-day investigation target are verbatim in
       c_faa7e3e074e0f281, the 4-business-hour Severity 1 response in c_8befbf9c1eefd50e, the definition of
       "response" in c_8e5b6fa6417ebbd2, and the Employee Relations routing in c_b1b9f056ae7f2f27.
   - item_id: equipment-001
+    turn_id: 5c747d0eb1812ebdbdfeb9beda7c34ad
     verdict: not_grounded
     rationale: >-
       The claim that a USD 1,200 laptop refresh "requires approval from both your direct manager and your
@@ -91,12 +100,14 @@ labels:
       refresh as an automatic MosaicOne ticket, so the USD 500 catalogue threshold in c_65179b00c1b6abd2
       does not establish the asserted director sign-off.
   - item_id: expenses-001
+    turn_id: 9fc4a9f225ba53adfced6f428c12fe91
     verdict: grounded
     rationale: >-
       The USD 750 annual home-office cap, the itemised example list, the 1 January reset with no carryover,
       and the exclusion of laptops/monitors/docks/peripherals are all verbatim in c_c0b4b1d7c6436137;
       MosaicOne Expenses is named in c_9ce35f1b68d5c0f8 and the itemised-receipt step in c_98e436172ce912d3.
   - item_id: expenses-002
+    turn_id: d80ea824498ff66710c6abfbcc678910
     verdict: grounded
     rationale: >-
       The 14-calendar-day booking rule and per-trip manager approval are in c_337bde2666993ccd, the USD 250
@@ -105,6 +116,7 @@ labels:
       direct manager and director" and the unverified claim-age caveat both come from
       check_policy_compliance#1 and lookup_employee_profile#1.
   - item_id: pto-002
+    turn_id: 341c22ca69e5ff6ccf10c66f7f966589
     verdict: grounded
     rationale: >-
       The 13.5 remaining days is the employee's own record (check_pto_balance#1, remaining_days 13.5 as of
@@ -112,6 +124,7 @@ labels:
       the length-based approval tiers in c_9948839107acfaaf, and Dana as direct manager in
       lookup_employee_profile#1.
   - item_id: travel-001
+    turn_id: 07b019799d76246312946d97aaa7ceb6
     verdict: grounded
     rationale: >-
       Every statement - the USD 250 standard cap before taxes and fees, taxes/fees reimbursable above it,

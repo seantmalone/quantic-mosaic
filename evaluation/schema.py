@@ -377,6 +377,14 @@ class ReferenceLabel(BaseModel):
     item_id: str
     verdict: Literal["grounded", "not_grounded"]
     rationale: str
+    #: The `turn_id` of the served answer this label was authored against — the mechanical half of
+    #: the blinding claim. A label is a judgement about *one* answer, and an answer belongs to one
+    #: turn of one run; without this field the only thing binding a verdict to the text it was
+    #: written about is the prose in `protocol.blinding`, so re-scoring a later run against an
+    #: earlier run's labels would have been silent. `evaluation.runner.recompute_agreement()`
+    #: refuses when it is set and does not match the run's turn for that item. `None` is allowed so
+    #: that label files authored before the field existed keep working unchanged.
+    turn_id: str | None = None
 
 
 class ReferenceProtocol(BaseModel):
