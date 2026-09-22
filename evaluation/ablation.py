@@ -2,8 +2,9 @@
 
 **This module only compares runs that already exist** under `evaluation/results/`. It never
 executes a variant — which is why each phase runs the two non-baseline arms itself — and it
-asserts that every run it compares shares the same `target` **and** the same `dataset_sha`, so
-`comparison.json` can never mix a deployed run with two local ones.
+asserts that every run it compares shares the same `target`, the same `dataset_sha` **and** the
+same `target_git_sha`, so `comparison.json` can never mix a deployed run with two local ones, nor
+an arm measured on one build with an arm measured on the next.
 
 **A null result is surfaced, never misreported.** The interpretive claim behind the
 `no_structured_tools` arm is that the agentic layer does real work rather than decorating a RAG
@@ -70,7 +71,7 @@ require a `lookup_employee_profile` result and a `check_pto_balance` result **in
 
 
 class AblationError(RuntimeError):
-    """The compared runs are not comparable — a mixed target or a moved dataset."""
+    """The compared runs are not comparable — a mixed target, a moved dataset, or two builds."""
 
 
 def load_runs(results_dir: Path = RESULTS_DIR) -> dict[str, RunFile]:
@@ -94,7 +95,17 @@ def load_runs(results_dir: Path = RESULTS_DIR) -> dict[str, RunFile]:
 
 
 def assert_comparable(runs: Sequence[RunFile]) -> None:
-    """Same `target`, same `dataset_sha` — the two ways a comparison silently becomes a lie."""
+    """Same `target`, same `dataset_sha`, same `target_git_sha` — the three ways a comparison
+    silently becomes a lie.
+
+    The third one is the build (G5 gap 8). A published `baseline` measured on one commit against two
+    arms measured on another is not an ablation: `dense_only_k2` came out *ahead* of `baseline` on
+    tool selection that way, which is a difference between two builds of the assistant and not the
+    effect of withdrawing a retriever. A run file written before 2026-09-11 carries no
+    `target_git_sha` at all and a `local` target never has one, so an all-`None` set is one value
+    and still comparable; a mix of `None` and a sha is not, because nothing in the pair says the two
+    were measured on the same code.
+    """
     targets = {run.target for run in runs}
     if len(targets) > 1:
         raise AblationError(
@@ -104,6 +115,12 @@ def assert_comparable(runs: Sequence[RunFile]) -> None:
     if len(shas) > 1:
         raise AblationError(
             "the runs do not share a dataset_sha: " + ", ".join(f"{run.variant}={run.dataset_sha[:12]}" for run in runs)
+        )
+    builds = {run.target_git_sha for run in runs}
+    if len(builds) > 1:
+        raise AblationError(
+            "the runs do not share a target_git_sha: "
+            + ", ".join(f"{run.variant}={(run.target_git_sha or 'none')[:12]}" for run in runs)
         )
 
 
@@ -146,6 +163,9 @@ def build_comparison(runs: dict[str, RunFile]) -> dict[str, Any]:
         "generated_at": None,
         "target": ordered[0].target if ordered else None,
         "dataset_sha": ordered[0].dataset_sha if ordered else None,
+        # The one build every arm was measured on — `assert_comparable` has just proved there is
+        # only one (G5 gap 8). `None` on a `local` target, which has no second sha to record.
+        "target_git_sha": ordered[0].target_git_sha if ordered else None,
         "variants": variants,
         "workflow_completion_check": check,
         "flips": _flips(runs),
@@ -260,10 +280,13 @@ def render_section(comparison: dict[str, Any]) -> str:
         )
     else:
         flip_lines = "\n\nNo item's strict pass flipped against `baseline`."
+    build = comparison.get("target_git_sha")
     footnote = (
         "\n\nAll three runs share `target: "
-        f"{comparison['target']}` and `dataset_sha: {str(comparison['dataset_sha'])[:16]}…`, which "
-        "`evaluation/ablation.py` asserts before it writes anything. " + comparison["note"]
+        f"{comparison['target']}`, `dataset_sha: {str(comparison['dataset_sha'])[:16]}…` and "
+        + (f"`target_git_sha: {str(build)[:12]}…`" if build else "no `target_git_sha` (a local target)")
+        + ", which `evaluation/ablation.py` asserts before it writes anything. "
+        + comparison["note"]
     )
     return f"{table}\n\n{body}{flip_lines}{footnote}"
 

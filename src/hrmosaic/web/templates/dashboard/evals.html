@@ -112,11 +112,36 @@
 <section class="panel tab-panel" id="tab-compare" role="tabpanel" aria-labelledby="tab-btn-compare"{% if tab != 'compare' %} hidden{% endif %}>
   {# One list, read by the chart and by the table beside it: two copies of the series would be two
      pictures of different things under one heading (UX W5). #}
-  {% set ablation_series = ['cit_resolve_mean', 'tool_selection_accuracy', 'arg_correctness_rate',
-                            'strict_pass_rate', 'groundedness_mean', 'citation_accuracy_mean'] %}
+  {# `workflow_completion` and `doc_recall_mean` lead the list because they are the two arms' own
+     hypothesis metrics — what `no_structured_tools` and `dense_only_k2` exist to move (§13.3, §13.9)
+     — and the chart could not plot either while the view-model did not carry them (G5 gap 25). #}
+  {% set ablation_series = ['workflow_completion', 'doc_recall_mean', 'cit_resolve_mean',
+                            'tool_selection_accuracy', 'arg_correctness_rate', 'strict_pass_rate',
+                            'groundedness_mean', 'citation_accuracy_mean'] %}
   <h3>Ablation — three variants over the identical items</h3>
-  {# Decorative: the six series are read out as a table below, one row per variant, so a reader
-     who cannot tell six hues apart still gets the comparison (accessibility-and-responsive-19). #}
+
+  {#- Which build each arm was measured on, and whether that is one build (G5 gap 8). The tab pairs
+      the newest run of each variant, so a `baseline` re-driven on a later commit sits beside two
+      arms from an earlier one and every delta between them is partly the difference between two
+      builds of the assistant. That is not a footnote; it is whether the comparison means anything,
+      so it is said before the chart. -#}
+  {% if compare.builds_differ %}
+  <p class="alert" id="ablation-build-notice"><strong>These arms were measured on different
+    builds.</strong> The runs below do not share one <code>target_git_sha</code>, so a delta between
+    them is partly a difference between two builds of the assistant and not the effect of the
+    ablation. Re-drive the arms on one build — <code>make ablation</code> refuses to publish a
+    comparison that mixes them.</p>
+  {% endif %}
+  {{ t.table('ablation-builds-table', [
+      {'label': 'Variant', 'key': 'variant', 'kind': 'badge'},
+      {'label': 'Run', 'key': 'run_id', 'kind': 'id', 'href_prefix': '/dashboard/evals/'},
+      {'label': 'Build measured', 'key': 'target_git_sha', 'kind': 'id',
+       'help': 'The commit the assistant was running when this arm was scored, as its own /health reported it. Two arms on two builds are not an ablation.'}],
+      compare.variants, 'No variant has been run yet.',
+      label='The build behind each ablation arm') }}
+
+  {# Decorative: the eight series are read out as a table below, one row per variant, so a reader
+     who cannot tell eight hues apart still gets the comparison (accessibility-and-responsive-19). #}
   <figure class="chart-figure">
     <canvas id="chart-ablation" aria-hidden="true"></canvas>
     <figcaption class="visually-hidden">
@@ -141,6 +166,43 @@
   <p class="note">Judged metrics are computed on the <code>baseline</code> variant only: the two
     ablation arms report <span class="not-judged">not judged</span> rather than a
     zero, and the chart omits those series.</p>
+
+  {#- §13.9's pre-registered check, as `make ablation` published it (G5 gap 25). The delta and the
+      bar it has to clear are the two numbers the demo says out loud; they were computed, written to
+      `comparison.json`, quoted in `REPORT.md` — and on no page. -#}
+  <h4>Workflow completion — the pre-registered check</h4>
+  {% if compare.workflow_check %}
+  {% set check = compare.workflow_check %}
+  <dl class="facts" id="workflow-completion-check">
+    <div><dt>{{ 'baseline'|enum_label }}</dt><dd>{{ check.baseline|pct }}</dd></div>
+    <div><dt>{{ 'no_structured_tools'|enum_label }}</dt><dd>{{ check.no_structured_tools|pct }}</dd></div>
+    <div><dt>Delta</dt><dd>{{ check.delta|pct }}</dd></div>
+    <div><dt>Pre-registered bar</dt><dd>a drop past {{ check.threshold|pct }}</dd></div>
+    <div><dt>Claim supported</dt>
+      <dd><span class="flag flag-{{ 'yes' if check.supported else 'no' }}">{{ 'yes' if check.supported else 'no' }}</span></dd></div>
+  </dl>
+  <p class="note">§13.9 predicts that withdrawing the five structured-data tools drops workflow
+    completion past its threshold: <code>workflow_completion(no_structured_tools) &lt;
+    workflow_completion(baseline) − {{ check.threshold|pct }}</code>.
+    {% if check.reason %}It is not computable on this comparison — {{ check.reason }}.
+    {% elif check.supported %}It holds on the published comparison, which is the signal the arm
+    exists to produce: the agentic layer does real work rather than decorating a RAG bot.
+    {% else %}It does <strong>not</strong> hold on the published comparison, and
+    <code>evaluation/REPORT.md</code> carries a not-supported banner in place of the narrative —
+    a measurement, not evidence that the agentic layer does the work.{% endif %}
+    These are the figures of the published <code>comparison.json</code>, whose three runs
+    <code>make ablation</code> asserts share one target, one dataset and one build — computed on
+    {% if check.baseline_run_id %}<a href="/dashboard/evals/{{ check.baseline_run_id }}"><code
+      class="id-chip" title="{{ check.baseline_run_id }}">{{ check.baseline_run_id|id_chip }}</code></a>{%
+      else %}no baseline run{% endif %} and
+    {% if check.no_structured_tools_run_id %}<a href="/dashboard/evals/{{ check.no_structured_tools_run_id }}"><code
+      class="id-chip" title="{{ check.no_structured_tools_run_id }}">{{ check.no_structured_tools_run_id|id_chip }}</code></a>{%
+      else %}no <code>no_structured_tools</code> run{% endif %}, which are not always the newest run
+    of each variant charted above.</p>
+  {% else %}
+  <p class="note">No published <code>comparison.json</code> yet — run the three variants and then
+    <code>make ablation</code> (§13.9).</p>
+  {% endif %}
 
   <h4>Pass flips against baseline</h4>
   {{ t.table('flips-table', [

@@ -213,6 +213,9 @@ METRIC_LABELS: dict[str, str] = {
     "recommendation_labeled_rate": "Recommendations labelled",
     "catalog_reopened_rate": "Tool catalog reopened",
     "judge_agreement_rate": "Judge agreement",
+    # The two the compare tab charts (G5 gap 25): the hypothesis metric of each ablation arm.
+    "workflow_completion": "Workflow completion",
+    "doc_recall_mean": "Documents recalled",
 }
 
 #: Which of those are 0–1 proportions, and therefore render as percentages. The rest are counts.
@@ -235,6 +238,8 @@ RATE_METRICS: frozenset[str] = frozenset(
         "recommendation_labeled_rate",
         "catalog_reopened_rate",
         "judge_agreement_rate",
+        "workflow_completion",
+        "doc_recall_mean",
     }
 )
 
@@ -394,11 +399,19 @@ def _f_rate(value: Any, n: Any = None, unit: str = "", always: bool = False) -> 
 
 
 def _f_ms_n(value: Any, n: Any = None) -> str:
-    """**P14**: a percentile over fewer than five samples prints its `n`, not a figure."""
+    """**P14**: a percentile over fewer than five samples prints its `n`, not a figure.
+
+    A sample of **none at all** says something different again, and says it to a reader who has no
+    reason to know what `n` is (G5 gap 25): every published run has `n_cold = 0`, so both cold
+    percentiles on page 11 read `n=0` — a cell a grader reads as a measurement of zero, or as a
+    defect. `not measured (n=0)` is the fact, and the `n` stays beside it.
+    """
     try:
         sample = int(n)
     except (TypeError, ValueError):
         sample = None
+    if sample is not None and sample <= 0:
+        return "not measured (n=0)"
     if sample is not None and sample < SMALL_PERCENTILE:
         return f"n={sample}"
     return _f_ms(value)
@@ -1474,6 +1487,13 @@ class EvalMetrics(BaseModel):
     judge_agreement_n_hard: int = 0
     judge_agreement_subset_hard: str | None = None
     est_cost_usd: float | None = None
+    #: The two figures the two ablation arms exist to move (§13.3, §13.9), which `extra="ignore"`
+    #: used to drop on the floor: `no_structured_tools` is judged by `workflow_completion` and
+    #: `dense_only_k2` by `doc_recall_mean`, and neither could be charted on the compare tab while
+    #: the view-model refused to carry them (G5 gap 25). `evaluation/schema.py::RunMetrics` has held
+    #: both all along, so every committed run file already supplies them.
+    workflow_completion: float | None = None
+    doc_recall_mean: float | None = None
 
 
 class EvalRunRow(_View):
@@ -1574,7 +1594,35 @@ class EvalRunDetailView(_View):
 class VariantMetrics(_View):
     variant: str
     run_id: str
+    #: `app.git_sha` as the target's own `/health` reported it when this arm was measured — the one
+    #: provenance field `eval_runs` does not hold, read back from the committed run file (G5 gap 8).
+    #: `None` for a `local` run, for a run file written before 2026-09-11, and for a run whose file
+    #: is not on disk (a dashboard smoke run). An ablation across two builds is not an ablation, so
+    #: the arm's build is part of the payload rather than something a reader has to infer.
+    target_git_sha: str | None = None
     metrics: EvalMetrics
+
+
+class WorkflowCheck(_View):
+    """§13.9's pre-registered check as `make ablation` published it, from `comparison.json`.
+
+    The claim behind the `no_structured_tools` arm is that the agentic layer does real work, and its
+    test is `workflow_completion(no_structured_tools) < workflow_completion(baseline) − threshold`.
+    The delta and the bar are the two numbers the demo says out loud (G5 gap 25), so the compare tab
+    prints them beside the chart instead of leaving them in a file nothing in `src/` reads.
+    """
+
+    supported: bool
+    baseline: float | None = None
+    no_structured_tools: float | None = None
+    delta: float | None = None
+    threshold: float | None = None
+    reason: str | None = None
+    #: The two runs the published check was computed on. The tab beside it shows the **newest** run
+    #: of each variant, which is not always the trio `make ablation` last compared, so the check
+    #: names its own inputs rather than leaving a reader to assume they are the ones above.
+    baseline_run_id: str | None = None
+    no_structured_tools_run_id: str | None = None
 
 
 class Flip(_View):
@@ -1593,6 +1641,13 @@ class EvalCompareView(_View):
     variants: list[VariantMetrics]
     flips: list[Flip]
     chunk_size: list[ChunkSizePoint]
+    #: True when the arms on this tab were **not** all measured on one build — more than one distinct
+    #: `target_git_sha` among them (G5 gap 8). The tab pairs the newest run of each variant, which is
+    #: how a `baseline` from one commit came to sit beside two arms from another; the page says so
+    #: rather than printing the deltas as if they measured the ablation.
+    builds_differ: bool = False
+    #: `None` until `make ablation` has written `comparison.json`.
+    workflow_check: WorkflowCheck | None = None
 
 
 # --------------------------------------------------------------------------------------
@@ -2969,6 +3024,60 @@ def _chunk_size_points() -> list[ChunkSizePoint]:
     ]
 
 
+def _target_git_sha(run_id: str) -> str | None:
+    """The build a run was measured on, from `evaluation/results/<run_id>.json` (G5 gap 8).
+
+    `core/archive.py` imports every field of a run file into `eval_runs` except this one — the table
+    predates `target_git_sha` — so the committed file is where the compare tab has to read it. A run
+    with no file on disk (a dashboard smoke run) has no recorded build, which is `None` and renders
+    as "not recorded", never as agreement.
+    """
+    path = RESULTS_DIR / f"{run_id}.json"
+    if path.parent != RESULTS_DIR or not path.is_file():  # `..` in a run id buys nothing
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.warning("could not read %s", path, exc_info=True)
+        return None
+    sha = document.get("target_git_sha") if isinstance(document, dict) else None
+    return str(sha) if sha else None
+
+
+def _published_workflow_check() -> WorkflowCheck | None:
+    """`comparison.json`'s `workflow_completion_check` — §13.9's pre-registered claim (G5 gap 25).
+
+    `evaluation/ablation.py` computes it and `REPORT.md` quotes it; until now nothing in `src/` read
+    it, so the one number the demo's closing beat says out loud was on no page. It is the published
+    comparison's own check, which is why the tab labels it as such: `make ablation` asserts the three
+    runs behind it share a target, a dataset and a build.
+    """
+    path = RESULTS_DIR / "comparison.json"
+    if not path.is_file():
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.warning("could not read %s", path, exc_info=True)
+        return None
+    check = document.get("workflow_completion_check") if isinstance(document, dict) else None
+    if not isinstance(check, dict):
+        return None
+    run_ids = {
+        entry.get("variant"): entry.get("run_id") for entry in document.get("variants") or [] if isinstance(entry, dict)
+    }
+    return WorkflowCheck(
+        supported=bool(check.get("supported")),
+        baseline=check.get("baseline"),
+        no_structured_tools=check.get("no_structured_tools"),
+        delta=check.get("delta"),
+        threshold=check.get("threshold"),
+        reason=check.get("reason"),
+        baseline_run_id=run_ids.get("baseline"),
+        no_structured_tools_run_id=run_ids.get("no_structured_tools"),
+    )
+
+
 def build_eval_compare(request: Request) -> EvalCompareView:
     """The newest run of each variant, and every item whose pass flips against `baseline`."""
     store = _store(request)
@@ -2981,10 +3090,15 @@ def build_eval_compare(request: Request) -> EvalCompareView:
         VariantMetrics(
             variant=variant,
             run_id=row["id"],
+            target_git_sha=_target_git_sha(row["id"]),
             metrics=EvalMetrics.model_validate(json.loads(row["metrics_json"] or "{}")),
         )
         for variant, row in sorted(newest.items(), key=lambda pair: pair[0] != "baseline")
     ]
+    # Recorded builds only: an arm whose build is not recorded is unknown, not different. Two
+    # recorded and unequal shas, though, are two builds of the assistant, and a delta across them
+    # is partly a build artefact — which is the pairing the page has to name (G5 gap 8).
+    builds = {row.target_git_sha for row in variants if row.target_git_sha}
 
     flips: list[Flip] = []
     baseline = newest.get("baseline")
@@ -3015,7 +3129,13 @@ def build_eval_compare(request: Request) -> EvalCompareView:
                     )
                 )
     flips.sort(key=lambda flip: (flip.variant, flip.item_id))
-    return EvalCompareView(variants=variants, flips=flips, chunk_size=_chunk_size_points())
+    return EvalCompareView(
+        variants=variants,
+        flips=flips,
+        chunk_size=_chunk_size_points(),
+        builds_differ=len(builds) > 1,
+        workflow_check=_published_workflow_check(),
+    )
 
 
 # --------------------------------------------------------------------------------------

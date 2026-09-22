@@ -289,6 +289,163 @@ async def test_the_compare_tab_carries_one_run_per_variant_the_flips_and_the_chu
     assert [point["chunk_chars"] for point in payload["chunk_size"]] == [700, 1100, 1600]
 
 
+#: The two builds of G5 gap 8: the published `baseline` was re-driven on `bd4ac93` while both arms
+#: stayed on `34717b5`, and the compare tab paired them with no sha anywhere in the payload.
+BUILD_A = "bd4ac9336e87f1233f848ef4e5635c29e07cd15b"
+BUILD_B = "34717b52eb01312097ec41fe8a07394843d215d6"
+
+
+async def _compare_run_ids(seeded) -> dict[str, str]:
+    """Which run the tab shows per variant — the newest of each, whatever the store holds."""
+    payload = await _get(seeded, "/api/eval/compare")
+    return {row["variant"]: row["run_id"] for row in payload["variants"]}
+
+
+def _results_dir(tmp_path, builds: dict[str, str] | None = None, comparison: dict | None = None):
+    """A results directory holding exactly the provenance the compare tab reads from disk.
+
+    `eval_runs` predates `target_git_sha` (`core/archive.py` has no column to import it into), so the
+    build behind an arm is read back from `evaluation/results/<run_id>.json` and the published check
+    from `comparison.json`. Those two files are what this builds, keyed by the run ids the tab is
+    actually showing.
+    """
+    import json
+
+    for run_id, sha in (builds or {}).items():
+        (tmp_path / f"{run_id}.json").write_text(
+            json.dumps({"run_id": run_id, "target_git_sha": sha}), encoding="utf-8"
+        )
+    if comparison is not None:
+        (tmp_path / "comparison.json").write_text(json.dumps(comparison), encoding="utf-8")
+    return tmp_path
+
+
+async def test_the_compare_tab_names_each_arms_build_and_says_so_when_they_differ(seeded, monkeypatch, tmp_path):
+    """**G5 gap 8**: a cross-build pairing is visible, not implied.
+
+    The tab takes the newest run of each variant, which is exactly how a `baseline` re-driven on a
+    later commit came to sit beside two arms from an earlier one while `dense_only_k2` appeared to
+    *beat* it on tool selection — a difference between two builds of the assistant, read as the
+    effect of dropping the sparse retriever.
+    """
+    runs = await _compare_run_ids(seeded)
+    builds = {runs["baseline"]: BUILD_A, runs["dense_only_k2"]: BUILD_B, runs["no_structured_tools"]: BUILD_B}
+    monkeypatch.setattr(dash, "RESULTS_DIR", _results_dir(tmp_path, builds=builds))
+
+    payload = await _get(seeded, "/api/eval/compare")
+    assert {row["variant"]: row["target_git_sha"] for row in payload["variants"]} == {
+        "baseline": BUILD_A,
+        "dense_only_k2": BUILD_B,
+        "no_structured_tools": BUILD_B,
+    }
+    assert payload["builds_differ"] is True
+
+    page = await seeded["client"].get("/dashboard/evals?tab=compare", headers=ADMIN)
+    assert page.status_code == 200, page.text[:400]
+    assert 'id="ablation-build-notice"' in page.text, "the page must say the arms are on two builds"
+    assert 'id="ablation-builds-table"' in page.text
+    # The short form beside each arm, with the full sha one hover away.
+    assert BUILD_A[:8] in page.text and BUILD_B[:8] in page.text
+
+
+async def test_one_shared_build_still_names_it_and_raises_no_notice(seeded, monkeypatch, tmp_path):
+    runs = await _compare_run_ids(seeded)
+    monkeypatch.setattr(dash, "RESULTS_DIR", _results_dir(tmp_path, builds=dict.fromkeys(runs.values(), BUILD_B)))
+    payload = await _get(seeded, "/api/eval/compare")
+    assert {row["target_git_sha"] for row in payload["variants"]} == {BUILD_B}
+    assert payload["builds_differ"] is False
+
+    page = await seeded["client"].get("/dashboard/evals?tab=compare", headers=ADMIN)
+    assert 'id="ablation-build-notice"' not in page.text, "one build is not a mixed pairing"
+    assert 'id="ablation-builds-table"' in page.text, "the build is named either way"
+
+
+async def test_a_build_no_run_file_records_is_unknown_rather_than_shared(seeded, monkeypatch, tmp_path):
+    """A `local` run and every run file written before 2026-09-11 carry no `target_git_sha`, and a
+    dashboard smoke run has no file at all. None of that is evidence that two arms agree."""
+    monkeypatch.setattr(dash, "RESULTS_DIR", _results_dir(tmp_path))  # no run files, no comparison
+    payload = await _get(seeded, "/api/eval/compare")
+    assert all(row["target_git_sha"] is None for row in payload["variants"])
+    assert payload["builds_differ"] is False
+    assert payload["workflow_check"] is None
+
+    page = await seeded["client"].get("/dashboard/evals?tab=compare", headers=ADMIN)
+    assert 'id="ablation-build-notice"' not in page.text
+    assert 'id="workflow-completion-check"' not in page.text, "no published comparison to quote"
+
+
+async def test_the_compare_tab_charts_both_arms_hypothesis_metrics(seeded, monkeypatch):
+    """**G5 gap 25**: `workflow_completion` and `doc_recall_mean` reach the page at all.
+
+    `EvalMetrics` is `extra="ignore"`, so the two figures the arms exist to move were dropped on
+    validation: the demo's closing beat said a workflow-completion delta that was on no chart.
+    """
+    monkeypatch.setattr(dash, "RESULTS_DIR", EVAL_RUNS)
+    payload = await _get(seeded, "/api/eval/compare")
+    for row in payload["variants"]:
+        assert row["metrics"]["workflow_completion"] is not None, row["variant"]
+        assert row["metrics"]["doc_recall_mean"] is not None, row["variant"]
+
+    page = await seeded["client"].get("/dashboard/evals?tab=compare", headers=ADMIN)
+    series = re.search(r'id="chart-ablation-series"[^>]*>(.*?)</script>', page.text, re.S)
+    assert series, "the compare tab still declares its shared series list"
+    assert "workflow_completion" in series.group(1) and "doc_recall_mean" in series.group(1)
+    # One list, read by the chart and by the read-out table beside it (UX W5).
+    assert dash.METRIC_LABELS["workflow_completion"] in page.text
+    assert dash.METRIC_LABELS["doc_recall_mean"] in page.text
+
+
+async def test_the_compare_tab_publishes_the_pre_registered_workflow_check(seeded, monkeypatch, tmp_path):
+    """**G5 gap 25**: §13.9's delta and its bar, from `comparison.json`, which nothing in `src/` read.
+
+    The check names the two runs it was computed on, because they are not always the newest run of
+    each variant the tab charts above it — which is the whole of gap 8.
+    """
+    comparison = {
+        "target": "deployed",
+        "dataset_sha": "0" * 64,
+        "target_git_sha": BUILD_B,
+        "variants": [{"variant": name, "run_id": run_id} for name, run_id in VARIANT_RUNS.items()],
+        "workflow_completion_check": {
+            "supported": False,
+            "reason": None,
+            "baseline": 1.0,
+            "no_structured_tools": 0.8333,
+            "delta": -0.1667,
+            "threshold": 0.25,
+        },
+    }
+    monkeypatch.setattr(dash, "RESULTS_DIR", _results_dir(tmp_path, comparison=comparison))
+    check = (await _get(seeded, "/api/eval/compare"))["workflow_check"]
+    assert check == {
+        "supported": False,
+        "reason": None,
+        "baseline": 1.0,
+        "no_structured_tools": 0.8333,
+        "delta": -0.1667,
+        "threshold": 0.25,
+        # The published check's own inputs — `r_p9fixture_*` here — which are **not** the newest run
+        # of each variant the tab charts above it. That is gap 8 in one payload.
+        "baseline_run_id": VARIANT_RUNS["baseline"],
+        "no_structured_tools_run_id": VARIANT_RUNS["no_structured_tools"],
+    }
+
+    page = await seeded["client"].get("/dashboard/evals?tab=compare", headers=ADMIN)
+    assert 'id="workflow-completion-check"' in page.text
+    # The delta and the pre-registered bar, through the page's one rate formatter.
+    assert dash._f_pct(-0.1667) in page.text and dash._f_pct(0.25) in page.text
+    assert VARIANT_RUNS["baseline"] in page.text, "the check names the run it was computed on"
+
+
+async def test_a_cold_latency_cell_with_no_samples_says_it_was_not_measured():
+    """**G5 gap 25**: every published run has `n_cold = 0`, so both cold percentiles read `n=0` —
+    a cell a grader reads as a measured zero, or as a defect. `n=0` alone is not a measurement."""
+    assert dash._f_ms_n(None, 0) == "not measured (n=0)"
+    assert dash._f_ms_n(4200, 0) == "not measured (n=0)", "no cold probe ran; there is nothing to print"
+    assert dash._f_ms_n(4200, 3) == "n=3", "P14's small-sample rule is unchanged"
+    assert dash._f_ms_n(4200, 40) == "4.20 s"
+
+
 async def test_the_metrics_tab_reads_latency_from_the_run_and_the_decomposition_from_the_turns(seeded):
     payload = await _get(seeded, "/api/eval/runs/r_p9fixture_baseline")
     latency = payload["latency"]
