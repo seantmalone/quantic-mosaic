@@ -194,7 +194,7 @@ so the verdict and every gap behind this wave can be read rather than taken on t
   free daily cap mid-evaluation; the judge was moved to the second Cloud project's quota, which
   is exactly why two keys exist. Then Google returned `500`/`503 "high demand"` for hours across
   **both** projects, and the P10 evaluation had to be restructured into a **two-pass harness** —
-  drive all 28 items now, judge later against the committed run file, gated on eight consecutive
+  drive all 30 items now, judge later against the committed run file, gated on eight consecutive
   successful responses — so the run was never lost to a provider's bad afternoon. The design's
   failover path (agent → free Gemini) is the same instinct applied to the product.
 - **Two concurrent turns of one agent collided.** I sent a mid-run instruction to a working
@@ -277,8 +277,9 @@ and academic **integrity** of everything submitted here. I reviewed the architec
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
 committed suite — 3,435 tests as of 2026-09-22, the count `pytest --collect-only -q` reports and the
-count a contract test holds every graded document to — and by a 28-item evaluation whose real
-numbers, including the ones below target, are published with their causes; security by secrets that exist only in environment variables, a
+count a contract test holds every graded document to — and by a 30-item evaluation whose real
+numbers, including the ones below target, are published with their causes (the published run was
+measured on the 28-item set; a re-drive on the 30-item set follows); security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
 and dataset, and a write gate enforced at a boundary rather than in a prompt; integrity by this
 disclosure, by the fact that no third-party code was represented as my own, and by every vendored

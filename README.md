@@ -206,12 +206,12 @@ next boot, and the workflow is stopped from the repository's **Actions** tab.
 ## Evaluation
 
 ```bash
-make eval        # drive the 28-item dataset against EVAL_TARGET_BASE_URL — no judging
+make eval        # drive the 30-item dataset against EVAL_TARGET_BASE_URL — no judging
 make ablation    # compare the committed baseline run against the two ablation variants
 ```
 
 **The whole recipe, and the credential each step needs.** `make eval` is
-`python -m evaluation.runner --variant baseline`: it drives the 28 items as one
+`python -m evaluation.runner --variant baseline`: it drives the 30 items as one
 `POST $EVAL_TARGET_BASE_URL/chat` each, carrying `Authorization: Bearer $APP_ACCESS_TOKEN` and
 `X-Actor: admin`, and scores every deterministic metric. It does **not** judge — `--judge-inline` is
 off by default, so a judge-provider outage cannot leave a half-judged run whose composite cannot be
@@ -250,10 +250,11 @@ into a judged run. `make ablation` only compares runs that already exist, and as
 
 Results are committed under `evaluation/results/` and rendered by the dashboard's evaluation
 pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analysis and
-[`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 28 questions
+[`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 30 questions
 with their expected answers, the judge-agreement figures and the known limitations.
 
-**The published run** is `r_1790074972_baseline` (2026-09-22) — 28 items, `target: deployed`, judged
+**The published run** is `r_1790074972_baseline` (2026-09-22) — 28 items (the set as it stood
+that morning; a re-drive on the 30-item set follows), `target: deployed`, judged
 by `gemini-3.5-flash-lite` over 268 judge calls, driven and served by build **`8a89310`**: the run
 file records that sha as its `target_git_sha`, and the live `/health` still reported it at 11:52Z
 that day. Later commits on `main` change documentation, evaluation tooling and tests only, so the
