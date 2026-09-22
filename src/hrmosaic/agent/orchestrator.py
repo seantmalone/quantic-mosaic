@@ -426,6 +426,11 @@ NAMED_BALANCE_WORDS: tuple[str, ...] = (
     "401k",
     "401(k)",
     "expense",
+    # The two accounts whose balance a reader asks about by acronym and never by the word "benefit"
+    # (fix round 1). E1042 holds an FSA, so *"How much is left in my FSA?"* names its balance as
+    # squarely as *"my PTO balance"* does and must not be sent back a clarification.
+    "fsa",
+    "hsa",
 )
 
 #: …and what makes a question a balance question at all: the noun itself, or the quantity phrasing a
@@ -434,7 +439,7 @@ BALANCE_ASK_WORDS: tuple[str, ...] = ("balance",)
 BALANCE_QUANTITY = re.compile(r"\bhow m(?:uch|any)\b[^?]*\b(?:left|remaining|remain)\b")
 
 
-def is_bare_balance_ask(message: str, *, intent: str | None) -> bool:
+def is_bare_balance_ask(message: str, *, intent: str | None, workflow: str | None) -> bool:
     """A question about "the balance" that never says **which** balance (G5b, task 11b).
 
     `amb-003` — *"Can you check the balance for me?"* — is gold `clarify`, and the record carries more
@@ -443,12 +448,19 @@ def is_bare_balance_ask(message: str, *, intent: str | None) -> bool:
     decision is made deterministically here instead, on the same three closed readings the
     clarification tables already make of a message.
 
-    True only when all of it holds: the router's intent is `employee_data` (a question about the
-    reader's own record, not about policy), the message asks about a balance, and it names **neither**
-    which balance nor an employee id. A question that names its balance — *"What is my PTO balance?"* —
-    is never forced to clarify: the ambiguity it would be asked about is not there.
+    True only when all of it holds: the router named **no** workflow, its intent is `employee_data` (a
+    question about the reader's own record, not about policy), the message asks about a balance, and it
+    names **neither** which balance nor an employee id. A question that names its balance — *"What is
+    my PTO balance?"* — is never forced to clarify: the ambiguity it would be asked about is not there.
+
+    The workflow clause is the same rule `_clarification_text` already keeps for its topic inference
+    (gap 4b, fix round 1): a named workflow is the router's decision and is not second-guessed here.
+    It also has to hold for the question to make sense — a bare ask the router attached to, say,
+    `pto_request` would walk that workflow's slot order and be asked *"which dates are you thinking
+    of?"*, and only an unattached turn reaches `CLARIFY_INTENT_ORDER["employee_data"]` and the
+    *"which balance do you mean"* question this rule exists to serve.
     """
-    if intent != "employee_data":
+    if workflow is not None or intent != "employee_data":
         return False
     lowered = " ".join((message or "").lower().split())
     asks = any(word in lowered for word in BALANCE_ASK_WORDS) or BALANCE_QUANTITY.search(lowered) is not None
@@ -1224,7 +1236,9 @@ class Orchestrator:
             return self._refuse_unsafe(turn, cold_start=cold_start)
         if decision.out_of_scope:
             return self._refuse(turn, g1.OUT_OF_SCOPE, cold_start=cold_start)
-        if decision.needs_clarification or is_bare_balance_ask(req.message, intent=decision.intent):
+        if decision.needs_clarification or is_bare_balance_ask(
+            req.message, intent=decision.intent, workflow=decision.workflow
+        ):
             # The second disjunct is `amb-003` (G5b, task 11b): a bare balance ask clarifies whether
             # or not the router said so. Everything else about the path is unchanged — it is the
             # existing `employee_data` clarify order, which already asks *"which balance do you

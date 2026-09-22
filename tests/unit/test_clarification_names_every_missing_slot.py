@@ -247,29 +247,41 @@ async def test_a_question_that_names_its_balance_is_never_forced_to_clarify(run_
     assert "which balance do you mean" not in response.answer, response.answer
 
 
-def test_the_bare_balance_rule_reads_the_three_things_it_says_it_reads():
-    """The closed readings of `is_bare_balance_ask`, one at a time (G5b, task 11b).
+def test_the_bare_balance_rule_reads_the_four_things_it_says_it_reads():
+    """The closed readings of `is_bare_balance_ask`, one at a time (G5b, task 11b; fix round 1).
 
     The rule exists to stop a correct-by-gold clarification being answered, and it must not become a
-    second router: it fires only on an `employee_data` turn, only on a balance question, and only
-    when neither the balance nor an employee id is named.
+    second router: it fires only on a turn the router attached to **no** workflow, only on an
+    `employee_data` intent, only on a balance question, and only when neither the balance nor an
+    employee id is named.
     """
     bare = "Can you check the balance for me?"
-    assert is_bare_balance_ask(bare, intent="employee_data")
-    assert is_bare_balance_ask("How many do I have left?", intent="employee_data")
-    assert is_bare_balance_ask("How much is remaining?", intent="employee_data")
+    assert is_bare_balance_ask(bare, intent="employee_data", workflow=None)
+    assert is_bare_balance_ask("How many do I have left?", intent="employee_data", workflow=None)
+    assert is_bare_balance_ask("How much is remaining?", intent="employee_data", workflow=None)
+    # "left" is not "leave": the quantity phrasing names no balance and is still bare.
+    assert is_bare_balance_ask("Can you check the balance I have left?", intent="employee_data", workflow=None)
 
+    # A named workflow is the router's decision and is not second-guessed (fix round 1). This turn
+    # would walk `pto_request`'s slot order and be asked "which dates are you thinking of?" — a
+    # question about dates nobody mentioned, in place of the one the rule exists to serve.
+    for workflow in CLARIFY_SLOT_ORDER:
+        assert not is_bare_balance_ask(bare, intent="employee_data", workflow=workflow), workflow
     # Not an `employee_data` turn: a policy question that mentions a balance is not this rule's.
-    assert not is_bare_balance_ask(bare, intent="policy_qa")
-    assert not is_bare_balance_ask(bare, intent=None)
+    assert not is_bare_balance_ask(bare, intent="policy_qa", workflow=None)
+    assert not is_bare_balance_ask(bare, intent=None, workflow=None)
     # Not a balance question at all.
-    assert not is_bare_balance_ask("Which office am I assigned to?", intent="employee_data")
-    assert not is_bare_balance_ask("How many days of notice do I need?", intent="employee_data")
+    assert not is_bare_balance_ask("Which office am I assigned to?", intent="employee_data", workflow=None)
+    assert not is_bare_balance_ask("How many days of notice do I need?", intent="employee_data", workflow=None)
     # It names the employee whose record to read, so the turn is not missing that either.
-    assert not is_bare_balance_ask("Can you check the balance for E1042?", intent="employee_data")
-    # …and every word that says which balance is meant disarms it.
+    assert not is_bare_balance_ask("Can you check the balance for E1042?", intent="employee_data", workflow=None)
+    # …and every word that says which balance is meant disarms it, in the phrasing each word is used
+    # in: the two acronyms are asked about by quantity, not by the noun (fix round 1 — E1042 holds
+    # an FSA, and "How much is left in my FSA?" is not a bare ask).
     for word in NAMED_BALANCE_WORDS:
-        assert not is_bare_balance_ask(f"Can you check my {word} balance?", intent="employee_data"), word
+        assert not is_bare_balance_ask(f"Can you check my {word} balance?", intent="employee_data", workflow=None), word
+        assert not is_bare_balance_ask(f"How much is left in my {word}?", intent="employee_data", workflow=None), word
+    assert {"fsa", "hsa"} <= set(NAMED_BALANCE_WORDS), "the two account acronyms name a balance too"
 
 
 async def test_amb_001_still_asks_one_question_and_names_both_its_slots(run_agent):
