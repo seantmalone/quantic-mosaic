@@ -30,8 +30,8 @@ Before you start, tick [`pre-submission-checklist.md`](pre-submission-checklist.
   read, in addition to speaking your name.
 - **Check the overlay does not occlude** the **Sources (n)** strip at the foot of an answer, the
   sticky composer at the bottom of the conversation column, or — on the dashboard — the chevron at
-  the left of a span row, which is the control that opens the payload. Move the PiP to the top-left
-  if it does. (Chat has been one centred conversation column since UX W2; there is no side panel,
+  the **right-hand end** of a span row, which is the control that opens the payload (it is the last
+  grid track at every width). Move the PiP to the top-left if it does. (Chat has been one centred conversation column since UX W2; there is no side panel,
   and the technical record lives on the dashboard.)
 - **Verify audio on a 20-second test clip** before the real take. Re-recording nine minutes
   because of a dead microphone is the single most common way this goes wrong.
@@ -56,6 +56,11 @@ would rather narrate the cold start honestly on camera, do it deliberately in th
 where `deployed.md`'s numbers are already on screen; do not let it happen by accident in the middle
 of task 1.
 
+**In the same warm-up, open `/dashboard/evals` and confirm the Runs table fronts
+`r_1790074972_baseline`** — the evaluation segment speaks that run's figures, and this deployment's
+store can hold later dashboard-only drives whose tiles would not match the script. Check it before
+the take, not on camera.
+
 ---
 
 ## Segment table
@@ -64,9 +69,9 @@ of task 1.
 |---|---|---|---|
 | **0:00–0:45** | Intro, on camera, full frame | You, then the browser address bar showing the deployed URL | Your name; **hold the government ID still for ≥ 3 s at ~0:15**; one line on the project — *"an agentic HR assistant for a fictional 420-person robotics company: policy RAG over 14 documents, nine MCP tools, and a full audit trail of every step."* Then shrink the webcam to the persistent overlay and **leave it there** |
 | **0:45–1:25** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Name the seven components as you point at them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. Make the one point that matters: *"the MCP server is mounted inside the app that consumes it, and the client speaks real JSON-RPC over a real loopback socket — these are not function calls dressed up as tools."* Mention the single trace model: one writer, five readers |
-| **1:25–3:40** | **Task 1 live** — international remote-work eligibility | Chat page (≈ 1:15), then the session record in the second tab (≈ 0:45), then the policy reader (≈ 0:15) | Click **Working from Berlin for six weeks** to fill the composer, read the dates it filled in aloud, press **Send**. While the turn runs, narrate the one progress line — *"Looking up your employee record… Checking this request against the rules… Searching the policy library…"* — and say what it is: plain language for a person, with the technical record kept elsewhere on purpose. Then the answer, the **Sources (n)** strip, and the demo panel's *"How this answer was produced"* line. Then switch to the record for DEMO.6 ①–③ (sub-checklist below), and come back through one citation into the **policy reader**. Budget the turn itself at ~45 s: the pinned live run took 46.8 s over 35 spans |
+| **1:25–3:40** | **Task 1 live** — international remote-work eligibility | Chat page (≈ 1:15), then the session record in the second tab (≈ 0:45), then the policy reader (≈ 0:15) | Click **Working from Berlin for six weeks** to fill the composer, read the dates it filled in aloud, press **Send**. While the turn runs, narrate the one progress line — *"Looking up your employee record… Checking this request against the rules… Searching the policy library…"* — and say what it is: plain language for a person, with the technical record kept elsewhere on purpose. Then the answer, the **Sources (n)** strip, and the demo panel's *"How this answer was produced"* line. Then switch to the record for DEMO.6 ①–③ (sub-checklist below) — **the observability beat is said here**, with the waterfall open, because this is the page that shows it — and come back through one citation into the **policy reader**. Budget the turn itself at ~45 s: the pinned live run took 46.8 s over 35 spans |
 | **3:40–6:00** | **Task 2 live** — PTO request through the confirmation gate | Chat page and the confirmation card (≈ 1:20), then the session record (≈ 0:40), then **Guardrails** (≈ 0:20) | Click **Three days of PTO, opened for me**, press **Send**. The turn stops at **Confirm before anything is written**. Land the safety beat (below) with that card on screen, then press **Don't open it** and read the cancelled receipt; ask again; press **Open the request** and read the *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`"* lede. Then the record for ①–③, including the **paused for confirmation** row; then **Guardrails** for the `declined` and `confirmed` rows and the new **Simulated writes** row. Beat ⑦ of the optimization story goes here, while the answer is streaming and the progress line is naming each step |
-| **6:00–6:25** | Dashboard tour | `/dashboard/mcp` → `/dashboard/llm` | The **Tool server** page (page 9): nine **Discovered tools** with their JSON Schemas, the **Server** block's transport, and **Handshake history**. Then **Model calls** (page 5) for the observability beat below. Use the `Chat \| Dashboard` switch — no persona change is needed anywhere in this segment |
+| **6:00–6:25** | Dashboard tour | `/dashboard/mcp` → `/dashboard/llm` | The **Tool server** page (page 9): nine **Discovered tools** with their JSON Schemas, the **Server** block's transport, and **Handshake history**. Then **Model calls** (page 5) in one line — *"the same model calls, aggregated across every session: purpose, token counts, first-token and streamed, and a **Turn** chip back into the record."* **The observability beat is not narrated here** — page 5 is two tables, not a waterfall; that beat belongs on the session record inside a task segment (see below). Use the `Chat \| Dashboard` switch — no persona change is needed anywhere in this segment |
 | **6:25–7:10** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count`, `rss_mb`. Then the measured numbers: about **300 MB** against a hard 512 MB cap — **293.6 MB** on Render's own instance on 2026-09-10, **294.9 MB** under the local gate, and `rss_mb` is right there on the payload, so read the number on screen. **This is the only place the cold/warm split is narrated**, because the published evaluation run has `n_cold = 0`: a median **71.0 s** cold to first answer over three probes (67.5–77.6 s), **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it three times with nothing pinging it, published the spread, and only then turned on a ten-minute keep-alive, which has been running on the service since the eleventh — it costs 744 of our 750 free hours, so it is the last step, not the way we made the number look good."* Beat ⑥ of the optimization story belongs here |
 | **7:10–7:50** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. **Five jobs:** `lint` (ruff + gitleaks over full history), `test` (the suite under coverage, offline, with no API keys, behind a `--fail-under=90` gate), `ux` (the browser suite — the only thing in the repo that needs a chromium binary), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. **Read the test count off the screen:** `pytest`'s default `addopts` carry `-m "not ux"`, so the `test` job collects **3,111 of 3,410** and the browser tests are the **299 deselected**; `ux` runs exactly those 299. Then the gate: **`deploy` declares `needs: [test, docker]`**, and Render's own auto-deploy is off, so CI is the only path to production. Say why `ux` is deliberately **not** in that list — *"a browser suite must never be able to block a deploy, so it is its own job with no `needs:` and nothing needing it; it reports, it does not gate."* Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
 | **7:50–8:50** | Evaluation | `/dashboard/evals` → the run detail → the **Compare** tab | No persona change — the dashboard is open to any persona holding the token. 28 items across all seven categories, run `r_1790074972_baseline` on build `8a89310`, judged by a different vendor's model. Walk the metric tiles and say the `n` with each one: groundedness **0.963** (n=18), citation accuracy **0.875** (n=18), document recall **0.947** (n=19), tool selection **0.993** (n=28), workflow completion **0.964** (n=28), clarification accuracy **1.000** (n=3), action safety **1.000** (n=**1** — one item, not a rate), strict pass **0.893** against our own 0.85 bar. Open `equipment-001`'s **Verdicts** disclosure: eight claims, `c4 contradicted`, `c5 unsupported`, groundedness 0.69 — one of the three items the run reports as failing. Say what that disclosure is and is not: it carries the judge's **per-claim verdicts** and the judge model, not a paragraph of prose. Then its **Trace** chip → the turn that produced it. Then the **Compare** tab: *"Ablation — three variants over the identical items"*, whose **Build measured** column shows all three arms on `8a89310`. If the *"These arms were measured on different builds"* notice ever appears, read it out — the tab pairs the newest run of each variant in this deployment's store, which need not be the committed comparison. Beats ①–③ of the optimization story land here, on screen |
@@ -76,9 +81,13 @@ Sum: 0:45 + 0:40 + 2:15 + 2:20 + 0:25 + 0:45 + 0:40 + 1:00 + 0:25 = **9:15**.
 
 ---
 
-## Observability beat (6:00–6:25)
+## Observability beat — say it over the record, because the record is what shows it
 
-Say what the record shows, and only that.
+**No new segment, and not the 6:00–6:25 tour.** The waterfall lives on
+`/dashboard/sessions/{id}#turn-N`, so this beat rides a **task segment's record frame** — task 1's
+0:45 frame is its natural home, because the waterfall is already open there for DEMO.6 ①–③ and the
+paragraph below is the sentence that frames those three ticks. Say it with that page on screen and
+nowhere else.
 
 > *"Every step of the turn is a row on this waterfall, in order, with its own duration bar. Each row
 > opens on the payload the store actually holds. A model call shows its **purpose** — route, act,
@@ -92,6 +101,14 @@ Two things **not** to say. The waterfall does **not** render the request message
 span carries `messages_ref` — a span id, a message count and a character total — and the bodies go
 to a separate `llm_messages` table with no route and no drill-down reading it. And a `paused for
 confirmation` row is not a failure; see the safety beat.
+
+**What page 5 is, if you keep it in the tour.** `/dashboard/llm` (**Model calls**) is **not** a
+waterfall and has no payload disclosures — it is two tables: **By model** (calls, tokens in and out,
+estimated cost per model) and **Calls**, one row per model call across every session, with its
+**Purpose** badge, its token counts, its duration, **First token** and **Streamed** for the
+streaming path, **Finish** and **Provider**, and a **Turn** chip that links back into the record.
+One line is enough: *"the same model calls, aggregated across every session — this is where the
+spend and the streaming latency are read, and each row links back to the turn it belongs to."*
 
 ---
 
