@@ -78,10 +78,15 @@ Topic = Literal[
 
 Strategy = Literal["hybrid_rrf", "dense_only"]
 
+#: The `default: null` in the published schema is what makes this sentence true (G5b, gap 8). The
+#: parameter used to carry a literal `0.26` — the pre-calibration value, which sat below this
+#: embedder's cosine floor — while an omitted argument has always routed to `MIN_SUPPORT_SCORE`
+#: (0.45), so the catalog a model and a grader read advertised a threshold the server never used.
 MIN_DENSE_SCORE_DESCRIPTION = (
     "Minimum DENSE score (dense_score = 1 - cosine_distance). Applied to the full fused candidate "
     "list, then the top-k is taken from the survivors. Never applied to rrf_score, whose maximum "
-    "is ~0.033."
+    "is ~0.033. Omit it (or send null) for the server's own support floor — MIN_SUPPORT_SCORE, 0.45 "
+    "as shipped."
 )
 
 #: The published semantics of `topic` — a soft preference, not a wall, so a model reading only the
@@ -186,14 +191,18 @@ def register(server: MCPServer, deps: ServerDeps) -> None:
         k: Annotated[int, Field(ge=1, le=10, description="How many chunks to return.")] = 5,
         doc_ids: Annotated[list[str] | None, Field(description="Restrict the search to these doc_ids.")] = None,
         topic: Annotated[Topic | None, Field(description=TOPIC_DESCRIPTION)] = None,
-        min_dense_score: Annotated[float, Field(ge=0, le=1, description=MIN_DENSE_SCORE_DESCRIPTION)] = 0.26,
+        min_dense_score: Annotated[float | None, Field(ge=0, le=1, description=MIN_DENSE_SCORE_DESCRIPTION)] = None,
     ) -> SearchOutput:
         call = read_meta(ctx)
         strategy = call.retrieval.get("strategy") or settings.retrieval_strategy
         if strategy not in ("hybrid_rrf", "dense_only"):
             return invalid_arguments(["_meta.mosaic/retrieval.strategy"])
         effective_k, k_source = _resolve_k(call.supplied("k"), k, call.retrieval.get("k_override"))
-        threshold = min_dense_score if call.supplied("min_dense_score") else settings.min_support_score
+        # `None` — omitted, or explicitly null — is the server's own floor, which is what the schema
+        # now publishes (G5b, gap 8). The idiom is `rag/retrieve.py`'s: the default lives in
+        # `settings`, never twice. `call.supplied` no longer decides it, so a model that sends
+        # `min_dense_score: null` gets the same threshold as a model that omits the argument.
+        threshold = settings.min_support_score if min_dense_score is None else min_dense_score
 
         started = now_micros()
         body, payload = await asyncio.to_thread(

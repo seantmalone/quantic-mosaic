@@ -41,7 +41,7 @@ from hrmosaic.settings import settings
 #: outcome, not the intent.
 Intent = Literal["policy_qa", "employee_data", "workflow", "action"]
 
-#: The two declarative workflows of §9.3, plus "no workflow".
+#: The three declarative workflows of §9.3, plus "no workflow".
 WorkflowName = Literal["remote_work_eligibility", "pto_request", "expense_claim"]
 
 #: §11's persona format, and the only shape an employee id may take.

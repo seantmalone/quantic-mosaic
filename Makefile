@@ -17,13 +17,27 @@ BASE_URL ?= http://$(HOST):$(PORT)
 # round, Critical 2). Only the demo replays pin it; a real deployment leaves it unset.
 MOCK_TODAY ?= 2026-09-01
 
-.PHONY: setup run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
+.PHONY: setup lock run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
 
 setup:
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/pip install --upgrade pip
 	$(BIN)/pip install -r requirements.txt -r requirements-dev.txt
 	$(BIN)/pip install -e .
+
+# The three committed manifests, recompiled from the authoritative `pyproject.toml` (R1.2).
+# `pyproject.toml` has pointed at "the `lock` recipe in the Makefile" since P0 and there was no such
+# target (G5b, gap 20a) — a cross-reference to nothing, in the one file that says where the pins come
+# from. The commands are the ones in each file's own `uv pip compile` header, so re-running this and
+# committing the result is a no-op unless `pyproject.toml` changed.
+#
+# `uv` is deliberately NOT a project dependency: it is a developer tool for the day a pin moves, run
+# through `uvx`/`pipx` or installed globally, and nothing in `make setup`, the suite, the image or CI
+# needs it. `requirements-ux.txt` is its own group, so it is its own compile.
+lock:
+	uv pip compile pyproject.toml -o requirements.txt
+	uv pip compile --group pyproject.toml:dev -o requirements-dev.txt
+	uv pip compile --group pyproject.toml:ux -o requirements-ux.txt
 
 run:
 	$(BIN)/uvicorn hrmosaic.web.main:app --host $(HOST) --port $(PORT) --workers 1

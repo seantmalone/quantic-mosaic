@@ -224,6 +224,28 @@ async def test_amb_001_still_asks_one_question_and_names_both_its_slots(run_agen
     assert answer.count("?") == 1
 
 
+async def test_amb_001_asks_about_time_off_even_when_the_rationale_says_remote_work(run_agent):
+    """The published run's own routing for amb-001, which the covering fixture never exercised (G5b, gap 2).
+
+    `r_1790074972_baseline` routed *"Can I take some time off?"* `policy_qa` with `workflow: null` —
+    the inference path — and its rationale mentioned remote work in passing. The topic words used to
+    be matched against the rationale and the message **joined**, so "remote work" decided ahead of
+    "time off": amb-001 was served amb-002's question verbatim, asking for a destination country the
+    item never needed, and the judge passed it for naming *some* missing detail. MISSING INFORMATION
+    for this item is *"the requested dates and the number of days"*, so those are the words the
+    question has to carry, and `fault_ambiguous.json`'s rationale ("No dates were given…") cannot
+    catch the flip because it names no other topic.
+    """
+    answer = await served(run_agent, "clarify_pto_rationale_names_remote_work.json", "amb-001")
+
+    assert "which dates are you thinking of" in answer, answer
+    assert "how many days that would be" in answer, answer
+    assert "where would you be working from" not in answer, "amb-002's question, on amb-001's turn"
+    assert "how long you would be there" not in answer, answer
+    assert CLARIFY_FALLBACK not in answer
+    assert answer.count("?") == 1
+
+
 def test_every_unfilled_slot_is_named_and_the_first_one_asks_the_question():
     """Three empty slots, one question, and the other two named after it."""
     slots = unfilled_slots("pto_request", known=set(), has_record=False)

@@ -7,6 +7,7 @@ otherwise eat — survive intact.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from hrmosaic.core.models import AnswerBlock
@@ -114,6 +115,31 @@ def test_nested_structures_and_non_strings_are_handled():
     assert scrubbed["cost_usd_estimate"] == 0.0012
     assert scrubbed["chunks"][0] == {"chunk_id": "c_1b7e", "quarantined": False, "score": 0.74}
     assert scrubbed["resolved_at"] is None
+
+
+def test_a_sha256_digest_of_public_content_survives_and_a_secret_under_the_same_key_does_not():
+    """G5b, gap 11 — `catalog_sha` was `"[REDACTED]"` on every persisted turn.
+
+    A sha256 hex digest is 64 characters of `[0-9a-f]`, which the long-base64 value pattern matches,
+    so the digest of the **published tool catalog** was scrubbed before persistence while
+    `mcp/README.md` and `design-and-evaluation.md` both list it among what the `mcp_discovery` span
+    records, and the dashboard's column printed `[REDACTED]` on every row. The covering integration
+    assertion passed vacuously: `"[REDACTED]"` is truthy, and the fixtures' fake sha is 16 characters,
+    short enough to escape the pattern in the first place.
+
+    The exemption is the key **and** the shape: a 64-char base64 blob smuggled in under
+    `corpus_sha256` is not a digest and is swept like any other value.
+    """
+    digest = hashlib.sha256(b"the sorted tool catalog").hexdigest()
+    assert len(digest) == 64
+
+    payload = {"catalog_sha": digest, "corpus_sha256": digest, "manifest_sha256": digest}
+    assert redact(payload) == payload
+
+    assert redact({"catalog_sha": FAKE_BASE64}) == {"catalog_sha": REDACTED}
+    assert redact({"corpus_sha256": FAKE_ANTHROPIC}) == {"corpus_sha256": REDACTED}
+    # …and the carve-out is scoped to the three names: any other key keeps the old behaviour.
+    assert redact({"some_other_sha": digest}) == {"some_other_sha": REDACTED}
 
 
 def test_redaction_is_idempotent_and_does_not_mutate_its_input():

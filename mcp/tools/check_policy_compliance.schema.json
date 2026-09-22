@@ -47,7 +47,7 @@
           ]
         },
         "default": {},
-        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, end_date, days, amount_usd, category, transaction_date, reason. The submission date is the server's own — never send one — and notice is always computed by the engine from it against start_date, so any supplied notice value is ignored; duration_days and days are derived from start_date and end_date.",
+        "description": "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, end_date, days, amount_usd, category, transaction_date, reason, request_type. The submission date is the server's own — never send one — and notice is always computed by the engine from it against start_date, so any supplied notice value is ignored; duration_days and days are derived from start_date and end_date. request_type takes exactly one of \"new\" (additional or upgraded equipment), \"refresh\" (a device at or past its 36-month cycle) or \"separation\" (a return), and the equipment director-approval threshold is evaluated only for \"new\".",
         "title": "Parameters",
         "type": "object"
       }

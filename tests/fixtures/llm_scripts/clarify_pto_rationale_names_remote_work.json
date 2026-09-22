@@ -1,0 +1,13 @@
+{
+  "scenario": "clarify_pto_rationale_names_remote_work",
+  "_note": "G5b, gap 2 — `amb-001` (\"Can I take some time off?\") as the published run r_1790074972_baseline routed it: `policy_qa`, `workflow: null`, `needs_clarification`, and a free-text rationale that mentions remote work in passing. The run's item carries the served answer but not the route span, and the deployed trace store rolls, so the rationale below is a reconstruction of that shape rather than the recorded bytes: what it replays is the one property that mattered — a rationale whose topic words point at `remote_work_eligibility` on a question whose own words are about time off. Read as one joined string it walked the remote-work slot order and served amb-002's question verbatim; the message is read first now.",
+  "completions": [
+    {
+      "purpose": "route",
+      "response_text": "{\"intent\": \"policy_qa\", \"workflow\": null, \"needs_employee_data\": true, \"needs_clarification\": true, \"multi_doc\": false, \"out_of_scope\": false, \"sensitive\": false, \"target_employee_id\": \"E1042\", \"selected_tools\": [], \"rationale_summary\": \"The request names neither dates nor a duration; the time off and remote work policies are both scored from specifics the employee has not given.\"}",
+      "finish_reason": "stop",
+      "prompt_tokens": 1098,
+      "completion_tokens": 88
+    }
+  ]
+}

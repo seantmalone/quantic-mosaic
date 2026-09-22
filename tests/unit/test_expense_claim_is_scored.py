@@ -15,6 +15,7 @@ import json
 import pytest
 
 from hrmosaic.agent.orchestrator import ChatRequest
+from hrmosaic.agent.workflows import LoopState, expense_claim
 
 pytestmark = pytest.mark.anyio
 
@@ -64,3 +65,27 @@ async def test_the_answer_routes_the_claim_to_the_tier_that_applies(scored):
     assert response.outcome == "answered"
     assert "up to USD 2,500" not in response.answer
     assert "director" in response.answer.lower()
+
+
+def test_the_predicate_closes_on_a_profile_a_verdict_and_two_citations():
+    """`expense_claim.SPEC.is_complete` over its three states (G5b, gap 18).
+
+    The third registered workflow's predicate had never been *observed* closing: instrumented across
+    the unit and integration suites it was called 20 times and returned `False` 20 times, so "the
+    workflow spec decides when the turn is complete" was asserted for two of the three. The clauses
+    are §9.3's own — a `lookup_employee_profile` result **in state**, a compliance verdict that is not
+    `insufficient_evidence`, and evidence for at least `MIN_CITATIONS` citations.
+    """
+    empty = LoopState()
+    assert expense_claim.SPEC.is_complete(empty) is False
+
+    profile_only = LoopState()
+    profile_only.record("lookup_employee_profile", {"employee_id": "E1042"})
+    assert expense_claim.SPEC.is_complete(profile_only) is False
+
+    complete = LoopState()
+    complete.record("lookup_employee_profile", {"employee_id": "E1042"})
+    complete.record("check_policy_compliance", {"verdict": "compliant"}, arguments={"scenario": "expense_claim"})
+    for index in range(expense_claim.MIN_CITATIONS):
+        complete.note_evidence(f"c_{index}", "expenses-and-reimbursement")
+    assert expense_claim.SPEC.is_complete(complete) is True

@@ -11,7 +11,8 @@ Three mechanisms, in order:
 **Preserved:** the integer token-count fields of an `llm_call` payload, which the denylist's
 `token` pattern would otherwise eat — `prompt_tokens`, `completion_tokens` and `total_tokens`
 (the three §10.4 names) plus the two cache counters of the same class, so the dashboard's token
-and cost columns stay honest.
+and cost columns stay honest; and the sha256 digests of public content (`DIGEST_KEYS`), which the
+long-base64 value pattern would otherwise eat.
 """
 
 from __future__ import annotations
@@ -40,6 +41,19 @@ PRESERVED_KEYS = frozenset(
 )
 
 CREDENTIAL_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET")
+
+#: Keys whose value is a **digest of public content**, not a credential (G5b, gap 11). A sha256 hex
+#: digest is 64 characters of `[0-9a-f]`, which the long-base64 value pattern below matches, so
+#: `catalog_sha` reached the trace store as `"[REDACTED]"` on every turn while `mcp/README.md`,
+#: `design-and-evaluation.md` and four `docs/architecture.html` nodes all advertised it as span
+#: content and the dashboard printed the column empty. `PRESERVED_KEYS` alone cannot fix it: that
+#: exemption is the key-name denylist's, and `redact_text` applies the value patterns whatever the
+#: key. The exemption is the key **and** the shape together — a value under one of these names that
+#: is not a bare 64-hex digest is swept like any other string, so the carve-out cannot become a
+#: hiding place for a secret named `corpus_sha256`.
+DIGEST_KEYS = frozenset({"catalog_sha", "corpus_sha256", "manifest_sha256"})
+
+SHA256_HEX = re.compile(r"\A[0-9a-f]{64}\Z")
 
 VALUE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"sk-ant-[A-Za-z0-9\-_]{12,}"),  # Anthropic
@@ -74,9 +88,16 @@ def _is_denied(key: str) -> bool:
     return key.lower() not in PRESERVED_KEYS and bool(KEY_DENYLIST.search(key))
 
 
+def _is_public_digest(key: str | None, value: Any) -> bool:
+    """A 64-hex sha256 under one of the `DIGEST_KEYS` — public content, never a credential."""
+    return key is not None and key.lower() in DIGEST_KEYS and isinstance(value, str) and bool(SHA256_HEX.match(value))
+
+
 def _walk(value: Any, key: str | None) -> Any:
     if key is not None and _is_denied(key):
         return REDACTED
+    if _is_public_digest(key, value):
+        return value
     if isinstance(value, dict):
         return {name: _walk(item, str(name)) for name, item in value.items()}
     if isinstance(value, (list, tuple)):

@@ -264,6 +264,32 @@ async def test_the_metric_block_carries_the_whole_of_section_11_6(seeded):
     assert metrics["est_cost_usd"] is not None
 
 
+async def test_each_judge_agreement_figure_is_rendered_beside_the_subset_it_was_computed_over(seeded):
+    """§13.7's two figures are two samples, and the page says which (G5b, gap 13).
+
+    The tile printed `judge_agreement_rate` alone, so a run whose `judge_agreement_subset` is null —
+    `r_1790067656_baseline`, whose 1.000 over n = 8 was folded in from a label file authored against
+    **another run's** served answers — rendered as an uncaveated figure one click from the published
+    run. And the hard-case figure every run file carries reached no template at all, which is the same
+    defect from the other side: the blind subset came back 8/8 on both sides, so it is the disclosed
+    hard-case subset that carries the information, and it was the one not shown.
+    """
+    metrics = (await _get(seeded, "/api/eval/runs/r_p9fixture_baseline"))["metrics"]
+    assert (metrics["judge_agreement_subset"], metrics["judge_agreement_subset_hard"]) == (
+        "seed_1729_8",
+        "judge_lowest_8",
+    )
+
+    page = await seeded["client"].get("/dashboard/evals/r_p9fixture_baseline", headers=ADMIN)
+    block = re.search(r'id="behaviour-metrics".*?</dl>', page.text, re.S)
+    assert block, "the behaviour-and-safety list still renders"
+    body = " ".join(block.group(0).split())
+    assert dash.METRIC_LABELS["judge_agreement_rate"] in body
+    assert "seed 1729 8 subset" in body, body
+    assert dash.METRIC_LABELS["judge_agreement_rate_hard"] in body, "the hard figure reaches the page"
+    assert "judge lowest 8 subset" in body, body
+
+
 async def test_the_headline_strip_is_the_eight_metrics_the_spec_names(seeded):
     runs = (await _get(seeded, "/api/eval/runs"))["runs"]
     baseline = next(run for run in runs if run["run_id"] == "r_p9fixture_baseline")

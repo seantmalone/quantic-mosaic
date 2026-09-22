@@ -1,4 +1,4 @@
-"""The two declarative workflows of spec §9.3 (R4.2), and the state they are evaluated against.
+"""The three declarative workflows of spec §9.3 (R4.2), and the state they are evaluated against.
 
 **The LLM chooses tools; the workflow spec decides when the turn is complete.** That split is the
 whole design: a completion predicate written in Python cannot be talked out of its requirements by
@@ -8,8 +8,8 @@ than a judge's opinion.
 **The structured-data slot is required, not merely listed.** An eligibility verdict reached without
 ever reading the employee's work country is not a complete workflow — and requiring the tool result
 is what makes the `no_structured_tools` ablation move workflow completion rather than only
-ToolSelection (§13.9). Both predicates below therefore start with "a result from *this* tool is in
-state", never with "the answer says so".
+ToolSelection (§13.9). All three predicates below therefore start with "a result from *this* tool is
+in state", never with "the answer says so".
 
 **A slot also carries the words for its own debt.** The act loop may remind a model that stopped
 early (§9.1 step 2), and what it is allowed to say is `slot_descriptions` / `evidence_description`

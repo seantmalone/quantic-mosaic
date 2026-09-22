@@ -66,12 +66,19 @@
         "title": "Topic"
       },
       "min_dense_score": {
-        "default": 0.26,
-        "description": "Minimum DENSE score (dense_score = 1 - cosine_distance). Applied to the full fused candidate list, then the top-k is taken from the survivors. Never applied to rrf_score, whose maximum is ~0.033.",
-        "maximum": 1,
-        "minimum": 0,
-        "title": "Min Dense Score",
-        "type": "number"
+        "anyOf": [
+          {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Minimum DENSE score (dense_score = 1 - cosine_distance). Applied to the full fused candidate list, then the top-k is taken from the survivors. Never applied to rrf_score, whose maximum is ~0.033. Omit it (or send null) for the server's own support floor — MIN_SUPPORT_SCORE, 0.45 as shipped.",
+        "title": "Min Dense Score"
       }
     },
     "required": [

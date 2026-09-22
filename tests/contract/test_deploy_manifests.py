@@ -14,8 +14,9 @@ The load-bearing ones, and what each would cost if it silently drifted:
   splits the in-process MCP server and the span buffer across processes.
 * **The index and the model are built at *build* time** (§14.2, §14.4). At boot they would cost a
   corpus ingestion and a 16–63 s model download on 0.1 CPU, on every spin-up.
-* **`autoDeploy: false` plus `needs: [test, docker]`** (§14.5) — together these are the whole R8.4
-  claim that deployment cannot happen unless tests pass. Either one alone is not the claim.
+* **`autoDeploy: false` plus `needs: [test, docker, ux]`** (§14.5) — together these are the whole
+  R8.4 claim that deployment cannot happen unless tests pass. Either one alone is not the claim, and
+  the `needs:` list has to name every job that runs tests (G5b, gap 16).
 * **The `.dockerignore` negations** (P0). `tests/` and `data/index/*` are excluded wholesale and
   two paths re-included; if a negation stops matching, the default `LLM_STUB_SCRIPT` cannot resolve
   inside the container and `--verify-manifest` has nothing to verify against. The build proves this
@@ -192,19 +193,57 @@ def test_the_blueprint_carries_the_keep_alive_so_a_redeploy_cannot_drop_it():
     assert int(plain["KEEP_ALIVE_INTERVAL_S"]) == 600
 
 
+# --- ci.yml: the push trigger and the lint job --------------------------------------------
+
+
+def test_a_root_readme_commit_still_runs_the_suite_and_deploys():
+    """`paths-ignore` may skip a published *result*, never a document (G5b, gap 9).
+
+    `*.md` does not cross a `/`, so listing it meant "every repo-root document" — and the last commit
+    before submission is by design a root README edit (the demo-video URL). That commit would have run
+    no lint, no test, no docs contract tests and triggered no deploy: the graded tip would carry no
+    green run and the live sha would lag HEAD. The docs contract tests are the guard against stale
+    claims, so they have to gate the commits most likely to introduce one.
+    """
+    ignored = CI[True]["push"]["paths-ignore"]
+    assert ignored == ["evaluation/results/**", "evaluation/REPORT.md", "docs/**"]
+    assert "*.md" not in ignored, "a root README edit must run CI and deploy"
+
+
+def test_the_lint_job_scans_the_whole_history_on_every_run():
+    """The "full-history gitleaks scan" README claims and the demo script narrates (G5b, gap 7).
+
+    `gitleaks-action@v2` runs an unbounded scan only on a dispatch or a schedule, and this workflow has
+    no `schedule:`; on the graded push it scanned two commits. The explicit step below makes the claim
+    true on every run, against the same pinned build and the same `.gitleaks.toml`, and `fetch-depth: 0`
+    on the checkout is what gives it a history to walk.
+    """
+    lint = CI["jobs"]["lint"]
+    assert lint["env"]["GITLEAKS_VERSION"] == "8.30.1", "one pin for both scans"
+    checkout = next(step for step in lint["steps"] if str(step.get("uses", "")).startswith("actions/checkout"))
+    assert checkout["with"]["fetch-depth"] == 0
+
+    runs = _run_lines("lint")
+    assert "gitleaks detect --source . --config .gitleaks.toml" in runs
+    assert "$GITLEAKS_VERSION" in runs, "the downloaded binary is the pinned one, not whatever is newest"
+    assert any(str(step.get("uses", "")).startswith("gitleaks/gitleaks-action") for step in lint["steps"])
+
+
 # --- ci.yml: the docker job ---------------------------------------------------------------
 
 
 def test_ci_has_the_four_jobs_of_15_1_plus_the_ux_suite():
     """§15.1's four, and the browser suite UX W1 added between `test` and `docker`.
 
-    `ux` carries no `needs:` and nothing needs it, which is the point: the screenshot-and-geometry
-    suite is the only thing in the repo that wants a browser binary, and it must never stand
-    between a green suite and a deploy.
+    `ux` carries no `needs:` — nothing has to finish before a browser can start — but `deploy` needs
+    **it** since G5b (gap 16). It used to need only `test` and `docker`, on the rationale that the
+    screenshot-and-geometry suite must never stand between a green suite and a deploy; what that
+    bought was run 35723846982, a red `ux` and a green `deploy` in the same run, and §8's bullet says
+    "deployment must only occur if tests pass". These 299 are tests.
     """
     assert list(CI["jobs"]) == ["lint", "test", "ux", "docker", "deploy"]
     assert "needs" not in CI["jobs"]["ux"]
-    assert CI["jobs"]["deploy"]["needs"] == ["test", "docker"]
+    assert CI["jobs"]["deploy"]["needs"] == ["test", "docker", "ux"]
 
 
 def test_the_ux_job_installs_the_browser_from_the_committed_manifest_and_caches_it():
@@ -273,9 +312,13 @@ def test_the_docker_job_always_dumps_the_container_log():
 # --- ci.yml: the deploy job ---------------------------------------------------------------
 
 
-def test_deploy_needs_both_test_and_docker():
-    """R8.4 in one line: Actions skips a job whose `needs` failed."""
-    assert CI["jobs"]["deploy"]["needs"] == ["test", "docker"]
+def test_deploy_needs_every_job_that_runs_tests():
+    """R8.4 in one line: Actions skips a job whose `needs` failed.
+
+    All three of them (G5b, gap 16): `test`, `docker`, and the browser suite, so a red run on main
+    always means something that gates production is broken.
+    """
+    assert CI["jobs"]["deploy"]["needs"] == ["test", "docker", "ux"]
 
 
 def test_deploy_runs_only_on_a_main_push_or_a_deliberate_dispatch():

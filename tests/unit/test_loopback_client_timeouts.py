@@ -1,7 +1,8 @@
 """The loopback MCP client's transport timeouts (spec §11.4).
 
 `streamable_http_client` takes an `httpx2.AsyncClient` rather than a headers mapping, so the
-access-gate header of §11 forces `McpClient` to build the client itself — and a client built with
+access-gate header of §11 — and, since G5b, the response hook that reads the MCP session id — force
+`McpClient` to build the client itself on every http transport. A client built with
 `httpx2.AsyncClient(headers=…)` alone inherits httpx2 2.12's default `Timeout(5.0)` on all four
 phases. That default is wrong for this wire: a StreamableHTTP `tools/call` holds its response
 stream open until the result arrives, and on Render's 0.1-CPU free instance the first embedding
@@ -38,9 +39,22 @@ async def test_the_gated_loopback_client_reads_for_five_minutes():
         await client.aclose()
 
 
-async def test_the_ungated_client_is_none_so_the_sdk_builds_its_own():
-    """With no headers there is nothing to inject, and the SDK's factory uses the same numbers."""
-    assert McpClient(transport="http", url=LOOPBACK_URL)._http_client() is None
+async def test_the_ungated_client_is_still_ours_and_still_reads_for_five_minutes():
+    """It used to return `None` when there was no header to send, and let the SDK build the client.
+
+    Since G5b (gap 17) it is always ours, because the `Mcp-Session-Id` the discovery span records is a
+    **response header** and a client the SDK builds has no hook on it — `mcp_session_id` was `null` on
+    every recorded turn. The numbers are unchanged either way: `LOOPBACK_TIMEOUT` is
+    `create_mcp_http_client`'s own 30 s / 300 s, so a client built here and one the SDK would have
+    built wait exactly as long.
+    """
+    client = McpClient(transport="http", url=LOOPBACK_URL)._http_client()
+    assert client is not None
+    try:
+        assert client.timeout.read == 300.0
+        assert client.event_hooks["response"], "nothing would read the session id off the handshake"
+    finally:
+        await client.aclose()
 
 
 async def test_the_timeout_is_not_httpx2s_default():

@@ -101,12 +101,18 @@ def normalise_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
     return {key: normalise_country(value) if key in COUNTRY_PARAMETERS else value for key, value in parameters.items()}
 
 
+#: `request_type` is named with its three values because a rule is **guarded** on them (G5b): the
+#: equipment scenario applies its USD 500 director threshold only to `request_type: "new"`, so a model
+#: that omits the parameter, or invents a fourth word for it, gets a verdict with that requirement
+#: silently unevaluated. A closed set a caller cannot see is a closed set a caller cannot honour.
 PARAMETERS_DESCRIPTION = (
     "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, "
-    "end_date, days, amount_usd, category, transaction_date, reason. The submission date is the "
-    "server's own — never send one — and notice is always computed by the engine from it against "
-    "start_date, so any supplied notice value is ignored; duration_days and days are derived from "
-    "start_date and end_date."
+    "end_date, days, amount_usd, category, transaction_date, reason, request_type. The submission "
+    "date is the server's own — never send one — and notice is always computed by the engine from it "
+    "against start_date, so any supplied notice value is ignored; duration_days and days are derived "
+    'from start_date and end_date. request_type takes exactly one of "new" (additional or upgraded '
+    'equipment), "refresh" (a device at or past its 36-month cycle) or "separation" (a return), '
+    'and the equipment director-approval threshold is evaluated only for "new".'
 )
 
 #: What `submitted_on` means, in the words the **result** publishes (W8, C04; W10, ruling 1).

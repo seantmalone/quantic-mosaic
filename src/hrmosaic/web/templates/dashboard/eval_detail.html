@@ -133,8 +133,22 @@
       <dd>{{ view.metrics.recommendation_labeled_rate|rate(view.metrics.n_scored.get('recommendation_labeled_rate'), 'item', always=true) }}</dd></div>
     <div><dt>{{ 'catalog_reopened_rate'|metric_label }}</dt>
       <dd>{{ view.metrics.catalog_reopened_rate|rate(view.metrics.n_scored.get('catalog_reopened_rate'), 'item', always=true) }}</dd></div>
+    {#- Each agreement figure names the subset it was computed over (G5b, gap 13). The two are never
+        one number — one is the blind `seed_1729_8` sample, the other the disclosed `judge_lowest_8`
+        hard cases — and a folded-in rate whose `judge_agreement_subset` is null is exactly the case
+        the design doc says is not published: `r_1790067656_baseline` carries 1.000 over n = 8 folded
+        from a label file authored against **another run's** answers, and this tile rendered it bare.
+        No subset recorded, no provenance to show, so the tile says so rather than implying one. -#}
     <div><dt>{{ 'judge_agreement_rate'|metric_label }}</dt>
-      <dd>{{ view.metrics.judge_agreement_rate|rate(view.metrics.judge_agreement_n, 'item', always=true) }}</dd></div>
+      <dd>{{ view.metrics.judge_agreement_rate|rate(view.metrics.judge_agreement_n, 'item', always=true) }}
+        {%- if view.metrics.judge_agreement_rate is not none %}
+        <span class="muted">· {% if view.metrics.judge_agreement_subset %}{{ view.metrics.judge_agreement_subset|enum_label }} subset{% else %}subset not recorded{% endif %}</span>
+        {%- endif %}</dd></div>
+    {%- if view.metrics.judge_agreement_rate_hard is not none %}
+    <div><dt>{{ 'judge_agreement_rate_hard'|metric_label }}</dt>
+      <dd>{{ view.metrics.judge_agreement_rate_hard|rate(view.metrics.judge_agreement_n_hard, 'item', always=true) }}
+        <span class="muted">· {% if view.metrics.judge_agreement_subset_hard %}{{ view.metrics.judge_agreement_subset_hard|enum_label }} subset{% else %}subset not recorded{% endif %}</span></dd></div>
+    {%- endif %}
   </dl>
 
   <h4>Workflow completion</h4>

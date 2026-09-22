@@ -4,7 +4,8 @@
 POST /chat  (or /chat/confirm)
  ├─ open/resume session → sessions row   ┐ written synchronously at turn start
  ├─ open turn           → turns row      ┘
- ├─ ensure MCP session  → mcp_discovery span, emitted EVERY turn (§8.2 step 3)
+ ├─ ensure MCP session  → mcp_discovery span, emitted EVERY turn PASS (§8.2 step 3; a turn
+ │                        resumed after a confirmation carries a second one)
  ├─ 0. PRE-CHECKS   deterministic, zero LLM
  ├─ 1. ROUTE        one constrained-JSON llm_call → plan span
  ├─ 2. ACT LOOP     ≤ AGENT_MAX_STEPS · ≤ AGENT_MAX_TOOL_CALLS · ≤ AGENT_WALL_CLOCK_S
@@ -289,10 +290,11 @@ CLARIFY_INTENT_ORDER: dict[str, tuple[str, ...]] = {
 #: deployed run routed `amb-002` — *"Am I allowed to work from there for a while?"* — `policy_qa`
 #: with `workflow: null`, so neither slot order above applied and the turn fell through to the
 #: rationale words, which named the destination alone: it was asked where and never for how long.
-#: The topic is what the rationale and the question do say, so it is read from both and mapped to one
-#: of the three closed workflow names — as **data**, never as an instruction; nothing else is taken
-#: from the prose. The order is the order it is tested in: "work from" decides before "leave", so a
-#: remote-work question that mentions taking leave is still a remote-work question.
+#: The topic is what the rationale and the question do say, so it is read from both — **the user's own
+#: message first** (G5b, gap 2) — and mapped to one of the three closed workflow names as **data**,
+#: never as an instruction; nothing else is taken from the prose. The order is the order it is tested
+#: in: "work from" decides before "leave", so a remote-work question that mentions taking leave is
+#: still a remote-work question.
 CLARIFY_TOPIC_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "remote_work_eligibility",
@@ -379,20 +381,28 @@ def rationale_slot(rationale: str) -> str | None:
     return next((slot for slot, words in RATIONALE_SLOT_WORDS if any(word in lowered for word in words)), None)
 
 
-def clarify_topic_workflow(*texts: str) -> str | None:
-    """Which workflow a clarification is about, from the topic words of the prose (G5, gap 4b).
+def clarify_topic_workflow(text: str) -> str | None:
+    """Which workflow a clarification is about, from the topic words of **one** string (G5, gap 4b).
 
     The router names a workflow on most turns; when it does not, `CLARIFY_SLOT_ORDER` has nothing to
     key on and the question could only be built from whichever single slot `rationale_slot` happened
     to match — `amb-002` was asked for the destination and never for how long, because that is all
     its rationale named. Both the rationale and the user's own question say what the turn is *about*,
-    so the topic is read from them and the workflow's whole slot order is walked instead.
+    so the topic is read and the workflow's whole slot order is walked instead.
 
-    Read as **data**: the only thing taken from either string is which of the three closed workflow
+    **One string at a time** (G5b, gap 2). This used to take `*texts` and match the topic words
+    against the two joined, which makes the tables' own order meaningless: an incidental "remote
+    work" anywhere in the router's free-text rationale outranked "time off" in the reader's question,
+    and on the published run `amb-001` — *"Can I take some time off?"* — was asked where it would be
+    working from and for how long, `amb-002`'s question verbatim. The caller asks about the user's
+    message first and falls back to the rationale, so the reader's own words decide the topic and the
+    router's prose only fills a silence.
+
+    Read as **data**: the only thing taken from the string is which of the three closed workflow
     names its topic words point at, first match wins, and a string that points at none returns
     `None` so the caller keeps the rationale-word fallback.
     """
-    lowered = " ".join(text.lower() for text in texts if text)
+    lowered = (text or "").lower()
     return next(
         (workflow for workflow, words in CLARIFY_TOPIC_WORDS if any(word in lowered for word in words)),
         None,
@@ -1555,7 +1565,12 @@ class Orchestrator:
     # ----------------------------------------------------------------------------------
 
     async def _discover(self, turn: _Turn) -> DiscoveredCatalog:
-        """The `mcp_discovery` span, with §9.5 row 1's one re-discovery."""
+        """The `mcp_discovery` span, with §9.5 row 1's one re-discovery.
+
+        Called once per turn **pass** (G5b, gap 17): `_resume` calls it again on the confirmation leg,
+        so a resumed turn holds two `mcp_discovery` spans — the second `cached`. The re-discovery here
+        is the only retry the client has; a `tools/call` that fails degrades the turn immediately.
+        """
         try:
             return await self.client.discover(turn.buffer)
         except McpUnavailable:
@@ -2890,11 +2905,15 @@ class Orchestrator:
         Gap 4b closes the other half of `amb-002`: the deployed run routed it with `workflow: null`,
         so there was no slot order at all and the rationale words named the destination alone. A turn
         the router named **no** workflow for, and whose intent has no order either, now **infers** one
-        from the topic words of the rationale and the question (`clarify_topic_workflow`) and walks
-        that order. A named workflow is never second-guessed: the inference does not run at all when
-        the router named one, even if the session has settled every slot of it. The rationale words
-        are the last resort, for a turn with no order to walk and for one whose order is fully
+        from the topic words of the question and then of the rationale (`clarify_topic_workflow`) and
+        walks that order. A named workflow is never second-guessed: the inference does not run at all
+        when the router named one, even if the session has settled every slot of it. The rationale
+        words are the last resort, for a turn with no order to walk and for one whose order is fully
         settled — the rationale can name a slot outside it, and that is still what is missing.
+
+        G5b (gap 2) fixes which of the two strings decides: the reader's message is read **first** and
+        the rationale only when the message names no topic. Joined, an incidental "remote work" in the
+        router's prose answered `amb-001` — *"Can I take some time off?"* — with `amb-002`'s question.
         """
         workflow = turn.workflow
         has_record = bool(EMPLOYEE_ID.match(turn.request.employee_id or ""))
@@ -2918,7 +2937,16 @@ class Orchestrator:
             # whose slots the session has all settled must not be re-keyed onto another workflow's
             # order by a word in the reader's own message — a `pto_request` follow-up that mentions
             # an expense is not an expense claim.
-            inferred = clarify_topic_workflow(decision.rationale_summary or "", turn.request.message)
+            #
+            # The **message decides first** (G5b, gap 2). Read as one joined string, an incidental
+            # "remote work" in the router's prose outranked the reader's own topic: the published run
+            # asked `amb-001` — *"Can I take some time off?"* — where it would be working from and for
+            # how long, which is `amb-002`'s question, and the judge passed it for naming *some*
+            # missing detail. Two calls, the reader's words first; the rationale is what is read when
+            # the message names no topic at all.
+            inferred = clarify_topic_workflow(turn.request.message) or clarify_topic_workflow(
+                decision.rationale_summary or ""
+            )
             if inferred is not None:
                 slots = unfilled_slots(inferred, known=known, has_record=has_record)
         if not slots and decision is not None:

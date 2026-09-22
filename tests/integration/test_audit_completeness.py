@@ -13,6 +13,7 @@ mismatch, not as a code review comment six phases later.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -41,12 +42,22 @@ def _of(audited, kind: str) -> list[dict]:
 
 
 async def test_exactly_one_mcp_discovery_span(audited):
-    """§8.2 step 3: emitted every turn, so every session carries RUBRIC5.2's primary evidence."""
+    """§8.2 step 3: emitted every turn pass, so every session carries RUBRIC5.2's primary evidence.
+
+    One pass here, so one span: this turn is answered outright. A turn resumed after a confirmation
+    re-discovers on the resume leg and carries two (G5b, gap 17).
+    """
     discovery = _of(audited, "mcp_discovery")
     assert len(discovery) == 1
     payload = discovery[0]["payload"]
     assert payload["tool_count"] == 9
-    assert payload["catalog_sha"]
+    # The transport's session id, off the `Mcp-Session-Id` response header (G5b, gap 17). It used to
+    # be read as `getattr(session, "session_id", None)` — an attribute `ClientSession` does not have —
+    # so it was `null` on every recorded turn while four documents listed it as span content.
+    assert payload["mcp_session_id"], "the streamable-HTTP handshake assigns a session id"
+    # The digest **as persisted**, not merely truthy (G5b, gap 11): `"[REDACTED]"` is truthy too, and
+    # that is what this column held on every turn until G6 exempted the digest keys by shape.
+    assert re.fullmatch(r"[0-9a-f]{64}", payload["catalog_sha"] or ""), payload["catalog_sha"]
     assert {tool["name"] for tool in payload["tools"]} >= {"search_policy_documents", "check_pto_balance"}
 
 

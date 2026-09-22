@@ -365,6 +365,9 @@ class McpClient:
         self._connection: _Connection | None = None
         self._catalog: DiscoveredCatalog | None = None
         self._lock = asyncio.Lock()
+        #: The `Mcp-Session-Id` the server assigned this handshake, read off the response headers by
+        #: `_note_session_id` (G5b, gap 17). `None` on stdio, which has no session id at all.
+        self._mcp_session_id: str | None = None
 
     # -- transports --------------------------------------------------------------------
     def _open_connection(self) -> _Connection:
@@ -380,8 +383,8 @@ class McpClient:
             http_client=http_client,
         )
 
-    def _http_client(self) -> httpx2.AsyncClient | None:
-        """A client carrying the access-gate header, or `None` to let the SDK build its own.
+    def _http_client(self) -> httpx2.AsyncClient:
+        """The transport's HTTP client: the access-gate header, the MCP timeouts, and the session hook.
 
         The gate is P8's; this is the seam it plugs into, because `streamable_http_client` takes an
         `httpx2.AsyncClient` rather than a headers mapping (§11, the in-process MCP client sends
@@ -391,15 +394,45 @@ class McpClient:
         `search_policy_documents` call loads the ONNX session before it embeds anything, so the
         response stream stays silent for far longer than httpx2's 5 s default read timeout. A
         StreamableHTTP response stream that is silent between bytes is not a dead stream — it is a
-        result still being computed — which is why the SDK's own factory reads for 300 s.
+        result still being computed — which is why the SDK's own factory reads for 300 s. The values
+        are `create_mcp_http_client`'s own, so a client built here and one the SDK would have built
+        wait exactly as long.
+
+        **Always ours, since G5b (gap 17).** It used to return `None` when there was no header to
+        send, which let the SDK build the client and left nothing to observe: `mcp_session_id` was
+        read as `getattr(session, "session_id", None)` and `ClientSession` has no such attribute in
+        mcp 2.2.0 — the id lives on the transport, and `streamable_http_client` yields only the two
+        streams — so four documents listed a field that was `null` on every turn. The session id is a
+        **response header**, so a response hook is where it can be seen.
         """
-        if not self._headers:
-            return None
-        return httpx2.AsyncClient(headers=self._headers, timeout=LOOPBACK_TIMEOUT)
+        return httpx2.AsyncClient(
+            headers=self._headers or None,
+            timeout=LOOPBACK_TIMEOUT,
+            event_hooks={"response": [self._note_session_id]},
+        )
+
+    async def _note_session_id(self, response: Any) -> None:
+        """Record `Mcp-Session-Id` off the handshake response (§8.2 step 3, G5b gap 17).
+
+        The header is on the `initialize` response and the SDK echoes it on every message after it, so
+        the last one seen is the live session — and a server that assigns none (or a stdio transport,
+        which has no hook at all) leaves the field `None`, which is then the truth rather than a bug.
+        Reading `response.headers` needs no body, so this cannot touch a stream the SDK is still
+        reading.
+        """
+        session_id = response.headers.get("mcp-session-id")
+        if session_id:
+            self._mcp_session_id = session_id
 
     # -- discovery ---------------------------------------------------------------------
     async def discover(self, turn: TurnBuffer | None = None) -> DiscoveredCatalog:
-        """The cached handshake, and **one `mcp_discovery` span per turn** (§8.2 step 3)."""
+        """The cached handshake, and **one `mcp_discovery` span per turn pass** (§8.2 step 3).
+
+        Per *pass*, not per turn (G5b, gap 17): a turn resumed after a confirmation goes through
+        `_discover` again on the resume leg, so demo task 2's 36-span turn carries the span at seq 1
+        and again at seq 27. Both are real — the second records the catalog the resumed leg called
+        against — and `cached: true` on it is how a reader tells them apart.
+        """
         async with self._lock:
             cached = self._catalog is not None
             if not cached:
@@ -422,6 +455,7 @@ class McpClient:
 
     async def _handshake(self) -> DiscoveredCatalog:
         began = time.perf_counter()
+        self._mcp_session_id = None
         connection = self._open_connection()
         try:
             session, initialized = await connection.open()
@@ -442,7 +476,7 @@ class McpClient:
             server_info=ServerInfo(name=info.name, version=info.version or "") if info is not None else None,
             tools=tools,
             catalog_sha=catalog_sha(tools),
-            mcp_session_id=getattr(session, "session_id", None),
+            mcp_session_id=self._mcp_session_id,
             handshake_ms=max(0, round((time.perf_counter() - began) * 1000)),
             discovered_at=now_micros(),
         )
@@ -451,6 +485,7 @@ class McpClient:
         """Drop the cached handshake so the next turn re-discovers — §9.5 row 1's "re-discover once"."""
         connection, self._connection = self._connection, None
         self._catalog = None
+        self._mcp_session_id = None
         if connection is not None:
             await connection.close()
 

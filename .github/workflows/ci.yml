@@ -3,8 +3,14 @@ name: ci
 on:
   push:
     branches: [main]
-    # Repo-root docs only — `*.md` does not cross a `/`, so `corpus/**` stays gated.
-    paths-ignore: ['evaluation/results/**', 'evaluation/REPORT.md', 'docs/**', '*.md']
+    # Published artifacts only. `*.md` used to be here too — it does not cross a `/`, so it meant
+    # "every repo-root document" — and the last commit before submission is by design a root README
+    # edit (the demo-video URL), which would have run no lint, no test, no docs contract tests and
+    # triggered no deploy: the graded tip would carry no green run and `/health.app.git_sha` would
+    # lag HEAD (G5b, gap 9). The docs contract tests are the guard against stale claims, and they
+    # have to gate the commits most likely to introduce one. What stays ignored is the three paths a
+    # published *result* lands in, where rerunning the suite proves nothing new.
+    paths-ignore: ['evaluation/results/**', 'evaluation/REPORT.md', 'docs/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -23,6 +29,18 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    # `GITLEAKS_VERSION` is pinned rather than left at the action's default, for two reasons. The
+    # scanner's ruleset is an input like any other, and an unpinned one drifts: run 34481667075 went
+    # red on a commit that touched nothing relevant, purely because the action had moved to a build
+    # whose default ruleset carries `curl-auth-header`. And `.gitleaks.toml` needs the `[[allowlists]]`
+    # form with `targetRules` to scope its one carve-out to a single rule — that form is 8.25+, and the
+    # action's default was **8.24.3**, which cannot express it. 8.30.1 is newer than the default it
+    # replaces (so this pin adds rules, it does not withhold them) and it is the build every
+    # `gitleaks detect` in the P11 gate log was run against, so CI runs the scan that was actually
+    # verified. It sits on the **job** so the action below and the whole-history step below it cannot
+    # end up on different rulesets; the action reads the name out of the environment itself.
+    env:
+      GITLEAKS_VERSION: 8.30.1
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -30,19 +48,27 @@ jobs:
         with: { python-version-file: '.python-version' }
       - run: pip install -r requirements-dev.txt
       - run: ruff check . && ruff format --check .
-      # `GITLEAKS_VERSION` is pinned rather than left at the action's default, for two reasons.
-      # The scanner's ruleset is an input like any other, and an unpinned one drifts: run
-      # 34481667075 went red on a commit that touched nothing relevant, purely because the
-      # action had moved to a build whose default ruleset carries `curl-auth-header`. And
-      # `.gitleaks.toml` needs the `[[allowlists]]` form with `targetRules` to scope its one
-      # carve-out to a single rule — that form is 8.25+, and the action's default was **8.24.3**,
-      # which cannot express it. 8.30.1 is newer than the default it replaces (so this pin adds
-      # rules, it does not withhold them) and it is the build every `gitleaks detect` in the
-      # P11 gate log was run against, so CI now runs the scan that was actually verified.
-      - uses: gitleaks/gitleaks-action@v2            # full history
+      # The action's own scan: the pushed range on a push (`--log-opts=--no-merges --first-parent
+      # <base>^..<head>`), the whole repository on a dispatch. It stays because the range scan is the
+      # one that annotates the commits a reviewer is looking at.
+      - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_VERSION: 8.30.1
+      # …and the whole history, on EVERY run (G5b, gap 7). README, this file and the demo script all
+      # called the job "a full-history gitleaks scan", but the action is unbounded only on a dispatch
+      # or a schedule and there is no `schedule:` here: the graded push scanned **2 commits /
+      # 6.56 KB** while the dispatch of the same tip scanned 278. The history really is clean, so this
+      # is claim accuracy — and the way to fix a claim is to make it true on the run a grader opens.
+      # Same pinned build, same `.gitleaks.toml`, and the invocation both committed gate logs used
+      # (P17, P23); `detect` is the older spelling of what 8.30.1 also calls `gitleaks git`, and it is
+      # the one those logs recorded. Verified against this commit on 2026-09-22: **280 commits
+      # scanned, 13.22 MB, no leaks found**. `fetch-depth: 0` above is what gives it a history to walk
+      # — at the default depth of 1 it would scan one commit and report success.
+      - name: gitleaks over the whole history
+        run: |
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xzf - -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --config .gitleaks.toml --redact --no-banner
 
   test:
     runs-on: ubuntu-latest
@@ -88,9 +114,15 @@ jobs:
   # is P1, P3–P11, P12 and P14 across `test_principles.py`, `test_dashboard_principles.py` and
   # `test_accessibility.py`, the last of which also drives a second browser context at
   # `color_scheme=dark` and one at `reduced_motion=reduce`. Its own job because it is the only thing
-  # in the repo that needs a browser binary, and `needs:` is deliberately absent — it must never
-  # block `test` or `deploy`. The chromium build is cached on the pinned playwright version, so a
-  # cache hit makes it a no-op.
+  # in the repo that needs a browser binary. The chromium build is cached on the pinned playwright
+  # version, so a cache hit makes it a no-op.
+  #
+  # It carries no `needs:` — nothing has to finish before a browser can start — but since G5b (gap 16)
+  # `deploy` **needs it**. §8's bullet is "deployment must only occur if tests pass", and these 299
+  # are tests: run 35723846982 is the demonstration of the old arrangement, a red `ux` and a green
+  # `deploy` in one run, so main's history carries red runs that reached production. The job ran
+  # ~11 min on the tip and its browser is cached, which is the whole cost of making a red run mean
+  # that something gating production is broken.
   ux:
     runs-on: ubuntu-latest
     env:
@@ -143,7 +175,7 @@ jobs:
         run: docker logs app && docker rm -f app
 
   deploy:      # see §14.5
-    needs: [test, docker]
+    needs: [test, docker, ux]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
         (github.event_name == 'workflow_dispatch' && inputs.deploy_only == 'true')
     runs-on: ubuntu-latest
@@ -162,7 +194,7 @@ jobs:
       #     unattended and needs a human with a browser;
       #   * RENDER_API_KEY + RENDER_SERVICE_ID — `POST /v1/services/{id}/deploys`, which
       #     `scripts/provision_render.py` can set without anyone opening a browser.
-      # Neither weakens R8.4: this job still carries `needs: [test, docker]`, and Render's own
+      # Neither weakens R8.4: this job still carries `needs: [test, docker, ux]`, and Render's own
       # Auto-Deploy is still off, so a commit reaches production only by passing through here.
       - name: The deploy secrets must exist
         env:

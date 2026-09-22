@@ -213,6 +213,9 @@ METRIC_LABELS: dict[str, str] = {
     "recommendation_labeled_rate": "Recommendations labelled",
     "catalog_reopened_rate": "Tool catalog reopened",
     "judge_agreement_rate": "Judge agreement",
+    # The hard-case sibling, which no template rendered until G5b (gap 13) even though every run file
+    # carried it: the two subsets are different samples, so they are two labelled figures and never one.
+    "judge_agreement_rate_hard": "Judge agreement (hard cases)",
     # The two the compare tab charts (G5 gap 25): the hypothesis metric of each ablation arm.
     "workflow_completion": "Workflow completion",
     "doc_recall_mean": "Documents recalled",
