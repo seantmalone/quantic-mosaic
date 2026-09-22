@@ -1,6 +1,6 @@
 # AI tooling — how Mosaic HR Copilot was actually built
 
-**Project:** `quantic-mosaic` · **Author:** Sean Malone · **Period:** 2026-09-08 → 2026-09-11
+**Project:** `quantic-mosaic` · **Author:** Sean Malone · **Period:** 2026-09-08 → 2026-09-21
 
 This is a dated, specific account of the AI tooling used to build this project, including the
 parts that went badly. It is not a summary of what the tools can do; it is what happened.
@@ -49,6 +49,10 @@ run the commands rather than read the implementer's claims, because the build wa
 Phases P2 ∥ P3 ∥ P6 ran in **parallel git worktrees** on separate branches and were merged by the
 coordinating session.
 
+P0–P12 built the system; the same loop then ran to **P29**. P13 onward were quality, review-fix,
+performance and deployment waves rather than new subsystems, and `docs/process/sdd/` carries the
+brief and the report for each of them through P27.
+
 **4 — Blind labelling by separate sessions (2026-09-10).** The judge-agreement figures in
 `design-and-evaluation.md` come from a fresh **Claude Opus 5** session: the **same vendor as the
 agent** (Anthropic), a *different model*, in an **independent session that read only the packet** —
@@ -65,6 +69,55 @@ path with zero API keys.
 
 **6 — The human did accounts, keys and the demo.** Every gate that reached me was a browser-only
 OAuth grant, an API key paste, or the recording itself. Nothing else.
+
+**7 — Waves against an audit of the running product (2026-09-14 → 16).** Eighty-five commits landed
+in these three days — 15 on 09-14, 61 on 09-15, 9 on 09-16, by
+`git log --format='%ad' --date=short | sort | uniq -c` — and the unit of work changed. Instead of
+phases against a spec, **waves against an audit of the rendered product**, because the thing the
+spec could not tell me was that the interface was clunky. A headless browser captured **53 screens**
+(every page and state at desktop, laptop and phone widths, with every visible number and every
+overflow measured); **seven sessions reviewed the renders** through separate lenses; a skeptic
+confirmed each serious finding against its screenshot; the result was **155 verified findings** and a
+plan of **15 principles, each with a mechanical detection rule**
+(`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md`, screens under
+`docs/evidence/ux-audit-2026-09-14/`). Waves W0–W7 implemented it, and after each batch a **fresh
+read-only session re-captured every screen and re-scored the plan itself** — four independent
+re-audits, each dispatched with the plan, the previous re-audit's report and the new capture, and
+never with the implementing session's account of what it had fixed. The first (48 agents) verified
+**138 of the 155** findings fixed and failed its own gate; the second (45 agents) reached **150 of
+155** and 8 of the 15 principles; the fourth reached **9 of 15**. Every wave and every measure is in
+`docs/optimization-log.md` (sections dated 2026-09-14 → 15 and 2026-09-15), with before/after screens
+committed under `docs/evidence/ux-w*` and `ux-final` and the audit reports themselves at
+`docs/evidence/ux-audit-2026-09-14/` and `docs/evidence/ux-reaudit*.md`.
+
+A screenshot of my own, not one the capture had taken — "Done — your request is with the HR Time Off
+team" printed above "Submit the request in MosaicOne" — raised a different question: are the demo paths
+*logically* right for the person asking? A second adversarial review, of behaviour rather than
+pixels, read **512 captured turns** and drove **16 fresh persona scenarios** one turn at a time
+through seven lenses with a refuter per triaged class. It confirmed **22 defect classes, 11 of them
+Critical**, and found **11 of the 16 scenarios logically wrong for their persona**
+(`docs/evidence/demo-path-review-2026-09-15.md`). The cause was a single one: the deterministic layer
+and the model's prose were never reconciled — the rules engine scored a requirement met while the
+answer called it unmet, a non-compliant request was filed and then denied, a director was told to get
+her director's approval. Waves W8–W10 put verdicts, arithmetic, dates, approvers, ids and the account
+of a write behind the deterministic layer and reconciled or replaced the prose against it; re-driving
+the same sixteen scenarios went **5 → 8 → 13 of 16** right
+(`docs/evidence/scenario-recheck-final-2026-09-16.md`). Over the three days the suite went from
+**2,002** collected to **3,040** plus **299** real-browser checks at the final build, and the browser
+test surface from **3 routes to 18**.
+
+**8 — Graded by one workflow, fixed by another (2026-09-21).** Before submission the repository was
+put through an independent grading workflow of **82 agents**: assessors over grouped rubric sections,
+then one adversarial skeptic per flagged finding whose brief was to *refute* it against the artifact,
+then a synthesising grader. It returned a **band-4 verdict and 27 ranked gaps**, each with its
+evidence, a proposed fix and an effort estimate; a further set of candidate findings was overturned on
+verification and recorded as checked rather than worked on. The fixes then ran in the shape the
+phases had used: one Opus implementer per task, an independently dispatched Opus reviewer after it,
+and a fix-and-re-review loop until the reviewer had nothing open — the wave's measurement and
+documentation tasks follow the same pattern. The plan is committed at
+`docs/superpowers/plans/2026-09-21-grade-5.md`; the grade report and the ranked gap list sit in this
+session's `.superpowers/` working directory, which is git-ignored — see *Where the process is
+auditable* below for what that means for a reader.
 
 ## What worked well
 
@@ -100,6 +153,18 @@ OAuth grant, an API key paste, or the recording itself. Nothing else.
   defect, and that everything else gets published with its cause.
 - **`make` targets as the shared vocabulary.** CI runs the same targets a developer runs, so a
   macOS-only assumption fails immediately rather than at deploy time.
+- **Auditing the rendered artifact rather than the code.** The interface and demo-path reviews were
+  given screenshots, DOM dumps, overflow measurements and captured turns, told the repository was
+  read-only, and scored the plan's principles themselves; they were not given the implementing
+  session's report. That is what produced findings no code review had produced — unrounded numbers on
+  human surfaces, span kinds and guardrail names in chat prose, screens that scrolled sideways at
+  390 px, a completed ticket rendered as advice — and it is why each re-audit kept catching the
+  previous wave's own regressions rather than confirming them fixed.
+- **Refuting a finding before acting on it.** The audit waves and the 2026-09-21 grading pass both put
+  each serious finding to a separate session whose job was to overturn it against the artifact.
+  Several were overturned — one on arithmetic the flagging session had not done, one on a truncation
+  convention the repository deliberately enforces in a test — and no wave spent time on them. Without
+  that step an audit's output is a list of things that look wrong in a screenshot.
 
 ## What did not work
 
@@ -160,6 +225,36 @@ OAuth grant, an API key paste, or the recording itself. Nothing else.
 - **Estimates were optimistic.** The plan budgeted ~50 agent-hours across thirteen phases. The
   evaluation phase alone (P10) took four fix rounds, a voided labelling round, a provider outage
   and a two-pass harness rewrite.
+- **Every re-audit found residuals in the previous wave's fixes, and the interface gate never
+  passed.** Four independent re-audits scored the same 15 principles **6 → 8 → 7 → 9**; the dip at the
+  third is real and is printed in `docs/optimization-log.md` rather than smoothed. Worse, **three of
+  the four Criticals that failed the first re-audit's gate were regressions the waves had introduced**:
+  every dashboard chart collapsed to about a quarter of its panel, a completed HR ticket rendered
+  under "What I suggest you do" with the "not company policy" footnote beneath it, and the model's own
+  next-steps text painted a deadline computed a month early. Nine of fifteen is where it stopped; the
+  gate itself and three of the sixteen persona scenarios are recorded as open follow-ups in the
+  optimization log rather than presented as closed. The narrow lesson is not "agents cause
+  regressions" — it is that a wave which fixes a screen without adding a guard on the *class* it fixed
+  will have the next audit find that class somewhere else, which is why every regression class now has
+  a browser test that fails on the build that had it.
+- **The recorded demo fixtures kept passing while the live path was broken.** Both stub recordings
+  were verbatim 2026-09-10 exchanges, so they could not show what the current prompt does. Only a live
+  run on the W6 build showed the flagship question needing nine tool calls against a cap of 8, ending
+  the turn partial on top of a complete answer (P28 raised the cap to 12); only a live run showed the
+  model writing "HR ticket MOCK-HR-000007 has been created" as a *recommendation*, which the
+  one-account guard then kept, so the "Done" lede never appeared and the re-audit's Critical was back
+  on the live path; and only a pair of consecutive live runs showed the tenure wording obeying the
+  prompt's rule in one and not the other (P29 made both deterministic). The fixtures themselves then
+  had to be amended, under a contract test
+  that fails on the old text. Recording a real model is better than imagining one, but a recording
+  ages against the prompt that produced it.
+- **An implementer closing a gap opened a privilege hole (2026-09-21).** One task of the grade-and-fix
+  wave made `MCP_TOOLS_DISABLED` actually take effect, and in doing so made the filter statable per
+  request: a non-admin caller could send `tools_disabled: []` and switch the operator's default off.
+  The implementer's own tests passed. The independent re-reviewer found it, flagged it as outside its
+  scope, and it was ruled in and fixed by unioning the process default into the effective filter so no
+  caller can state their way past it (`ef917a3`). It is the sharpest argument in the project for the
+  reviewer being a different session: the hole was inside the diff that closed the gap.
 
 ## AI use and ownership
 
@@ -176,7 +271,7 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 3,392 tests as of 2026-09-16, the count `pytest --collect-only -q` reports and the
+committed suite — 3,392 tests as of 2026-09-21, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 28-item evaluation whose real
 numbers, including the ones below target, are published with their causes; security by secrets that exist only in environment variables, a
 `gitleaks` scan over full history, a PII check that fails the build, an entirely synthetic corpus
@@ -194,7 +289,11 @@ paid data is included or loaded at run time. Runtime and development dependencie
 section per phase, including the corrections); the briefs and phase reports themselves are
 **committed** under [`docs/process/sdd/`](docs/process/sdd/) — the ledger, every `P<n>-brief.md`
 and `P<n>-report.md` with its definition-of-done output pasted verbatim, the binding constraints
-and the independent grade card — and the design history is in `docs/superpowers/`. The commit
+and the independent grade card — and the design history is in `docs/superpowers/`. The audit waves of
+2026-09-14 → 16 are recorded differently, because they were not phases: their method, measures and
+open follow-ups are in `docs/optimization-log.md`, the plan they implemented and the plan for the
+2026-09-21 grade-and-fix pass are under `docs/superpowers/plans/`, and the audit and re-audit reports
+are committed verbatim under `docs/evidence/` beside the before/after screens they scored. The commit
 history carries one commit per phase with the requirement ids it satisfies in the trailer.
 (They are produced in `.superpowers/`, which is git-ignored; `docs/process/sdd/README.md` says what
 was copied, what was not, and how it was scanned for secrets first.)
@@ -205,7 +304,11 @@ history, and the split is not random: of the 160 commits through `5b1bd51`, **12
 implementer or reviewer subagent wrote them — **35 carry `Claude Fable 5.1`**, the coordinating
 session's own commits (the spec, the roadmap, the optimization log, the merges of adjudicated
 rulings), and **3 are branch merges** with no trailer at all. The rule is the same in all three
-cases: **the trailer names the model that actually wrote the commit.**
+cases: **the trailer names the model that actually wrote the commit.** That census is a **snapshot at
+`5b1bd51`**, not a running total: the anchor is fixed so the figures can be recounted rather than
+trusted, and the audit waves and the grade-and-fix pass sit after it. Every commit since carries a
+trailer under the same rule, in the same mix — subagent commits for the waves and the per-task fixes,
+coordinating-session commits for the plans, the rulings and the documents.
 `docs/process/sdd/constraints.md` line 14 said it as a fixed string until 2026-09-11 and now says
 it as that rule, which is what the history has done since P0. None of those four figures is typed
 from memory: `tests/contract/test_docs_completeness.py` recounts them from `git log` at the commit
