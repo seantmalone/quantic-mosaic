@@ -563,7 +563,8 @@ bug in the repair call). Re-audit #4 of the interface reached 9 of 15 principles
 W9 fixed the evaluation regressions and the interface residuals; W10 closes the demo-path gaps; the
 published numbers below are from the run after both.
 
-**Published measurements (run `r_1789555212_baseline`, build `bd4ac93`, 2026-09-16).**
+**Published measurements at the time (run `r_1789555212_baseline`, build `bd4ac93`, 2026-09-16) —
+superseded on 2026-09-22 by `r_1790074972_baseline` (build `8a89310`); see the entry below.**
 
 | Measure | Published 2026-09-11 (`r_1789166880`) | Final (`r_1789555212`) |
 |---|---|---|

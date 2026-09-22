@@ -829,13 +829,14 @@ own ~30–60 s spin-up sits on top, which the three live probes confirm at 43.5�
 
 ### CI/CD
 
-One workflow, `.github/workflows/ci.yml`, four jobs, running on **push to `main`, on every pull
+One workflow, `.github/workflows/ci.yml`, five jobs, running on **push to `main`, on every pull
 request, and on `workflow_dispatch`**:
 
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, and `gitleaks` over **full history** |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub; 3,415 tests as of 2026-09-22) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole non-browser suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact. `pyproject.toml`'s `addopts` carries `-m "not ux"`, so this job runs **3,116** of the 3,415 tests collected as of 2026-09-22; the other 299 are the browser checks the `ux` job runs |
+| `ux` | the browser suite — `pytest -q -m ux`, the **299** real-browser checks against the rendered pages in a cached chromium at the three audited viewports, plus a dark-mode and a reduced-motion context. It is the only job needing a browser binary, and **`needs:` is deliberately absent — "it must never block `test` or `deploy`"** (`ci.yml`), so a browser-only regression is reported without gating the deploy path |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
@@ -1546,7 +1547,7 @@ chat page; outside it they render disabled and say so.
 | Page | Shows |
 |---|---|
 | `/dashboard/sessions/{id}` | the full span waterfall for one turn — the centrepiece |
-| `/dashboard/llm` | every LLM call with its verbatim messages, tokens, latency, cache and failover flags |
+| `/dashboard/llm` | two tables — **by model** (calls, tokens in/out, estimated cost from the committed price table) and **by call** (model, purpose, tokens in/out, duration, first token, streamed, finish reason, provider, and a Turn chip back into the session record). The verbatim `messages[]` are **not** rendered: they are stored in the `llm_messages` side table and reached through the `messages_ref` the `llm_call` span carries |
 | `/dashboard/retrieval` | every query with its ranked, scored chunks and zero-evidence queries |
 | `/dashboard/tools` | per-tool call counts, error rates, p50/p95, and every recorded argument set |
 | `/dashboard/safety` | guardrail verdicts by rule, injection hits, the confirmation ledger, the mock-action log |

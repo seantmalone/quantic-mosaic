@@ -105,8 +105,10 @@ her director's approval. Waves W8–W10 put verdicts, arithmetic, dates, approve
 of a write behind the deterministic layer and reconciled or replaced the prose against it; re-driving
 the same sixteen scenarios went **5 → 8 → 13 of 16** right
 (`docs/evidence/scenario-recheck-final-2026-09-16.md`). Over the three days the suite went from
-**2,002** collected to **3,040** plus **299** real-browser checks at the final build, and the browser
-test surface from **3 routes to 18**.
+**2,002** collected to **3,040** plus **299** real-browser checks at that window's final build
+(`bd4ac93`, 2026-09-16), and the browser test surface from **3 routes to 18**. Both figures are as of
+that date and measure the W8–W10 window, not the submitted repository — the collected count at
+submission is the one stated in the ownership disclosure below.
 
 **8 — Graded by one workflow, fixed by another (2026-09-21).** Before submission the repository was
 put through an independent grading workflow of **82 agents**: assessors over grouped rubric sections,
