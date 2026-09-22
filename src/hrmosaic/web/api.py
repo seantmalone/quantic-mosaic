@@ -61,7 +61,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from hrmosaic.agent import orchestrator as agent
 from hrmosaic.agent.client import McpUnavailable
-from hrmosaic.agent.guardrails import g5
+from hrmosaic.agent.guardrails import g1, g5
 from hrmosaic.agent.orchestrator import (
     ChatOptions,
     ChatRequest,
@@ -1084,6 +1084,23 @@ DECISION_LINES = {
 }
 
 
+def resolved_decision(decision: str | None, response: ChatResponse) -> str | None:
+    """Which decision line a resolved card gets — **none**, when the confirmation was refused.
+
+    G5 (gap 19, fix round 1). `DECISION_LINES["confirmed"]` is a statement about the world — *"it
+    went ahead"* — and `chat_confirm` passed the reader's own decision straight into it, so a Confirm
+    whose token the gate then refused rendered *"You approved this — it went ahead."* directly above
+    *"I could not act on that confirmation, so nothing was created or sent."* The reader approved it;
+    nothing went ahead, and the line that says otherwise is the one that has to go. The turn's own
+    refusal copy is the whole account of what happened, so nothing replaces it: a second sentence
+    saying the same thing is chat-production-ux-9's defect.
+    """
+    refused = response.outcome == "refused" and any(
+        block.text == g1.CONFIRMATION_REFUSAL for block in response.answer_blocks
+    )
+    return None if refused else decision
+
+
 #: What the one live region says when a turn finishes, by the outcome it finished with (UX W3).
 #:
 #: Until W3 every outcome announced *"Answer ready."* — including a refusal, a clarifying question,
@@ -1863,7 +1880,12 @@ async def chat_confirm(request: Request) -> Response:
     _publish_turn_completed(response)
     # The question the card belonged to is re-rendered with the resolved turn: the fragment replaces
     # the whole `article.turn`, so without it the transcript loses the half the reader wrote.
-    return _render_turn(request, response, question=turn["user_message"], decision=body.decision)
+    return _render_turn(
+        request,
+        response,
+        question=turn["user_message"],
+        decision=resolved_decision(body.decision, response),
+    )
 
 
 #: …and what an unanswered one does. §8.6 step 3 gives a proposal ten minutes; the turns that were
@@ -2356,6 +2378,7 @@ __all__ = [
     "produced_summary",
     "provider_label",
     "refusal_page",
+    "resolved_decision",
     "router",
     "sent_at_human",
     "shell_context",

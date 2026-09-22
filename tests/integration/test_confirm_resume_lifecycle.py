@@ -314,3 +314,68 @@ async def test_the_maintenance_sweep_expires_a_proposal_nobody_came_back_to(web,
     assert (row["outcome"], row["stop_reason"], row["resumed_count"]) == ("refused", "expired", 0)
     assert "expired before it was confirmed" in row["final_answer"]
     assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0
+
+
+# --------------------------------------------------------------------------------------
+# A Confirm the gate then refuses (G5, gap 19, fix round 1)
+# --------------------------------------------------------------------------------------
+
+
+async def test_a_confirm_the_gate_refuses_is_never_rendered_as_having_gone_ahead(web, store, monkeypatch):
+    """The reader's decision and what became of it are two different facts, and the page said one.
+
+    `DECISION_LINES["confirmed"]` — *"You approved this — it went ahead."* — was rendered from
+    `body.decision`, i.e. from what the reader clicked, while the turn under it could be a refusal:
+    with a token the gate rejects, `_resume` refuses and (since G5) says *"I could not act on that
+    confirmation, so nothing was created or sent."* The two sentences appeared one above the other.
+
+    The rejection is produced by the **shipped** gate, not by a stand-in for it: `mint` is wrapped so
+    the minted token is spent the moment it is issued, which is the double-click race
+    `confirm.validate`'s *"token already used"* check exists for. Asserted on the **rendered**
+    fragment, because that is the surface the contradiction was on.
+    """
+    from hrmosaic.agent.guardrails import g1
+    from hrmosaic.mcpserver import confirm as confirm_gate
+    from hrmosaic.web import api
+
+    minted = confirm_gate.mint
+
+    def spent_on_arrival(store_, **kwargs):
+        token = minted(store_, **kwargs)
+        store_.execute("UPDATE confirmations SET used_at = ? WHERE token = ?", (1, token))
+        return token
+
+    monkeypatch.setattr(confirm_gate, "mint", spent_on_arrival)
+
+    async with web("confirm_lifecycle.json") as client:
+        parked = await _ask(client)
+        assert parked["outcome"] == "awaiting_confirmation"
+        rendered = await client.post(
+            "/chat/confirm",
+            json={"session_id": parked["session_id"], "turn_id": parked["turn_id"], "decision": "confirmed"},
+            headers={"HX-Request": "true"},
+        )
+
+    assert rendered.status_code == 200, rendered.text
+    html = rendered.text
+    assert api.DECISION_LINES["confirmed"] not in html, "nothing went ahead, so the page may not say so"
+    assert g1.CONFIRMATION_REFUSAL in html, "and the reader is told what did happen"
+    assert g1.USER_REFUSAL not in html, "which is not that a policy search came back empty"
+    assert store.execute("SELECT COUNT(*) AS n FROM mock_writes").scalar() == 0, "and nothing was created"
+    row = store.execute("SELECT outcome, stop_reason FROM turns WHERE id = ?", (parked["turn_id"],)).one()
+    assert (row["outcome"], row["stop_reason"]) == ("refused", "refused")
+
+
+async def test_the_two_lines_a_resolved_card_can_still_carry(lifecycle):
+    """The guard is keyed on the refusal, not on the decision: a real Cancel and a real Confirm — the
+    two turns the lifecycle above produced — keep the line each of them earned."""
+    from hrmosaic.agent.orchestrator import ChatResponse
+    from hrmosaic.web import api
+
+    declined = ChatResponse.model_validate(lifecycle["declined"])
+    confirmed = ChatResponse.model_validate(lifecycle["confirmed"])
+
+    assert api.DECISION_LINES[api.resolved_decision("declined", declined)] == (
+        "You cancelled this — nothing was created."
+    )
+    assert api.DECISION_LINES[api.resolved_decision("confirmed", confirmed)] == "You approved this — it went ahead."

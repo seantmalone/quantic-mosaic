@@ -30,6 +30,7 @@ from hrmosaic.agent.orchestrator import (
     CLARIFY_QUESTIONS,
     ChatRequest,
     clarification_question,
+    clarify_slot_of,
     unfilled_slots,
 )
 
@@ -115,3 +116,18 @@ def test_every_question_has_a_fragment_for_when_it_is_not_asked_first():
     """`CLARIFY_ALSO` is keyed on the same closed set, or a named slot would go unnamed."""
     assert set(CLARIFY_ALSO) == set(CLARIFY_QUESTIONS)
     assert all(not fragment.endswith((".", "?")) for fragment in CLARIFY_ALSO.values()), "fragments, not sentences"
+
+
+def test_no_question_is_a_prefix_of_another():
+    """What `clarify_slot_of`'s `startswith` rests on (G5, gap 4, fix round 1).
+
+    The served text can now carry a fragment after the opening question, so the reverse lookup the
+    replay path uses (`web/api.py::_replayed_clarify_slot`) matches on the opening question rather
+    than on the whole string. That is exact only while no question is a prefix of another: were one
+    added that is, a stored question would resolve to the wrong slot and the replayed turn would
+    offer the wrong two quick replies — silently, because both are valid chip sets.
+    """
+    for slot, question in CLARIFY_QUESTIONS.items():
+        others = [text for other, text in CLARIFY_QUESTIONS.items() if other != slot]
+        assert not [text for text in others if question.startswith(text)], slot
+        assert clarify_slot_of(f"{question} I will also need to know the dates.") == slot
