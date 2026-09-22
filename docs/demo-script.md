@@ -183,15 +183,15 @@ Tick all five on camera. ④ and ⑤ are on the chat page; ①–③ are on the 
       **"Open <the document's title>"**. The count in the heading is **passages**, not documents —
       say which, because the record's own citation line says *"(across n documents)"* and the demo
       panel says *"n policy sections read"*. Breadth here is not deterministic. The live run pinned
-      as [`docs/evidence/demo-task-1-live-2026-09-15-p29.txt`](evidence/demo-task-1-live-2026-09-15-p29.txt)
-      cited **10 passages across four documents** (`remote-and-hybrid-work`,
-      `tax-and-location-addendum`, `manager-approval-matrix`, `travel-policy`); on the published run
-      (`r_1790074972_baseline`) this prompt's dataset twin `remote-004` **passed**, with document
-      recall 0.75 — three of its four expected documents — and no block dropped by the citation
-      guardrail (`blocks_dropped_by_g2` = 0). **Read off the references that are actually on
-      screen.** Then follow **"Open <the document's title>"** on one: since UX W1 a citation lands
-      in the **policy reader** at `/policy/{doc_id}#{chunk_id}`, which highlights the 30-day section
-      in the document a person would read, not in a chunk inspector.
+      as [`docs/evidence/demo-task-1-live-2026-09-22.txt`](evidence/demo-task-1-live-2026-09-22.txt)
+      cited **8 passages across four documents** (`remote-and-hybrid-work`, `tax-and-location-addendum`,
+      `manager-approval-matrix`, `security-acceptable-use`); on the published run
+      (`r_1790074972_baseline`) this prompt's dataset twin `remote-004` **passed**, with document recall
+      0.75 — three of its four expected documents — and no block dropped by the citation guardrail
+      (`blocks_dropped_by_g2` = 0). **Read off the references that are actually on screen.** Then follow
+      **"Open <the document's title>"** on one: since UX W1 a citation lands in the **policy reader** at
+      `/policy/{doc_id}#{chunk_id}`, which highlights the 30-day section in the document a person would
+      read, not in a chunk inspector.
 - [ ] **⑤ Final answer** — read the verdict aloud: **conditional** — 42 days exceeds the 30-day
       threshold so Tax & Legal review and director approval are required before travel, Germany is
       on the approved-country list, the 42 days sit inside the rolling 90-day annual limit, a
@@ -249,26 +249,27 @@ Tick all five on camera. ④ and ⑤ are on the chat page; ①–③ are on the 
 - [ ] **④ Retrieved citations** — **read the references that are actually on screen.** Breadth here
       is not deterministic and is narrower than task 1's by design, because the rules engine's own
       evidence passages are cited directly: the live run in
-      [`docs/evidence/demo-task-2-live-2026-09-15-p29.txt`](evidence/demo-task-2-live-2026-09-15-p29.txt)
-      cited **three passages from one document** (`pto-and-holidays` — Notice Requirements, Approval
-      Chain, Blackout Periods) with **no** `search_policy_documents` call at all, while the
-      2026-09-11 run cited four passages across **two** documents (`pto-and-holidays`,
-      `manager-approval-matrix`). Name what is there and click one through to the
-      notice-requirement sentence in the policy reader. On the published run
-      (`r_1790074972_baseline`) this prompt's dataset twin `pto-003` **passed** on every clause, and
-      workflow completion for the `pto_request` workflow is **1.00** — over n = 1, one tagged item,
-      so call it an indicator rather than a rate.
+      [`docs/evidence/demo-task-2-live-2026-09-22.txt`](evidence/demo-task-2-live-2026-09-22.txt) cited
+      **three passages across two documents** (`pto-and-holidays` — Notice Requirements and Approval
+      Chain — and `manager-approval-matrix` — Time Off), while the 2026-09-15 run cited three passages
+      from `pto-and-holidays` alone with **no** `search_policy_documents` call at all. Name what is
+      there and click one through to the notice-requirement sentence in the policy reader. On the
+      published run (`r_1790074972_baseline`) this prompt's dataset twin `pto-003` **passed** on every
+      clause, and workflow completion for the `pto_request` workflow is **1.00** — over n = 1, one
+      tagged item, so call it an indicator rather than a rate.
 - [ ] **⑤ Final answer and action** — the answer **opens with the write**, in its own block above
       the facts: *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`. Your
-      manager's written approval is the next step."* Say why that block is deterministic — it is
-      built from the tool result by `agent/outcome.py`, not from what the model wrote, and it is
-      always the turn's one account of the write: a model block of any type that names the id is
-      **removed** and replaced by it, so a created ticket can never end up filed under *"What I
-      suggest you do"* beneath *"Suggestions are guidance, not company policy"* (which is exactly
-      what happened live on 2026-09-15 before this guard was rewritten). The same step also clears
-      the **next steps** of anything that sends the viewer off to file the request themselves, so
-      nothing under "Next steps:" contradicts the ticket on screen — in the pinned run one step
-      survived: *"Your manager will approve it in writing on the request record."*
+      manager Dana's written approval is the next step."* — the lede the 2026-09-22 run served, with
+      `agent/approvers.py` filling the bare role with the persona's own manager's name. Say why that
+      block is deterministic — it is built from the tool result by `agent/outcome.py`, not from what the
+      model wrote, and it is always the turn's one account of the write: a model block of any type that
+      names the id is **removed** and replaced by it, so a created ticket can never end up filed under
+      *"What I suggest you do"* beneath *"Suggestions are guidance, not company policy"* (which is
+      exactly what happened live on 2026-09-15 before this guard was rewritten). The same step also
+      clears the **next steps** of anything that sends the viewer off to file the request themselves, so
+      nothing under "Next steps:" contradicts the ticket on screen — in the 2026-09-22 run two steps
+      survived: *"Dana reviews and approves the request in MosaicOne"* and *"Check MosaicOne for the
+      approval decision"*.
 
 ### The safety beat (do not rush this — it is the best 40 seconds in the demo)
 
@@ -328,8 +329,10 @@ The ninth tool, `draft_hr_email`, runs through the **same** gate and is worth on
 clock allows — *"ask it to message your manager instead and the identical machinery applies: the
 same card, the same one-time token, and a confirmed draft narrates itself as **'Done — the email
 draft is ready for <name>. Reference `MOCK-EMAIL-…`'** rather than as a refusal."* Cancelling it
-gives the same cancelled receipt. Deployed in `8a89310`. It is a bonus, not a requirement: the two
-tasks above are the spine, and this beat is the first thing to cut.
+gives the same cancelled receipt. Deployed in `8a89310` and captured live on 2026-09-22 —
+[`docs/evidence/draft-hr-email-live-2026-09-22.txt`](evidence/draft-hr-email-live-2026-09-22.txt):
+`MOCK-EMAIL-000020` confirmed, then the cancelled receipt with no write. It is a bonus, not a
+requirement: the two tasks above are the spine, and this beat is the first thing to cut.
 
 ---
 

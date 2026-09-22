@@ -96,17 +96,30 @@ sends the frozen wording the stub scripts were recorded against instead; the `ma
 not need it, because they pin `MOCK_TODAY=2026-09-01` on their own server and the prompt they
 fetch from it comes back byte for byte the recorded one.
 
-**Pinned evidence — both tasks run live against the deployed service on 2026-09-11**, transcripts
+**Pinned evidence — the newest three transcripts were run live against the deployed service on
+2026-09-22**, on `/health` sha `8782177` (a docs-only commit on top of the app build `8a89310`:
+`git diff 8a89310..8782177 -- src mcp Dockerfile render.yaml requirements.txt` is empty), each
 committed with the bearer token redacted and nothing else edited:
+[`docs/evidence/demo-task-1-live-2026-09-22.txt`](docs/evidence/demo-task-1-live-2026-09-22.txt)
+(8 citations across 4 documents, 39 spans, a `conditional` verdict, 38 s),
+[`docs/evidence/demo-task-2-live-2026-09-22.txt`](docs/evidence/demo-task-2-live-2026-09-22.txt)
+(the confirmation gate, then `MOCK-HR-000019` named in the answer's opening `performed` block,
+3 citations across 2 documents, 36 spans, 35 s) and — the first live capture of `draft_hr_email`,
+whose two endings had only replayed tests behind them —
+[`docs/evidence/draft-hr-email-live-2026-09-22.txt`](docs/evidence/draft-hr-email-live-2026-09-22.txt)
+(one ask driven twice: **confirmed** opens *"Done — the email draft is ready for Dana Whitfield.
+Reference MOCK-EMAIL-000020."*, 20 spans, 8 s; **cancelled** answers *"Cancelled — nothing was
+created…"* and nothing else, 15 spans, 6 s, with `GET /api/traces/tools` showing the one write
+between them). **Earlier live runs are kept as history:** both tasks on 2026-09-11 —
 [`docs/evidence/demo-task-1-live-2026-09-11.txt`](docs/evidence/demo-task-1-live-2026-09-11.txt)
 (8 citations across 3 documents, 30 spans, a `conditional` verdict) and
 [`docs/evidence/demo-task-2-live-2026-09-11.txt`](docs/evidence/demo-task-2-live-2026-09-11.txt)
-(the confirmation gate, then `MOCK-HR-000005`, 4 citations across 2 documents, 29 spans). Demo
-task 2 was then **re-run on the build being submitted** —
+(the confirmation gate, then `MOCK-HR-000005`, 4 citations across 2 documents, 29 spans) — and demo
+task 2 again on 2026-09-12 —
 [`docs/evidence/demo-task-2-live-2026-09-12.txt`](docs/evidence/demo-task-2-live-2026-09-12.txt)
 (the same gate, then `MOCK-HR-000006`, 4 citations across 2 documents, 32 spans, 40 s), run
 against `/health` sha `f5e86c3`. The trace store rolls, so these are the record of what the deployed
-instance actually did. The fourth pinned transcript is the **external MCP session** —
+instance actually did. One more pinned transcript is the **external MCP session** —
 [`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt)
 (plain `curl` from outside the service: `initialize` 200, `notifications/initialized`, `tools/list`
 returning all nine tools, a real `search_policy_documents` call with its retrieval span) — which is

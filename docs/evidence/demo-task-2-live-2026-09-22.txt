@@ -1,0 +1,120 @@
+# Demo task 2 against the live service, 2026-09-22 12:39:17Z–12:39:53Z (34.9 s of turn time).
+# Live build: /health `git_sha` 878217797ea19573e57f259350e4bf54d9df23fa (8782177) — a docs-only
+# commit on top of the app build 8a89310; `git diff 8a89310..8782177 -- src mcp Dockerfile
+# render.yaml requirements.txt` is empty, and so is the same diff to the commit this file lands on.
+# The instance was warm: GET /health 200, `cold_start: false` (demo task 1 ran immediately before).
+# Command: BASE_URL=https://mosaic-hr-copilot.onrender.com APP_ACCESS_TOKEN=<redacted> sh scripts/demo_task_2.sh
+# Verbatim stdout and stderr, merged in the order the script wrote them (the card lines and the two
+# assertions go to stderr); the bearer token is nowhere in the capture.
+#
+# One reading note, not an edit: the script prints the `performed` lede as "Done: …" because it
+# strips the block's own "Done — " (see its comment). The block text this turn served, from
+# `GET /api/traces/sessions/61be2fd9e86e076b4a0a62acd324cb87`, is
+# "Done — your request is with the HR Time Off team. Reference MOCK-HR-000019. Your manager Dana's
+# written approval is the next step." — `agent/outcome.py`'s statement with `agent/approvers.py`
+# having filled the bare role with the persona's own manager name.
+
+== Demo task 2 — PTO request with a confirmation-gated mock write
+   https://mosaic-hr-copilot.onrender.com
+   "Can I take three days of PTO from Tuesday 6 October to Thursday 8 October 2026 — and can you open the request for me?"
+
+-- the confirmation card (nothing has been created yet, and there is no token in this body)
+   action:  create_mock_hr_ticket
+   summary: Open an HR ticket with the HR Time Off team: "PTO Request: 3 days, 6–8 October 2026".
+   employee_id: E1042
+   priority: normal
+   queue: hr-timeoff
+   summary: PTO Request: 3 days, 6–8 October 2026
+
+-- Confirm: POST /chat/confirm mints the one-time token and the write happens
+
+-- outcome: answered
+
+-- answer
+Done: your request is with the HR Time Off team. Reference MOCK-HR-000019. Your manager Dana's written approval is the next step.
+
+PTO requests must be submitted at least 5 business days in advance.
+
+Your balance is 13.5 days remaining. The request for 3 business days is covered.
+
+Every PTO request requires written approval from your direct manager in MosaicOne.
+
+PTO requests of any length are approved by the direct manager.
+
+Written manager approval in MosaicOne: not verified from your record — confirm before you proceed.
+
+Next steps:
+- Dana reviews and approves the request in MosaicOne
+- Check MosaicOne for the approval decision
+
+-- the confirmed write is reported as done: MOCK-HR-000019 in the lede 'performed' block
+-- and no next step asks for it again (2 step(s) kept)
+
+-- citations (3 from 2 document(s))
+  [pto-and-holidays] Requesting Time Off > Notice Requirements
+      PTO requests must be submitted at least 5 business days in advance. A request of six or more consecutive business days requires 15 business 
+      /policy/pto-and-holidays#c_16186f87d12c1302
+  [pto-and-holidays] Requesting Time Off > Approval Chain
+      Every PTO request requires written approval from the employee's direct manager in MosaicOne. Verbal agreement, a message in chat and an emai
+      /policy/pto-and-holidays#c_d57a7964d974ba44
+  [manager-approval-matrix] Time Off
+      PTO requests of any length are approved by the employee's direct manager. Longer requests and requests overlapping a blackout period additio
+      /policy/manager-approval-matrix#c_9948839107acfaaf
+
+-- trace (36 spans)
+    1  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+    2  guardrail      G4_injection_shield               0 ms  verdict=allow · 1 user message passage clean
+    3  llm_call       anthropic:claude-haiku-4-5     1737 ms  purpose=route · 1,696→130 tok
+    4  plan           router                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+    5  llm_call       anthropic:claude-haiku-4-5     1617 ms  purpose=act · 3,909→194 tok
+    6  tool_call      check_pto_balance               134 ms  check_pto_balance · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "computed_at": "2026-09-22T12:39:22Z", "accrual_rate_days_per_month": 1.5, "accrual_fact_key": "pto.accrual.ft_…
+    7  tool_call      check_policy_compliance          10 ms  check_policy_compliance · ok
+        args   {"scenario": "pto_request", "employee_id": "E1042", "parameters": {"start_date": "2026-10-06", "end_date": "2026-10-08"}}
+        result {"scenario": "pto_request", "verdict": "conditional", "as_of": "2026-09-01", "submitted_on": "2026-09-22", "computed": {"as_of": "2026-09-01", "submitted_on": …
+    8  guardrail      G4_injection_shield               0 ms  verdict=allow · 4 compliance evidence passages clean
+    9  llm_call       anthropic:claude-haiku-4-5     2733 ms  purpose=act · 5,986→210 tok
+   10  llm_call       anthropic:claude-haiku-4-5     2773 ms  purpose=act · 6,306→278 tok
+   11  tool_call      search_policy_documents         391 ms  search_policy_documents · ok
+        args   {"query": "PTO request manager approval required", "topic": "pto", "k": 5}
+        result {"hits": [{"chunk_id": "c_d57a7964d974ba44", "doc_id": "pto-and-holidays", "doc_title": "PTO & Holidays Policy", "heading_path": "Requesting Time Off > Approva…
+   12  retrieval      search_policy_documents         373 ms  5 passages · best match 0.80 · manager-approval-matrix, pto-and-holidays
+   13  tool_call      search_policy_documents         408 ms  search_policy_documents · ok
+        args   {"query": "notice business days advance PTO request", "topic": "pto", "k": 5}
+        result {"hits": [{"chunk_id": "c_16186f87d12c1302", "doc_id": "pto-and-holidays", "doc_title": "PTO & Holidays Policy", "heading_path": "Requesting Time Off > Notice …
+   14  retrieval      search_policy_documents         400 ms  5 passages · best match 0.82 · leave-of-absence, manager-approval-matrix, pto-and-holidays
+   15  tool_call      search_policy_documents         403 ms  search_policy_documents · ok
+        args   {"query": "PTO balance accrual full-time employees", "topic": "pto", "k": 5}
+        result {"hits": [{"chunk_id": "c_6fe8009f6b657b16", "doc_id": "pto-and-holidays", "doc_title": "PTO & Holidays Policy", "heading_path": "Accrual > Accrual Caps", "sec…
+   16  retrieval      search_policy_documents         394 ms  5 passages · best match 0.81 · leave-of-absence, pto-and-holidays
+   17  guardrail      G4_injection_shield               0 ms  verdict=allow · 9 retrieval passages clean
+   18  llm_call       anthropic:claude-haiku-4-5     6028 ms  purpose=act · 11,977→353 tok
+   19  llm_call       anthropic:claude-haiku-4-5     3276 ms  purpose=act · 12,391→274 tok
+   20  tool_call      create_mock_hr_ticket            89 ms  create_mock_hr_ticket · paused for confirmation
+        args   {"employee_id": "E1042", "queue": "hr-timeoff", "summary": "PTO Request: 3 days, 6–8 October 2026", "details": "Employee E1042 requests three days of PTO from …
+        result {"status": "confirmation_required", "code": "CONFIRMATION_REQUIRED", "action": "create_mock_hr_ticket", "human_summary": "Open an HR ticket with the HR Time Of…
+   21  confirmation   create_mock_hr_ticket             0 ms  create_mock_hr_ticket · confirmed
+   22  plan           act_summary                       0 ms  intent=action workflow=pto_request catalog_reopened=false
+   23  tool_call      lookup_employee_profile          92 ms  lookup_employee_profile · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "preferred_name": "Priya", "legal_name": "Priya Raghavan", "title": "Senior Robotics Engineer", "department": "…
+   24  plan           replan                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+   25  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+   26  guardrail      G4_injection_shield               0 ms  verdict=allow · 4 compliance evidence passages clean
+   27  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+   28  tool_call      create_mock_hr_ticket           127 ms  create_mock_hr_ticket · ok
+        args   {"employee_id": "E1042", "queue": "hr-timeoff", "summary": "PTO Request: 3 days, 6–8 October 2026", "details": "Employee E1042 requests three days of PTO from …
+        result {"status": "created", "ticket_id": "MOCK-HR-000019", "queue": "hr-timeoff", "priority": "normal", "created_at": "2026-09-22T12:39:41Z", "employee_id": "E1042",…
+   29  guardrail      G1_evidence_gate                  0 ms  verdict=allow · evidence-gate score 0.81, 13 supporting passages
+   30  llm_call       anthropic:claude-haiku-4-5     8755 ms  purpose=synthesize · 7,694→254 tok
+   31  guardrail      G2_citation_resolvability         0 ms  verdict=allow · 2 of 2 citation links resolved (1 source)
+   32  guardrail      G3_fact_vs_recommendation         0 ms  verdict=allow · 4 blocks, every policy_fact cited
+   33  llm_call       anthropic:claude-haiku-4-5     3597 ms  purpose=repair · 8,204→310 tok
+   34  guardrail      G2_citation_resolvability         0 ms  verdict=allow · 3 of 3 citation links resolved (2 sources)
+   35  guardrail      G3_fact_vs_recommendation         0 ms  verdict=allow · 5 blocks, every policy_fact cited
+   36  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+
+-- usage: 8 model call(s), 8 tool call(s), 3 retrieval(s), 58163→2003 tokens in 34864 ms
+-- dashboard: /dashboard/sessions/61be2fd9e86e076b4a0a62acd324cb87#turn-1
+exit=0

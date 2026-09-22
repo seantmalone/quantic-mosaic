@@ -1,0 +1,133 @@
+# Demo task 1 against the live service, 2026-09-22 12:38:03Z–12:38:43Z (38.2 s of turn time).
+# Live build: /health `git_sha` 878217797ea19573e57f259350e4bf54d9df23fa (8782177) — a docs-only
+# commit on top of the app build 8a89310; `git diff 8a89310..8782177 -- src mcp Dockerfile
+# render.yaml requirements.txt` is empty, and so is the same diff to the commit this file lands on.
+# Warm-up: GET /health was 200 with `cold_start: true` (up 34 min, no turn served since boot) before
+# this run and `cold_start: false` after it, so demo task 1 is the first turn of the instance's life.
+# Command: BASE_URL=https://mosaic-hr-copilot.onrender.com APP_ACCESS_TOKEN=<redacted> sh scripts/demo_task_1.sh
+# Verbatim stdout+stderr (stderr was empty); the bearer token is nowhere in the capture.
+
+== Demo task 1 — international remote-work eligibility
+   https://mosaic-hr-copilot.onrender.com
+   "I want to work from Berlin from 3 November to 14 December 2026 — can I?"
+
+-- outcome: answered
+
+-- answer
+You have completed 3 years 9 months of continuous service, exceeding the 12-month minimum required to work outside your home country.
+
+Your proposed stay of 42 consecutive days exceeds the 30-day threshold, so it requires director approval and a Tax & Legal review before travel begins.
+
+Germany is an approved destination for temporary work abroad.
+
+Your 42-day stay falls within the rolling 90-day annual limit for work outside your home country.
+
+You must use a company-managed, full-disk-encrypted laptop with always-on VPN, and IT Security must be notified of the destination at least 5 business days before departure.
+
+Always-on VPN is required whenever a company device connects to a network that Mosaic Robotics does not control, including home networks and hotel networks.
+
+You may not sign contracts or negotiate customer agreements on behalf of Mosaic Robotics while abroad; Tax & Legal will review your planned activities and may impose restrictions such as a prohibition on customer-facing work.
+
+Recommendation — not company policy: Raise the request in MosaicOne under 'Work from another country' with your exact dates (3 November to 14 December 2026) and the address of your workspace in Berlin.
+
+You have 42 calendar days' notice, which satisfies the 21-day requirement.
+
+Recommendation — not company policy: File the Tax & Legal review request alongside your manager Dana approval, naming the destination, dates, workspace address and a description of the work you will perform while abroad.
+
+Recommendation — not company policy: Confirm with IT Security that your travel laptop meets the encryption and VPN requirements before you depart.
+
+Company-managed laptop with full-disk encryption and always-on VPN: not verified from your record — confirm before you proceed.
+
+Next steps:
+- Raise the request in MosaicOne with exact dates and workspace address.
+- File Tax & Legal review request with work description.
+- Confirm laptop encryption and VPN with IT Security.
+
+-- citations (8 from 4 document(s))
+  [remote-and-hybrid-work] Working Outside Your Home Country > Eligibility
+      Employees must have completed at least 12 months of continuous service to work outside their home country. The requirement applies to tempor
+      /policy/remote-and-hybrid-work#c_6577bf6f392890bf
+  [tax-and-location-addendum] Duration Thresholds > Stays Exceeding 30 Days
+      A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins.
+      /policy/tax-and-location-addendum#c_c502ccd2ba5028f5
+  [manager-approval-matrix] Remote Work > International
+      International remote work of more than 30 days requires approval from the employee's director and from Tax & Legal. Shorter stays are a dire
+      /policy/manager-approval-matrix#c_0d2c84e4df38b6a0
+  [tax-and-location-addendum] Approved Countries
+      Germany, Ireland, the Netherlands, Portugal, Spain, Canada and Mexico are approved destinations for temporary work abroad. The list is maint
+      /policy/tax-and-location-addendum#c_b189d36f26fb7c60
+  [remote-and-hybrid-work] Working Outside Your Home Country > Duration Limits
+      No employee may work outside their home country for more than 90 days in a rolling 12-month period. The 90-day figure is a company limit and
+      /policy/remote-and-hybrid-work#c_864fb910f46475a7
+  [remote-and-hybrid-work] Working Outside Your Home Country > Device and Connectivity Requirements
+      Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. Personal devices may not 
+      /policy/remote-and-hybrid-work#c_57b2015388bbf7d4
+  [security-acceptable-use] Working in Public Places
+      Always-on VPN is required whenever a company device connects to a network that Mosaic Robotics does not control. That includes home networks
+      /policy/security-acceptable-use#c_21fb57a686af7f30
+  [tax-and-location-addendum] Permanent Establishment Risk
+      A permanent establishment is a taxable presence that a company creates in a country by having a fixed place of business there, or by having 
+      /policy/tax-and-location-addendum#c_b2664838607c21cd
+
+-- trace (39 spans)
+    1  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+    2  guardrail      G4_injection_shield               0 ms  verdict=allow · 1 user message passage clean
+    3  llm_call       anthropic:claude-haiku-4-5     2981 ms  purpose=route · 1,686→135 tok
+    4  plan           router                            0 ms  intent=workflow workflow=remote_work_eligibility catalog_reopened=false
+    5  llm_call       anthropic:claude-haiku-4-5     1444 ms  purpose=act · 3,899→148 tok
+    6  tool_call      lookup_employee_profile         157 ms  lookup_employee_profile · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "preferred_name": "Priya", "legal_name": "Priya Raghavan", "title": "Senior Robotics Engineer", "department": "…
+    7  tool_call      search_policy_documents         601 ms  search_policy_documents · ok
+        args   {"query": "international remote work Berlin Germany requirements approval", "topic": "remote_work"}
+        result {"hits": [{"chunk_id": "c_763b799ee8de38d2", "doc_id": "tax-and-location-addendum", "doc_title": "Tax & Location Addendum", "heading_path": "Frequently Asked S…
+    8  retrieval      search_policy_documents         537 ms  5 passages · best match 0.74 · remote-and-hybrid-work, tax-and-location-addendum
+    9  guardrail      G4_injection_shield               0 ms  verdict=allow · 5 retrieval passages clean
+   10  llm_call       anthropic:claude-haiku-4-5     1714 ms  purpose=act · 6,316→149 tok
+   11  tool_call      check_policy_compliance         971 ms  check_policy_compliance · ok
+        args   {"scenario": "international_remote", "employee_id": "E1042", "parameters": {"destination_country": "Germany", "start_date": "2026-11-03", "end_date": "2026-12-…
+        result {"scenario": "international_remote", "verdict": "conditional", "as_of": "2026-09-01", "submitted_on": "2026-09-22", "computed": {"as_of": "2026-09-01", "submit…
+   12  guardrail      G4_injection_shield               0 ms  verdict=allow · 6 compliance evidence passages clean
+   13  llm_call       anthropic:claude-haiku-4-5     4884 ms  purpose=act · 9,321→366 tok
+   14  llm_call       anthropic:claude-haiku-4-5     2550 ms  purpose=act · 9,849→307 tok
+   15  tool_call      search_policy_documents         460 ms  search_policy_documents · ok
+        args   {"query": "company-managed laptop full-disk encryption VPN device requirements international remote work", "topic": "remote_work", "k": 5}
+        result {"hits": [{"chunk_id": "c_57b2015388bbf7d4", "doc_id": "remote-and-hybrid-work", "doc_title": "Remote & Hybrid Work Policy", "heading_path": "Working Outside Y…
+   16  retrieval      search_policy_documents         450 ms  5 passages · best match 0.77 · remote-and-hybrid-work, tax-and-location-addendum
+   17  tool_call      search_policy_documents         498 ms  search_policy_documents · ok
+        args   {"query": "12 months continuous service tenure requirement work outside home country", "topic": "remote_work", "k": 5}
+        result {"hits": [{"chunk_id": "c_6577bf6f392890bf", "doc_id": "remote-and-hybrid-work", "doc_title": "Remote & Hybrid Work Policy", "heading_path": "Working Outside Y…
+   18  retrieval      search_policy_documents         404 ms  5 passages · best match 0.78 · remote-and-hybrid-work, tax-and-location-addendum
+   19  tool_call      search_policy_documents         495 ms  search_policy_documents · ok
+        args   {"query": "90 days rolling 12-month period annual limit work abroad", "topic": "remote_work", "k": 5}
+        result {"hits": [{"chunk_id": "c_864fb910f46475a7", "doc_id": "remote-and-hybrid-work", "doc_title": "Remote & Hybrid Work Policy", "heading_path": "Working Outside Y…
+   20  retrieval      search_policy_documents         401 ms  5 passages · best match 0.86 · remote-and-hybrid-work, tax-and-location-addendum
+   21  guardrail      G4_injection_shield               0 ms  verdict=allow · 2 retrieval passages clean
+   22  llm_call       anthropic:claude-haiku-4-5     6341 ms  purpose=act · 15,802→526 tok
+   23  llm_call       anthropic:claude-haiku-4-5     2424 ms  purpose=act · 16,425→280 tok
+   24  tool_call      search_policy_documents         335 ms  search_policy_documents · ok
+        args   {"query": "approved countries list Germany Ireland Netherlands Portugal Spain Canada Mexico", "topic": "tax_location", "k": 5}
+        result {"hits": [{"chunk_id": "c_b189d36f26fb7c60", "doc_id": "tax-and-location-addendum", "doc_title": "Tax & Location Addendum", "heading_path": "Approved Countries…
+   25  retrieval      search_policy_documents         326 ms  5 passages · best match 0.78 · manager-approval-matrix, tax-and-location-addendum, travel-policy
+   26  tool_call      search_policy_documents         494 ms  search_policy_documents · ok
+        args   {"query": "manager approval director approval matrix international remote work authority", "topic": "approvals", "k": 5}
+        result {"hits": [{"chunk_id": "c_0d2c84e4df38b6a0", "doc_id": "manager-approval-matrix", "doc_title": "Manager Approval Matrix", "heading_path": "Remote Work > Intern…
+   27  retrieval      search_policy_documents         398 ms  5 passages · best match 0.75 · manager-approval-matrix, pto-and-holidays, remote-and-hybrid-work
+   28  tool_call      search_policy_documents         489 ms  search_policy_documents · ok
+        args   {"query": "IT Security notification conditional access travel risk monitoring", "topic": "data_security", "k": 5}
+        result {"hits": [{"chunk_id": "c_21fb57a686af7f30", "doc_id": "security-acceptable-use", "doc_title": "Security & Acceptable Use Policy", "heading_path": "Working in …
+   29  retrieval      search_policy_documents         308 ms  5 passages · best match 0.71 · remote-and-hybrid-work, security-acceptable-use, travel-policy
+   30  guardrail      G4_injection_shield               0 ms  verdict=allow · 8 retrieval passages clean
+   31  plan           act_summary                       0 ms  intent=workflow workflow=remote_work_eligibility catalog_reopened=false
+   32  guardrail      G1_evidence_gate                  0 ms  verdict=allow · evidence-gate score 0.75, 21 supporting passages
+   33  llm_call       anthropic:claude-haiku-4-5     6591 ms  purpose=synthesize · 11,207→597 tok
+   34  guardrail      G2_citation_resolvability         0 ms  verdict=allow · 7 of 7 citation links resolved (3 sources)
+   35  guardrail      G3_fact_vs_recommendation         0 ms  verdict=allow · 9 blocks, every policy_fact cited
+   36  llm_call       anthropic:claude-haiku-4-5     3359 ms  purpose=repair · 12,082→687 tok
+   37  guardrail      G2_citation_resolvability         0 ms  verdict=allow · 8 of 8 citation links resolved (4 sources)
+   38  guardrail      G3_fact_vs_recommendation         0 ms  verdict=allow · 10 blocks, every policy_fact cited
+   39  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+
+-- usage: 9 model call(s), 9 tool call(s), 7 retrieval(s), 86587→3195 tokens in 38249 ms
+-- dashboard: /dashboard/sessions/6e665d2134de3e8015481e09ba86d60f#turn-1
+exit=0

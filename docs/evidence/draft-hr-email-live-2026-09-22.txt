@@ -1,0 +1,158 @@
+# `draft_hr_email` against the live service, 2026-09-22 12:41:43Z–12:42:11Z: the same ask driven
+# twice, confirmed once and cancelled once. First live capture of this tool's two endings.
+# Live build: /health `git_sha` 878217797ea19573e57f259350e4bf54d9df23fa (8782177) — a docs-only
+# commit on top of the app build 8a89310, the build that carries task 1c's fixes (`grounded_by_write`
+# in g1, and the receipt that replaces a refusal on a cancelled write); `git diff 8a89310..8782177 --
+# src mcp Dockerfile render.yaml requirements.txt` is empty, as is the same diff to the commit this
+# file lands on. The instance was warm: GET /health 200, `cold_start: false`.
+#
+# No committed script covers `draft_hr_email`, so the two turns were driven by a throwaway urllib
+# driver whose printing mirrors `scripts/demo_task_2.sh` (same card lines, citations, span table and
+# usage line, plus one extra `answer blocks` table because the endings are about block types). Every
+# request it made is printed above its own output, with its method, path and body, so the run is
+# reproducible with plain curl:
+#
+#   curl -X POST "$BASE_URL/chat" -H 'Content-Type: application/json' \
+#        -H "Authorization: Bearer $APP_ACCESS_TOKEN" \
+#        -d '{"message":"<the prompt>","client_label":"demo"}'
+#   curl -X POST "$BASE_URL/chat/confirm" -H 'Content-Type: application/json' \
+#        -H "Authorization: Bearer $APP_ACCESS_TOKEN" \
+#        -d '{"session_id":"…","turn_id":"…","decision":"confirmed"}'   # then again, "declined"
+#
+# The prompt is the one task 4's report recorded against the earlier build, unchanged; the agent
+# proposed `draft_hr_email` on the first try both times, so no rewording was needed.
+# Verbatim output, token redacted from the header above and absent from the capture below.
+
+== draft_hr_email ① — confirmed: the draft is made and the answer opens with it
+   https://mosaic-hr-copilot.onrender.com
+   "Can you draft an email to my manager Dana asking her to approve three days of PTO from Tuesday 6 October to Thursday 8 October 2026?"
+
+-- POST /chat  {"message": "<the prompt above>", "client_label": "demo"}
+-- HTTP 200, outcome awaiting_confirmation
+-- the confirmation card (nothing has been created yet, and there is no token in this body)
+   action:  draft_hr_email
+   summary: Draft an email to Dana Whitfield (manager) about: "Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026".
+   employee_id: E1042
+   purpose: Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026
+   recipient_role: manager
+   to_name: Dana Whitfield
+
+-- POST /chat/confirm  {"session_id": "9e05a2148db78f783f5c2d38ae9ee058", "turn_id": "dcf249b268f2a005c5220da0d4ea2c28", "decision": "confirmed"}
+-- HTTP 200
+
+-- outcome: answered
+
+-- answer
+Done — the email draft is ready for Dana Whitfield. Reference MOCK-EMAIL-000020.
+
+Your PTO balance is 13.5 days. You are requesting three days from Tuesday, 6 October to Thursday, 8 October 2026, which is within your available balance.
+
+Next steps:
+- Await Dana's written approval
+- Check your email for her response
+
+-- citations (0 from 0 document(s))
+
+-- answer blocks, in order (the type each is rendered under)
+  performed      Done — the email draft is ready for Dana Whitfield. Reference MOCK-EMAIL-000020.
+  record         Your PTO balance is 13.5 days. You are requesting three days from Tuesday, 6 October to Thursday, 8 October 2026, which is within your available balance.
+
+-- trace (20 spans)
+    1  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+    2  guardrail      G4_injection_shield               0 ms  verdict=allow · 1 user message passage clean
+    3  llm_call       anthropic:claude-haiku-4-5     1779 ms  purpose=route · 1,696→115 tok
+    4  plan           router                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+    5  llm_call       anthropic:claude-haiku-4-5     1102 ms  purpose=act · 3,909→89 tok
+    6  tool_call      check_pto_balance                 6 ms  check_pto_balance · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "computed_at": "2026-09-22T12:41:47Z", "accrual_rate_days_per_month": 1.5, "accrual_fact_key": "pto.accrual.ft_…
+    7  llm_call       anthropic:claude-haiku-4-5     2352 ms  purpose=act · 4,259→277 tok
+    8  tool_call      draft_hr_email                    8 ms  draft_hr_email · paused for confirmation
+        args   {"employee_id": "E1042", "recipient_role": "manager", "purpose": "Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026",…
+        result {"status": "confirmation_required", "code": "CONFIRMATION_REQUIRED", "action": "draft_hr_email", "human_summary": "Draft an email to Dana Whitfield (manager) a…
+    9  confirmation   draft_hr_email                    0 ms  draft_hr_email · confirmed
+   10  plan           act_summary                       0 ms  intent=action workflow=pto_request catalog_reopened=false
+   11  tool_call      lookup_employee_profile           9 ms  lookup_employee_profile · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "preferred_name": "Priya", "legal_name": "Priya Raghavan", "title": "Senior Robotics Engineer", "department": "…
+   12  plan           replan                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+   13  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+   14  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+   15  tool_call      draft_hr_email                  182 ms  draft_hr_email · ok
+        args   {"employee_id": "E1042", "recipient_role": "manager", "purpose": "Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026",…
+        result {"status": "drafted", "draft_id": "MOCK-EMAIL-000020", "to_role": "manager", "to_name": "Dana Whitfield", "subject": "Request approval for three days of PTO fr…
+   16  guardrail      G1_evidence_gate                  0 ms  verdict=allow · the write this turn performed is the evidence for the answer: no policy evidence was retrieved for this question
+   17  llm_call       anthropic:claude-haiku-4-5     2263 ms  purpose=synthesize · 2,497→150 tok
+   18  guardrail      G2_citation_resolvability         0 ms  verdict=allow · 0 of 0 citation links resolved (0 sources)
+   19  guardrail      G3_fact_vs_recommendation         0 ms  verdict=allow · 2 blocks, every policy_fact cited
+   20  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+
+-- usage: 4 model call(s), 4 tool call(s), 0 retrieval(s), 12361→631 tokens in 8458 ms
+-- dashboard: /dashboard/sessions/9e05a2148db78f783f5c2d38ae9ee058#turn-1
+exit=0
+
+== draft_hr_email ② — cancelled: the receipt is the answer and nothing is created
+   https://mosaic-hr-copilot.onrender.com
+   "Can you draft an email to my manager Dana asking her to approve three days of PTO from Tuesday 6 October to Thursday 8 October 2026?"
+
+-- POST /chat  {"message": "<the prompt above>", "client_label": "demo"}
+-- HTTP 200, outcome awaiting_confirmation
+-- the confirmation card (nothing has been created yet, and there is no token in this body)
+   action:  draft_hr_email
+   summary: Draft an email to Dana Whitfield (manager) about: "Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026".
+   employee_id: E1042
+   purpose: Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026
+   recipient_role: manager
+   to_name: Dana Whitfield
+
+-- POST /chat/confirm  {"session_id": "11b25c0746c6ca6074542bc2d2e6ce54", "turn_id": "07eb61bd114b9d69e82b4935e56a64e7", "decision": "declined"}
+-- HTTP 200
+
+-- outcome: refused
+
+-- answer
+Cancelled — nothing was created. Ask again whenever you would like me to open it.
+
+Next steps:
+- I can help with things like PTO and holidays, remote and hybrid work, travel and expenses, benefits and conduct.
+- If this is urgent, contact People Operations at people-ops@mosaicrobotics.example.
+
+-- citations (0 from 0 document(s))
+
+-- answer blocks, in order (the type each is rendered under)
+  notice         Cancelled — nothing was created. Ask again whenever you would like me to open it.
+
+-- trace (15 spans)
+    1  mcp_discovery  mosaic-hr                         0 ms  9 tools discovered over http
+    2  guardrail      G4_injection_shield               0 ms  verdict=allow · 1 user message passage clean
+    3  llm_call       anthropic:claude-haiku-4-5     1449 ms  purpose=route · 1,696→112 tok
+    4  plan           router                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+    5  llm_call       anthropic:claude-haiku-4-5     1068 ms  purpose=act · 3,909→89 tok
+    6  tool_call      check_pto_balance                 7 ms  check_pto_balance · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "computed_at": "2026-09-22T12:42:08Z", "accrual_rate_days_per_month": 1.5, "accrual_fact_key": "pto.accrual.ft_…
+    7  llm_call       anthropic:claude-haiku-4-5     2442 ms  purpose=act · 4,259→288 tok
+    8  tool_call      draft_hr_email                    7 ms  draft_hr_email · paused for confirmation
+        args   {"employee_id": "E1042", "recipient_role": "manager", "purpose": "Request approval for three days of PTO from Tuesday, October 6 to Thursday, October 8, 2026",…
+        result {"status": "confirmation_required", "code": "CONFIRMATION_REQUIRED", "action": "draft_hr_email", "human_summary": "Draft an email to Dana Whitfield (manager) a…
+    9  confirmation   draft_hr_email                    0 ms  draft_hr_email · declined
+   10  plan           act_summary                       0 ms  intent=action workflow=pto_request catalog_reopened=false
+   11  tool_call      lookup_employee_profile           8 ms  lookup_employee_profile · ok
+        args   {"employee_id": "E1042"}
+        result {"employee_id": "E1042", "as_of": "2026-09-01", "preferred_name": "Priya", "legal_name": "Priya Raghavan", "title": "Senior Robotics Engineer", "department": "…
+   12  plan           replan                            0 ms  intent=action workflow=pto_request catalog_reopened=false
+   13  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+   14  guardrail      G1_evidence_gate                  0 ms  verdict=refuse · no policy evidence was retrieved for this question
+   15  guardrail      G6_pii_secret_redaction           0 ms  verdict=allow · final answer carried nothing to redact
+
+-- usage: 3 model call(s), 3 tool call(s), 0 retrieval(s), 9864→489 tokens in 5525 ms
+-- dashboard: /dashboard/sessions/11b25c0746c6ca6074542bc2d2e6ce54#turn-1
+exit=0
+
+-- and the write ledger agrees that turn ② created nothing.
+   GET /api/traces/tools, immediately after both turns:
+   {"tool_name": "draft_hr_email", "calls": 5, "sample_n": 5, "errors": 0, "confirmation_pauses": 3, "error_rate": 0.0, "duration_n": 5, "p50_ms": 8.0, "p95_ms": 167.8}
+   Task 4's report recorded this row as calls 2, confirmation_pauses 1 on the earlier build. The two
+   turns above added three calls: ① paused and then performed (2), ② paused and stopped (1). One
+   MOCK-EMAIL id was allocated across both turns — MOCK-EMAIL-000020, turn ①'s — and turn ②'s trace
+   carries no `draft_hr_email · ok` span at all.
