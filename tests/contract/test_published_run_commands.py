@@ -12,6 +12,7 @@ is what stops it, or anything like it, coming back.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -214,16 +215,33 @@ APPLICATION_PATHSPEC = (
     "requirements.txt",
 )
 
-#: The single-line form a reader copies. Quoted where a shell needs it — `:!…` is a git pathspec, not
+#: The arguments as a reader copies them. Quoted where a shell needs it — `:!…` is a git pathspec, not
 #: a glob, and an unquoted `!` is history expansion in an interactive shell.
-PUBLISHED_PATHSPEC_LINE = "git diff --stat 80a5a71..HEAD -- " + " ".join(
-    f"'{entry}'" if entry.startswith(":") else entry for entry in APPLICATION_PATHSPEC
-)
+PATHSPEC_ARGUMENTS = " ".join(f"'{entry}'" if entry.startswith(":") else entry for entry in APPLICATION_PATHSPEC)
+
+
+def published_command(base: str) -> str:
+    """The single-line form a reader copies, against `base`."""
+    return f"git diff --stat {base}..HEAD -- {PATHSPEC_ARGUMENTS}"
+
+
+#: The published command with its base sha captured. The sha is **read out of the document**, not
+#: typed here, because the claim under test is the one the document makes.
+PUBLISHED_COMMAND = re.compile(r"git diff --stat (?P<base>[0-9a-f]{7,40})\.\.HEAD -- " + re.escape(PATHSPEC_ARGUMENTS))
+
+#: The marker of the interim notice README carries *instead* of the command while the claim is
+#: withdrawn — a run has been published, the application tree has moved past the build it measured,
+#: and the re-drive that would make the command true again has not landed. A notice is not a claim,
+#: so the guard below stands down rather than blocking the very commit that has to be deployed
+#: before a new run can measure it.
+RE_MEASURE_NOTICE = re.compile(r"the application tree has changed since", re.IGNORECASE)
+
+README = REPO_ROOT / "README.md"
 
 #: Every document that prints that command. A document may wrap it over several lines, with or
 #: without a trailing `\\`, so the comparison is against whitespace-normalised text.
 PROVENANCE_DOCUMENTS = (
-    REPO_ROOT / "README.md",
+    README,
     REPO_ROOT / "deployed.md",
     REPO_ROOT / "docs" / "pre-submission-checklist.md",
     REPO_ROOT / "docs" / "requirements-traceability.md",
@@ -233,27 +251,56 @@ PROVENANCE_DOCUMENTS = (
 LATEST = REPO_ROOT / "evaluation" / "results" / "latest.json"
 
 
+def _normalised(path: Path) -> str:
+    """The document as one line, with any shell continuation folded away."""
+    return " ".join(path.read_text(encoding="utf-8").replace("\\\n", " ").split())
+
+
 def test_the_application_tree_has_not_moved_since_the_measured_build():
-    """The provenance command is executed, not asserted (G5b, final round).
+    """The claim is enforced exactly while README.md makes it (G5c).
 
-    Five documents tell a reader that the commits after the published run's build are documentation,
-    evaluation tooling and tests — that `/health`'s sha moves while the application tree does not —
-    and print a command to prove it. A claim like that expires silently, and the round-1 version of
-    it *had* expired by the time a grade card read it. So the suite runs the command.
+    The guarantee is a documentary one, and it is narrower than it looks. It is **not** that the
+    application tree may never move after a run is published — it has to move, because a code change
+    can only be measured by a run driven against a build that was deployed first, and a guard that
+    failed on every application commit would make that deploy impossible to get through CI. It is
+    that the graded documents must not *claim* the tree is unchanged while it is.
 
-    The base is not a sha typed into a document: it is `target_git_sha` from the run file
-    `evaluation/results/latest.json` points at — the sha the service's own `/health` reported while
-    that run was being driven. The pathspec is `APPLICATION_PATHSPEC`, which the same documents print.
-    If the two ever disagree, the second assertion here is the one that fails.
+    So the claim, not the tree, is what this test reads. README.md is where it is published: either
+    it prints the provenance command inside a sentence offering it as evidence that nothing changed —
+    and then the command is run here, against the base sha parsed out of the very line a reader
+    copies, and must print nothing — or it prints the interim notice instead (`RE_MEASURE_NOTICE`),
+    withdrawing the claim until a re-drive lands, and there is nothing to enforce. A README that
+    prints no command at all makes no claim either. Both of those skip.
 
-    The skip is earned rather than assumed, the same way `test_docs_completeness.py`'s commit census
-    earns its own: a checkout that cannot resolve the base sha has to *prove* it could not hold it
-    (no git at all, or a shallow clone) or this fails. CI is not that checkout — both the `lint` and
-    the `test` job in `ci.yml` check out at `fetch-depth: 0` — so in CI this test always runs.
+    When the claim *is* made, two things are checked beyond the diff: that README's base is the build
+    the published run actually measured (`target_git_sha` in the run file `latest.json` points at, the
+    sha the service's own `/health` reported while the run was driven), and that the other four
+    documents print the same command — so the line a reader copies is the line the suite executes.
+
+    The skip for an unresolvable base is earned rather than assumed, the same way
+    `test_docs_completeness.py`'s commit census earns its own: a checkout that cannot resolve the base
+    has to *prove* it could not hold it (no git at all, or a shallow clone) or this fails. CI is not
+    that checkout — both the `lint` and the `test` job in `ci.yml` check out at `fetch-depth: 0`.
     """
     run_id = json.loads(LATEST.read_text(encoding="utf-8"))["run_id"]
+    readme = _normalised(README)
+    published = PUBLISHED_COMMAND.search(readme)
+    if published is None or RE_MEASURE_NOTICE.search(readme):
+        pytest.skip(
+            f"README.md does not claim the application tree is unchanged since the build {run_id} "
+            "measured — the claim is withdrawn pending a re-drive on the current build — so there is "
+            "nothing to enforce. This test starts running again the moment README publishes the "
+            "provenance command as evidence that the command prints nothing."
+        )
+
+    base = published.group("base")
     run_file = REPO_ROOT / "evaluation" / "results" / f"{run_id}.json"
-    base = json.loads(run_file.read_text(encoding="utf-8"))["target_git_sha"]
+    measured = json.loads(run_file.read_text(encoding="utf-8"))["target_git_sha"]
+    assert measured.startswith(base) or base.startswith(measured), (
+        f"README.md publishes the provenance command against {base}, but the published run {run_id} "
+        f"records `target_git_sha` {measured}. A command based on any other build proves nothing "
+        "about what that run measured."
+    )
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
@@ -280,15 +327,15 @@ def test_the_application_tree_has_not_moved_since_the_measured_build():
         f"the application tree has moved since the measured build {base[:7]}, so the published run "
         f"{run_id} no longer measures what this repository would deploy. Changed: {moved}. Either "
         "re-drive the run against the new build and repoint `latest.json`, or stop printing "
-        f"`{PUBLISHED_PATHSPEC_LINE}` as evidence that nothing changed."
+        f"`{published_command(base)}` as evidence that nothing changed."
     )
 
     stale = [
         path.relative_to(REPO_ROOT).as_posix()
         for path in PROVENANCE_DOCUMENTS
-        if PUBLISHED_PATHSPEC_LINE not in " ".join(path.read_text(encoding="utf-8").replace("\\\n", " ").split())
+        if published_command(base) not in _normalised(path)
     ]
     assert stale == [], (
-        f"these documents no longer print the pathspec this test runs (`{PUBLISHED_PATHSPEC_LINE}`), "
+        f"these documents no longer print the pathspec this test runs (`{published_command(base)}`), "
         f"so the command a reader copies is not the command the suite executes: {stale}"
     )

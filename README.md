@@ -270,21 +270,19 @@ with their expected answers, the judge-agreement figures and the known limitatio
 `evaluation/dataset.yaml` (sha `2c8973147744…`), `target: deployed`, judged by
 `gemini-3.5-flash-lite` over 266 judge calls, driven and served by build **`80a5a71`**: the run file
 records that sha as its `target_git_sha`, and the live `/health` reported it at 21:58Z that day.
-Commits after it change documentation, evaluation tooling and tests only, so the sha `/health`
-reports moves on while the application tree does not, and the relation is a command rather than a
-promise:
 
-```bash
-git diff --stat 80a5a71..HEAD -- src mcp/tools mcp/server_entrypoint.py \
-  mcp/run_stdio.sh mcp/run_http.sh corpus ':!corpus/README.md' \
-  data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt
-```
-
-**It printed nothing at `97177e5`, checked 2026-09-22 — and it is no longer only a claim: the suite
-runs it.** `tests/contract/test_published_run_commands.py` reads the measured build out of
-`evaluation/results/latest.json` → the run file's own `target_git_sha` and runs that exact pathspec as
-`git diff --quiet`, so a commit that moves the application tree fails a test and names the paths it
-moved instead of quietly falsifying this paragraph. Run it yourself at whatever HEAD you are reading.
+**The provenance command is withdrawn until the re-drive lands — and this is the honest reason.**
+The published run `r_1790110325_baseline` measured build `80a5a71`, and **the application tree has
+changed since**: round 3 landed the disabled-tool filter now enforced at the MCP call boundary, the
+rules engine's `not_stated` semantics, the expense-approver sentence and the compare-tab preference.
+So the published run no longer measures what this repository would deploy, and the `git diff --stat`
+line that used to stand here — the one asserting nothing in the application tree had moved — would
+print those six paths rather than nothing. Printing it anyway would be the one thing worse than not
+printing it. **A re-drive on the new build is in progress; the command is restored here, with its new
+base sha, when `evaluation/results/latest.json` points at that run.**
+`tests/contract/test_published_run_commands.py` reads this section to decide what to enforce: while
+this notice stands it skips, and the moment the command is published again it runs that exact pathspec
+as `git diff --quiet` and fails any commit that moves the application tree, naming the paths.
 
 The pathspec is **what the deployed service answers from, and nothing else**. `src`, the MCP server's
 code and schemas, the two launch scripts, the image, the service manifest and the pinned dependencies
