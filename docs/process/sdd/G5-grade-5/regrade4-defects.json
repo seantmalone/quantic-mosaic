@@ -1,0 +1,152 @@
+[
+ {
+  "rank": 1,
+  "title": "The `is_unsafe` substring gate hard-refuses legitimate in-corpus approval questions, and it is documented nowhere in the graded docs",
+  "severity": "medium",
+  "section": "3. Retrieval, prompting, citations & guardrails / 4. Agent orchestration",
+  "why_it_costs_marks": "Band 5 asks for \"correct, cited, grounded responses\" and \"excellent guardrails\". This is the only confirmed defect in the whole set that is a product behaviour rather than prose, and the only one the project's own disclosure discipline skipped: the structurally identical bare-balance rule gets a design-doc paragraph plus Known limitation 14, while this one appears in no graded document, has no negative test for the false-refusal class, and is not covered by the run's over_refusal_rate 0.000 (n=18) because no dataset item contains a listed phrase. It also carries live demo risk: an improvised question during the recording can hit it.",
+  "evidence": "`.venv/bin/python -c \"from hrmosaic.agent.router import is_unsafe; ...\"` returns True for \"What happens if I submit a request without manager approval?\", \"Can I take PTO without manager approval if my manager is on leave?\", \"Is there any way to skip the manager step when they are on holiday?\" and \"Who can approve my own expense report?\", and False for \"What is the policy on self-approval?\" \u2014 the intent the gate exists for. src/hrmosaic/agent/router.py:172-175 is a bare substring scan over 21 phrases; src/hrmosaic/agent/orchestrator.py:1236 calls it unconditionally on the raw message, before out_of_scope and clarify, returning `_refuse_unsafe` with outcome=\"refused\". The manager-on-leave case is answerable from corpus/manager-approval-matrix.md:141-172 (delegation rules). `grep -rIn 'is_unsafe|UNSAFE_PHRASES|_refuse_unsafe' README.md design-and-evaluation.md docs/requirements-traceability.md docs/demo-script.md` returns nothing.",
+  "fix": "Cheapest and highest-value: disclose it, which converts it from an undisclosed defect into the same bounded limitation class as the bare-balance rule \u2014 add a row to design-and-evaluation.md's safety section and a Known-limitations entry stating the 21-phrase breadth, the bound (adds a refusal only, fails closed, cites the matrix, redirects to People Ops, no tools/call, no write) and the fix. The code fix (gate on intent=='action' or a first-person request verb, or exclude negated forms) plus a negative test with the three phrasings above is the right answer but touches src/, which breaks the empty-diff provenance contract five documents print and forces a re-drive of the published run and both ablation arms.",
+  "effort": "15 min to disclose; ~1 h of code plus a full re-drive (~3 drives, $1.30-2.70) to fix properly"
+ },
+ {
+  "rank": 2,
+  "title": "The grade-wave process index contradicts the directory it indexes: 30 reports where its own printed command returns 31, and a fourth grade it does not mention",
+  "severity": "medium",
+  "section": "Submission files / 10. Documentation (ai-tooling.md support artifact)",
+  "why_it_costs_marks": "This is a recurrence: the fourth grade ranked the count defect #8, a57ed44 corrected 26\u219230, and the immediately following commit 204d48f added task-17-report.md without touching the count. The same paragraph set still frames the wave as three rounds and two re-grades while regrade3-report.md (titled \"Fourth grade\"), regrade3-defects.json (16 entries), regrade3-polish.json and task-17-report.md sit unindexed beside it. ai-tooling.md:381 links this directory, so a grader auditing the AI-use disclosure lands on an index that denies artifacts in its own folder and stakes its credibility on a command that refutes it.",
+  "evidence": "`ls docs/process/sdd/G5-grade-5/task-*-report.md | wc -l` \u2192 31 against docs/process/sdd/G5-grade-5/README.md:45 \"**Coverage: 12 briefs and 30 reports** at this commit\", four lines above the README's own instruction to run that command. README.md:1 heading \"(2026-09-21 \u2192 23, three rounds)\", :6 \"two further re-grades\", :17 \"## The three rounds\" with three rows, the What-is-here table ending at the regrade2 row, and the round-3 task list naming 14/15/16/5e but not 17 \u2014 while progress.md:159-161 records the fourth grade and Task 17's completion at a57ed44.",
+  "fix": "In docs/process/sdd/G5-grade-5/README.md: add a fourth rounds row (graded at f7852bb, band 4, 16 confirmed text defects, fixes land as a57ed44), add the three regrade3-* rows to the file table, add task 17 to the round-3 list, change the title and the \"two further re-grades\" clause to four grades / three fix rounds, and replace the literal count with a number-free sentence (\"one report per task; count them with the command below\") so the next copied report cannot falsify it again.",
+  "effort": "15 min"
+ },
+ {
+  "rank": 3,
+  "title": "The evaluation segment tells the presenter to walk two metric tiles the run-detail page does not render",
+  "severity": "low",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "docs/demo-script.md:85 is the one segment carrying the rubric's evaluation walkthrough, and two of the eight figures it names are not on the page it sends the presenter to. Worse, under that page's own **Workflow completion** heading the presenter would be saying 0.933 while the screen shows the per-workflow pills 66.7% and 50.0%. Falsifiable with a single GET, and the script elsewhere warns the presenter not to read figures off the Runs page where both figures actually live.",
+  "evidence": "The live run-detail page's strip is `headline_metrics + ('clarification_accuracy',)` (src/hrmosaic/web/templates/dashboard/eval_detail.html:66) over the eight keys in src/hrmosaic/web/dashboard.py:182-190, which exclude doc_recall_mean and workflow_completion (:220-221 labels them \"the two the compare tab charts\"). Python regex over the fetched page: `97.4` \u2192 0 hits, `93\\.3` \u2192 0 hits, \"Documents recalled\" \u2192 0 hits. Both figures are on /dashboard/evals and the Compare chart, which the same segment reaches seconds later.",
+  "fix": "Rewrite the tile-walk sentence to name the nine tiles actually on the strip, and move \"document recall 0.974\" and \"workflow completion 0.933\" into the Compare-tab beat at the end of the same segment where both are charted. One sentence, no code change.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 4,
+  "title": "design-and-evaluation.md names 34d50fb as \"the build that is deployed\" in the present tense, which one curl refutes",
+  "severity": "low",
+  "section": "10. Documentation",
+  "why_it_costs_marks": "Two present-tense sentences in the primary graded document are false at HEAD, and they are the two a grader falsifies first \u2014 the provenance check is the obvious thing to try. README.md and deployed.md both carry the correct hedge (\"the live sha moves; the application tree does not\"); the design document does not, and it never prints the pathspec that would let a reader reconcile the two shas in place.",
+  "evidence": "`curl -s https://mosaic-hr-copilot.onrender.com/health` \u2192 app.git_sha 204d48fd6104e53e9b526c37ab751f8086d93e2d = HEAD, against design-and-evaluation.md:20 \"live service on commit `34d50fb` \u2014 the build that is deployed\" and :1504 \"its `target_git_sha` equals the deployed sha\". The substance holds: `git diff --stat 34d50fb..HEAD -- src mcp/tools corpus data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt` printed nothing (exit 0).",
+  "fix": "Reword both to \"the build the application tree at HEAD still is \u2014 the live `/health` sha moves with every documentation deploy; see the pathspec command in `deployed.md`\" and link deployed.md's provenance paragraph, so the sentences survive the next docs push.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 5,
+  "title": "Three sentences point at \"the provenance pathspec this document prints\" in a document that prints no command",
+  "severity": "low",
+  "section": "10. Documentation",
+  "why_it_costs_marks": "A dangling self-reference in the primary graded document, three times, one of them (\"the pathspec above\") with no antecedent in either direction \u2014 line 604 is the file's first use of the word while the only provenance discussion is at 1053, below it. Tests/contract/test_published_run_commands.py pins five documents as printing the command identically and design-and-evaluation.md is deliberately not one of them, so \"this document prints\" is false by the project's own construction.",
+  "evidence": "`grep -n 'this document prints\\|pathspec above' design-and-evaluation.md` \u2192 604, 1053, 1991; `grep -c 'git diff' design-and-evaluation.md` \u2192 0. The five documents that do print it are README.md, deployed.md, docs/pre-submission-checklist.md, docs/requirements-traceability.md and CHANGELOG.md.",
+  "fix": "Either print the pathspec once in the deployment-choices section and add design-and-evaluation.md to the contract test's document list, or reword all three to \"the frozen provenance pathspec `deployed.md` prints\" with a link.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 6,
+  "title": "\"28 of them open mid-word\" overstates a measured 23 in three live places",
+  "severity": "low",
+  "section": "2. RAG ingestion & indexing / 10. Documentation",
+  "why_it_costs_marks": "A quantified claim in the graded design document that one script falsifies. 28 is the number of continuation windows whose first character is lowercase; 23 are preceded by a non-whitespace character and so genuinely open inside a word, because src/hrmosaic/rag/chunk.py:148-151 lstrips a window that starts on whitespace. The earlier regrade had it right at 23; the a57ed44 fix pass introduced the conflation while fixing the surrounding sentence.",
+  "evidence": "Grouping data/index/chunks.manifest.jsonl by (doc_id, heading_path): continuations 29, lowercase-first 28, preceded-by-non-space 23. Six continuations are preceded by a space or newline (e.g. ' ' \u2192 'nominates an onboarding b', '\\n' \u2192 'specific work, not genera'). Live at design-and-evaluation.md:241-243, :2170 and .env.example:56.",
+  "fix": "Change the three live sentences to \"28 open with a lowercase word and 23 open inside a word\", and keep the measuring snippet beside the figure so the next edit re-derives it.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 7,
+  "title": "Five source comments and the architecture page claim a decline emits a *second* confirmation span; the code resolves the pending one in place",
+  "severity": "low",
+  "section": "4. Agent orchestration / 10. Documentation",
+  "why_it_costs_marks": "docs/architecture.html:1649 asserts the exact inverse of the implementation (\"a second confirmation span is emitted, never an in-place update of the pending one\") in a reader-facing \u00a710 artifact, and web/api.py:1831 contradicts a comment 56 lines below it in the same function. None of these five sites is among the four stale comments Known limitation 15 discloses, so a grader grepping for the second span finds a contradiction the docs have not accounted for \u2014 and the limitation list's own stated criterion (\"contradicted by a live document or test\") is met by all of them.",
+  "evidence": "`grep -n add_span src/hrmosaic/web/api.py` \u2192 one hit, line 1518, and it writes an `error` span. The only confirmation-span writer in src/ is Orchestrator._propose (orchestrator.py:3007-3019, user_response=\"pending\"); decline_turn \u2192 _resolve_proposal \u2192 core/trace.py:947-970 `resolve_confirmation`, self-described as \"The only UPDATE to `spans` in the codebase\". Stale sites: src/hrmosaic/web/api.py:1831, src/hrmosaic/core/trace.py:111 and :886, docs/architecture.html:1647 and :1649. Contradicted in place by api.py:1887-1889.",
+  "fix": "Correct docs/architecture.html:1647/1649 now (it is outside the frozen pathspec), and add api.py:1831 and trace.py:111/886 to the limitation-15 list with their corrections until the next application rebuild.",
+  "effort": "20 min"
+ },
+ {
+  "rank": 8,
+  "title": "mcp/README.md and architecture.html say the per-turn tool array is \"OpenAI-shaped\"; the deployed provider is Anthropic",
+  "severity": "low",
+  "section": "5. MCP servers & tools / 10. Documentation",
+  "why_it_costs_marks": "R5.5 requires documenting how the agent client discovers and calls tools, and the Discovery flow is that artifact. The shape claim is false for the shipped path \u2014 render.yaml:23 sets LLM_PROVIDER=anthropic, and AnthropicAdapter._tool_payload emits {name, description, input_schema} with no OpenAI envelope. mcp/README.md also contradicts its own step 2, which already names AnthropicAdapter as the thing that shapes the wire, and design-and-evaluation.md:400 states it correctly, so the MCP documents disagree.",
+  "evidence": "mcp/README.md:83 \"converted to OpenAI-shaped function schemas\"; docs/architecture.html:1534 \"the live catalog becomes the OpenAI-shaped tools array every turn\" and :1625 the same. src/hrmosaic/core/llm/anthropic.py:274-284 returns {name, description, input_schema}; the `{\"type\": \"function\"}` envelope exists only in openai_compat.py:200-201, an adapter the deployed service does not select.",
+  "fix": "Reword all three to \"converted per turn to the provider's own tool shape \u2014 Anthropic-shaped by `AnthropicAdapter`, which is the deployed path \u2014 never a hard-coded list\". Leave the dated 2026-09-08 spec alone.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 9,
+  "title": "deployed.md's provenance table gives the published run a time its own stated rule contradicts",
+  "severity": "low",
+  "section": "7. Deployment",
+  "why_it_costs_marks": "deployed.md:71 states every time in that column is the run file's own `created_at`, and the most important row is the one row that does not follow it. The other nine baselines match their files to the second, so it reads as a transcription slip rather than a second convention \u2014 and the run file carries no judged-at field, so the printed value is not `created_at` under any reading.",
+  "evidence": "deployed.md:69 prints \"published \u2014 2026-09-23 02:59:40Z\"; `json.load('evaluation/results/r_1790130220_baseline.json')['created_at']` = 1790130688429615 \u00b5s = 2026-09-23T02:31:28.429615Z (= id epoch 02:23:40Z + duration_s 467.8). deployed.md:73 explains 02:59:40Z correctly as when the judged file closed.",
+  "fix": "Set the row to 2026-09-23 02:31:28Z and keep the judged instant as a separate clause (\"began 02:23:40Z, drive file written 02:31:28Z, judged file rewritten 02:59:40Z\"). A contract assertion that each row equals its run file's `created_at` would stop the column drifting \u2014 test_published_run_commands.py already reads these files.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 10,
+  "title": "Two source comments inside the frozen tree still carry pre-repair text (chunk.py docstring, synthesize.j2 chunk counts)",
+  "severity": "low",
+  "section": "2. RAG ingestion & indexing",
+  "why_it_costs_marks": "chunk.py:6-7 makes a false claim about its own function (\"cut on sentence boundaries so a chunk never begins mid-sentence\" \u2014 only the end is cut) in the module a \u00a72 grader opens to check the justified-chunking requirement. Explicitly disclosed with corrected figures as Known limitation 15, and both files sit inside the empty-diff provenance pathspec, so this is a deferred correction rather than an unnoticed error.",
+  "evidence": "src/hrmosaic/rag/chunk.py:6-7 against chunk.py:155 `start = max(end - overlap_chars, start + 1)`; synthesize.j2:11 says \"199 of the 204 committed chunks are longer than that (median 995)\" where the manifest measures 205 chunks, 200 over 320 chars, median 983. Disclosed at design-and-evaluation.md:1979-1994 with the right numbers; tests/contract/test_prompt_golden.py:215-222 states 200/205/983.",
+  "fix": "Correct both in the next commit that legitimately touches the app tree, and re-run `ingest --verify-manifest` plus the prompt golden test in the same commit.",
+  "effort": "5 min at the next rebuild"
+ },
+ {
+  "rank": 11,
+  "title": "A cancelled write is filed as outcome `refused`, and two consequences of that are undisclosed",
+  "severity": "low",
+  "section": "4. Agent orchestration",
+  "why_it_costs_marks": "The core mislabel is disclosed as Known limitation 13 with a live capture, but two reader-facing effects are not: the a11y live region keys on outcome, so a screen-reader user who cancels their own card hears \"I can't answer that one.\" over visible text reading \"Cancelled \u2014 nothing was created.\"; and templates/_turn.html:151-153 asserts a declined confirmation \"carries no steps \u2026 gets no library link\" while `_refuse` keeps the redirect next_steps, so the policy-library link does render.",
+  "evidence": "TurnOutcome (core/models.py:38-48) has no cancelled value; orchestrator.py:3160-3177 `_refuse` returns outcome=\"refused\" with CANCELLED_NOTICE. src/hrmosaic/web/api.py:1144 `\"refused\": \"I can't answer that one.\"`, painted from lastTurn.dataset.outcome after the /chat/confirm swap (templates/chat.html:586, _turn.html:27/191). Live: docs/evidence/draft-hr-email-live-2026-09-22.txt line 111 `-- outcome: refused` with two next steps.",
+  "fix": "Add a `cancelled` TurnOutcome carried through the store, the /chat schema, the dashboard filters and TURN_ANNOUNCEMENTS. Until then, extend limitation 13 to name the announcement and the _turn.html claim.",
+  "effort": "10 min to disclose; ~1 h for the schema change"
+ },
+ {
+  "rank": 12,
+  "title": "Five broken relative links in the grade-wave index (wrong directory depth)",
+  "severity": "low",
+  "section": "Submission files",
+  "why_it_costs_marks": "All five render as 404s on GitHub, including the two links to the grade cards the file exists to point at. A scan of all 168 tracked .md files found exactly 5 unresolved targets and all five are in this one file \u2014 so it is the only link defect in the repository.",
+  "evidence": "docs/process/sdd/G5-grade-5/README.md lines 4, 5, 12, 21, 22 use `../../evidence/\u2026` and `../../superpowers/\u2026`, which normalise to docs/process/evidence and docs/process/superpowers; `ls docs/process/` \u2192 `sdd` only. Correct depth from four levels down is `../../../`.",
+  "fix": "Change the five `../../` prefixes to `../../../`, and consider extending the docs link-resolution check to files under docs/process/.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 13,
+  "title": "One of the nine ablation sweeps is dated 2026-09-11 in four places; the repo's own provenance table dates it 2026-09-10",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "\"\u22120.192 and \u22120.154 on 2026-09-10, then \u22120.192 and \u22120.231 on 2026-09-11\" misattributes the third sweep by one day. Nothing numeric is wrong \u2014 all nine deltas and the \"largest is \u22120.231\" / \"largest since\" claims reproduce \u2014 but the repository contradicts itself on the date, and deployed.md's stated convention (the column is the run file's `created_at`) settles it against the prose.",
+  "evidence": "r_1789069158_baseline created_at = 2026-09-10T19:49:28Z (its arm r_1789070405 closed 20:11:38Z the same day); only the \u22120.231 pair (r_1789086979) is 2026-09-11T00:44:19Z. Prose at design-and-evaluation.md:1391 and :1713, docs/optimization-log.md:903 and :1048, against deployed.md:62 and docs/optimization-log.md:182.",
+  "fix": "Reword the four occurrences to \"\u22120.192, \u22120.154 and \u22120.192 on 2026-09-10, then \u22120.231 on 2026-09-11\", or drop the dates and name the run ids as the rest of the section does.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 14,
+  "title": "\"Five of the eight published runs returned 1.000 \u2026 with eight unanimous grounded labels\" \u2014 one of those five compared n=7",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "The sentence overstates the population of one of the five in the very paragraph whose point is that an n and a population must travel with a rate \u2014 and it contradicts the same file 860 lines earlier, plus the design document's history table.",
+  "evidence": "docs/optimization-log.md:1021-1022 against r_1789055103_baseline.json metrics judge_agreement_rate 1.0 / judge_agreement_n 7 / subset seed_1729_8 (8 items, 7 compared). Correct elsewhere: docs/optimization-log.md:158 \"(n=7)\" and design-and-evaluation.md:1218 \"1.000 (n=7) / 1.000 (n=8)\".",
+  "fix": "Change to \"with unanimous `grounded` labels on every item compared (n = 8, and n = 7 on the first)\".",
+  "effort": "2 min"
+ },
+ {
+  "rank": 15,
+  "title": "docs/evidence/README.md attributes the 390-capture count to index.json's `screen_ids`, which holds the 72 ids",
+  "severity": "low",
+  "section": "Submission files",
+  "why_it_costs_marks": "Two errors in one parenthesis: 390 is recorded under `screen_count`, not `screen_ids`, and \"72 \u00d7 3 (390 captures)\" invites the reader to compute 216 with nothing explaining the extra 174. README.md's own version of the clause binds it to the 72 correctly, so the evidence index copied it onto the wrong number.",
+  "evidence": "scripts/ux_capture.py:401-402 writes `\"screen_ids\": ids` and `\"screen_count\": len(self.entries)`; the live .ux-capture/index.json has len(screen_ids)=72 and screen_count=390, with the extra 174 being the `#full` full-page variants of 58 ids (per-id counts Counter({6: 58, 3: 14})). docs/evidence/README.md:90-91 carries the claim; docs/process/sdd/G5-grade-5/task-16-report.md:172 states it correctly.",
+  "fix": "Rewrite as \"**72** screen ids over 3 viewports plus the full-page `#full` variants of 58 of them \u2014 **390** captures, the `screen_count` `make ux-capture` prints beside the 72-entry `screen_ids`\". Note the extras are `#full` variants only, not dark-scheme or phone-only screens.",
+  "effort": "5 min"
+ }
+]
