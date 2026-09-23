@@ -465,3 +465,120 @@ def test_every_label_in_the_rules_file_renders_as_a_sentence_with_one_verb_and_n
             assert re.search(r"\b(?:is|are) 7\b", sentence), sentence
             assert "the policy asks for" in sentence or "your request is for" in sentence
             assert "_" not in sentence, sentence
+
+
+# -- G5c gap 30: the approver justified from the wrong rule ------------------------------
+#
+# Live turn `67dc4d8653ec7a7f0b0c92bda4dc67d2`, span 18: the engine scored `expense.manager_limit`
+# **unmet** — "parameters.amount_usd is 3000; the policy value is 2500" — attached the Director and
+# said "Ask a director to approve", and the served answer still opened:
+#
+#     Since your USD 3,000 conference trip is below the USD 5,000 director threshold,
+#     your manager Dana can approve it
+#
+# The judge scored that claim contradicted (groundedness 0.778, one of the published run's three
+# composite failures). Neither existing repair reaches it: `polarity()` reads the sentence as
+# `denies`, which *agrees* with an unmet row, so `correct()` leaves it; and `correct_ceilings` only
+# matches an "up to USD X" ceiling *below* the amount, while USD 5,000 sits above USD 3,000. The
+# workflow exists because a USD 3,000 question was once answered from the USD 2,500 row, and the lead
+# sentence had gone back to doing it from the tier above instead.
+
+WRONG_THRESHOLD_SENTENCE = (
+    "Since your USD 3,000 conference trip is below the USD 5,000 director threshold, your manager Dana can approve it."
+)
+
+ROUTING_SENTENCE = "Reports above USD 2,500 need director approval and a Finance business partner review."
+
+
+def test_the_lead_sentence_is_replaced_by_the_engines_own_routing_rule():
+    result = compliance.apply([block(WRONG_THRESHOLD_SENTENCE)], [envelope(EXPENSES_002)])
+
+    assert result.blocks[0]["text"] == ROUTING_SENTENCE
+    assert result.authority == 1 and result.changed
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Your manager can approve this report.",
+        "Your direct manager may approve it.",
+        "The report can be approved by your manager.",
+        "Your manager Dana may sign off on the claim.",
+    ],
+)
+def test_every_voice_of_the_same_conclusion_is_caught(sentence):
+    result = compliance.apply([block(sentence)], [envelope(EXPENSES_002)])
+
+    assert result.blocks[0]["text"] == ROUTING_SENTENCE
+    assert result.authority == 1
+
+
+def test_a_sentence_that_denies_the_managers_authority_is_left_alone():
+    """The repair must not rewrite prose that already agrees with the engine: "cannot approve" is the
+    correct reading of an unmet manager limit, and `\\bcan\\b` does not match inside "cannot"."""
+    sentence = "Your manager cannot approve a report of this size on their own."
+    result = compliance.apply([block(sentence)], [envelope(EXPENSES_002)])
+
+    assert result.blocks[0]["text"] == sentence
+    assert result.authority == 0
+
+
+def test_a_claim_within_the_managers_limit_keeps_its_manager():
+    """The other direction, and the reason this is keyed on the row rather than on the words: with
+    `expense.manager_limit` **met**, the manager really may approve it."""
+    within = json.loads(json.dumps(EXPENSES_002))
+    manager = next(row for row in within["requirements"] if row["id"] == "expense.manager_limit")
+    manager.update(met=True, status="met", reason="parameters.amount_usd is 900; the policy value is 2500 (lte).")
+    within["approvals_required"] = within["approvals_required"][:1]
+
+    result = compliance.apply([block("Your manager can approve this report.")], [envelope(within)])
+
+    assert result.blocks[0]["text"] == "Your manager can approve this report."
+    assert result.authority == 0
+
+
+def test_a_row_nobody_could_check_is_not_grounds_for_rerouting_either():
+    """`not_stated` is not a failure (W8, C05). With no `amount_usd` supplied there is no tier to
+    route to, and `correct()`'s own "I could not check …" line is the honest repair."""
+    unchecked = json.loads(json.dumps(EXPENSES_002))
+    for row in unchecked["requirements"]:
+        row.update(met=False, status="not_stated", reason="Not stated: parameters.amount_usd was not supplied.")
+
+    result = compliance.apply([block("Your manager can approve this report.")], [envelope(unchecked)])
+
+    assert result.authority == 0
+
+
+def test_the_engines_own_next_steps_are_never_rerouted():
+    """A `next_step` is `rules.yml` speaking. "file a missing-receipt declaration for the manager to
+    approve" is the engine's own instruction and this step does not rewrite it."""
+    step = "Attach an itemised receipt, or file a missing-receipt declaration for the manager to approve."
+    result = compliance.apply([block("Nothing to see here.")], [envelope(EXPENSES_002)], next_steps=[step])
+
+    assert result.next_steps == [step]
+    assert result.authority == 0
+
+
+def test_the_reroute_is_idempotent():
+    once = compliance.apply([block(WRONG_THRESHOLD_SENTENCE)], [envelope(EXPENSES_002)])
+    twice = compliance.apply(once.blocks, [envelope(EXPENSES_002)])
+
+    assert twice.blocks == once.blocks
+    assert twice.authority == 0
+
+
+def test_with_no_higher_tier_the_failing_rows_own_result_is_said_instead():
+    """`covering_rule` needs more than one attached approval; where the engine named a single tier the
+    replacement is the row's own reader sentence, never silence and never the original claim."""
+    single = json.loads(json.dumps(EXPENSES_002))
+    single["approvals_required"] = single["approvals_required"][:1]
+    manager = next(row for row in single["requirements"] if row["id"] == "expense.manager_limit")
+    manager["label"] = "claim against the direct manager's approval limit, in US dollars"
+
+    result = compliance.apply([block("Your manager can approve this report.")], [envelope(single)])
+
+    assert result.blocks[0]["text"] == (
+        "Your claim against the direct manager's approval limit is 3000 US dollars; "
+        "the policy asks for no more than 2500 US dollars."
+    )
+    assert result.authority == 1

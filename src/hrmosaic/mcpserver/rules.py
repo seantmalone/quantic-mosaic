@@ -511,7 +511,7 @@ def _apply(operator: str, subject: Any, expected: Any) -> bool:
     }[operator]
 
 
-def guard_holds(guard: Any, context: Context, decided: Mapping[str, bool], known: frozenset[str]) -> bool:
+def guard_holds(guard: Any, context: Context, decided: Mapping[str, str], known: frozenset[str]) -> bool:
     """`applies_when` — the closed vocabulary of the `rules.yml` header.
 
     `unmet:`/`met:` read requirements already decided in file order, which is why the file lists a
@@ -519,6 +519,18 @@ def guard_holds(guard: Any, context: Context, decided: Mapping[str, bool], known
     met nor unmet, so both forms are false for it — the Tax & Legal approval does not attach itself
     to a request whose duration was never in question. A guard naming an id the scenario does not
     contain at all is a typo, and raises.
+
+    **`decided` holds each row's `status`, and `unmet:` means `status == "unmet"` — checked and
+    failed** (G5c, gaps 4 and 29). It held `met` as a boolean, so `unmet:<id>` read as `not met`,
+    and a `not_stated` row — the caller never supplied the parameter, nothing was compared — carries
+    `met: false` by construction. Every `unmet:`-guarded approval and next step therefore fired on a
+    requirement the engine had explicitly *not* been able to check: an `equipment_request` refresh
+    with no `device_age_months` came back `insufficient_evidence` and still attached an early-refresh
+    manager approval, and an `international_remote` with only a destination reached `conditional`
+    with Director and Tax & Legal attached and `unmet: []` — the published `unmet[]` list is filtered
+    on `status == "unmet"` (see `evaluate`), so the body contradicted itself. A `not_stated` row now
+    satisfies neither form, which leaves the verdict semantics alone: `insufficient_evidence` is
+    still what a scenario that evaluated nothing returns, with nothing attached to it.
     """
     if guard is None or guard == "always":
         return True
@@ -528,9 +540,7 @@ def guard_holds(guard: Any, context: Context, decided: Mapping[str, bool], known
     if kind in ("unmet", "met"):
         if rest not in known:
             raise RuleError(f"applies_when {guard!r} names a requirement this scenario does not carry")
-        if rest not in decided:
-            return False
-        return decided[rest] if kind == "met" else not decided[rest]
+        return decided.get(rest) == kind
     if kind == "employee_eq":
         field, _, expected = rest.partition(":")
         return str(context.employee.get(field)) == expected
@@ -774,13 +784,15 @@ def evaluate(
     )
 
     known = frozenset(str(requirement["id"]) for requirement in spec["requirements"])
-    decided: dict[str, bool] = {}
+    # Each decided row's **status**, not its `met` boolean (G5c, gaps 4 and 29): `unmet:` guards a
+    # row that was checked and failed, and a `not_stated` row satisfies no guard at all.
+    decided: dict[str, str] = {}
     decisions: list[Decision] = []
     for requirement in spec["requirements"]:
         if not guard_holds(requirement.get("applies_when"), context, decided, known):
             continue
         decision = _evaluate_requirement(requirement, context)
-        decided[decision.entry["id"]] = decision.met
+        decided[decision.entry["id"]] = decision.status
         decisions.append(decision)
     decisions = _settle_manual(decisions)
     for decision in decisions:

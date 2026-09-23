@@ -699,3 +699,151 @@ def test_the_label_rides_on_the_wire_row():
     body = _pto({"start_date": "2026-09-15", "days": 3}, submitted_on="2026-09-01")
     notice = _row(body, "pto.request.notice")
     assert notice["label"] == "notice before the first day off, in business days"
+
+
+# -- G5c, gaps 4 and 29: `unmet:` means checked-and-failed, never "could not check" ----
+#
+# `guard_holds` read `decided[id]` as a `met` boolean, so `unmet:<id>` meant `not met` — and a
+# `not_stated` row carries `met: false` by construction. Every one of `corpus/rules.yml`'s 18
+# `unmet:`-guarded approvals and next steps therefore fired on a requirement the engine had
+# explicitly not been able to check. Two instances were reproduced in process on 2026-09-22: an
+# `equipment_request` refresh with no `device_age_months` came back `insufficient_evidence` with an
+# early-refresh manager approval and its next step attached, and an `international_remote` carrying
+# only a destination reached **`conditional`** with Director and Tax & Legal attached and `unmet: []`
+# — byte-identical to the 42-day run, and self-contradicting, because the published `unmet[]` list
+# has been filtered on `status == "unmet"` since W8's fix round.
+#
+# `decided` now holds each row's **status**, and both guard forms are false for a `not_stated` row.
+# The five cases below are the whole ladder of the one scenario where both forms appear.
+
+EARLY_REFRESH_APPROVAL = "An early laptop refresh, before the 36-month anniversary, is a direct-manager decision."
+EARLY_REFRESH_STEP = "Ask your direct manager to approve an early refresh"
+DUE_REFRESH_STEP = "A refresh that falls due on the 36-month cycle needs no spending approval"
+
+
+def _equipment(parameters: dict) -> dict:
+    """One `equipment_request` evaluation straight through the engine, at the pinned snapshot."""
+    employee = DEPS.employee(DEFAULT_ACTOR)
+    assert employee is not None
+    return rules.evaluate(
+        "equipment_request",
+        employee=employee,
+        balance={},
+        parameters=parameters,
+        holidays=(),
+        as_of=DEPS.as_of(),
+        submitted_on=DEPS.as_of(),
+        rule_set=RULE_SET,
+        connection=DEPS.index(),
+    )
+
+
+def _roles(body: dict) -> list[str]:
+    return [approval["role"] for approval in body["approvals_required"]]
+
+
+def test_a_refresh_with_no_device_age_attaches_nothing_from_the_early_refresh_rows():
+    """The reproduction from the 2026-09-21 grade card, rank 4: a verdict of `insufficient_evidence`
+    that still told the reader to get a manager's approval for an early refresh, on a request whose
+    device age nobody had supplied."""
+    body = _equipment({"request_type": "refresh"})
+
+    eligibility = _row(body, "equipment.refresh_eligibility")
+    assert eligibility["status"] == "not_stated"
+    assert body["verdict"] == "insufficient_evidence", "nothing was evaluable"
+    assert body["unmet"] == []
+    assert _roles(body) == [], "an approval cannot be derived from a row nobody could check"
+    assert body["next_steps"] == []
+
+
+def test_an_early_refresh_is_conditional_and_needs_the_direct_manager():
+    """The `unmet:` branch itself, which the fix must leave working: 24 months is short of the
+    36-month cycle, so the row was checked and failed and the approval is real."""
+    body = _equipment({"request_type": "refresh", "device_age_months": 24})
+
+    assert _row(body, "equipment.refresh_eligibility")["status"] == "unmet"
+    assert body["verdict"] == "conditional"
+    assert body["unmet"] == ["equipment.refresh_eligibility"]
+    assert _roles(body) == ["Direct manager"]
+    assert [approval["reason"] for approval in body["approvals_required"]] == [EARLY_REFRESH_APPROVAL]
+    assert any(step.startswith(EARLY_REFRESH_STEP) for step in body["next_steps"]), body["next_steps"]
+
+
+def test_a_refresh_that_falls_due_is_compliant_and_is_an_it_ticket_at_any_price():
+    """The `met:` branch, and the corpus rule G5b's equipment fix wrote down: a scheduled refresh
+    needs no spending approval whatever the replacement costs."""
+    body = _equipment({"request_type": "refresh", "device_age_months": 36})
+
+    assert _row(body, "equipment.refresh_eligibility")["status"] == "met"
+    assert body["verdict"] == "compliant"
+    assert _roles(body) == [], "no approver on a refresh that is simply due"
+    assert [step.startswith(DUE_REFRESH_STEP) for step in body["next_steps"]] == [True]
+
+
+def test_a_new_request_with_no_amount_does_not_summon_the_director():
+    """The same class on the other guarded branch. `equipment.director_threshold` applies to
+    `request_type: "new"`, and with no `amount_usd` it is `not_stated` — so the USD 500 director
+    approval, and the off-catalogue next step that rides with it, must not attach."""
+    body = _equipment({"request_type": "new"})
+
+    assert _row(body, "equipment.director_threshold")["status"] == "not_stated"
+    assert body["verdict"] == "insufficient_evidence"
+    assert _roles(body) == ["Direct manager"], "the always-guarded approval stands; the unmet one does not"
+    assert not any("15 business days" in step for step in body["next_steps"]), body["next_steps"]
+
+
+def test_a_new_request_above_the_threshold_still_summons_the_director():
+    """The other direction: USD 1,200 is above the USD 500 catalogue threshold, the row was checked
+    and failed, and both tiers are attached."""
+    body = _equipment({"request_type": "new", "amount_usd": 1200})
+
+    assert _row(body, "equipment.director_threshold")["status"] == "unmet"
+    assert body["verdict"] == "conditional"
+    assert _roles(body) == ["Direct manager", "Director"]
+    assert any("15 business days" in step for step in body["next_steps"]), body["next_steps"]
+
+
+def test_an_international_stay_with_only_a_destination_attaches_no_tax_review():
+    """Rank 29's half of the same defect, on the flagship demo scenario. With the duration never
+    supplied, the 30-day branch is unreachable: no Director, no Tax & Legal, and no 21-day filing
+    step — the answer the engine used to produce was byte-identical to the 42-day one."""
+    body = rules.evaluate(
+        "international_remote",
+        employee=DEPS.employee(DEFAULT_ACTOR) or {},
+        balance={},
+        parameters={"destination_country": "PT"},
+        holidays=(),
+        as_of=DEPS.as_of(),
+        submitted_on=DEPS.as_of(),
+        rule_set=RULE_SET,
+        connection=DEPS.index(),
+    )
+
+    assert _row(body, "remote.intl.duration")["status"] == "not_stated"
+    assert body["unmet"] == []
+    assert _roles(body) == ["Direct manager"]
+    assert not any("Tax & Legal" in step for step in body["next_steps"]), body["next_steps"]
+    assert not any(item["id"] == "remote.intl.tax_review_lead" for item in body["requirements"])
+
+
+def test_the_guard_reads_a_status_and_a_not_stated_row_satisfies_neither_form():
+    """The unit of the fix, at the function. Nothing else in the suite pinned `guard_holds` beyond
+    its unknown-prefix refusal, which is what left this class unfrozen (rank 29)."""
+    context = rules.Context(
+        as_of=date(2026, 9, 1),
+        submitted_on=date(2026, 9, 1),
+        employee={},
+        balance={},
+        parameters={},
+        holidays=frozenset(),
+        facts=FACTS,
+    )
+    known = frozenset({"probe"})
+
+    assert rules.guard_holds("unmet:probe", context, {"probe": "unmet"}, known) is True
+    assert rules.guard_holds("met:probe", context, {"probe": "met"}, known) is True
+    assert rules.guard_holds("unmet:probe", context, {"probe": "not_stated"}, known) is False
+    assert rules.guard_holds("met:probe", context, {"probe": "not_stated"}, known) is False
+    # A requirement that did not apply at all is decided by nothing, and both forms stay false.
+    assert rules.guard_holds("unmet:probe", context, {}, known) is False
+    assert rules.guard_holds("met:probe", context, {}, known) is False

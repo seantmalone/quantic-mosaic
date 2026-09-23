@@ -3081,13 +3081,39 @@ def _published_workflow_check() -> WorkflowCheck | None:
     )
 
 
+#: The label §11.7's launch puts on every run it starts — the same string `evaluation/runner.py`'s
+#: `smoke_run()` defaults to, and the one `_compare_rank` reads to keep a smoke run off the ablation
+#: tab (G5c, gap 16). `tests/contract/test_dashboard_viewmodels.py` pins the two together.
+SMOKE_LABEL = "dashboard smoke run"
+
+
+def _compare_rank(row: Mapping[str, Any], *, dataset_size: int) -> int:
+    """How eligible one run is to stand for its variant on the ablation tab (G5c, gap 16).
+
+    `0` a full run over the committed dataset, `1` a short run that is not a smoke run, `2` a
+    dashboard smoke run. The tab takes the best rank per variant and, within a rank, the newest —
+    so one admin click on §11.7's smoke button can no longer put a 3-item run under the heading
+    "Ablation — three variants over the identical items", charted against two full arms with the
+    flips recomputed against it. It is a *preference*, not a filter: a store whose only run for a
+    variant is short still shows it, exactly as before, rather than dropping an arm off the page.
+    """
+    if str(row.get("label") or "") == SMOKE_LABEL:
+        return 2
+    return 0 if dataset_size and int(row.get("n_items") or 0) >= dataset_size else 1
+
+
 def build_eval_compare(request: Request) -> EvalCompareView:
     """The newest run of each variant, and every item whose pass flips against `baseline`."""
     store = _store(request)
     rows = store.execute(f"SELECT {RUN_COLUMNS} FROM eval_runs ORDER BY created_at DESC").dicts()
+    dataset_size = len(_dataset_items())
     newest: dict[str, dict[str, Any]] = {}
+    ranked: dict[str, int] = {}
     for row in rows:
-        newest.setdefault(row["variant"], row)
+        variant, rank = row["variant"], _compare_rank(row, dataset_size=dataset_size)
+        # Rows arrive newest first, so a strict improvement in rank is the only reason to replace.
+        if variant not in newest or rank < ranked[variant]:
+            newest[variant], ranked[variant] = row, rank
 
     variants = [
         VariantMetrics(
@@ -3155,7 +3181,7 @@ class SmokeEvalBody(BaseModel):
     n_items: int = 3
     item_ids: list[str] = Field(default_factory=list)
     judge: bool = False
-    label: str = "dashboard smoke run"
+    label: str = SMOKE_LABEL
 
 
 # --------------------------------------------------------------------------------------

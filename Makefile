@@ -19,6 +19,17 @@ MOCK_TODAY ?= 2026-09-01
 
 .PHONY: setup lock run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
 
+# The built index, and the rule that builds it when it is missing (G5c, gap 35). Fifteen test files
+# read the corpus through `core.corpusread`, so `make setup && make test` on a fresh clone used to
+# fail with a bare sqlite "unable to open database file" and no remediation hint — CI never saw it,
+# because `ingest --verify-manifest` runs ahead of the suite there and leaves a real index behind.
+# `test`, `coverage` and `ux` depend on the FILE, not on the `ingest` phony: an existing index is
+# never rebuilt, so the common case costs one `stat`.
+INDEX ?= data/index/hr_index.sqlite
+
+$(INDEX):
+	$(BIN)/python -m hrmosaic.rag.ingest
+
 setup:
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/pip install --upgrade pip
@@ -49,7 +60,7 @@ lint:
 	$(BIN)/ruff check .
 	$(BIN)/ruff format --check .
 
-test:
+test: $(INDEX)
 	$(BIN)/pytest -q
 
 # The coverage gate (P20). `--branch` because a project this full of guard clauses reports a
@@ -58,7 +69,7 @@ test:
 # as an artifact even on the run that fails it — which is the run whose numbers someone needs.
 # `--fail-under=90` is the gate itself; `coverage.xml` and `.coverage` are git-ignored.
 COVERAGE_MIN ?= 90
-coverage:
+coverage: $(INDEX)
 	$(BIN)/coverage run --branch --source=src/hrmosaic -m pytest -q
 	$(BIN)/coverage xml
 	$(BIN)/coverage report --fail-under=$(COVERAGE_MIN)
@@ -74,7 +85,7 @@ coverage:
 # justified it. Both run four stub servers on loopback: LLM_PROVIDER=stub, no live model call.
 UX_OUT ?= .ux-capture
 
-ux:
+ux: $(INDEX)
 	MOCK_TODAY=$(MOCK_TODAY) $(BIN)/pytest -q -m ux
 
 ux-capture:

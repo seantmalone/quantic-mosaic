@@ -400,6 +400,109 @@ async def test_a_build_no_run_file_records_is_unknown_rather_than_shared(seeded,
     assert 'id="workflow-completion-check"' not in page.text, "no published comparison to quote"
 
 
+async def _insert_run(store, *, run_id: str, variant: str, label: str, n_items: int, created_at: int) -> None:
+    """One `eval_runs` row, straight into the store — the shape `core/archive.py` imports."""
+    import json
+
+    from hrmosaic.core.db import Statement
+
+    store.batch(
+        [
+            Statement(
+                "INSERT INTO eval_runs (id, created_at, git_sha, label, variant, target, target_base_url, "
+                "dataset_sha, config_json, n_items, metrics_json, status) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    run_id,
+                    created_at,
+                    "0" * 40,
+                    label,
+                    variant,
+                    "local",
+                    "http://127.0.0.1:8000",
+                    "sha",
+                    "{}",
+                    n_items,
+                    json.dumps({"strict_pass_rate": 1.0}),
+                    "complete",
+                ),
+            )
+        ]
+    )
+
+
+async def test_a_dashboard_smoke_run_cannot_replace_an_ablation_arm(seeded, store, monkeypatch):
+    """**G5c, gap 16**: one admin click must not re-chart the ablation.
+
+    The tab pairs the newest run per variant, and §11.7's smoke button defaults to `baseline` and
+    **3 items** — so pressing it put a 3-item run under the heading *"Ablation — three variants over
+    the identical items"*, charted against two 30-item arms with the flips recomputed against it, and
+    the build-mismatch alert could not fire for a run with no committed file. A smoke run is now the
+    least preferred row for its variant, and so is any run shorter than the committed dataset.
+    """
+    monkeypatch.setattr(dash, "RESULTS_DIR", EVAL_RUNS)
+    before = await _compare_run_ids(seeded)
+    newest = max(
+        row["created_at"]
+        for row in store.execute("SELECT created_at FROM eval_runs").dicts()  # the fixtures' own clock
+    )
+
+    await _insert_run(
+        store,
+        run_id="r_smoke_click",
+        variant="baseline",
+        label=dash.SMOKE_LABEL,
+        n_items=3,
+        created_at=newest + 1_000_000,
+    )
+    payload = await _get(seeded, "/api/eval/compare")
+
+    assert {row["variant"]: row["run_id"] for row in payload["variants"]} == before
+    assert "r_smoke_click" not in {row["run_id"] for row in payload["variants"]}
+    # …and the button really does label its runs that way, in both the endpoint and the harness.
+    assert dash.SmokeEvalBody().label == dash.SMOKE_LABEL
+    from evaluation import runner as eval_runner
+
+    assert inspect.signature(eval_runner.smoke_run).parameters["label"].default == dash.SMOKE_LABEL
+
+
+async def test_a_run_shorter_than_the_dataset_yields_to_a_full_one(seeded, store, monkeypatch):
+    """The other half of the preference, for a short run that carries no smoke label: an arm driven
+    with `--n-items 5` while debugging must not become the published arm on the page. A variant whose
+    **only** run is short is still shown — the tab prefers, it does not drop an arm."""
+    monkeypatch.setattr(dash, "RESULTS_DIR", EVAL_RUNS)
+    newest = max(row["created_at"] for row in store.execute("SELECT created_at FROM eval_runs").dicts())
+    dataset_size = len(dash._dataset_items())
+    assert dataset_size > 5, "the fixture only bites while the committed dataset is larger than the short run"
+
+    await _insert_run(
+        store,
+        run_id="r_full_arm",
+        variant="dense_only_k2",
+        label="a full re-drive",
+        n_items=dataset_size,
+        created_at=newest + 1_000_000,
+    )
+    await _insert_run(
+        store,
+        run_id="r_short_arm",
+        variant="dense_only_k2",
+        label="five items while debugging",
+        n_items=5,
+        created_at=newest + 2_000_000,
+    )
+    payload = await _get(seeded, "/api/eval/compare")
+
+    chosen = {row["variant"]: row["run_id"] for row in payload["variants"]}
+    assert chosen["dense_only_k2"] == "r_full_arm", "the newest FULL run, not the newest run"
+    assert "r_short_arm" not in set(chosen.values())
+    # A preference, not a filter: all three arms are still on the page.
+    assert set(chosen) == set(VARIANT_RUNS)
+    assert dash._compare_rank({"label": "a re-drive", "n_items": dataset_size}, dataset_size=dataset_size) == 0
+    assert dash._compare_rank({"label": "a re-drive", "n_items": 5}, dataset_size=dataset_size) == 1
+    assert dash._compare_rank({"label": dash.SMOKE_LABEL, "n_items": dataset_size}, dataset_size=dataset_size) == 2
+
+
 async def test_the_compare_tab_charts_both_arms_hypothesis_metrics(seeded, monkeypatch):
     """**G5 gap 25**: `workflow_completion` and `doc_recall_mean` reach the page at all.
 

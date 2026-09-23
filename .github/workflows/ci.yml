@@ -8,9 +8,16 @@ on:
     # edit (the demo-video URL), which would have run no lint, no test, no docs contract tests and
     # triggered no deploy: the graded tip would carry no green run and `/health.app.git_sha` would
     # lag HEAD (G5b, gap 9). The docs contract tests are the guard against stale claims, and they
-    # have to gate the commits most likely to introduce one. What stays ignored is the three paths a
-    # published *result* lands in, where rerunning the suite proves nothing new.
-    paths-ignore: ['evaluation/results/**', 'evaluation/REPORT.md', 'docs/**']
+    # have to gate the commits most likely to introduce one.
+    #
+    # `docs/**` went the same way (G5c, gap 36): the rationale above argued for gating documents and
+    # the list below then skipped the whole tree those contract tests read —
+    # `test_published_run_commands.py` binds `docs/requirements-traceability.md` and
+    # `docs/pre-submission-checklist.md`, `test_docs_completeness.py` binds `docs/demo-script.md` —
+    # and three commits of the round-2 wave touched nothing else, so pushed alone any of them could
+    # have falsified a contract test with no run. What stays ignored is the **two** paths a published
+    # *result* lands in, where rerunning the suite proves nothing new.
+    paths-ignore: ['evaluation/results/**', 'evaluation/REPORT.md']
   pull_request:
   workflow_dispatch:
     inputs:

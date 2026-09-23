@@ -60,7 +60,11 @@ make test         # pytest -q over the whole suite
 make coverage     # the same suite under coverage, then the 90% gate and coverage.xml
 ```
 
-**Tests and coverage.** `make test` runs the whole suite in one command — 3,439 tests as of
+`make test`, `make coverage` and `make ux` each depend on the built index file and run `make ingest`
+themselves when `data/index/hr_index.sqlite` is missing, so a fresh clone can go straight from `make
+setup` to `make test`; an index that already exists is never rebuilt.
+
+**Tests and coverage.** `make test` runs the whole suite in one command — 3,469 tests as of
 2026-09-22, unit, contract, integration, architecture and e2e-with-stub, every one of them against
 the scripted stub provider, so no credential is involved. 299 of those are the browser-based UX
 principle suite (`make ux`, marked `ux`): they need a chromium build, so `make test` deselects them

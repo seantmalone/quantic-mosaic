@@ -29,6 +29,13 @@ result, in the reader's voice. Three rules and nothing else:
 * `not_stated` — a sentence that concludes **either way** is replaced by "I could not check …",
   because a requirement nobody evaluated has no verdict to state (W8, C05).
 
+**Two sentences are wrong without opposing anything, and each has its own rule.** A threshold the
+request has already outgrown — *"expenses up to USD 2,500 are approved by your manager"* on a USD
+3,000 claim — is `correct_ceilings` (W8, C07); and a sentence handing the decision to the lower
+authority while the engine has that authority's own limit **unmet** is `correct_authority` (G5c, gap
+30). Both are replaced by the engine's own routing sentence, which is the reason of the highest
+approval tier the request actually reached.
+
 **When it is unsure it leaves the sentence alone and says so.** A sentence carrying both polarities
 ("meets the notice rule but does not meet the balance rule") is one this step cannot cut safely, so
 it is recorded in `unverified` and shipped untouched. A repair that is not certain is worse than
@@ -158,6 +165,19 @@ CEILING = re.compile(
 
 #: The subject whose value is the amount the question asked about.
 AMOUNT_SUBJECT = "parameters.amount_usd"
+
+#: *"your manager Dana can approve it"* — the decision handed to the lower authority (G5c, gap 30).
+#: Both voices, because both were written: the active one, with up to four words of name or title
+#: between the role and its verb, and the passive *"approved by your manager"*. `\bcan\b` does not
+#: match inside *"cannot"*, so a sentence that **denies** the authority is left alone.
+LOWER_AUTHORITY = re.compile(
+    r"\b(?:your|the|a|their)\s+(?:direct\s+|line\s+|reporting\s+)?manager\b"
+    r"(?:\s+[\w'’-]+){0,4}?\s+(?:can|may|is able to|has the authority to)\s+"
+    r"(?:approve|authorise|authorize|sign)\b"
+    r"|\b(?:approved|authorised|authorized|signed\s+off)\s+by\s+(?:your|the|a|their)\s+"
+    r"(?:direct\s+|line\s+|reporting\s+)?manager\b",
+    re.IGNORECASE,
+)
 
 #: A sentence that concludes about **this request** rather than about the rule in general (W8 fix
 #: round, W7-review I4). `pto.request.manager_approval` is a `manual` row and therefore
@@ -292,6 +312,8 @@ class Outcome:
     unverified: list[tuple[int, str]] = field(default_factory=list)
     #: How many sentences quoted a threshold the request had already outgrown (W8, C07).
     thresholds: int = 0
+    #: How many sentences handed the decision to an authority the amount had outgrown (G5c, gap 30).
+    authority: int = 0
     #: `(index into the blocks, the type it was given)` for every block this step retyped
     #: (W10, ruling 5).
     retyped: list[tuple[int, str]] = field(default_factory=list)
@@ -300,7 +322,9 @@ class Outcome:
 
     @property
     def changed(self) -> bool:
-        return bool(self.restated or self.restated_steps or self.thresholds or self.retyped or self.unchecked)
+        return bool(
+            self.restated or self.restated_steps or self.thresholds or self.authority or self.retyped or self.unchecked
+        )
 
 
 def rows(envelopes: Iterable[Any]) -> list[Row]:
@@ -603,6 +627,48 @@ def correct_ceilings(text: str, amount: float | None, covering: str | None) -> t
     return (" ".join(part.strip() for part in kept) if changed else text), changed
 
 
+def correct_authority(text: str, rows_: Sequence[Row], covering: str | None) -> tuple[str, int]:
+    """`(the text, how many approval-authority sentences were replaced)` (G5c, gap 30).
+
+    The sibling of `correct_ceilings`, for the other half of the same failure. On the live
+    `expenses-002` turn the engine scored `expense.manager_limit` **unmet** — *"parameters.amount_usd
+    is 3000; the policy value is 2500"* — and attached the Director approval, and the served answer
+    still opened *"Since your USD 3,000 conference trip is below the USD 5,000 director threshold,
+    your manager Dana can approve it"*: the right authority for the wrong reason, justified from a
+    threshold the failing row is not about. Neither existing repair reaches it. `correct()` reads the
+    sentence's polarity as `denies`, which *agrees* with an unmet row, so it leaves it; and
+    `correct_ceilings` only matches a *"up to USD X"* ceiling below the amount, while USD 5,000 is
+    above USD 3,000 and is quoted as a floor the claim sits under.
+
+    So: while an amount threshold **was checked and failed**, a sentence concluding that the lower
+    authority may approve is replaced by the engine's own routing sentence — the reason of the
+    highest approval tier the request actually reached, else the failing row's own result. Replaced
+    once: a second such sentence is dropped rather than repeating it. Nothing happens on a claim
+    whose amount row is `met` (the manager really may approve it) or `not_stated` (nothing was
+    checked, and `correct()` already says so).
+    """
+    failing = [
+        row
+        for row in rows_
+        if row.status == "unmet"
+        and (match := REASON.match(row.reason)) is not None
+        and match["subject"] == AMOUNT_SUBJECT
+    ]
+    if not failing:
+        return text, 0
+    routing = covering or reader_sentence(failing[-1])
+    kept: list[str] = []
+    changed = 0
+    for sentence in sentences(text):
+        if not LOWER_AUTHORITY.search(sentence):
+            kept.append(sentence)
+            continue
+        changed += 1
+        if changed == 1:
+            kept.append(routing)
+    return (" ".join(part.strip() for part in kept) if changed else text), changed
+
+
 def apply(
     blocks: Sequence[Mapping[str, Any]],
     envelopes: Iterable[Any],
@@ -635,12 +701,17 @@ def apply(
     unverified: list[tuple[int, str]] = []
     retyped: list[tuple[int, str]] = []
     rewritten = 0
+    rerouted = 0
     for index, block in enumerate(blocks):
         item = dict(block)
         text, changed, unsure = correct(str(item.get("text") or ""), evaluated)
         text, ceilings = correct_ceilings(text, amount, covering)
         rewritten += ceilings
-        if ceilings and not text.strip():
+        # The engine's own routing sentence, over the blocks only: a `next_step` is `rules.yml`
+        # speaking, and this step does not rewrite the engine's own instructions (G5c, gap 30).
+        text, routed = correct_authority(text, evaluated, covering)
+        rerouted += routed
+        if (ceilings or routed) and not text.strip():
             # The block was nothing but a threshold the request had already outgrown.
             continue
         item["text"] = text
@@ -679,6 +750,7 @@ def apply(
         restated_steps=restated_steps,
         unverified=unverified,
         thresholds=rewritten,
+        authority=rerouted,
         retyped=retyped,
         unchecked=stated,
     )
@@ -698,12 +770,14 @@ __all__ = [
     "IN_WORDS",
     "AMOUNT_SUBJECT",
     "CEILING",
+    "LOWER_AUTHORITY",
     "SUBJECT_WORDS",
     "THIS_REQUEST",
     "Outcome",
     "Row",
     "apply",
     "correct",
+    "correct_authority",
     "correct_ceilings",
     "covering_rule",
     "MIN_STEP_OVERLAP",

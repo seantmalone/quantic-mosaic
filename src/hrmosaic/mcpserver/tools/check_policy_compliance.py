@@ -105,14 +105,26 @@ def normalise_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
 #: equipment scenario applies its USD 500 director threshold only to `request_type: "new"`, so a model
 #: that omits the parameter, or invents a fourth word for it, gets a verdict with that requirement
 #: silently unevaluated. A closed set a caller cannot see is a closed set a caller cannot honour.
+#:
+#: **And the parameter each guarded branch then measures is named too** (G5c, gap 4). `refresh` and
+#: `separation` were published as branches with no stated input: `device_age_months` appeared nowhere
+#: in `mcp/tools/check_policy_compliance.schema.json`, and the sentence defining `refresh` as "a
+#: device at or past its 36-month cycle" described the *conclusion* the engine reaches from it rather
+#: than the value it compares — an early refresh is exactly the case the branch exists to route.
+#: A caller that cannot see the deciding field gets `not_stated` for the one row its own
+#: `request_type` selected, which is `insufficient_evidence` and nothing else.
 PARAMETERS_DESCRIPTION = (
     "Scenario facts the engine cannot read from the record, e.g. destination_country, start_date, "
-    "end_date, days, amount_usd, category, transaction_date, reason, request_type. The submission "
+    "end_date, days, amount_usd, category, transaction_date, reason, request_type, "
+    "device_age_months, days_since_final_day. The submission "
     "date is the server's own — never send one — and notice is always computed by the engine from it "
     "against start_date, so any supplied notice value is ignored; duration_days and days are derived "
-    'from start_date and end_date. request_type takes exactly one of "new" (additional or upgraded '
-    'equipment), "refresh" (a device at or past its 36-month cycle) or "separation" (a return), '
-    'and the equipment director-approval threshold is evaluated only for "new".'
+    'from start_date and end_date. request_type takes exactly one of "new" (a request for additional '
+    'or upgraded equipment, priced in amount_usd), "refresh" (a laptop refresh, whose device_age_months '
+    "is compared against the 36-month cycle: at or past it the refresh is due and is an IT ticket at "
+    'any price, below it the refresh is early and needs manager approval) or "separation" (a return, '
+    "whose days_since_final_day is compared against the return window), and the equipment "
+    'director-approval threshold is evaluated only for "new".'
 )
 
 #: What `submitted_on` means, in the words the **result** publishes (W8, C04; W10, ruling 1).

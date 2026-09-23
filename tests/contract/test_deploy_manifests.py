@@ -197,17 +197,26 @@ def test_the_blueprint_carries_the_keep_alive_so_a_redeploy_cannot_drop_it():
 
 
 def test_a_root_readme_commit_still_runs_the_suite_and_deploys():
-    """`paths-ignore` may skip a published *result*, never a document (G5b, gap 9).
+    """`paths-ignore` may skip a published *result*, never a document (G5b, gap 9; G5c, gap 36).
 
     `*.md` does not cross a `/`, so listing it meant "every repo-root document" — and the last commit
     before submission is by design a root README edit (the demo-video URL). That commit would have run
     no lint, no test, no docs contract tests and triggered no deploy: the graded tip would carry no
     green run and the live sha would lag HEAD. The docs contract tests are the guard against stale
     claims, so they have to gate the commits most likely to introduce one.
+
+    `docs/**` was the same defect one directory over, and against the rationale written directly
+    above the list: the docs contract tests read that tree, and three commits of the round-2 wave
+    touched nothing outside it. Only the two published-result paths are skipped now, and this test
+    names the documents the suite would stop reading if the tree were ignored again.
     """
     ignored = CI[True]["push"]["paths-ignore"]
-    assert ignored == ["evaluation/results/**", "evaluation/REPORT.md", "docs/**"]
+    assert ignored == ["evaluation/results/**", "evaluation/REPORT.md"]
     assert "*.md" not in ignored, "a root README edit must run CI and deploy"
+    assert not any(entry.startswith("docs/") for entry in ignored), (
+        "the docs contract tests read docs/requirements-traceability.md, docs/pre-submission-checklist.md "
+        "and docs/demo-script.md — a commit that touches only those must run them"
+    )
 
 
 def test_the_lint_job_scans_the_whole_history_on_every_run():

@@ -96,6 +96,7 @@ from hrmosaic.core.models import (
     ErrorPayload,
     PlanPayload,
     RetrievalPayload,
+    ToolCallPayload,
     TraceEntry,
     TurnOutcome,
 )
@@ -2072,6 +2073,12 @@ class Orchestrator:
         tool recall 0.67 with workflow completion 0. Every call records what it was asked; that is the
         question being asked here.
 
+        **§13.9's tool filter *is* consulted, and §9.2's router gate is not.** The filter is what the
+        operator or the ablation arm withheld, and `_call` refuses a withheld tool at the boundary
+        anyway (G5c, gap 3) — so asking here is what keeps the turn from spending two of its tool
+        calls on an attempt that cannot succeed and recording a `profile_read_deterministically`
+        reminder for a read that never happened.
+
         **§9.2's router gate is deliberately not consulted** (W10 fix round, the live evaluation).
         That gate exists to stop the *model* wandering into people data on a corpus-only question,
         and `remote-003` is routed `policy_qa` — so the reminder could not ask for the profile and
@@ -2082,6 +2089,7 @@ class Orchestrator:
         actor = turn.request.employee_id or ""
         return (
             not turn.state.has(PROFILE_TOOL)
+            and PROFILE_TOOL not in self._disabled(turn)
             and any(turn.state.called_with(name, "employee_id", actor) for name in PROFILE_FIRST_TOOLS)
             and turn.tool_calls_made < self.settings.agent_max_tool_calls
             and bool(actor and EMPLOYEE_ID.match(actor))
@@ -2400,7 +2408,75 @@ class Orchestrator:
         turn.tool_calls_made += 1
         return await self._call(turn, call.name, repair.arguments)
 
+    def _disabled(self, turn: _Turn) -> frozenset[str]:
+        """§13.9's **effective** withheld set: the operator's `MCP_TOOLS_DISABLED`, plus this
+        request's own `tools_disabled`. The same union `router.allowed_tools` applies to the offered
+        array, read here so the two can never disagree."""
+        return frozenset(turn.request.options.tools_disabled) | frozenset(self.settings.mcp_tools_disabled_list)
+
+    def _refuse_disabled(self, turn: _Turn, name: str, arguments: dict[str, Any]) -> ToolResult:
+        """A disabled tool, refused at the call boundary — recorded, never called (G5c, gap 3).
+
+        The filter used to govern only the array offered to the model, so §9.2's gate stopped *the
+        model* from calling a withheld tool while the orchestrator's own calls walked straight past
+        it: the published `no_structured_tools` arm lists `lookup_employee_profile` in
+        `config.tools_disabled` and 8 of its 30 items called it anyway, through the deterministic
+        profile read, and `remote-003` / `remote-004` scored workflow completion 1.0 on the result.
+        An ablation arm whose intervention did not happen measures nothing.
+
+        Every `tools/call` this process makes goes through `_call` — the act loop's, its one repair,
+        the three deterministic calls, and `_resume`'s re-issue of the gated write — so one check
+        here is the whole boundary. It **never raises**: the caller sees an `is_error` result and the
+        turn degrades exactly as it does for a tool the server could not run, which is what the arm
+        is supposed to be measuring in the first place.
+        """
+        catalog = turn.catalog
+        self._error(
+            turn,
+            "tool_disabled",
+            f"{name} is disabled for this turn (MCP_TOOLS_DISABLED / options.tools_disabled)",
+            component="mcp",
+        )
+        body = {
+            "status": "error",
+            "code": "TOOL_DISABLED",
+            "message": f"{name} is disabled for this turn and was not called.",
+        }
+        text = json.dumps(body, ensure_ascii=False)
+        span_id = turn.buffer.add_span(
+            "tool_call",
+            name,
+            ToolCallPayload(
+                server=catalog.server if catalog is not None else "mcp",
+                transport=catalog.transport if catalog is not None else self.settings.mcp_transport_effective,
+                tool_name=name,
+                arguments=dict(arguments),
+                result_json=text,
+                structured_content=body,
+                is_error=True,
+                error_code="TOOL_DISABLED",
+                duration_ms=0,
+                actor_employee_id=turn.request.employee_id,
+                actor_source=turn.request.actor_source,
+            ),
+            status="error",
+            error_message="TOOL_DISABLED",
+        )
+        turn.step_summaries.append(f"step {turn.steps_taken}: {name} refused — the tool is disabled for this turn")
+        return ToolResult(
+            tool_name=name,
+            arguments=dict(arguments),
+            body=body,
+            is_error=True,
+            error_code="TOOL_DISABLED",
+            span_id=span_id,
+            duration_ms=0,
+            text=text,
+        )
+
     async def _call(self, turn: _Turn, name: str, arguments: dict[str, Any], token: str | None = None) -> ToolResult:
+        if name in self._disabled(turn):
+            return self._refuse_disabled(turn, name, arguments)
         options = turn.request.options
         return await self.client.call_tool(
             turn.buffer,
