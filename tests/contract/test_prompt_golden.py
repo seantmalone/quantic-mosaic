@@ -215,8 +215,11 @@ def test_employee_context_hands_the_model_the_human_tenure_and_keeps_the_months(
 def test_the_document_envelope_carries_the_whole_chunk_not_the_snippet():
     """§7.2 renders `c.text`. The snippet is a 320-character display subset (`rag/chunk.py`).
 
-    199 of the 204 committed chunks are longer than that, so rendering the snippet would have shown
-    the synthesis model roughly a third of every chunk it was asked to ground an answer in.
+    200 of the 205 committed chunks are longer than that (median 983), so rendering the snippet would
+    have shown the synthesis model roughly a third of every chunk it was asked to ground an answer in.
+    `synthesize.j2:11` still carries the pre-repair figures ("199 of the 204", median 995) inside a Jinja
+    comment; that file is in the frozen provenance pathspec, so it is corrected at the next rebuild and
+    recorded as stale-at-34d50fb in `design-and-evaluation.md`'s Known limitations.
     """
     _, user = prompts.render("synthesize.j2", **context("synthesize.j2"))
     for chunk in chunks():

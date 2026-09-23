@@ -117,9 +117,9 @@ on 2026-09-10 and `gemini-3.5-flash-lite` is now priced at its paid standard rat
 input tokens and $2.50 per 1M output**. Nothing records judge *tokens*, so the totals below are the
 ones measured on run `r_1789055103_baseline` — ~369k input and ~20k output over
 264 calls, **≈ $0.16** (369k × $0.30/1M + 20k × $2.50/1M). **This run's
-judge pass made 273 calls**; a pass runs 249–296 calls and **≈ $0.16–$0.18**,
-depending on how many answers had to be decomposed into claims. Neither cache bucket applies: the
-OpenAI-compatible adapter never asks for Gemini context caching.
+judge pass made 273 calls**; the 10 committed judged baselines ran **232–296** calls and **≈ $0.14–$0.18**
+at that per-call rate, the spread being how many answers each run had to decompose into claims.
+Neither cache bucket applies: the OpenAI-compatible adapter never asks for Gemini context caching.
 
 #### `judge_agreement_rate` — subset `seed_1729_8`
 
@@ -177,8 +177,8 @@ above is what tells you how many turns were pushed back into the loop at all.
 | `over_refusal_rate` | 0.000 | 0.000 | 0.000 |
 | `strict_pass_rate` | 0.900 | 0.900 | 0.733 |
 
-> ⚠ **The `no_structured_tools` variant did not move Workflow completion; the interpretive claim
-> below is NOT supported by this run.** §13.9 predicts
+> ⚠ **The `no_structured_tools` variant did not move Workflow completion past §13.9's bar; the
+> interpretive claim below is NOT supported by this run.** §13.9 predicts
 > `workflow_completion(no_structured_tools) < workflow_completion(baseline) − 0.25`; the
 > observed values are baseline **0.933** and no_structured_tools **0.733**
 > (delta **-0.200**). Read the table as a measurement, not as evidence that the agentic layer

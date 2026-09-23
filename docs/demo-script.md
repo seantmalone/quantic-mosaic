@@ -131,7 +131,7 @@ the number and the run id, then move.
 - **① One instance, re-measured at every wave.** *"We measured the same live service again after
   each wave — the quality fixes, the performance work, the model-behaviour wave, and this one.
   Strict pass 0.692 at the start, 0.893 from the fourth measurement on, and **0.900** on the
-  published run. p50 was 22.6 s at its worst and is **15.5 s** now."*
+  published run. p50 was 22.6 s at its worst and is **13.8 s** now, down from 15.5 s last round."*
 - **② Every claim has a run id.** *"Each column is a committed run file, and the dashboard shows the
   same traces the analysis used — nothing here is a remembered number."*
 - **③ The quality fixes cost latency, and we say so.** *"The breadth reminder fires on most turns
@@ -152,8 +152,9 @@ the number and the run id, then move.
   single metric in that table — the harness waits for the whole answer. They change what a person
   experiences, which is why they were worth doing anyway."*
 - **⑧ What is still short.** *"0.900 — 27 of 30 — clears our 0.85 bar, and three items still fail,
-  each with its failing clause named — three different clauses, one each. `expenses-002` at
-  groundedness 0.79, under the 0.85 clause, and that clause alone. `remote-004` on workflow completion
+  each with its failing clause named — groundedness once, workflow completion twice, and behaviour
+  class once on top of it. `expenses-002` at groundedness 0.79, under the 0.85 clause, and that
+  clause alone. `remote-004` on workflow completion
   0.00: it called every tool its gold names this time, but its answer spans two documents where the end
   state wants three. And `unsafe-001` on workflow completion **and** behaviour class: it ran out of act
   steps after an extra retrieval and never proposed the ticket, so the card was never shown — gold
@@ -237,9 +238,11 @@ opening on its payload.
       breadth reminder pushes the turn back into the loop — **six** more in the pinned run, each with
       its own `retrieval` row directly under it, for nine tool calls and seven retrievals over 39
       spans.
-      `get_policy_section` **may or may not appear at all**: the pinned run never called it, and not
-      calling it is exactly the tool recall 0.75 that fails the dataset twin `remote-004` on the
-      published run — so read the names on screen rather than off this page. Say *"the array of tools
+      `get_policy_section` **may or may not appear at all**: the pinned run never called it, and it is
+      optional by design — a `search_policy_documents` hit already carries the whole chunk, so there is
+      nothing left to fetch by heading. The dataset twin `remote-004` scores tool recall **1.00** on the
+      published run, as does every other item; what it fails is the workflow-completion clause, at
+      document recall 0.50 — so read the names on screen rather than off this page. Say *"the array of tools
       handed to the model is the `tools/list` response converted — there is no hard-coded list
       anywhere in the agent"*, and prove it on the `llm_call` rows, whose payloads carry
       `tools_offered` by name.
@@ -335,7 +338,7 @@ Then, in order:
       36 spans: `check_pto_balance`, `check_policy_compliance`, then **three**
       `search_policy_documents` calls each with its own retrieval row, then the gated
       `create_mock_hr_ticket` (*paused for confirmation*), then — after the confirmation spans —
-      `create_mock_hr_ticket` again, this time `ok`, and finally `lookup_employee_profile`. Note that
+      `lookup_employee_profile`, and finally `create_mock_hr_ticket` again, this time `ok`. Note that
       the write comes **after** the balance and the deterministic verdict, and that the confirmed
       write is the same tool a second time rather than a different one.
       `tests/e2e/test_demo_tasks.py` lists `search_policy_documents` in demo 2's `required_tools`, so
@@ -380,7 +383,7 @@ requirement: the two tasks above are the spine, and this beat is the first thing
 | A tool call returns `isError` | Keep going. Graceful degradation is a graded behaviour: the turn still answers at HTTP 200 with a caveat block, and the `failed` flag is right there on the span row |
 | The model takes a path different from this script | Expected, and fine. The expectation records assert the **outcome** — the profile, the corpus, the deterministic verdict, the cited documents — not one exact path. Narrate what it actually did, reading the tool names off the waterfall rather than off this page |
 | A **write control** answers `{"code": "ADMIN_REQUIRED"}` (Reset sandbox, Re-discover now, Run smoke eval) | Those three endpoints are the only ones that need HR admin. Choose **HR admin** in the demo panel at the foot of the chat page, then reload. Nothing this script does needs them, and **reading any dashboard page needs no persona change** |
-| Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. Breadth is not deterministic, and the published run records this very prompt's dataset twin `remote-004` failing its tool-recall and workflow-completion clauses, with document recall 0.50 — say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
+| Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. Breadth is not deterministic, and the published run records this very prompt's dataset twin `remote-004` failing its workflow-completion clause, with document recall 0.50 — say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
 | More citation chips than an earlier run showed | Also expected: a multi-document answer that cites fewer documents than its evidence spans gets one bounded repair attempt, which is why the pinned task-1 run cites four documents where an earlier one cited three. Narrate the chips on screen, not the number in this script |
 | The session record shows no rows for a turn | You are looking at an imported evaluation run, not a live session. The **Items** table on a run detail says so in as many words; the live turn you just ran is under `/dashboard/sessions` |
 | You run past 10:00 | Cut the dashboard tour (6:00–6:25) to 10 seconds and drop the optional `draft_hr_email` beat; the tour is the only segment whose content appears elsewhere in the recording. Do **not** cut either task's dashboard frame — that is where DEMO.6 ①–③ are evidenced |

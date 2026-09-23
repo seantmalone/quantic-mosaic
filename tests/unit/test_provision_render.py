@@ -219,7 +219,7 @@ def test_an_adopted_service_with_auto_deploy_on_is_patched_off():
 
     A service created by hand — or by a Blueprint deploy from before `autoDeploy: false` landed —
     keeps Render's own auto-deploy **on**, which defeats half of the R8.4 argument: a push to
-    `main` would reach production without passing `needs: [test, docker]`.
+    `main` would reach production without passing `needs: [test, docker, ux]`.
     """
     api = RecordingApi(service_exists=True, auto_deploy="yes")
     result = _provision(api)

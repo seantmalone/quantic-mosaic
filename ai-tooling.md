@@ -368,7 +368,7 @@ be present (no `git`, or a shallow clone) and **fails** rather than skipping in 
 does not have it, because a silent skip is how this guard went inert the first time.
 
 **From 2026-09-21 the trailer means something narrower, and a reader should know it.** Every commit of
-the grade-and-fix wave — both rounds, `G5(…)` and `G5b(…)` — carries `Claude Fable 5.1`, including the
+the grade-and-fix wave — all three rounds, `G5(…)`, `G5b(…)` and `G5c(…)` — carries `Claude Fable 5.1`, including the
 ones whose diffs an Opus implementer subagent wrote, because that wave's plan fixes the trailer to the coordinating session's model on every
 commit (`docs/superpowers/plans/2026-09-21-grade-5.md`, global constraints), following the same
 harness-is-authoritative clause of `constraints.md` line 14. So for those commits the trailer names

@@ -54,8 +54,8 @@ COMPARED_METRICS: tuple[str, ...] = (
 )
 
 NOT_SUPPORTED_BANNER = """\
-> ⚠ **The `no_structured_tools` variant did not move Workflow completion; the interpretive claim
-> below is NOT supported by this run.** §13.9 predicts
+> ⚠ **The `no_structured_tools` variant did not move Workflow completion past §13.9's bar; the
+> interpretive claim below is NOT supported by this run.** §13.9 predicts
 > `workflow_completion(no_structured_tools) < workflow_completion(baseline) − {threshold}`; the
 > observed values are baseline **{baseline}** and no_structured_tools **{variant}**
 > (delta **{delta}**). Read the table as a measurement, not as evidence that the agentic layer

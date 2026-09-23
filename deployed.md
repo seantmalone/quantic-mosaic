@@ -481,8 +481,9 @@ Dockerfile's `CMD` is proved to expand `${PORT}` at run time.
 **$0 of infrastructure.** Render Hobby free, Turso free, no paid database, embeddings computed
 locally by a baked ONNX model, and free Actions minutes because the repository is public (verified
 public 2026-09-08). The models are the only spend: the agent's Anthropic calls, and — since paid
-billing was enabled on the judge Cloud project on 2026-09-10 — the Gemini judge, at ≈ $0.16–0.18 a
-pass (249 to 296 calls, depending on how many answers the run had to decompose).
+billing was enabled on the judge Cloud project on 2026-09-10 — the Gemini judge, at ≈ $0.14–$0.18 a
+pass (232 to 296 calls over the ten committed judged baselines, the spread being how many answers each
+run had to decompose).
 
 | Line | Amount | Observed |
 |---|---|---|
@@ -490,7 +491,7 @@ pass (249 to 296 calls, depending on how many answers the run had to decompose).
 | Render free-tier budgets | **750 instance-hours** per workspace per calendar month and **500 build-pipeline minutes**. Build minutes used to date **~11.5 of 500** (`scripts/check_render_hours.py`, an upper bound derived from deploy wall-clock). Instance hours read **UNAVAILABLE**: `GET /v1/metrics/instance-count` answers 200 with no samples for a free instance type, so the dashboard's usage page is the figure to read — the script says so rather than printing zero | 2026-09-11 |
 | Turso database | **$0** — organisation `seantm` on the free **Starter** plan with `overages: false`, holding one database (`mosaic-hr`, group `default`, `aws-us-west-2`) | 2026-09-10 |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
-| Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.16–0.18 a judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates on the judge project since **2026-09-10**; the failover project is still on a free key. A pass is 249–296 calls over ~369k input / ~20k output tokens. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so the pass figure is stated from token counts | 2026-09-10 |
+| Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.14–$0.18 a judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates on the judge project since **2026-09-10**; the failover project is still on a free key. A pass is 232–296 calls across the ten committed judged baselines, on ~369k input / ~20k output tokens; `REPORT.md` derives that range from those runs at render time rather than carrying a literal. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so the pass figure is stated from token counts | 2026-09-10 |
 | Agent (Anthropic `claude-haiku-4-5`) | **$18.54 across the 28 committed evaluation runs** — the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time), re-derived from the files on 2026-09-23 and ranging $0.42–$0.89 a drive — plus **≈ $0.09** for the two live demo turns of 2026-09-11; the live re-captures of 2026-09-22 (`docs/evidence/demo-task-*-live-2026-09-22.txt` and the `draft_hr_email` pair) are turns of the same order and are not separately priced. **This is past §9.8's "under $10 all-in" expectation, and the overrun is the honest number:** the row read $6.84 over twelve runs when it was written on 2026-09-11 and was never re-derived as ten more drives landed. Two further drives of the 2026-09-22 waves were discarded rather than committed and cost **$0.80** (`r_1790062696`) and **$0.83** (`r_1790106448`) by their own runner summaries, recorded in the wave ledger; the two 2026-09-16 drives that live only in the trace store carry no cost figure in any committed artifact. What took the total past $10 was re-driving the baseline **and both ablation arms** on every build that changed application code: the 28 files are **nine such trios plus one lone baseline**, three of the trios were driven on 2026-09-22 alone and a fourth on 2026-09-23, as each round of the grade-and-fix wave landed a new application build. An ablation whose arms sit on different commits measures the commits rather than the ablation, and `evaluation/ablation.py` refuses to compare them, so a code fix costs three drives and not one. That was accepted deliberately: the alternative was publishing a comparison the repository's own checker rejects. Nothing here is infrastructure spend, which is still $0, and `LLM_DAILY_CALL_CAP` (1,500 calls per UTC day) is what bounds it | re-derived 2026-09-23 |
 | GitHub Actions | **$0** — public repository, no minute cap | 2026-09-08 |
 
@@ -632,7 +633,7 @@ output: 5.00, cache_write: 1.25, cache_read: 0.10}` — so no change was needed,
 **What the unverified Gemini figure does and does not affect.** §13.9 is explicit that the
 **free-tier** Gemini RPD/TPM arithmetic bounds **only the failover path**. It no longer bounds the
 judge: the judge's Cloud project moved to paid billing on 2026-09-10, so what bounds the judge is
-the **≈ $0.16–$0.18 a pass (249–296 calls)** costs (the cost row above) and the wall clock, not a free daily
+the **≈ $0.14–$0.18 a pass (232–296 calls over the ten committed judged baselines)** costs (the cost row above) and the wall clock, not a free daily
 request cap. What bounds the agent is `LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per UTC day) and
 the prompt cache. The failover project is the one still on a free key, and it is exercised only
 when an Anthropic call fails — each such call recorded as `provider_failover` on the span — so the

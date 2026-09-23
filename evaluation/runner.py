@@ -1232,12 +1232,39 @@ above is what tells you how many turns were pushed back into the loop at all."""
 #: token fields and `traces.sqlite` has no judge spans — so the totals cannot be attributed to the
 #: run being reported without saying where they came from. Only the call count is this run's, and
 #: it is interpolated rather than carried over, which is how this paragraph came to claim a
-#: **264**-call pass in a report whose own header said 249.
+#: **264**-call pass in a report whose own header said 249. The *range* a pass runs in was a second
+#: literal of the same kind — `249–296`, which a committed judged run at 232 calls already fell
+#: below — so it is derived from the committed judged baselines at render time by
+#: `_judge_call_span()` and scoped to them in the sentence.
 JUDGE_COST_MEASURED_RUN = "r_1789055103_baseline"
 JUDGE_COST_MEASURED_CALLS = 264
+JUDGE_COST_MEASURED_USD = 0.16
 
 
-def judge_cost_note(run: RunFile) -> str:
+def _judge_call_span(results_dir: Path = RESULTS_DIR) -> str:
+    """What a judge pass has actually cost, read off the committed judged baselines."""
+    calls: list[int] = []
+    for path in sorted(results_dir.glob("r_*_baseline.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        count = payload.get("judge_calls")
+        if payload.get("judge_status") == "judged" and isinstance(count, int) and count > 0:
+            calls.append(count)
+    rate = JUDGE_COST_MEASURED_USD / JUDGE_COST_MEASURED_CALLS
+    if not calls:
+        return "no judged baseline is committed beside this report, so a pass has no observed range"
+    low, high = min(calls), max(calls)
+    if low == high:
+        return f"the one committed judged baseline ran **{low}** calls and **≈ ${low * rate:.2f}**"
+    return (
+        f"the {len(calls)} committed judged baselines ran **{low}–{high}** calls and "
+        f"**≈ ${low * rate:.2f}–${high * rate:.2f}**"
+    )
+
+
+def judge_cost_note(run: RunFile, *, results_dir: Path = RESULTS_DIR) -> str:
     """The cost paragraph, with **this** run's judge-call count instead of an inherited literal."""
     return f"""\
 **What the judge pass cost.** Judge spans recorded before 2026-09-10 carry `cost_usd_estimate` =
@@ -1246,10 +1273,10 @@ at write time, so no later change re-prices a span. Paid billing was enabled on 
 on 2026-09-10 and `gemini-3.5-flash-lite` is now priced at its paid standard rates, **$0.30 per 1M
 input tokens and $2.50 per 1M output**. Nothing records judge *tokens*, so the totals below are the
 ones measured on run `{JUDGE_COST_MEASURED_RUN}` — ~369k input and ~20k output over
-{JUDGE_COST_MEASURED_CALLS} calls, **≈ $0.16** (369k × $0.30/1M + 20k × $2.50/1M). **This run's
-judge pass made {run.judge_calls} calls**; a pass runs 249–296 calls and **≈ $0.16–$0.18**,
-depending on how many answers had to be decomposed into claims. Neither cache bucket applies: the
-OpenAI-compatible adapter never asks for Gemini context caching."""
+{JUDGE_COST_MEASURED_CALLS} calls, **≈ ${JUDGE_COST_MEASURED_USD:.2f}** (369k × $0.30/1M + 20k × $2.50/1M). **This run's
+judge pass made {run.judge_calls} calls**; {_judge_call_span(results_dir)}
+at that per-call rate, the spread being how many answers each run had to decompose into claims.
+Neither cache bucket applies: the OpenAI-compatible adapter never asks for Gemini context caching."""
 
 
 def fmt(value: Any, digits: int = 3) -> str:

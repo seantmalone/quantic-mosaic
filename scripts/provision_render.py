@@ -411,7 +411,7 @@ def reconcile_auto_deploy(client: RenderClient, service: dict[str, Any], wanted:
             f"service {service_id} reports autoDeploy={observed!r} but render.yaml says "
             f"{wanted!r}, and the PATCH did not change it. Turn Auto-Deploy off in the Render "
             "dashboard (Service → Settings): with it on, a push to main reaches production "
-            "without passing `needs: [test, docker]`, which is half of R8.4."
+            "without passing `needs: [test, docker, ux]`, which is half of R8.4."
         )
     return observed, patched
 

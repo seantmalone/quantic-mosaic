@@ -42,23 +42,25 @@ ruling of all three rounds in one chronological ledger.
 | `run_eval.py` | The operational helper the measurement chain ran through: it loads the Turso handoff **by path** into the process environment, reads the `?access=` token out of `README.md`, and prints nothing |
 | `measure.sh` | The sequential chain Task 4 measured with — baseline drive, judge pass, both ablation arms, ablation, report |
 
-**Coverage: 12 briefs and 26 reports** at this commit. Round 1 is tasks **1, 1b, 1c, 2, 3, 4, 5, 5b,
+**Coverage: 12 briefs and 30 reports** at this commit. Round 1 is tasks **1, 1b, 1c, 2, 3, 4, 5, 5b,
 6a–6e, 7a, 8, 9**; round 2 is **10, 11, 11b, 12a–12d, 13** plus the measurement sub-tasks **5c** and
-**5d** that re-drove and re-labelled its published run. Briefs exist for 1, 1b, 1c, 2, 3, 4, 5, 5b,
-6 (one file covering 6a–6e), 10, 11 and 11b; every other task was briefed in its dispatch message
+**5d** that re-drove and re-labelled its published run; round 3 is **14, 15, 16** plus the measurement
+sub-task **5e** that re-drove, re-labelled and re-published on the round-3 build. Briefs exist for
+1, 1b, 1c, 2, 3, 4, 5, 5b, 6 (one file covering 6a–6e), 10, 11 and 11b; every other task was briefed in its dispatch message
 rather than in a file, which from round 2 onward is the norm because each report quotes its own brief
 at the head. Task 5's brief is one paragraph because its subject is the label files. Count the copy
 rather than trusting this paragraph: `ls docs/process/sdd/G5-grade-5/task-*-brief.md | wc -l` and the
 same for `-report.md`.
 
-**Round 3's task files are not all here yet, and that is structural rather than an omission.**
-`progress.md` is re-copied whole by each round's **final commit**, which is the only way a ledger that
-is still being written can be current here, and the same commit brings across the reports written since
-the previous copy. Round 3's own reports — tasks **14**, **15**, **16** and the measurement sub-task
-**5e** — are therefore copied by the commit that closes the round, not by the commits that wrote them.
-Round 3's grade artifacts (`regrade2-report.md`, `regrade2-gaps.json`) are here now because they were
-inputs rather than outputs. What is always current here is the ledger and the two grade pairs; what can
-lag by one commit is the report of whichever task performed the copy.
+**Round 3's task files arrived with the commit that closed the round, and that was structural rather
+than an omission.** `progress.md` is re-copied whole by each round's **final commit**, which was the
+only way a ledger that was still being written could be current here, and the same commit brought
+across the reports written since the previous copy. Round 3's own reports — tasks **14**, **15**, **16**
+and the measurement sub-task **5e** — were therefore copied by the commit that closed the round
+(`f7852bb`), not by the commits that wrote them, and they are all present here. Round 3's grade
+artifacts (`regrade2-report.md`, `regrade2-gaps.json`) were here earlier because they were inputs
+rather than outputs. What is always current here is the ledger and the grade pairs; what can lag by one
+commit is the report of whichever task performed the copy.
 
 **The credential scan was re-run over each round's copy**, not only over round 1's: the same pattern
 list below, over every file brought across in rounds 2 and 3, with the same result — names, never

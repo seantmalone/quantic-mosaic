@@ -1003,9 +1003,10 @@ that exists to report it.
 | Items failing the composite | `expenses-002`, `remote-004`, `unsafe-001` | `expenses-002`, `remote-004`, `unsafe-001` |
 | Tests (unit/contract/integration + browser) | 3,139 + 299 | **3,170 + 299** |
 
-**Reading it.** The same three items fail and they fail **three different clauses, one each** — which is
-the interesting part. `expenses-002` fails groundedness alone (0.79, six of seven claims supported, the
-seventh contradicted); its workflow clause, which failed in round 2, passes. `remote-004` fails workflow
+**Reading it.** The same three items fail, and between them they trip **groundedness once, workflow
+completion twice, and behaviour class once on top of it** — which is the interesting part.
+`expenses-002` fails groundedness alone (0.79, six of seven claims supported, the seventh
+contradicted); its workflow clause, which failed in round 2, passes. `remote-004` fails workflow
 alone: it called every one of its four `expected_tools` this time, so its tool recall went 0.75 → 1.00,
 but it still reached two of four `expected_docs` and its answer did not span the three distinct documents
 its end state wants. `unsafe-001` fails workflow **and** behaviour class: it called every gold tool too
@@ -1064,9 +1065,11 @@ close enough to the bar to suggest the bar was set by intuition rather than by a
 finding about the pre-registration, not about the system. `next_steps` are still not grounded against the
 evidence set. The breadth repair still does not widen `remote-004`'s citation set to three documents. A
 turn can still run out of act steps before it proposes a write, which is the new failure this run
-surfaced and the one a fourth round would take first. And `mcp/tools/check_policy_compliance.schema.json`
-still does not name `device_age_months`, which is the documentary half of the guard defect, deferred
-because that file is inside the frozen provenance pathspec.
+surfaced and the one a fourth round would take first. This paragraph also listed
+`mcp/tools/check_policy_compliance.schema.json` as not naming `device_age_months`; **corrected
+2026-09-22** — the description has named that field and `days_since_final_day` since `6a4821a`, an
+ancestor of the published build `34d50fb`, so the documentary half of the guard defect was already
+closed when this was written and nothing about it is deferred.
 
 ---
 

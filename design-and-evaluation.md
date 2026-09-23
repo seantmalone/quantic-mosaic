@@ -235,7 +235,13 @@ heading structure, because the heading path *is* the citation's section field. T
 asserts that its extracted heading set equals the markdown source it was generated from.
 
 Chunking is **heading-aware and deterministic**: split at H1/H2/H3 leaves; a leaf over 1,400
-characters is windowed at 1,100 characters with 150 characters of overlap on sentence boundaries;
+characters is windowed at 1,100 characters with 150 characters of overlap. Only the window **end** is
+cut back to a sentence boundary; the continuation window's **start** is a raw character offset 150
+characters back from that end (`chunk.py:155`, `start = max(end - overlap_chars, start + 1)`), so it
+opens wherever that offset lands. Measured over the committed manifest, **all 29 continuation windows
+open mid-sentence and 28 of them open mid-word.** The consequence is confined to display: `snippet_of()`
+takes the first 320 characters, so those 28 snippets open mid-word, while the stored `text` a citation
+resolves against is always the whole chunk.
 120 characters is a windowing floor, not a merge rule, so a short section stays its own chunk.
 
 ```python
@@ -474,11 +480,11 @@ than a live hazard still hold and are worth keeping on the record: the verdict w
 write could pass a blocking `not_stated` row — a caller refuses on the row, not on the verdict, which is
 why the effective `blocking` flag is published at all — `agent/compliance.py` replaces any sentence that
 draws a conclusion from a `not_stated` row and says the row was unchecked in its own line, and no item
-of any published run ever reached the defect. The one loose end left is documentary: the schema
-description at `mcp/tools/check_policy_compliance.schema.json` still names `request_type` and its three
-values without naming `device_age_months`, so nothing in the catalog tells a model to send the field
-that would let the row be decided at all. That file is inside the provenance pathspec above, so it
-waits for the next build and re-drive rather than being slipped in under a published run.
+of any published run ever reached the defect. The documentary half is closed as well: the schema
+description at `mcp/tools/check_policy_compliance.schema.json` names both `device_age_months` and
+`days_since_final_day` as of `6a4821a`, which is an ancestor of the published build `34d50fb`, so the
+catalog itself tells a model to send the fields that let those rows be decided rather than left
+`not_stated`.
 
 ### Error semantics
 
@@ -677,7 +683,7 @@ the abstraction claim is real rather than asserted:
 | Role | Provider / model | Adapter |
 |---|---|---|
 | **Agent** — route, act, synthesize, repair | Anthropic **`claude-haiku-4-5`** | `AnthropicAdapter` (native SDK, sync client behind `asyncio.to_thread`, `max_retries=0`, `timeout=25`) |
-| **Judge** | Google **`gemini-3.5-flash-lite`**, its own key on its own Cloud project — on paid billing since 2026-09-10, $0.30 / $2.50 per MTok in / out, ≈ $0.16–$0.18 a judge pass (249–296 calls) | `OpenAICompatAdapter` |
+| **Judge** | Google **`gemini-3.5-flash-lite`**, its own key on its own Cloud project — on paid billing since 2026-09-10, $0.30 / $2.50 per MTok in / out, ≈ $0.14–$0.18 a judge pass (232–296 calls over the ten committed judged baselines) | `OpenAICompatAdapter` |
 | **Agent failover** on repeated 429 / 5xx / timeout | Google `gemini-3.5-flash-lite`, a *second* Cloud project | `OpenAICompatAdapter` |
 | **CI and tests** | scripted `StubAdapter`, zero secrets | — |
 
@@ -802,7 +808,7 @@ page 8, each with its own unit suite:
 
 | id | Rule | Trigger | Action |
 |---|---|---|---|
-| **G1** | `evidence_gate` | `max_dense_score` over the fused candidate set < `MIN_EVIDENCE_SCORE` (0.60), **or** fewer than two chunks ≥ `MIN_SUPPORT_SCORE` (0.45). **At the shipped defaults the second clause is a second line of defence rather than an independent threshold:** `search_policy_documents` applies `MIN_SUPPORT_SCORE` itself when `min_dense_score` is omitted — and the agent always omits it — so the set the gate is handed is *already* floored at 0.45 and the clause reduces to *fewer than two candidates at all*. It becomes a threshold in its own right only when a call supplies a lower `min_dense_score`, which is a published parameter a model may set. Both clauses are still measured and recorded separately on the span | **Refuse and redirect**, naming what the corpus *does* cover, read from the real document list. **No `tools/call` is made.** Never answer from parametric knowledge. **One exemption (G5):** on a turn whose confirmed write has already been performed the receipt is the evidence, so the turn is answered — G1 still runs once and still records its measured figures, with the reason prefixed `PERFORMED_WRITE` |
+| **G1** | `evidence_gate` | `max_dense_score` over the fused candidate set < `MIN_EVIDENCE_SCORE` (0.60), **or** fewer than two chunks ≥ `MIN_SUPPORT_SCORE` (0.45). **At the shipped defaults the second clause is a second line of defence rather than an independent threshold:** `search_policy_documents` applies `MIN_SUPPORT_SCORE` itself when `min_dense_score` is omitted — and the agent always omits it — so the set the gate is handed is *already* floored at 0.45 and the clause reduces to *fewer than two candidates at all*. It becomes a threshold in its own right only when a call supplies a lower `min_dense_score`, which is a published parameter a model may set. Both clauses are still measured and recorded separately on the span | **Refuse and redirect**, naming five fixed corpus topics from a constant tuple and linking `/policy`, with **no index read** — the redirect is not derived from the document list. **No `tools/call` is made.** Never answer from parametric knowledge. **One exemption (G5):** on a turn whose confirmed write has already been performed the receipt is the evidence, so the turn is answered — G1 still runs once and still records its measured figures, with the reason prefixed `PERFORMED_WRITE` |
 | **G2** | `citation_resolvability` | a cited `chunk_id` is unknown, its displayed metadata mismatches the real chunk, the snippet is not a whitespace-normalised substring of the chunk text, or the chunk is quarantined | Strip the citation; if a `policy_fact` block loses all citations, drop the block; if all blocks drop, refuse. Resolution reads the **real index**, not the retrieved set |
 | **G3** | `fact_vs_recommendation` | a `policy_fact` block with zero citations | Relabel it `recommendation`; the UI renders the two distinctly |
 | **G4** | `injection_shield` | imperative-to-assistant patterns only | Mark the chunk `quarantined`: shown with a warning banner, **uncitable**, matched pattern logged |
@@ -1042,7 +1048,11 @@ for 200 with `mcp.connected` and `index.loaded`) and
 `tools/list` and a real `tools/call`, **on both stdio and mounted HTTP**).
 
 **"Deployment must only occur if tests pass" is proved two independent ways.** In the repository,
-`deploy` declares `needs: [test, docker, ux]`. On the platform, `render.yaml` sets `autoDeploy:
+`deploy` declares `needs: [test, docker, ux]`. One stale copy of that list survives in a comment:
+`render.yaml:7` still writes the gate as `needs: [test, docker]`, two jobs rather than three. The file
+is inside the frozen provenance pathspec this document prints, so the comment is **stale as of build
+`34d50fb`** and is corrected at the next application rebuild; `.github/workflows/ci.yml:188` and
+`tests/contract/test_deploy_manifests.py:330` are the authority meanwhile. On the platform, `render.yaml` sets `autoDeploy:
 false`, so the only path from a commit to the running service is the deploy that job triggers —
 `POST /v1/services/{id}/deploys` today, or the Deploy Hook if that optional secret is ever set. There is
 no branch protection — every phase pushes directly to `main`, so a rule exempting the owner would
@@ -1399,8 +1409,9 @@ agreement figure.
 **The same disclosure covers one run committed as history, and it is named here rather than left in a
 file.** `r_1790067656_baseline` — the `e85305b` drive of 2026-09-22, kept as history and not as a
 published figure — also carries a `judge_agreement_rate` of **1.000 (n = 8)** that was **folded from
-labels authored against a different run's answers**: all eight of the label file's `turn_id`s belong to
-`r_1790074972_baseline`'s turns, not to that run's. It is the same mechanical fold as column 2's, it is
+labels authored against a different run's answers**: the eight labels it was folded against were
+authored for `r_1790074972_baseline`'s answers, not for that run's (the current label file is bound to
+the published run `r_1790130220_baseline`'s `turn_id`s, 8 of 8, as recorded below). It is the same mechanical fold as column 2's, it is
 **not a published agreement figure for that run**, and it should not be read as one on
 `/dashboard/evals/r_1790067656_baseline` either. Two guards now stand behind that sentence: a label
 whose `turn_id` does not match the run being scored no longer folds in silently, and the dashboard
@@ -1951,17 +1962,7 @@ decides the `passed` flag — not off an earlier one:
     span and nothing added to the write ledger. The fix is a dedicated `TurnOutcome` value carried
     through the store, the `/chat` contract and the dashboard's labels — a schema change, and
     deliberately not made in this wave.
-14. **The one surviving half of the `not_stated` guard defect is a tool-schema description.**
-    `unmet:` guards now read a status rather than a boolean, so nothing attaches to a row the engine
-    could not check — the defect that stood here through two rounds is **closed**, with six
-    characterisation tests at `tests/unit/test_rules_engine.py:745–853` and the whole account under *The
-    nine tools* above. What is left is documentary and it is the reason the class could arise at all:
-    `mcp/tools/check_policy_compliance.schema.json` names `request_type` and its three values without
-    naming `device_age_months`, so nothing in the catalog tells a model to send the field that would let
-    `equipment.refresh_eligibility` be decided instead of left `not_stated`. That file is inside the
-    provenance pathspec this document prints, so it waits for the next build and re-drive rather than
-    being slipped in under a published run.
-15. **The bare-balance clarification rule keys on a twelve-word list, so an unlisted noun buys one
+14. **The bare-balance clarification rule keys on a twelve-word list, so an unlisted noun buys one
     extra turn.** `is_bare_balance_ask` decides `amb-003` deterministically and its docstring claims a
     question that names its balance is *"never forced to clarify"*
     (`src/hrmosaic/agent/orchestrator.py:453–454`). What it actually tests is substring membership in
@@ -1974,6 +1975,21 @@ decides the `passed` flag — not off an earlier one:
     (n = 3) on the published run. The docstring is the part that is wrong today; the fix is a wider
     list, or reading the noun in the router instead of matching it, and `orchestrator.py` is inside the
     frozen pathspec. Written out in full under *Clarification* above.
+15. **Four comments inside the frozen provenance pathspec are stale as of build `34d50fb`, and are
+    corrected at the next application rebuild.** None of them changes behaviour and each is contradicted
+    by a live document or test, which is why they are listed rather than edited under a published run.
+    Three are in the application tree: `src/hrmosaic/rag/chunk.py:6–7` says the overlap is *"cut on sentence boundaries so a chunk never
+    begins mid-sentence"* where only the window end is cut and all 29 continuation windows open
+    mid-sentence (the corrected account is under *Ingestion and chunking* above);
+    `src/hrmosaic/agent/guardrails/g1.py:84` says `next_steps` is *"built from the real index by
+    `coverage()`"* where there is no `coverage()` in `src/` and the redirect is a constant five-topic
+    tuple (the corrected account is the G1 row above, and the same file's own docstring already says it
+    *"reads nothing at all"*); and `src/hrmosaic/agent/prompts/synthesize.j2:11` — inside a Jinja comment,
+    so it never reaches a model — says *"199 of the 204 committed chunks"* with median 995 where the
+    manifest carries **205** chunks, **200** of them over the 320-character snippet cap, median **983**.
+    The fourth is `render.yaml:7`'s two-job `needs: [test, docker]` comment, recorded under *CI/CD*
+    above. All four files are inside the provenance pathspec this document prints, so editing them would
+    break the empty-diff contract test that ties the published run to the deployed build.
 
 **Limitations that were on this list and are now closed, with the wave that closed them.** The
 **confirmation-card miss** — `unsafe-001` answering where the turn should have stopped at the card,
@@ -1999,6 +2015,13 @@ whose arms came from a different build than the headline beside them — closed 
 comparison at all. And two write-path defects found by driving the live demo rather than the suite closed in the same
 wave: a *confirmed* `draft_hr_email` narrated as an evidence refusal, and a cancelled or failed write
 rendered under "You approved this — it went ahead".
+
+**And the documentary half of the `not_stated` guard defect is closed, not deferred.** It stood on this
+list as limitation 14 through round 3 on the grounds that
+`mcp/tools/check_policy_compliance.schema.json` did not name `device_age_months`; the description has
+named both `device_age_months` and `days_since_final_day` since `6a4821a`, an ancestor of the published
+build `34d50fb`, so the entry described a limitation that the published build had already closed and it
+is retired here rather than renumbered forward.
 
 **Three more closed in round 2 (G5b, 2026-09-22).** The **`equipment-001` corpus/dataset
 contradiction** — the USD 500 director threshold applied to a scheduled laptop refresh, which both the
@@ -2142,7 +2165,9 @@ numeric and jargon-heavy queries a policy corpus is made of.
 ### Chunking strategy
 
 **Heading-aware with bounded overlap windows**: split at H1/H2/H3 leaves, window leaves over 1,400
-characters at 1,100 with 150 characters of overlap on sentence boundaries. Policy documents are
+characters at 1,100 with 150 characters of overlap — the window **end** cut back to a sentence
+boundary, the continuation **start** a raw character offset 150 characters back from it, which is why
+all 29 continuation windows in the committed manifest open mid-sentence and 28 mid-word. Policy documents are
 authored as semantically complete sections, and **the section path *is* the citation** — so the
 chunk boundary and the citation boundary are the same object. Being a pure function of the corpus
 bytes, it needs no seed and is asserted byte-identical against a committed manifest in CI.

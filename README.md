@@ -34,9 +34,10 @@ python3.12 -m venv .venv
 cp .env.example .env      # optional: no credential is needed to boot, lint or test
 ```
 
-`make setup` runs exactly those steps. Every dependency is pinned in `requirements.txt`, which is
-compiled from the authoritative `pyproject.toml` with `uv pip compile` — the three commands are the
-Makefile's `lock` target, which is what `pyproject.toml`'s comment points at. Then build the index:
+`make setup` runs the same install, plus a `pip install --upgrade pip` first; the `.env` copy stays
+manual. Every dependency is pinned in `requirements.txt`, which is compiled from the authoritative
+`pyproject.toml` with `uv pip compile` — the three commands are the Makefile's `lock` target, which is
+what `pyproject.toml`'s comment points at. Then build the index:
 
 ```bash
 make ingest       # python -m hrmosaic.rag.ingest — writes data/index/hr_index.sqlite
@@ -143,8 +144,9 @@ Two surfaces and one shell: a **chat** page that is nothing but the conversation
 **observability dashboard** holding every technical detail the chat page does not show. The masthead
 is the same partial on both, the `Chat | Dashboard` switch is on every page in every persona, and
 the demo-only controls — the persona picker, the scripted prompts, the deep link into the record —
-live in one labelled *Demo & grader controls* panel at the foot of the chat page, collapsed by
-default, so nothing a real user would never see is mixed into the product.
+live in one dashed, muted *Demo & grader controls* section below the conversation at the foot of the
+chat page — **always expanded**, with no collapsed state, and below the fold — so nothing a real user
+would never see is mixed into the product.
 
 The final screen set is committed under
 [`docs/evidence/ux-final/`](docs/evidence/ux-final/) — chat at rest, an answered turn with its
