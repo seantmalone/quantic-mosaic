@@ -63,6 +63,32 @@ LABELLER_CLAIM_DOCUMENTS = [
     REPO_ROOT / "evaluation" / "reference_labels_hard.yaml",
 ]
 
+#: §13.7 / re-grade-2 gap 1 — the run whose two labelling packets were rendered *before*
+#: `scripts/gen_label_packet.py` stopped interpolating the `--subset` CLI value into the header, so
+#: `docs/evidence/label-packet-hard-2026-09-22.md:3` prints ``subset `judge_lowest` `` five lines
+#: above its own promise that the criterion is withheld. Those two files are what the labelling
+#: sessions read, byte for byte, and their labels are published — so they are **not** rewritten to
+#: match the fixed builder, and the leak is disclosed in prose instead (the label files'
+#: `protocol.blinding`). Every other run's packets, including the re-driven one this allowance exists
+#: to be deleted for, must be clean: the allowance is keyed on the run id in the packet's own header,
+#: so regenerating either file — even under the same name, on the same day — retires it.
+RUN_BEFORE_THE_NEUTRAL_HEADER = "r_1790110325_baseline"
+
+#: Where that run's packets name a criterion-bearing word, `<file>:<line>`. A frozen baseline, not a
+#: blanket exemption: a *new* leak, anywhere in either file, is a new entry and a failure.
+PACKET_CRITERION_BASELINE: dict[str, list[str]] = {
+    # line 3 is the header's ``subset `judge_lowest` ``; line 18 is "Judge against this set alone",
+    # the instruction verb the fixed builder renders as "Decide against this set alone".
+    "label-packet-hard-2026-09-22.md": ["label-packet-hard-2026-09-22.md:3", "label-packet-hard-2026-09-22.md:18"],
+    # line 5 is the seed note's "before the run was judged" — a timing claim, not this subset's
+    # criterion, but the guard does not read intent and the fixed builder says "scored".
+    "label-packet-seed-2026-09-22.md": ["label-packet-seed-2026-09-22.md:5", "label-packet-seed-2026-09-22.md:18"],
+}
+
+#: A line that carries a groundedness score. `groundedness` alone is in every packet's own title, so
+#: the pattern is the word followed by a digit on the same line — the shape a leaked score has.
+GROUNDEDNESS_SCORE_LINE = re.compile(r"groundedness\D{0,32}\d", re.IGNORECASE)
+
 PLACEHOLDER = "TBD-before-submission"
 PENDING = re.compile(r"^pending: gate \d(?: \+ \d| ?/ ?\d)*\b")
 
@@ -456,7 +482,8 @@ def test_security_posture_subsection_is_complete():
 
 
 def test_judge_methodology_names_the_labeller_and_the_blinding():
-    """RUBRIC5.8 / §13.7 — the agreement rate is never described as human."""
+    """RUBRIC5.8 / §13.7 — the agreement rate is never described as human, and the blinding claim is
+    held to the committed packets as well as to the prose that makes it."""
     body = _section(DESIGN, "### Judge methodology")
     assert "gemini-3.5-flash-lite" in body and "claude-haiku-4-5" in body
     assert "Opus" in body, "the labeller must be named, not implied"
@@ -467,6 +494,44 @@ def test_judge_methodology_names_the_labeller_and_the_blinding():
         "the labeller's relationship to the agent must be stated: same vendor, different model"
     )
     assert "judge_agreement_rate" in body
+
+    # The same claim, checked against the artifacts it describes rather than only against the prose
+    # that makes it. The two committed packets are what the labelling sessions read, so a packet that
+    # names its own selector falsifies "blind" by inspection — re-grade-2 gap 1 read it off line 3 of
+    # the hard packet, five lines above that packet's promise to withhold the criterion. Folded into
+    # this test rather than given one of its own because the collected suite size is a published
+    # figure in every `NUMBER_DOCS` document and this round may not move it.
+    criterion_words = _attribute_from_module(
+        REPO_ROOT / "scripts" / "gen_label_packet.py", "_gen_label_packet_for_docs", "CRITERION_WORDS"
+    )
+    packets = sorted(EVIDENCE.glob("label-packet-*.md"))
+    assert packets, "no labelling packet is committed, so §13.7's blinding is asserted rather than inspectable"
+    for packet in packets:
+        lines = packet.read_text(encoding="utf-8").splitlines()
+        run_id = next((m.group(1) for line in lines if (m := re.match(r"Run `([^`]+)`", line))), None)
+        assert run_id, f"{packet.name} carries no run id in its header, so it is attributable to nothing"
+        named = [
+            f"{packet.name}:{number}"
+            for number, line in enumerate(lines, start=1)
+            if any(word in line.lower() for word in criterion_words)
+        ]
+        allowed = PACKET_CRITERION_BASELINE.get(packet.name, []) if run_id == RUN_BEFORE_THE_NEUTRAL_HEADER else []
+        assert named == allowed, (
+            f"{packet.name} (run {run_id}) names its own selection criterion at {named}, expected "
+            f"{allowed}: a blind labelling packet may not carry any of {list(criterion_words)}. "
+            "Rebuild it with `python scripts/gen_label_packet.py … --subset judge_lowest`, which "
+            "prints an opaque subset token; if this is the pre-fix run, update "
+            "PACKET_CRITERION_BASELINE and say so in the label file's `protocol.blinding`."
+        )
+        scored = [
+            f"{packet.name}:{number}"
+            for number, line in enumerate(lines, start=1)
+            if GROUNDEDNESS_SCORE_LINE.search(line)
+        ]
+        assert scored == [], (
+            f"{packet.name} carries a groundedness score at {scored}; the builder reads neither "
+            "`scores` nor `verdicts`, so this cannot have come from it"
+        )
 
 
 def test_no_graded_document_sells_the_labeller_as_a_third_model_family():

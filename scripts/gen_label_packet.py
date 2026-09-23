@@ -34,8 +34,12 @@ items using the judge's own scores, and `evaluation/reference_labels_hard.yaml` 
 `selection_disclosed: true` — the report says so too, and never merges the two figures. What must
 not happen is the *labeller* learning it: told "these are the eight the judge liked least", a
 labeller drifts toward `not_grounded` and manufactures the very disagreement the subset was built
-to detect. So the packet states that a selection criterion exists and is withheld, and renders the
-items **in item-id order**, never in score order, so the ranking cannot leak through the sequence.
+to detect. So the packet states that a selection criterion exists and is withheld, refers to its
+subset by an opaque token rather than by name (the *names* are the criterion: `judge_lowest` tells a
+reader exactly what chose these eight items), and renders the items **in item-id order**, never in
+score order, so the ranking cannot leak through the sequence either. The header is checked against
+`CRITERION_WORDS` before the file is written; `docs/evidence/label-packet-hard-2026-09-22.md` is the
+packet that predates all three of those measures, and it printed ``subset `judge_lowest` `` on line 3.
 
 The `traces` argument is the literal `auto` when the run was driven against the **deployed**
 service: its turns are then in the service's own store (Turso), not in a local sqlite file, and
@@ -78,12 +82,24 @@ SUBSETS = ("seed", "judge_lowest")
 #: The `traces` value that means "whichever store this environment configures" — see the docstring.
 AUTO_STORE = "auto"
 
+#: How the packet refers to its own subset. The subset *names* are the criterion — `judge_lowest`
+#: says "the eight the judge liked least" to anyone who reads it — so the packet prints an opaque
+#: token instead and the mapping stays here, in the repository, with the rest of the disclosure.
+#: This is the leak that made the guard below necessary: the header used to interpolate the `--subset`
+#: CLI value, so the one packet whose criterion had to be withheld announced it on line 3.
+SUBSET_TOKEN: dict[str, str] = {"seed": "A", "judge_lowest": "B"}
+
+#: Words that would tell the labeller *why* these eight items are in front of them. `judge` and
+#: `lowest` name the hard subset's selector; `hardest` and `worst` are the same hint in prose. The
+#: packet's own instructions are checked against this tuple before the file is written.
+CRITERION_WORDS = ("judge", "lowest", "hardest", "worst")
+
 #: What the packet tells the labeller about how its items were chosen. Neither line contains a
-#: score, a verdict or an ordering — see the module docstring.
+#: score, a verdict, an ordering or a `CRITERION_WORDS` entry — see the module docstring.
 SELECTION_NOTE: dict[str, str] = {
     "seed": (
         "These items were sampled with a fixed seed from the questions whose correct behaviour is "
-        "to answer, before the run was judged. Nothing about any answer influenced which items are "
+        "to answer, before the run was scored. Nothing about any answer influenced which items are "
         "here."
     ),
     "judge_lowest": (
@@ -97,7 +113,7 @@ SELECTION_NOTE: dict[str, str] = {
 
 HEADER = """# Blind groundedness labelling packet
 
-Run `{run_id}` · dataset sha `{dataset_sha}…` · subset `{subset}` · {count} items.
+Run `{run_id}` · dataset sha `{dataset_sha}…` · subset `{subset_token}` · {count} items.
 
 {selection_note}
 
@@ -112,7 +128,7 @@ assistant searched up; `kind="section"` is one it fetched in full; `kind="compli
 deterministic rule engine's own requirement evidence; and `kind="structured_data"` is a record it
 read about this employee — a PTO balance, a benefits eligibility date, a profile. **A claim is
 supported if ANY item of ANY class supports it**: a correct fact taken from the employee's own
-record is grounded, not invented. Judge against this set alone — outside knowledge and plausibility
+record is grounded, not invented. Decide against this set alone — outside knowledge and plausibility
 are irrelevant, and a claim that no item supports is `not_grounded` however true it sounds.
 
 Return YAML in exactly this shape, one entry per item, in this order:
@@ -127,6 +143,34 @@ labels:
 
 ---
 """
+
+
+def criterion_words_in(text: str) -> list[str]:
+    """Which `CRITERION_WORDS` `text` carries. Empty is the only acceptable answer for a packet's
+    instructions; an item's own question, answer or evidence is not checked, because a policy
+    passage is allowed to contain an English word."""
+    lowered = text.lower()
+    return [word for word in CRITERION_WORDS if word in lowered]
+
+
+def header_for(run: RunFile, subset: str, count: int) -> str:
+    """The packet's instructions, with the subset named by token only — see `SUBSET_TOKEN`.
+
+    Refuses rather than writes a packet whose own instructions carry a criterion-bearing word: the
+    labeller's blindness is a published claim about this file, so the failure mode worth having is a
+    build that stops, not a packet that quietly names the criterion it says it withholds.
+    """
+    header = HEADER.format(
+        run_id=run.run_id,
+        dataset_sha=run.dataset_sha[:16],
+        subset_token=SUBSET_TOKEN[subset],
+        count=count,
+        selection_note=SELECTION_NOTE[subset],
+    )
+    leaked = criterion_words_in(header)
+    if leaked:
+        raise SystemExit(f"refusing to write a packet whose header names its selection criterion: {leaked}")
+    return header
 
 
 def select(subset: str, run: RunFile, dataset: Dataset, size: int) -> list[str]:
@@ -149,16 +193,7 @@ def render(run: RunFile, dataset: Dataset, store: Store, item_ids: Sequence[str]
     """The packet. Reads the served answers and the evidence; reads no score and no verdict."""
     by_id = {row.item_id: row for row in run.items if row.run_phase == "scored"}
     questions = {item.id: item.question for item in dataset.items}
-    lines = [
-        HEADER.format(
-            run_id=run.run_id,
-            dataset_sha=run.dataset_sha[:16],
-            subset=subset,
-            count=len(item_ids),
-            selection_note=SELECTION_NOTE[subset],
-        ),
-        "",
-    ]
+    lines = [header_for(run, subset, len(item_ids)), ""]
     for item_id in item_ids:
         entry = by_id.get(item_id)
         if entry is None:
