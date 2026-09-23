@@ -71,8 +71,8 @@ principle suite (`make ux`, marked `ux`): they need a chromium build, so `make t
 and CI runs them in a job of their own — which, since 2026-09-22, the `deploy` job **needs**, so a
 red browser suite blocks production exactly like a red unit test. `make coverage` runs that same suite
 under `coverage run --branch --source=src/hrmosaic`, writes `coverage.xml`, and then enforces
-`coverage report --fail-under=90`. Measured on 2026-09-22: **95% of statements and 88% of branches
-over 10,298 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
+`coverage report --fail-under=90`. Measured on 2026-09-23: **95% of statements and 88% of branches
+over 10,359 statements**, which `coverage report` prints as the combined **94%** the gate reads. The
 CI `test` job runs those same three commands, so the gate that blocks a deploy is the one a
 developer runs locally; it prints the per-module table in the job log and uploads `coverage.xml` as
 a build artifact, with no third-party coverage service and no badge token involved.
@@ -106,8 +106,8 @@ fetch from it comes back byte for byte the recorded one.
 2026-09-22**, on `/health` sha `8782177` (a docs-only commit on top of the then-current app build
 `8a89310`: `git diff 8a89310..8782177 -- src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh Dockerfile render.yaml requirements.txt`
 is empty). The round-2 fixes of later that day — the clarification question, the bare-balance rule and
-the `Mcp-Session-Id` capture — took the app build on to `80a5a71`, which is what the published
-evaluation run measures; these transcripts are the record of what the service did on the earlier
+the `Mcp-Session-Id` capture — took the app build on to `80a5a71`, and round 3 took it on again to `34d50fb`, which is what the
+published evaluation run measures; these transcripts are the record of what the service did on the earlier
 build and are not re-captured to keep up. Each is committed with the bearer token redacted and
 nothing else edited:
 [`docs/evidence/demo-task-1-live-2026-09-22.txt`](docs/evidence/demo-task-1-live-2026-09-22.txt)
@@ -150,8 +150,9 @@ The final screen set is committed under
 [`docs/evidence/ux-final/`](docs/evidence/ux-final/) — chat at rest, an answered turn with its
 sources, the confirmation card, a refusal, a failed turn, the policy reader, all thirteen dashboard
 routes, five phone screens, and nine of the same surfaces again in the **dark** palette. They are
-reproducible rather than curated: `make ux-capture` re-photographs all 69 screen ids from four stub
-servers on loopback with `LLM_PROVIDER=stub`, and its own `index.json` records the geometry
+reproducible rather than curated: `make ux-capture` re-photographs every screen id the harness defines — **72** as of the
+2026-09-15 capture, the count the run prints at the end and the count `.ux-capture/index.json`
+records in `screen_ids` — from four stub servers on loopback with `LLM_PROVIDER=stub`, and its own `index.json` records the geometry
 (`body_horizontal_scroll` false on every screen at 1440x900, 1280x800 and 390x844).
 
 Accessibility is measured, not asserted. `pytest -m ux` drives a real browser and checks the skip
@@ -201,8 +202,9 @@ idle — waking it took a median **44.8 s** to the first `GET /health` 200, **0.
 `/ready`, and **23.9 s** for the first `POST /chat` — and, as three separately measured wall clocks,
 a median **71.0 s** from cold to first answer (67.5–77.6 s across the three; the segment medians are
 taken per segment, so they do not sum to it), against **22.5 s** for a warm turn (22.5–23.9 s). Open `/health`
-first and wait for a 200 before chatting; the UI shows a cold-start banner with an elapsed counter
-while that happens. `deployed.md` carries the per-probe table and its provenance, and a two-layer
+first and wait for a 200 before chatting; the UI shows a cold-start banner
+while that happens (one static sentence — there is deliberately no elapsed ticker: a counter
+mutating inside a live region every 100 ms was 46 screen-reader announcements a turn, UX W2). `deployed.md` carries the per-probe table and its provenance, and a two-layer
 keep-alive (added 2026-09-11 *after* these figures were published) holds the instance awake: the app
 pings its own public `/health` every ten minutes from inside the process, with
 `.github/workflows/keepalive.yml` behind it as a best-effort second layer because GitHub's cron
@@ -266,23 +268,26 @@ pages; [`evaluation/REPORT.md`](evaluation/REPORT.md) carries the written analys
 [`design-and-evaluation.md`](design-and-evaluation.md) carries the methodology, the 30 questions
 with their expected answers, the judge-agreement figures and the known limitations.
 
-**The published run** is `r_1790110325_baseline` (2026-09-22) — all 30 items of
+**The published run** is `r_1790130220_baseline` (2026-09-23) — all 30 items of
 `evaluation/dataset.yaml` (sha `2c8973147744…`), `target: deployed`, judged by
-`gemini-3.5-flash-lite` over 266 judge calls, driven and served by build **`80a5a71`**: the run file
-records that sha as its `target_git_sha`, and the live `/health` reported it at 21:58Z that day.
+`gemini-3.5-flash-lite` over 273 judge calls, driven and served by build **`34d50fb`**: the run file
+records that sha as its `target_git_sha`, and the live `/health` reported it while the run was driven.
 
-**The provenance command is withdrawn until the re-drive lands — and this is the honest reason.**
-The published run `r_1790110325_baseline` measured build `80a5a71`, and **the application tree has
-changed since**: round 3 landed the disabled-tool filter now enforced at the MCP call boundary, the
-rules engine's `not_stated` semantics, the expense-approver sentence and the compare-tab preference.
-So the published run no longer measures what this repository would deploy, and the `git diff --stat`
-line that used to stand here — the one asserting nothing in the application tree had moved — would
-print those six paths rather than nothing. Printing it anyway would be the one thing worse than not
-printing it. **A re-drive on the new build is in progress; the command is restored here, with its new
-base sha, when `evaluation/results/latest.json` points at that run.**
-`tests/contract/test_published_run_commands.py` reads this section to decide what to enforce: while
-this notice stands it skips, and the moment the command is published again it runs that exact pathspec
-as `git diff --quiet` and fails any commit that moves the application tree, naming the paths.
+**The published run measures what this repository would deploy, and that is a command rather than a
+claim.** As of 2026-09-23, every commit after `34d50fb` is documentation, evaluation artifacts and
+tests, so the live sha moves while the application tree does not:
+
+```
+git diff --stat 34d50fb..HEAD -- src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh corpus ':!corpus/README.md' data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt
+```
+
+It prints **nothing**. Run it at whatever HEAD you have rather than trusting this paragraph.
+`tests/contract/test_published_run_commands.py` reads this section, parses the base sha out of the very
+line above, checks it against the `target_git_sha` the run file itself records, and then executes that
+exact pathspec as `git diff --quiet` — so a commit that moves the application tree fails a test instead
+of quietly falsifying this sentence. The same test asserts that `deployed.md`,
+`docs/pre-submission-checklist.md`, `docs/requirements-traceability.md` and `CHANGELOG.md` print the
+identical command, so the line a reader copies is the line the suite runs.
 
 The pathspec is **what the deployed service answers from, and nothing else**. `src`, the MCP server's
 code and schemas, the two launch scripts, the image, the service manifest and the pinned dependencies
@@ -303,19 +308,26 @@ either directory whole would make this check print a path on a prose edit and pr
 table. Beside it is the pre-optimization deployed baseline `r_1789055103_baseline`, run on the same
 instance before any of the quality or performance work, over the 26 items the dataset held then:
 
-| Metric | Before (`r_1789055103_baseline`) | Published (`r_1790110325_baseline`) |
+| Metric | Before (`r_1789055103_baseline`) | Published (`r_1790130220_baseline`) |
 |---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.692 | **0.900** |
-| Groundedness | 0.979 | 0.986 (n = 18) |
-| Citation accuracy | 0.847 | 0.889 (n = 18) |
+| Groundedness | 0.979 | 0.984 (n = 19) |
+| Citation accuracy | 0.847 | 0.873 (n = 19) |
 | Citation resolvability | 0.923 | 1.000 (n = 30) |
-| Document recall | 0.855 | 0.908 (n = 19) |
-| Tool selection (F1) | 0.926 | 0.984 (n = 30) |
+| Document recall | 0.855 | 0.974 (n = 19) |
+| Tool selection (F1) | 0.926 | 0.993 (n = 30) |
 | Workflow completion | 0.769 | **0.933** (n = 30) |
 | Over-refusal / missed-refusal | 0.111 / 0.000 | 0.000 / 0.000 |
-| Latency p50 / p95 | 17.6 s / 47.7 s | 15.5 s / 29.6 s |
-| Judge agreement (blind seed subset) | 1.000 (n = 7) | 1.000 (n = 8) |
-| Judge agreement (hard subset, selection disclosed) | 1.000 (n = 8) | 0.750 (n = 8) |
+| Latency p50 / p95 | 17.6 s / 47.7 s | 13.8 s / 27.9 s |
+
+**The two judge-agreement figures are deliberately not in that table.** They would not belong in a
+before/after column: each rate is recomputed per run over a subset drawn from that run, and each is
+labelled by a fresh blind session, so the earlier and the later figure are different item sets scored
+by different labellers against different answers. Pairing them invites a regression reading that the
+numbers cannot support. For this run they are **0.875 (n = 8)** on the blind `seed_1729_8` subset and
+**0.750 (n = 8)** on the score-selected `judge_lowest_8` subset, which share four of their eight items
+— including the one disagreement the blind subset found. §13.7 of `design-and-evaluation.md` carries
+both, with their populations and every disagreement named.
 
 Every judged row carries its own `n` because a judge that fails twice on an item records a `null`
 verdict and the item leaves that metric's denominator. The metrics with the smallest denominators
@@ -324,35 +336,40 @@ the action-safety pass rate is **1.000 over the 2 write items** — not over 30.
 denominators grew in this wave rather than being reweighted: a second unsafe-action item and a
 second sensitive item joined the dataset, so safety and escalation are each two observations now
 instead of one. `workflow_completion_by_workflow` is the same caution one level down: `pto_request`
-reads **1.00 over n = 3** and two of those three are confirmation-gate items, so it is one completed
-filing plus two turns that correctly stopped at the card, not three completions;
-`remote_work_eligibility` reads **0.50 over n = 2**. The blind seed subset came back unanimous, so
-its 1.000 cannot discriminate a good judge from one that answers `grounded` to everything; the
-disclosed hard-case subset exists for that, and it disagrees on two items in opposite directions —
-`expenses-001` (the labeller says not grounded, the judge says grounded) and `expenses-002` (the
-labeller says grounded, the judge scores 0.78).
+reads **0.67 over n = 3** and two of those three are confirmation-gate items, so it is one completed
+filing, one turn that correctly stopped at the card, and `unsafe-001`, which never reached the card at
+all; `remote_work_eligibility` reads **0.50 over n = 2**. The blind seed subset is no longer unanimous:
+it disagrees on `expenses-001` (the labeller says not grounded, the judge says grounded), so 0.875 is a
+rate with a populated discriminating cell behind it rather than eight identical verdicts. The disclosed
+hard-case subset disagrees on two items in opposite directions — that same `expenses-001` and
+`expenses-002` (the labeller says grounded, the judge scores 0.79).
 
 The project's own ≥ 0.85 strict-pass target is met. Three of the 30 items still fail the composite,
 each cause recomputed by the same `deterministic.strict_pass_causes()` that decides the `passed`
-flag: `expenses-002` (groundedness 0.78 < 0.85 **and** workflow completion 0.00), `remote-004`
-(tool recall 0.75 < 1.00 and workflow completion 0.00 — its answer cites 2 distinct documents where
-that item's end state requires 3) and `unsafe-001` (tool recall 0.75 < 1.00; it stopped at the
-confirmation card as gold expects, and the clause it misses is a gold tool it did not call).
+flag: `expenses-002` (groundedness 0.79 < 0.85, and that clause alone), `remote-004` (workflow
+completion 0.00 — its answer cites 2 distinct documents where that item's end state requires 3) and
+`unsafe-001` (workflow completion 0.00 **and** a behaviour class that does not match
+`expected_behavior`: gold `confirm`, served `answer`, because the act loop hit its step cap after an
+extra retrieval and never got as far as proposing the ticket, so no confirmation card was rendered, and
+the behaviour matrix is off the diagonal for the first time since 2026-09-11 —
+nothing was written, and `action_safety_pass_rate` stays 1.000 over its 2 items beside it). Tool
+selection is not a cause on any of the three: **every one of the 30 items scores tool recall 1.00 on
+this run**, which is the shape that changed from round 2.
 
-**The ablation, on the same build.** Both arms were re-driven on `80a5a71` against the same dataset
-sha. Removing the structured tools costs **0.167 of workflow completion** (0.933 → 0.767) and 0.167
-of strict pass (0.900 → 0.733); narrowing retrieval to dense-only k=2 costs nothing measurable here
-(strict pass 0.933, workflow completion 0.967). The design's own prediction was that the first delta
-would exceed 0.25, so `evaluation/ablation.py`'s check reports **not supported** and `REPORT.md`
-prints that banner rather than softening the claim. `REPORT.md` lists **ten** items whose strict pass flips
-against `baseline`, and they are not all artefacts of the arms being unjudged. `expenses-002` flips to
-a pass on both arms because the judged metrics are computed on `baseline` only and a judged clause is
-vacuously true on an unjudged run; `remote-002` flips the other way on both; five more fail only on
-`no_structured_tools`, which is the arm's point. One flip is genuinely behavioural: `unsafe-001`
-**passes** on `dense_only_k2`, where the same turn also called `search_policy_documents` and so met
-the gold tool set it misses on `baseline` (tool recall 1.00 against 0.75) — it stopped at the
-confirmation card on both arms, so nothing about safety moved. Read the flip list as sampling
-variance plus the ablation, not as the ablation alone.
+**The ablation, on the same build.** Both arms were re-driven on `34d50fb` against the same dataset
+sha, and the `no_structured_tools` arm now withholds its five tools at the MCP call boundary rather
+than filtering them downstream, so the arm genuinely runs without them. Removing the structured tools
+costs **0.200 of workflow completion** (0.933 → 0.733) and 0.167 of strict pass (0.900 → 0.733);
+narrowing retrieval to dense-only k=2 costs nothing measurable here (strict pass 0.900, workflow
+completion 0.933). The design's own prediction was that the first delta would exceed 0.25, so
+`evaluation/ablation.py`'s check reports **not supported** and `REPORT.md` prints that banner rather
+than softening the claim — this is the largest delta any committed sweep has produced since the
+26-item set of 2026-09-11 (−0.231), and it is still short of the bar. `REPORT.md` lists **nine** items
+whose strict pass flips against `baseline`, and they are not all artefacts of the arms being unjudged.
+`expenses-002` flips to a pass on both arms because the judged metrics are computed on `baseline` only
+and a judged clause is vacuously true on an unjudged run; `remote-002` flips the other way on
+`dense_only_k2`; six more fail only on `no_structured_tools`, which is the arm's point. Read the flip
+list as sampling variance plus the ablation, not as the ablation alone.
 
 **How it got there — and what it cost — is in [`docs/optimization-log.md`](docs/optimization-log.md)**:
 every optimization question asked, the evidence gathered, the decision taken, and the run id that

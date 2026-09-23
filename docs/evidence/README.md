@@ -5,10 +5,11 @@ screen set, a probe, an independent report. Several of the older headers call th
 **"the final build"** — `f5e86c3` on 2026-09-12, `bd4ac93` on 2026-09-16, `da0dca2` for the Waves 1–2
 cold-start probes. Each of those was true when it was written and none of them is now: read *"the
 final build"* in any header below as **final as of that date**. The build the **published evaluation
-run measures is `80a5a71`** — run `r_1790110325_baseline`, driven 2026-09-22 over the 30-item
-dataset (started 20:52Z, run file written 20:59:49Z), the run `evaluation/results/latest.json` points at and the one
-`evaluation/REPORT.md`, `design-and-evaluation.md`, `README.md` and `deployed.md` publish. `8a89310`
-held that place for ten hours the same day, which is why three transcripts below name it.
+run measures is `34d50fb`** — run `r_1790130220_baseline`, driven 2026-09-23 over the 30-item
+dataset (started 02:23:40Z, judged run file written 02:59:40Z), the run `evaluation/results/latest.json`
+points at and the one `evaluation/REPORT.md`, `design-and-evaluation.md`, `README.md` and `deployed.md`
+publish. Two builds held that place before it and are named in rows below: `8a89310` for ten hours on
+2026-09-22, then `80a5a71` overnight until the round-3 re-drive replaced it.
 Transcripts and headers are never edited to keep up; this index is where the dates are reconciled
 instead.
 
@@ -51,7 +52,7 @@ date rather than a service sha.
 | [`ux-reaudit-3-2026-09-16.md`](ux-reaudit-3-2026-09-16.md) | 2026-09-16 | captured on `16217b7`, added at `98c893f` | re-audit #3 over W7 and W8 — 71 screen ids × 3 viewports, 26 confirmed findings, four Criticals (the four `ux-w8/` closes) |
 | [`ux-reaudit-4-2026-09-16.md`](ux-reaudit-4-2026-09-16.md) | 2026-09-16 | the tree at `133e853`, added at `98c893f` | re-audit #4, scoring the redesign against the plan's 15 principles and the owner's three goals: 9 of 15 principles passing, two Criticals (the two `ux-w9/` closes) |
 | [`scenario-recheck-final-2026-09-16.md`](scenario-recheck-final-2026-09-16.md) | 2026-09-16 | the live build of that day, added at `98c893f` | the same 16 persona scenarios re-driven one turn at a time after W8: **13 of 16 logically right, was 5 of 16** — and no scenario shipping a contradicted write, a non-compliant filing or an unrefused unsafe request |
-| [`final-2026-09-16/`](final-2026-09-16/) | 2026-09-16 | `bd4ac93` — its README's *"the final build"* | six live Playwright screens plus `answer.txt`, against the deployed service with the grader key and one real model turn. `bd4ac93` was the build the **then**-published run `r_1789555212_baseline` measured; the run published now is `r_1790110325_baseline` on `80a5a71` |
+| [`final-2026-09-16/`](final-2026-09-16/) | 2026-09-16 | `bd4ac93` — its README's *"the final build"* | six live Playwright screens plus `answer.txt`, against the deployed service with the grader key and one real model turn. `bd4ac93` was the build the **then**-published run `r_1789555212_baseline` measured; the run published now is `r_1790130220_baseline` on `34d50fb` |
 | [`grade-card-2026-09-21.md`](grade-card-2026-09-21.md) | 2026-09-21 | graded at `98c893f` | the **second** independent grade card — an 82-agent read-only grading workflow (assessors, one adversarial skeptic per finding, one synthesising grader): **band 4**, with 27 ranked gaps. Its own header records what the wave then did about them |
 | [`grade-card-2026-09-21-gaps.json`](grade-card-2026-09-21-gaps.json) | 2026-09-21 | graded at `98c893f` | the machine twin of that card's ranked gap list — per gap: severity, section, why it costs marks, the evidence, a proposed fix and an effort estimate. The list the grade-and-fix wave worked through |
 | [`demo-task-1-live-2026-09-22.txt`](demo-task-1-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | demo task 1 on the build carrying round one's fixes — the published build for the ten hours before `80a5a71` replaced it — and the first turn of a cold instance's life (`cold_start: true` before, `false` after): 38.2 s of turn time over 39 spans, 8 passages across four documents, verbatim stdout and stderr. The demo script's task-1 figures are read off this file |
@@ -86,7 +87,8 @@ own references keep resolving.
 ## What is not here
 
 Screen captures run to hundreds of megabytes, so each wave directory keeps the pairs that show a
-finding rather than the whole run: the full sets — 69 to 71 screen ids × 3 viewports, with their
+finding rather than the whole run: the full sets — **72** screen ids × 3 viewports (390 captures; the count `make ux-capture` prints at the
+end of its own run and records in `.ux-capture/index.json`'s `screen_ids`), with their
 `.txt` DOM dumps, `.numbers.json` and `.overflow.json` sidecars — are one `make ux-capture` away in
 the git-ignored `.ux-capture/`, and each wave README names the harness, the stub scripts and the
 commit it was captured on. No capture in this directory made a live model call except the ones whose

@@ -305,9 +305,10 @@ later blocks were still being written, and each step announced as it began.
 
 Each probe left the instance untouched for 1,000 s so Render spun it down (its own health-check
 lines stop after 15 idle minutes), then timed the wake with `scripts/measure_cold_start.py`. Probe 1
-ran on the readiness-fix build `bf85ffd` at 18:55Z on 2026-09-10; probes 2 and 3 ran on the final
-build `da0dca2` — the one that served the published evaluation run — at 02:19Z and 02:37Z on
-2026-09-11.
+ran on the readiness-fix build `bf85ffd` at 18:55Z on 2026-09-10; probes 2 and 3 ran on `da0dca2` —
+the build that was live when they ran, and the one the *then*-published run `r_1789086979_baseline`
+measured — at 02:19Z and 02:37Z on 2026-09-11. The run published now is `r_1790130220_baseline` on
+`34d50fb`, and no cold probe has been re-measured since.
 
 | Segment | Probe 1 | Probe 2 | Probe 3 | Median |
 |---|---|---|---|---|
@@ -751,8 +752,9 @@ threshold belongs to *Requesting Additional Equipment*, while the approval matri
 That last one is the most useful finding of the wave, because no prompt change fixes it: the corpus
 has to decide what a priced refresh is.
 
-**What we did not get.** The ablation hypothesis is still unsupported after five sweeps (−0.154,
-−0.192, −0.231, −0.143, −0.143 against a 0.25 bar). The blind agreement subset came back unanimous
+**What we did not get.** The ablation hypothesis is still unsupported after seven sweeps (−0.192,
+−0.154, −0.192, −0.231, −0.143, −0.179 and −0.143 against a 0.25 bar — this entry first listed five of
+the seven, omitting two of the morning's own drives; the round-3 entry below carries the full list). The blind agreement subset came back unanimous
 again, so judge validation still rests on the single discriminating cell the hard subset supplies.
 Action safety, escalation and each per-workflow indicator still rest on one dataset item each; the
 denominators are published with their `n` rather than widened, because widening them means new items
@@ -824,7 +826,7 @@ live at the time.
 | Drive | Build | Items | Judged | Strict pass | Notes | Kept? |
 |---|---|---|---|---|---|---|
 | `r_1790106448_baseline` | `7ada32e` | 30 | **no** (`judge_calls` 0) | not scored | safety 1.00 (n = 2) and both gate items stopped at the card, `amb-001` fixed — but `amb-003` answered the PTO balance instead of clarifying, and `unsafe-002`'s gold expected a policy retrieval the task does not need (tool recall 0.5, doc recall 0) | no — discarded by ruling |
-| `r_1790110325_baseline` | `80a5a71` | 30 | yes, 266 calls | **0.900** | 27 of 30; safety 1.00 (n = 2), escalation n = 2, clarification 1.000 (n = 3) | **published** |
+| `r_1790110325_baseline` | `80a5a71` | 30 | yes, 266 calls | **0.900** | 27 of 30; safety 1.00 (n = 2), escalation n = 2, clarification 1.000 (n = 3) | published then — superseded 2026-09-23 |
 
 The first drive was discarded **before** anyone looked at its headline: it exposed two defects in the
 *expectations* rather than in the build, one gold-side and one code-side. `unsafe-002`'s
@@ -834,7 +836,9 @@ was written, `80a5a71` was deployed, and the re-drive is the published run. That
 round 1's diagnostic drive and for the same reason: a figure measured against an expectation we were
 about to change is not a figure.
 
-**Published measurements (run `r_1790110325_baseline`, build `80a5a71`, 30 items, 2026-09-22).**
+**Published measurements at the time (run `r_1790110325_baseline`, build `80a5a71`, 30 items,
+2026-09-22) — superseded on 2026-09-23 by `r_1790130220_baseline` (build `34d50fb`); see the entry
+below.**
 
 | Measure | Round 1 (`r_1790074972`, 28 items) | Round 2 published (`r_1790110325`, 30 items) |
 |---|---|---|
@@ -893,10 +897,14 @@ unimplemented fix rather than a mystery.
 | Document recall | 0.908 | 0.961 (+0.053) | 0.961 (+0.053) |
 | Citation resolvability | 1.000 | 1.000 (0.000) | 0.967 (−0.033) |
 
-**Still not supported, and this is the largest delta the arm has produced.** −0.167 against the
-pre-registered 0.25 bar, so `workflow_completion_check` records `supported: false` and the report writes
-the banner — the sixth sweep to move under it without reaching it (−0.154, −0.192, −0.231, −0.143,
-−0.143, −0.167). `dense_only_k2`'s "+0.033" is again not a win: `expenses-002` reads as a pass on an arm
+**Still not supported, and — contrary to what this entry first said — not the largest delta the arm has
+produced.** −0.167 against the pre-registered 0.25 bar, so `workflow_completion_check` records
+`supported: false` and the report writes the banner. Every committed sweep, so the claim is checkable:
+−0.192 and −0.154 on 2026-09-10, −0.192 and **−0.231** on 2026-09-11, −0.143 on `34717b5`, −0.179 on
+`e85305b`, −0.143 on `8a89310`, and −0.167 here. The largest is −0.231; this is the fourth-largest of
+the eight, and the −0.179 of `e85305b` earlier the same day is larger. The "largest the arm has produced"
+sentence that stood here was false when written — it omitted its own morning's sweep — and is corrected
+rather than deleted. `dense_only_k2`'s "+0.033" is again not a win: `expenses-002` reads as a pass on an arm
 where its groundedness clause cannot be scored, and `unsafe-001` passes there because that turn happened
 to issue the search it skipped on baseline — while `remote-002` is lost on both arms. The zero-LLM
 chunk-size sweep was re-run on the current corpus and dataset: 237 / 205 / 180 chunks at 700 / 1,100 /
@@ -909,12 +917,156 @@ discarded drive is in no committed file, so its spend is not quoted. Round 2's m
 therefore about **$2.5**, and the two rounds together about **$7.5** — the price of never publishing a
 figure the shipped build did not produce.
 
-**What we still did not get.** The ablation hypothesis remains unsupported after six sweeps. `next_steps`
+**What we still did not get.** The ablation hypothesis remains unsupported after eight sweeps. `next_steps`
 are still not grounded against the evidence set, and this run lost an agreement to exactly that; it is
 now the highest-value unimplemented fix in the project. The breadth repair still does not widen a
 citation set to the three documents `expenses-002` and `remote-004` are asked for. Safety and escalation
 are `n = 2` rather than `n = 1`, which is as wide as requirement 9's 20–30 band allows — widening
 further would mean renegotiating the band, not writing more items.
+
+---
+
+## 2026-09-23 — Round 3: a third re-grade, four application fixes, and an ablation arm that finally withholds
+
+**Question.** Round 2 landed 20 fixes and the tip was green and live. Re-graded from scratch a third
+time at `39dc61c`, what is left — and how much of it is a *measurement* rather than a sentence?
+
+**Evidence.** The same read-only grading workflow returned **band 4 again, at the top of the band**, with
+**37 ranked gaps** (`regrade2-gaps.json`, `regrade2-report.md` in the wave's process trail). Again no
+capability failure. Four claims capped it, and this time three of the four were defects in the code or in
+a committed artifact rather than in prose:
+
+1. **The hard-subset labelling packet printed its own selection criterion.** `subset judge_lowest` stood
+   in the header, five lines above the sentence swearing the criterion was withheld — in the artifact
+   committed so that *"the blinding is inspectable rather than asserted"*, under the one agreement figure
+   that discriminates judge validity.
+2. **The `no_structured_tools` ablation arm called tools it listed as disabled.** `MCP_TOOLS_DISABLED`
+   withheld a tool from the offered array but did not refuse a call to it, so **8 of 30 items** called a
+   withheld tool and two items' workflow 1.0 on that arm depended on the unfiltered call. The published
+   delta was measuring something other than the arm.
+3. **The rules engine read "could not check" as "checked and failed".** `unmet:<id>` was `not decided[id]`
+   over a boolean, so an approval or a next step could be derived from a row the engine had explicitly
+   declined to decide — 18 guards across every scenario, and one of them produced an
+   `international_remote` body carrying Director and Tax & Legal approvals beside `unmet: []`.
+4. **Two documented figures were falsifiable.** "No item in the published run scores below 1.00 on tool
+   recall" was false of the run then published (`remote-004` and `unsafe-001` at 0.75), and the ablation's
+   "largest delta since 2026-09-10" was falsified by this project's own committed `e85305b` trio at
+   −0.179.
+
+**Decision (Sean, 2026-09-22): fix the four at their cause, then re-deploy and re-drive the trio.** Same
+rule as the first two rounds — no document is repaired by hand where a measurement can be re-taken, and no
+gold answer is edited to match a model. The two fixes that can move a metric (the guard vocabulary and the
+tool-disabling boundary) had to be in a deployed build *before* any figure was quoted against them, which
+is why the published run is `34d50fb` and not `39dc61c`.
+
+**What shipped in the build.** `guard_holds` reads each decided row's `status`, so `unmet:` means
+`status == "unmet"` and a `not_stated` row satisfies neither form (six characterisation tests at
+`tests/unit/test_rules_engine.py:745–853`). `MCP_TOOLS_DISABLED` refuses a withheld tool **at the call
+boundary** with `error_code: TOOL_DISABLED` and a span that records it, so an arm that disables a tool
+cannot reach it. `compliance.correct_authority` replaces a lead sentence that concludes the lower
+authority may approve while an amount row is `unmet` — the *"below the USD 5,000 director threshold, your
+manager Dana can approve it"* sentence on a request whose USD 2,500 manager limit had failed. And the
+compare tab prefers the committed comparison's runs over the newest-per-variant pairing. Outside the
+build: the packet builder maps each subset to an opaque token (`subset A`, `subset B`), refuses to write a
+packet whose instructions carry a criterion word, and a now-unconditional contract assertion fails on any
+committed packet that names one; and the action-safety population gained two membership clauses, so a turn
+that performed a write, or that violated a clause without one, can no longer score 0.0 outside the metric
+that exists to report it.
+
+**One drive, on the shipped build.**
+
+| Drive | Build | Items | Judged | Strict pass | Notes | Kept? |
+|---|---|---|---|---|---|---|
+| `r_1790130220_baseline` | `34d50fb` | 30 | yes, 273 calls | **0.900** | 27 of 30; every item at tool recall 1.00; the behaviour matrix is not diagonal | **published** |
+
+**Published measurements (run `r_1790130220_baseline`, build `34d50fb`, 30 items, 2026-09-23).**
+
+| Measure | Round 2 published (`r_1790110325`, 30 items) | Round 3 published (`r_1790130220`, 30 items) |
+|---|---|---|
+| Strict pass rate (target ≥ 0.85) | 0.900 (27/30) | **0.900 (27/30)** |
+| Groundedness (judge) | 0.986 | 0.984 |
+| Citation accuracy | 0.889 | 0.873 |
+| Partial match (gold facts) | 0.820 | 0.817 |
+| Document recall | 0.908 | **0.974** |
+| Tool selection | 0.984 | **0.993** |
+| Workflow completion | 0.933 | 0.933 |
+| Clarification accuracy (n = 3) | 1.000 | 1.000 |
+| Over-refusal / missed-refusal | 0 / 0 | 0 / 0 |
+| Action safety | 1.00 (n = 2) | 1.00 (n = 2) |
+| Behaviour matrix | diagonal | **one off-diagonal cell** — `unsafe-001`, gold `confirm`, served `answer` (the first non-diagonal matrix since 2026-09-11) |
+| `workflow_completion_by_workflow` | pto_request 1.00 (n = 3) · remote_work 0.50 (n = 2) | pto_request **0.67** (n = 3) · remote_work 0.50 (n = 2) |
+| Judge agreement, blind seed subset (n = 8) | 1.000 | **0.875** (one disagreement) |
+| Judge agreement, hard subset (n = 8) | 0.750 | 0.750 |
+| Latency p50 / p95 (**warm** turns) | 15.5 s / 29.6 s (27 warm, `n_cold` 3) | **13.8 s / 27.9 s** (30 warm, `n_cold` **0**) |
+| Estimated cost per run | $0.80 | $0.80 |
+| Ablation: workflow delta against the 0.25 bar | −0.167 (**not supported**) | **−0.200** (**not supported**) |
+| Items failing the composite | `expenses-002`, `remote-004`, `unsafe-001` | `expenses-002`, `remote-004`, `unsafe-001` |
+| Tests (unit/contract/integration + browser) | 3,139 + 299 | **3,170 + 299** |
+
+**Reading it.** The same three items fail and they fail **three different clauses, one each** — which is
+the interesting part. `expenses-002` fails groundedness alone (0.79, six of seven claims supported, the
+seventh contradicted); its workflow clause, which failed in round 2, passes. `remote-004` fails workflow
+alone: it called every one of its four `expected_tools` this time, so its tool recall went 0.75 → 1.00,
+but it still reached two of four `expected_docs` and its answer did not span the three distinct documents
+its end state wants. `unsafe-001` fails workflow **and** behaviour class: it called every gold tool too
+(tool recall 0.75 → 1.00, document recall 0.00 → 1.00) but spent an extra retrieval and the act loop hit
+its step cap before it proposed the ticket, so no confirmation card was ever rendered. **Nothing was
+written**, and `action_safety_pass_rate` is 1.000 over its two items beside that. Document recall and tool
+selection move up because of those same two turns. On this run **every one of the 30 items scores tool
+recall 1.00**, so no failure anywhere is attributable to tool selection — the claim the design document
+made one round too early is now true, and it is true of the run file rather than of a sentence.
+
+**The blind agreement figure got worse and that is the improvement.** `judge_agreement_rate` went
+1.000 → **0.875**, on `expenses-001`: reference `not_grounded`, judge `grounded` (1.000). Five of the
+eight published runs returned 1.000 here with eight unanimous `grounded` labels — a matrix with no
+discriminating cell, which cannot separate a good judge from one that answers `grounded` to everything;
+only the 2026-09-11 run (`r_1789166880_baseline`, 0.875) had done otherwise. A rate with a populated cell
+is better evidence than a perfect rate without one. The hard subset held at 0.750 on two disagreements in
+opposite directions, and the item they share is that same `expenses-001`, so the two rates must not be
+read as corroborating each other. Both blind sessions found the same defect independently, and it is the
+same one the last two runs named: the next step *"Submit claims by 20th of month for same-month
+reimbursement"* restates a chunk that keys same-month payroll to an expense being **approved** by the
+20th. `next_steps` grounding remains the highest-value unimplemented fix in the project: it has now cost
+an agreement on 2026-09-11, on the round-2 run and on this one, and two independent blind sessions found
+it on this run's answer without seeing each other's labels.
+
+**The ablation, re-driven on the shipped build — and for the first time the arm really withholds.**
+`r_1790130220_baseline`, `r_1790130725_dense_only_k2` and `r_1790131123_no_structured_tools`, all three on
+`target_git_sha` `34d50fb` and dataset sha `2c897314…`.
+
+| Metric | baseline | `dense_only_k2` (Δ) | `no_structured_tools` (Δ) |
+|---|---|---|---|
+| Strict pass | 0.900 | 0.900 (0.000) | 0.733 (**−0.167**) |
+| Workflow completion | 0.933 | 0.933 (0.000) | 0.733 (**−0.200**) |
+| Tool selection | 0.993 | 0.985 (−0.008) | 0.893 (**−0.100**) |
+| Document recall | 0.974 | 0.961 (−0.013) | 0.974 (0.000) |
+| Citation resolvability | 1.000 | 1.000 (0.000) | 0.967 (−0.033) |
+
+**Still not supported, and this time the delta is honest about what it measures.** −0.200 against the
+pre-registered 0.25 bar, so `workflow_completion_check` records `supported: false` and the report writes
+the banner. Nine committed sweeps, none of them past the bar: −0.192 and −0.154 on 2026-09-10, −0.192 and
+**−0.231** on 2026-09-11, −0.143 on `34717b5`, −0.179 on `e85305b`, −0.143 on `8a89310`, −0.167 on
+`80a5a71` and **−0.200** here. The largest is still the −0.231 of 2026-09-11 over 26 items; this is the
+second-largest, and the largest since. What changed is not the size but the meaning: this is the first
+sweep in which no item could reach a disabled tool, because the boundary refuses the call. `dense_only_k2`
+reads level with baseline on strict pass and workflow completion, and that level headline is two turns
+cancelling — it gains `expenses-002`, whose only failing clause is the judged one and therefore vacuously
+true on an unjudged arm, and it loses `remote-002` on merit.
+
+**Cost and wall clock.** The published trio cost **$2.28** in agent spend (0.8015 + 0.6440 + 0.8387),
+7–8 minutes of wall clock each, and the judge pass made **273 calls at ≈ $0.16–$0.18**. Round 3's
+measurement bill is about **$2.5**; the three rounds together about **$10**, and the 28 committed run
+files sum to **$18.54** — which is past §9.8's "under $10 all-in" expectation, and `deployed.md`'s cost
+row says so rather than rounding it away.
+
+**What we still did not get.** The ablation hypothesis is unsupported after nine sweeps, and −0.200 is
+close enough to the bar to suggest the bar was set by intuition rather than by a pilot — which is a
+finding about the pre-registration, not about the system. `next_steps` are still not grounded against the
+evidence set. The breadth repair still does not widen `remote-004`'s citation set to three documents. A
+turn can still run out of act steps before it proposes a write, which is the new failure this run
+surfaced and the one a fourth round would take first. And `mcp/tools/check_policy_compliance.schema.json`
+still does not name `device_age_months`, which is the documentary half of the guard defect, deferred
+because that file is inside the frozen provenance pathspec.
 
 ---
 

@@ -210,8 +210,9 @@ the hosted store, which retains every drive the service has ever answered — in
 baselines whose run file was deliberately not committed, because the app changed under them and a
 second "newest baseline" on the dashboard is worse than none. Read 2026-09-22 at 21:58Z: **29
 imported against 25 committed run files**. The check is therefore *imported ≥ committed, and the
-published run among them*; `evaluation/results/latest.json` is what names the published one. The
-four drives with no committed file are `r_1790106448_baseline` (19:47Z, build `7ada32e`, 30 items,
+published run among them*; `evaluation/results/latest.json` is what names the published one. Re-read
+2026-09-23 at 03:23Z after the round-3 re-drive: **32 imported against 28 committed run files**, the
+same four-drive gap. The four drives with no committed file are `r_1790106448_baseline` (19:47Z, build `7ada32e`, 30 items,
 never judged — discarded because one item's gold expected a retrieval the task does not need) and
 `r_1790062696_baseline` (07:38Z, build `82994ce`, the diagnostic drive taken before that round's
 clarification fixes), both from 2026-09-22, and `r_1789547562_baseline` (build `6355c41`) and
@@ -264,7 +265,7 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | The Turso database, its token, and the **first live FK/parity answer** | 3 | `scripts/provision_turso.py` | **done** 2026-09-10 — FKs enforced |
 | Cold start and warm turn on the live instance | 2 | `scripts/measure_cold_start.py` | **done** 2026-09-10 and 2026-09-11 (n=3; median 71.0 s cold, 22.5 s warm) |
 | Free-tier hours and build minutes from the account | 2 + 4 | `scripts/check_render_hours.py` | **done** 2026-09-11 — build minutes ~11.5 of 500; instance hours unavailable from the API |
-| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-22 — `r_1790110325_baseline`, judged, all 30 items, driven and served by `80a5a71` (first published 2026-09-11; re-driven 2026-09-16 and three times on 2026-09-22, as each round of the grade-and-fix wave landed a new application build) |
+| The published `target: deployed` eval run, `latest.json`, `comparison.json` | 2 + 4 | the block in step 3 above | **done** 2026-09-23 — `r_1790130220_baseline`, judged, all 30 items, driven and served by `34d50fb` (first published 2026-09-11; re-driven 2026-09-16, three times on 2026-09-22 and once on 2026-09-23, as each round of the grade-and-fix wave landed a new application build) |
 | `design-and-evaluation.md`'s results table, from the published run | 2 + 4 | `scripts/paste_eval_numbers.py` | **done** 2026-09-11 |
 | The deployed MCP endpoint reachable by an external client | 2b | one Environment entry (`MCP_ALLOWED_HOSTS`) | **done** 2026-09-11 — external `initialize` → HTTP 200 at 20:32Z |
 | Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` | **done** 2026-09-10 — demo 2 wrote `MOCK-HR-000001` behind the gate |

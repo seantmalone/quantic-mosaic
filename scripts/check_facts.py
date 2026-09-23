@@ -32,9 +32,14 @@ The PDF is generated from `workplace-conduct.src.md` by `scripts/build_pdf.py`, 
 the source's by construction (spec §6.2); its *text*, however, is extracted from the committed PDF with
 `pypdf`, so a quote that did not survive rendering fails this check.
 
-This module is also the corpus reader for `scripts/corpus_stats.py` and for the `tests/unit/test_corpus_*`
-and `test_facts_quotes` tests. It is deliberately not `core/corpusread.py`, which is P4's index-backed
-reader over the chunked corpus.
+This module is the corpus reader for the `tests/unit/test_corpus_*` and `test_facts_quotes` tests. It is
+**not** `scripts/corpus_stats.py`'s reader — that script imports `hrmosaic.rag.parse.parse_corpus`, the
+parser that builds the shipped index, which is what makes its published table agree with the live
+`/dashboard/corpus`. Nor is it `core/corpusread.py`, which is P4's index-backed reader over the chunked
+corpus. The three readers segment a document differently on purpose, which is why the per-document line
+this script prints below is labelled *heading paths* rather than *sections*: it counts every non-empty
+heading path this quote-checker walks, including ones the index-building parser folds away, and it is
+**not** the `section_count` the graded §5.3 table publishes. Run `scripts/corpus_stats.py` for that.
 """
 
 from __future__ import annotations
@@ -418,7 +423,11 @@ def main() -> int:
     facts = load_facts()
     rules = load_rules()
     for doc_id, document in documents.items():
-        print(f"  {doc_id:<34} {document.source_format:<5} {len(document.heading_paths):>3} sections")
+        # Deliberately *not* labelled "sections": this walk counts heading paths, which is a finer
+        # segmentation than `rag.parse` — the parser the index and `corpus_stats.py` use — produces.
+        # The graded corpus table's `section_count` comes from that parser, and the two figures
+        # differ by design (G5c, gap 31).
+        print(f"  {doc_id:<34} {document.source_format:<5} {len(document.heading_paths):>3} heading paths")
     print(
         f"\n{len(documents)} documents · {len(facts)} facts · {len(rules)} rule scenarios · "
         f"{sum(len(spec['requirements']) for spec in rules.values())} requirements"

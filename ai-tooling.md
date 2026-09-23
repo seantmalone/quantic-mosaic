@@ -140,9 +140,24 @@ drive of the evaluation (`r_1790106448`, build `7ada32e`) was **discarded** rath
 because reading its results showed that one dataset item's expected answer demanded a policy
 retrieval the task does not need and another turn had no deterministic rule behind the behaviour
 gold expected. Those were fixed on the gold and code sides, the build was redeployed, and the
-published run is the drive after that (`r_1790110325_baseline`, build `80a5a71`) — the discarded
-drive scored no better, and what would have been dishonest is re-driving until a number improved and
-publishing only the last one. Both drives are named, with their figures, in the wave ledger.
+round-2 published run is the drive after that (`r_1790110325_baseline`, build `80a5a71`) — the
+discarded drive scored no better, and what would have been dishonest is re-driving until a number
+improved and publishing only the last one. Both drives are named, with their figures, in the wave
+ledger.
+
+**And a third time, which is where the pattern became the finding (2026-09-22 to 2026-09-23).** The
+round-2 tip went through the same read-only workflow at `39dc61c` and came back **band 4 again, with
+37 ranked gaps**. What made the third pass worth running is that three of the four claims capping it
+were **defects in code or in a committed artifact, not in prose**: the labelling packet printed the
+very selection criterion two documents swore it withheld, the `no_structured_tools` ablation arm
+called five tools it listed as disabled (8 of 30 items reached one), and the rules engine derived
+approvals from requirement rows it had explicitly declined to check. A documentation pass could not
+have closed any of them. Round three (**G5c**) therefore ran code first and documents last: the four
+application and tooling fixes, then a deploy, then a re-drive of the baseline and both arms on
+`34d50fb`, then a re-authored pair of blind label packets, and only then this and the other graded
+documents. The ordering is the lesson — the three rounds together read as a repository whose *claims*
+were graded harder than its *capability*, and the only durable answer to a falsifiable sentence is a
+measurement plus a test that fails when the sentence stops being true.
 
 ## What worked well
 
@@ -301,7 +316,7 @@ responsibility for the code as submitted work. Concretely: correctness is defend
 committed suite — 3,469 tests as of 2026-09-22, the count `pytest --collect-only -q` reports and the
 count a contract test holds every graded document to — and by a 30-item evaluation whose real
 numbers, including the ones below target, are published with their causes — the published run
-`r_1790110325_baseline` drives all 30 of them against the deployed build `80a5a71`; security by
+`r_1790130220_baseline` drives all 30 of them against the deployed build `34d50fb`; security by
 secrets that exist only in environment variables, two `gitleaks` scans on every CI run (the
 action's own scan of the pushed commits, and a whole-history `gitleaks detect` from the pinned
 8.30.1 binary — 280 commits read clean on 2026-09-22, that being the history at `2dee277`, which `git rev-list --count --no-merges 2dee277` counts; later runs scan more), a PII check that fails the build, an entirely synthetic corpus

@@ -5,9 +5,11 @@ Every surface the product has, at the end of the five-wave UX remediation
 against four stub servers on loopback — `LLM_PROVIDER=stub`, no live model call, no request to the
 deployed URL, one shared trace store so the dashboard shows all four conversations.
 
-This directory is the **set the report and the README cite**. The whole capture is 69 screen ids ×
-3 viewports, with the `.txt` DOM dumps, `.numbers.json` and `.overflow.json` the original audit
-measured, and it is one command away in the git-ignored `.ux-capture/`.
+This directory is the **set the report and the README cite**. The whole capture is **72** screen ids
+over **390** captures, with the `.txt` DOM dumps, `.numbers.json` and `.overflow.json` the original
+audit measured, and it is one command away in the git-ignored `.ux-capture/`. 72 is the count
+`make ux-capture` prints at the end of its own run and records in `.ux-capture/index.json`'s
+`screen_ids`, measured on the 2026-09-15 capture; earlier waves photographed fewer.
 
 | Suffix | What it is |
 |---|---|
@@ -15,7 +17,7 @@ measured, and it is one command away in the git-ignored `.ux-capture/`.
 | `-390.png` | the same screen at 390×844 — the phone |
 | `-dark-1440.png` | the same screen at 1440×900 with `prefers-color-scheme: dark` emulated |
 
-`body_horizontal_scroll` is **false on every one of the 69 ids at all three viewports** — the number
+`body_horizontal_scroll` is **false on every one of the 390 captures** — 0 of 390, which is what
 `make ux-capture` prints at the end of its own run, and the last line of the W5 report.
 
 ## Chat — the production surface

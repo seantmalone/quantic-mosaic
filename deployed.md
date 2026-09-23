@@ -19,8 +19,8 @@ included. Each row below names the command whose output it is; the full sequence
 | The Turso database `mosaic-hr`, its token and the first live FK/parity answer | `python scripts/provision_turso.py` | 2026-09-10 |
 | Measured cold start and warm turn on the live instance | `python scripts/measure_cold_start.py --url "$DEPLOY_URL"` | 2026-09-10 and 2026-09-11 (n=3) |
 | Free-tier hours and build minutes read from the account | `python scripts/check_render_hours.py` | 2026-09-11 |
-| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the judge pass, the two variants and `make ablation` | 2026-09-11, re-driven 2026-09-16 and three times on 2026-09-22, the last of them on `80a5a71` |
-| `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11, re-pasted 2026-09-22 |
+| The published `target: deployed` run, `latest.json`, `comparison.json` | `EVAL_TARGET_BASE_URL="$DEPLOY_URL" make eval`, then the judge pass, the two variants and `make ablation` | 2026-09-11, re-driven 2026-09-16, three times on 2026-09-22 and once on 2026-09-23, the last of them on `34d50fb` |
+| `design-and-evaluation.md`'s results table, refreshed from the published run | `python scripts/paste_eval_numbers.py` | 2026-09-11, re-pasted 2026-09-22 and 2026-09-23 |
 
 `RENDER_DEPLOY_HOOK_URL` is **optional**: no REST endpoint publishes it, so CI's `deploy` job
 triggers production through `POST /v1/services/{id}/deploys` with `RENDER_API_KEY` and
@@ -47,7 +47,7 @@ instance, region `oregon`, no disk, PR previews off, `autoDeploy: "no"`, `autoDe
 **harness tree's** `git rev-parse HEAD` — the code that scored the run — and `target_git_sha` is
 what the target's own `/health` reported under `app.git_sha`, the build that answered the
 questions. `evaluation/REPORT.md` prints both. The published run records both as
-`80a5a71c02f27ae696137c2afdc27bfe39d1625b`: the harness ran from the same commit the service was
+`34d50fb29429c25613ae23bd328448b4c5ad48af`: the harness ran from the same commit the service was
 serving.
 
 **Runs recorded before 2026-09-11 carry neither.** Until P23 the harness took `git_sha` from
@@ -65,11 +65,12 @@ three runs the serving commit lives here, in prose, taken from the deploy ledger
 | `r_1789555212_baseline` | published 2026-09-16 10:49:27Z — after the demo-path logic waves (W8–W10) | `bd4ac93` | yes |
 | `r_1790067656_baseline` | 2026-09-22 09:08:05Z — after the clarification fix; superseded the same day | `e85305b` | yes |
 | `r_1790074972_baseline` | published 2026-09-22 11:10:12Z — superseded that evening by the round-2 re-drive | `8a89310` | yes |
-| **`r_1790110325_baseline`** | **published — 2026-09-22 20:59:49Z, on the round-2 build, over the 30-item dataset** | **`80a5a71`** | **yes** |
+| `r_1790110325_baseline` | published 2026-09-22 20:59:49Z — on the round-2 build, superseded the next day by the round-3 re-drive | `80a5a71` | yes |
+| **`r_1790130220_baseline`** | **published — 2026-09-23 02:59:40Z, on the round-3 build, over the 30-item dataset** | **`34d50fb`** | **yes** |
 
 Every time in that column is the run file's own `created_at` in UTC — the instant the drive closed and
 the file was written. A run **id** carries a different instant: `r_<epoch>` is the drive's *start*, so
-`r_1790110325` began at 20:52Z and closed at 20:59:49Z. Where a drive has no committed file (the four
+`r_1790130220` began at 02:23:40Z on 2026-09-23 and its judged file closed at 02:59:40Z. Where a drive has no committed file (the four
 in `NEEDS-FROM-USER.md`'s import note) the id is the only timestamp there is, and that note says so.
 
 `scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
@@ -77,38 +78,41 @@ before any of those runs is allowed to count, which is what keeps the two shas f
 The earlier `target: deployed` baselines stay committed as history; only the last row is the
 published run, and `evaluation/results/latest.json` names it.
 
-**What was serving at 2026-09-22 21:58Z.** `curl -s https://mosaic-hr-copilot.onrender.com/health`,
-read at that minute, reported `app.git_sha` `80a5a71c02f27ae696137c2afdc27bfe39d1625b`,
-`status: ok`, `deploy_mode: render`, `rss_mb: 317.8`, `mcp.connected: true` with 9 tools, 14
-documents / **205** chunks (the equipment-policy repair of this wave re-ingested one more chunk),
-`trace_store.backend: turso` with `eval_runs_imported: 29`, and an empty `degradations[]` — the same
-commit the published run records as its `target_git_sha`. The reading ten hours earlier, at 11:52Z,
-was `8a89310` with 204 chunks: that was the build the superseded run measured.
+**What was serving at 2026-09-23 03:23Z.** `curl -s https://mosaic-hr-copilot.onrender.com/health`,
+read at that minute, reported `app.git_sha` `34d50fb29429c25613ae23bd328448b4c5ad48af`,
+`status: ok`, `deploy_mode: render`, `rss_mb: 325.9`, `mcp.connected: true` with 9 tools, 14
+documents / **205** chunks, `trace_store.backend: turso` with `session_count: 951`,
+`span_count: 22928` and `eval_runs_imported: 32`, and an empty `degradations[]` — the same commit the
+published run records as its `target_git_sha`. The reading of the previous evening, 2026-09-22 21:58Z,
+was `80a5a71` with 205 chunks and `eval_runs_imported: 29`: that was the build the superseded run
+measured.
 
 **The live sha moves; the application tree does not.** Every push to `main` that is not filtered
 out by `ci.yml`'s `paths-ignore` — which since 2026-09-22 keeps only published *results* off the
-build budget (`evaluation/results/**`, `evaluation/REPORT.md`, `docs/**`), so a repo-root document
-commit now runs the suite and deploys — triggers a build and a deploy. So `/health` reports
+build budget, and that is now exactly two entries: `evaluation/results/**` and
+`evaluation/REPORT.md`. Repo-root documents left the list in round 2 and `docs/**` left it in round 3,
+so a document commit anywhere in the tree now runs the suite and deploys — triggers a build and a
+deploy. So `/health` reports
 whichever commit was last deployed rather than the one a document names, and a documentation push
 made minutes after this sentence moves it. What matters is the relation, and it is a command anyone
 can run rather than a claim to take on trust:
 
 ```bash
-git diff --stat 80a5a71..HEAD -- \
+git diff --stat 34d50fb..HEAD -- \
   src mcp/tools mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh \
   corpus ':!corpus/README.md' data/index/chunks.manifest.jsonl \
   Dockerfile render.yaml requirements.txt
 ```
 
-**It printed nothing at `97177e5`, checked 2026-09-22** — the commits after the measured build
-`80a5a71` are documentation, evaluation tooling and tests. Run it at whatever HEAD you have: while it
+**It printed nothing on 2026-09-23** — the commits after the measured build `34d50fb` are
+documentation, evaluation artifacts and tests. Run it at whatever HEAD you have: while it
 prints nothing, a later sha on `/health` is a rebuild of the identical application tree, not a
 different build of the app the published run measured. If it ever prints a path, that path is the
 honest answer and this paragraph is the thing that is stale.
 
 **And the suite runs it, so the paragraph cannot go stale quietly.**
 `tests/contract/test_published_run_commands.py` reads `evaluation/results/latest.json`, opens the run
-file it names, takes that file's own `target_git_sha` — `80a5a71`, not a sha typed into a document —
+file it names, takes that file's own `target_git_sha` — `34d50fb`, not a sha typed into a document —
 and runs the pathspec above as `git diff --quiet`. A commit that moves the application tree turns that
 test red and the failure names the paths that moved. It skips only where the base sha is genuinely
 absent from the history, which CI is not: both the `lint` and the `test` jobs check out at
@@ -241,7 +245,9 @@ nothing touching it — and the behaviour a visitor gets whenever **both** keep-
 are off. That is not the live service's state today: the in-process layer has been armed on it
 since 2026-09-11 14:26Z, and this table is what comes back the moment the variable is cleared
 again. Probe 1 ran on `bf85ffd` (the readiness fix) at 18:55Z; probes 2 and 3
-ran on `da0dca2`, the build that served the published evaluation run, at 02:19Z and 02:37Z:
+ran on `da0dca2` — the build that was live when the probe ran, and the build the *then*-published run
+`r_1789086979_baseline` measured; the run published now is `r_1790130220_baseline` on `34d50fb`, and no
+cold probe has been re-measured since 2026-09-11 — at 02:19Z and 02:37Z:
 
 | Segment | Probe 1 | Probe 2 | Probe 3 | Median |
 |---|---|---|---|---|
@@ -485,7 +491,7 @@ pass (249 to 296 calls, depending on how many answers the run had to decompose).
 | Turso database | **$0** — organisation `seantm` on the free **Starter** plan with `overages: false`, holding one database (`mosaic-hr`, group `default`, `aws-us-west-2`) | 2026-09-10 |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
 | Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.16–0.18 a judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates on the judge project since **2026-09-10**; the failover project is still on a free key. A pass is 249–296 calls over ~369k input / ~20k output tokens. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so the pass figure is stated from token counts | 2026-09-10 |
-| Agent (Anthropic `claude-haiku-4-5`) | **$16.25 across the 25 committed evaluation runs** — the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time), re-derived from the files on 2026-09-22 and ranging $0.42–$0.89 a drive — plus **≈ $0.09** for the two live demo turns of 2026-09-11; the live re-captures of 2026-09-22 (`docs/evidence/demo-task-*-live-2026-09-22.txt` and the `draft_hr_email` pair) are turns of the same order and are not separately priced. **This is past §9.8's "under $10 all-in" expectation, and the overrun is the honest number:** the row read $6.84 over twelve runs when it was written on 2026-09-11 and was never re-derived as ten more drives landed. Two further drives of the 2026-09-22 waves were discarded rather than committed and cost **$0.80** (`r_1790062696`) and **$0.83** (`r_1790106448`) by their own runner summaries, recorded in the wave ledger; the two 2026-09-16 drives that live only in the trace store carry no cost figure in any committed artifact. What took the total past $10 was re-driving the baseline **and both ablation arms** on every build that changed application code: the 25 files are **eight such trios plus one lone baseline**, and three of the trios were driven on 2026-09-22 alone, as each round of the grade-and-fix wave landed a new application build. An ablation whose arms sit on different commits measures the commits rather than the ablation, and `evaluation/ablation.py` refuses to compare them, so a code fix costs three drives and not one. That was accepted deliberately: the alternative was publishing a comparison the repository's own checker rejects. Nothing here is infrastructure spend, which is still $0, and `LLM_DAILY_CALL_CAP` (1,500 calls per UTC day) is what bounds it | re-derived 2026-09-22 |
+| Agent (Anthropic `claude-haiku-4-5`) | **$18.54 across the 28 committed evaluation runs** — the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time), re-derived from the files on 2026-09-23 and ranging $0.42–$0.89 a drive — plus **≈ $0.09** for the two live demo turns of 2026-09-11; the live re-captures of 2026-09-22 (`docs/evidence/demo-task-*-live-2026-09-22.txt` and the `draft_hr_email` pair) are turns of the same order and are not separately priced. **This is past §9.8's "under $10 all-in" expectation, and the overrun is the honest number:** the row read $6.84 over twelve runs when it was written on 2026-09-11 and was never re-derived as ten more drives landed. Two further drives of the 2026-09-22 waves were discarded rather than committed and cost **$0.80** (`r_1790062696`) and **$0.83** (`r_1790106448`) by their own runner summaries, recorded in the wave ledger; the two 2026-09-16 drives that live only in the trace store carry no cost figure in any committed artifact. What took the total past $10 was re-driving the baseline **and both ablation arms** on every build that changed application code: the 28 files are **nine such trios plus one lone baseline**, three of the trios were driven on 2026-09-22 alone and a fourth on 2026-09-23, as each round of the grade-and-fix wave landed a new application build. An ablation whose arms sit on different commits measures the commits rather than the ablation, and `evaluation/ablation.py` refuses to compare them, so a code fix costs three drives and not one. That was accepted deliberately: the alternative was publishing a comparison the repository's own checker rejects. Nothing here is infrastructure spend, which is still $0, and `LLM_DAILY_CALL_CAP` (1,500 calls per UTC day) is what bounds it | re-derived 2026-09-23 |
 | GitHub Actions | **$0** — public repository, no minute cap | 2026-09-08 |
 
 **Build wall-clock, measured 2026-09-10** on the development machine (macOS arm64, Docker 29.6.1,
@@ -576,8 +582,14 @@ so **no change is needed** and the platform is not what bounds a turn — `AGENT
 `AGENT_MAX_TOOL_CALLS` and the token bucket are.
 
 **What the Turso figures settle.** A published eval run writes on the order of 10³ rows; the free
-tier's 10 M monthly writes and 5 GB are not a constraint this project can approach, and
-`TRACE_RETENTION_SESSIONS = 300` bounds the store regardless.
+tier's 10 M monthly writes and 5 GB are not a constraint this project can approach. **What retention
+bounds, precisely:** `TRACE_RETENTION_SESSIONS = 300` bounds *prunable conversational* sessions only.
+`retention.py`'s `PRUNABLE_SESSIONS` exempts every session carrying a non-null `eval_run_id`, every
+`eval_judge` and `maintenance` session, and every session that owns a `mock_writes` row — deliberately,
+so an evaluation run and a ticket created live on camera stay resolvable forever. The store therefore
+grows monotonically with the number of evaluation runs imported, and the live reading is far above 300:
+`session_count` **951** over `span_count` **22,928** with `eval_runs_imported` **32**, read
+2026-09-23. That growth is what the quota arithmetic has to be read against, not a 300-session ceiling.
 
 **The one thing Turso had never been asked, answered.** Until 2026-09-10 `TursoHTTPStore` had been
 exercised only against an httpx `MockTransport` (P1's carry-forward), so **whether foreign keys are
@@ -592,7 +604,15 @@ construction.)
 **Turso usage on the live database**, read 2026-09-10: 379k rows read and 10.5k written since the
 period opened at 04:00Z that day — both eval sweeps plus Render's 5-second `/health` poll, which
 costs five store queries each. Against the free tier's 500M reads and 10M writes a month, no quota
-action is needed, and `TRACE_RETENTION_SESSIONS = 300` bounds the store regardless.
+action was needed then. **That reading has not been re-derived and is the honest weak point in this
+row.** It was taken against a near-empty store; three of `/health`'s five queries are unqualified
+`COUNT(*)`s issued on every poll with no cache (`web/api.py`), so per-poll rows read scale with the
+store, and the store has since grown to 951 sessions over 22,928 spans because retention exempts
+evaluation sessions (above). Three headroom facts keep this short of a concern rather than resolving
+it: the free tier is 500 M reads a month, the sessions/spans/turns tables are what the counts scan, and
+a re-read of Turso's usage page — or caching the three counts for ~30 s, or replacing them with
+`max(rowid)` — is the work that would make the arithmetic current. It is named here rather than
+asserted away.
 
 ### Live provider facts — read at P10 step 0
 

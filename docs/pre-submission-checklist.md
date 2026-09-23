@@ -32,9 +32,13 @@ published a superseded evaluation run, with a stale known-limitations list and a
 by a provenance command four documents printed that no longer held at HEAD, a clarification defect
 sitting under a 1.000 metric, and two demo beats that described the wrong screen. Round two of the
 wave (`CHANGELOG.md`, entry **G5b**) closed those: the application fixes, a 30-item dataset in which
-safety and escalation no longer rest on one item each, a re-drive on build `80a5a71`, and this
-republish. The two items every card names as outside the repository — the video link and the dashboard submission
-— are the `DEMO.1` and `SUB.1` boxes below.
+safety and escalation no longer rest on one item each, a re-drive on build `80a5a71`, and a republish.
+A **fourth** pass then graded the repository again at `39dc61c` and returned **band 4 once more, with
+37 ranked gaps**, led by a labelling packet that printed its own selection criterion, an ablation arm
+that called tools it listed as disabled, and two falsifiable figures. Round three (`CHANGELOG.md`,
+entry **G5c**) closed those at their cause and re-drove the trio on build `34d50fb`, which is the run
+the boxes below are ticked against. The two items every card names as outside the repository — the
+video link and the dashboard submission — are the `DEMO.1` and `SUB.1` boxes below.
 
 ---
 
@@ -47,15 +51,15 @@ republish. The two items every card names as outside the repository — the vide
       → HTTP 200. — **done 2026-09-11**, verified 20:32Z.
 - [x] The published `target: deployed` evaluation run is committed, `evaluation/results/latest.json`
       names it, and `python scripts/paste_eval_numbers.py` has refreshed
-      `design-and-evaluation.md`'s results table from it. — **re-done 2026-09-22 on the round-2
-      build**, `r_1790110325_baseline` (all 30 items, judged, strict pass 0.900, measured on build
-      `80a5a71`); `paste_eval_numbers.py --check` exits 0. The commits after `80a5a71` are
-      documentation, evaluation tooling and tests, so the sha the live `/health` reports on the day
+      `design-and-evaluation.md`'s results table from it. — **re-done 2026-09-23 on the round-3
+      build**, `r_1790130220_baseline` (all 30 items, judged, strict pass 0.900, measured on build
+      `34d50fb`); `paste_eval_numbers.py --check` exits 0. The commits after `34d50fb` are
+      documentation, evaluation artifacts and tests, so the sha the live `/health` reports on the day
       will differ while the application tree does not. That is checked by running the command, not
-      by trusting this line: `git diff --stat 80a5a71..HEAD -- src mcp/tools
+      by trusting this line: `git diff --stat 34d50fb..HEAD -- src mcp/tools
       mcp/server_entrypoint.py mcp/run_stdio.sh mcp/run_http.sh corpus ':!corpus/README.md'
-      data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt` printed nothing at
-      `97177e5` on 2026-09-22, **and the suite runs that exact pathspec**
+      data/index/chunks.manifest.jsonl Dockerfile render.yaml requirements.txt` printed nothing on
+      2026-09-23, **and the suite runs that exact pathspec**
       (`tests/contract/test_published_run_commands.py`, against the `target_git_sha` of the run
       `latest.json` names), so this box cannot go stale without a red test. The pathspec is what the
       image serves: the application tree plus `corpus` and `data/index/chunks.manifest.jsonl`, which
@@ -69,7 +73,7 @@ republish. The two items every card names as outside the repository — the vide
 - [ ] **In the same `/health` body, read `llm.agent.calls_today` against `llm.agent.daily_call_cap`**
       (1,500 as shipped) and make sure there is headroom for the take. The cap is counted from the
       `llm_call` spans since **00:00 UTC** and resets at that minute, so a day of driving evaluation
-      runs is spent budget until midnight — the published run alone spent 266 judge calls on top of
+      runs is spent budget until midnight — the published run alone spent 273 judge calls on top of
       everything its 30 turns spent.
       This is on the list because **nothing warns you**: the five modelled `degradations[]` have no
       value for an exhausted cap (`src/hrmosaic/web/api.py:2079–2099`), so `/health` still reads
@@ -101,8 +105,10 @@ republish. The two items every card names as outside the repository — the vide
 - [ ] **DEMO.6** — for **each** task, all five elements are explained on camera: tool **names**,
       tool-call **arguments**, returned **outputs**, retrieved **citations**, and the **final
       answer or action**. Both per-task sub-checklists in `docs/demo-script.md` are fully ticked.
-- [ ] **DEMO.7** — the walkthrough covers all four topics: **design** (0:45–1:30), **deployment**
-      (6:15–7:00), **CI/CD** (7:00–7:40) and **evaluation results** (7:40–8:45).
+- [ ] **DEMO.7** — the walkthrough covers all four topics: **design**, **deployment**, **CI/CD** and
+      **evaluation results**, each in its own segment. The times are not restated here: the segment
+      table in [`docs/demo-script.md`](demo-script.md) is the single source for them, and this line is
+      ticked against that table rather than against a second copy of it.
 
 ## Submission
 

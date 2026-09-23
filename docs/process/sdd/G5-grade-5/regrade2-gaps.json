@@ -1,0 +1,372 @@
+[
+ {
+  "rank": 1,
+  "title": "The hard-subset labelling packet leaks its own selection criterion, contradicting the blinding claim in two graded documents",
+  "severity": "high",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "The one agreement figure that discriminates judge validity (0.750, n=8, versus the seed subset's non-discriminating 1.000) rests on a blinding claim the project invites the grader to verify by inspection \u2014 and the first artifact opened falsifies it. That is a materially inconsistent evaluation claim, which the rubric treats as a cap at 4.",
+  "evidence": "docs/evidence/label-packet-hard-2026-09-22.md:3 prints 'subset `judge_lowest`'; line 5 then tells the labeller the criterion is 'recorded in the project's artifacts and **deliberately withheld from this packet**'. evaluation/REPORT.md:146 asserts 'It also disclosed neither the selection criterion nor the score ordering'; design-and-evaluation.md:1495 asserts 'the hard packet additionally withholds both the selection criterion and the score ordering'; :1501 says 'both packets are committed, so the blinding is inspectable rather than asserted'. The same sentence is frozen into evaluation/reference_labels_hard.yaml protocol.blinding and repeated at docs/evidence/README.md:63. scripts/gen_label_packet.py's HEADER interpolates 'subset `{subset}`' from the CLI value with no sanitisation, while its own module docstring names this exact hazard ('What must not happen is the labeller learning it'). The hard session is the only one of the two that returned a not_grounded, and it returned it on expenses-001, which the seed session labelled grounded.",
+  "fix": "Render the header as `subset: (recorded elsewhere)` or a neutral token, regenerate both committed packets, and add a contract test asserting no packet contains a score, verdict, ordering hint or criterion-bearing subset name. If the packets cannot be re-labelled before submission, retract the 'disclosed neither the selection criterion' clause in evaluation/runner.py's report template and at design-and-evaluation.md:1495 and state plainly that the hard session could infer the criterion from the packet header.",
+  "effort": "~30 min to reword and retract; ~2 h plus a fresh blind session to regenerate and re-label"
+ },
+ {
+  "rank": 2,
+  "title": "design-and-evaluation.md states a tool-recall figure the published run contradicts, twice in one paragraph",
+  "severity": "medium",
+  "section": "4. Agent orchestration",
+  "why_it_costs_marks": "A demonstrably false statement about a rubric-named Section-4 metric, inside the paragraph claiming limitations were closed, contradicted by the same document 130 and 400 lines earlier. It is the same stale-claim-survives-a-re-drive shape the 2026-09-22 grade docked rank-1 for, so a grader reads it as an unclosed pattern rather than a typo.",
+  "evidence": "design-and-evaluation.md:1886-1888: '`remote-003` calls the lookup, scores tool recall 1.00 and passes, and no item in the published run scores below 1.00 on tool recall.' I re-derived from evaluation/results/r_1790110325_baseline.json (the run evaluation/results/latest.json names): items with tool_recall < 1.0 are remote-004 (0.75) and unsafe-001 (0.75), both passed=0. The same document tables both at :1374-1375 and narrates them at :1752-1761. The sentence was true of the 28-item round-1 run r_1790074972_baseline (tool_recall<1: []) and was not updated. Second instance in the same paragraph: :1882-1884 says unsafe-001 'passes every clause it defines' while its passed flag is 0.",
+  "fix": "Rewrite both clauses to the round-2 run: remote-003's own tool recall is 1.00 and the declined-lookup class is closed, but remote-004 and unsafe-001 score 0.75 for different reasons (a skipped get_policy_section and a skipped policy search), both already tabled above.",
+  "effort": "~10 min, documentation only, outside the frozen application pathspec"
+ },
+ {
+  "rank": 3,
+  "title": "The tools_disabled filter is enforced on the offered catalog but not at the MCP call boundary, so the published ablation arm calls a tool it disabled on 8 of 30 items",
+  "severity": "medium",
+  "section": "5. MCP server(s)",
+  "why_it_costs_marks": "The rubric's ablation requirement is satisfied by an arm whose stated intervention did not fully happen, and the metric improvement the last wave is proudest of depends on the unfiltered call. It is an evaluation-validity defect with an MCP-layer cause, and the operator knob does not do what .env.example says.",
+  "evidence": "src/hrmosaic/agent/router.py:211 unions MCP_TOOLS_DISABLED with the per-request list, but that union governs only the schema array offered to the model. `_settle_profile_debt` / `_profile_outstanding` (src/hrmosaic/agent/orchestrator.py:2058-2104) carries no `_permitted()` clause, unlike its siblings `_verdict_outstanding` (:2124) and `_propose_deterministically` (:2204), and `_call` (:2403) forwards straight to client.call_tool. I confirmed the consequence on the artifact: evaluation/results/r_1790111270_no_structured_tools.json lists lookup_employee_profile in config.tools_disabled, and 8 items record it in scores.tools_called (expenses-002, pto-002, pto-003, remote-003, remote-004, benefits-002, unsafe-001, unsafe-002). dataset.yaml gives remote-003 and remote-004 `requires_tool_results: [lookup_employee_profile]`, so their workflow 1.0 on that arm is produced by the disabled call. The two contract tests covering the knob read only `tools_offered` spans.",
+  "fix": "Check `name in self._permitted(turn)` inside `_call` (or gate `_profile_outstanding` on `PROFILE_TOOL in self._permitted(turn)`), add a test that an operator-disabled lookup_employee_profile is absent from a turn that would otherwise settle the profile debt, then either re-drive the arm or annotate the published comparison with the 8 items that called it. Also record the effective union rather than the requested list at evaluation/runner.py:1050.",
+  "effort": "~1 h for the guard and test; a re-drive costs about $0.75 and one UTC day of cap headroom"
+ },
+ {
+  "rank": 4,
+  "title": "check_policy_compliance attaches approvals and next steps derived from requirements it recorded as not_stated, and the deciding field is absent from the published schema",
+  "severity": "medium",
+  "section": "5. MCP server(s)",
+  "why_it_costs_marks": "The tool asserts a conclusion it explicitly could not reach, contradicting its own published input contract, and the agent-layer mitigation repairs only the chat prose \u2014 an external MCP client on the documented public mount reads the unrepaired body. The disclosure is exemplary in mechanism but understates the blast radius and never mentions the instance that reaches `conditional` on the flagship demo scenario.",
+  "evidence": "src/hrmosaic/mcpserver/rules.py:533 evaluates `unmet:<id>` as `not decided[id]`, decided[] holds decision.met (:783), and a not_stated row carries met=False by construction (:636) \u2014 while the published `unmet[]` list is correctly filtered on `status == \"unmet\"` (:832), so the body self-contradicts. Reproduced in-process: equipment_request with `{request_type: \"refresh\"}` returns verdict insufficient_evidence, `unmet: []`, and yet an early-refresh Direct-manager approval plus its next step; international_remote with only `destination_country` returns verdict **conditional**, `unmet: []`, and approvals [Direct manager, Director, Tax & Legal] with 'File a Tax & Legal review request at least 21 calendar days before departure' \u2014 byte-identical to the 42-day run. corpus/rules.yml has 18 `applies_when: \"unmet:\"` guards; the disclosure at design-and-evaluation.md:445-480 names only the four equipment ones. The deciding field `device_age_months` appears only at corpus/rules.yml:414 and nowhere in mcp/tools/check_policy_compliance.schema.json, whose `request_type` description defines \"refresh\" as a device at or past its 36-month cycle \u2014 the opposite of the approval reason returned.",
+  "fix": "Split the guard vocabulary (`unmet:` meaning `status == \"unmet\"`, plus a separate `not_stated:` form), or suppress every `unmet:`-guarded approval and next step when the row is not_stated; name `device_age_months` in the parameters description. If the provenance freeze stands, widen the disclosure to state the real scope (18 guards, including international_remote's Tax & Legal approval at verdict `conditional`) and add characterisation tests pinning the current output for `{request_type: \"refresh\"}` and `{destination_country: \"PT\"}`.",
+  "effort": "~2 h plus a re-ingest-free re-drive for the code fix; ~30 min for the disclosure-and-freeze route"
+ },
+ {
+  "rank": 5,
+  "title": "The ablation narrative publishes a false superlative and omits a committed same-build sweep with a larger delta",
+  "severity": "medium",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "A falsifiable claim about the project's own ablation history, on the requirement the ablation bullet grades, contradicted by two committed run files. The optimization log's version is worse \u2014 self-contradictory on its face.",
+  "evidence": "design-and-evaluation.md:1608-1611 lists '-0.154, -0.192, -0.231, -0.143 and -0.143 ... across six sweeps' and concludes 'This is the largest delta the arm has produced since 2026-09-10'. I recomputed workflow_completion over every committed run and grouped by (target_git_sha, dataset_sha): the e85305b trio of 2026-09-22 (r_1790067656_baseline 0.9643 vs r_1790068520_no_structured_tools 0.7857, same dataset sha e83cc9fc48) gives -0.1786, larger than the published -0.1667 and later than 2026-09-10. docs/optimization-log.md:896 states 'this is the largest delta the arm has produced' while listing -0.231 in the same sentence. The -0.179 figure does exist in the process trail (docs/process/sdd/G5-grade-5/task-4-report.md:90), so the measurement is not concealed \u2014 the published list and superlative are wrong.",
+  "fix": "Add the -0.179 sweep and drop the superlative: 'the second-largest of the deployed sweeps; the largest is -0.231 on 2026-09-10 and the e85305b trio of 2026-09-22 reached -0.179.' Fix the self-contradiction at docs/optimization-log.md:896 the same way.",
+  "effort": "~15 min, documentation only"
+ },
+ {
+  "rank": 6,
+  "title": "deployed.md's free-tier quota argument rests twice on a retention bound the live store contradicts by 2.9x",
+  "severity": "medium",
+  "section": "7. Deployment",
+  "why_it_costs_marks": "A false claim, stated twice, inside a section headed 'Nothing here is inferred', catchable by a grader who merely opens the URL the same document supplies. It also makes the read-cost arithmetic the paragraph prices unreliable, since per-poll rows scale with the number of eval runs committed.",
+  "evidence": "deployed.md:580 and :595 both close with '`TRACE_RETENTION_SESSIONS = 300` bounds the store regardless'. src/hrmosaic/core/retention.py:29-35 (PRUNABLE_SESSIONS) exempts every session with a non-null eval_run_id, and its docstring says so. Live `/health` reports trace_store {backend turso, reachable true, session_count 856, span_count 20735, eval_runs_imported 29} against settings.py:140's default of 300. src/hrmosaic/web/api.py:2173-2177 issues three unqualified COUNT(*)s on every `/health` call with no cache, plus count_calls_today and _last_llm_call \u2014 the five queries the paragraph prices \u2014 and the 379k-rows-read figure it relies on was read 2026-09-10 against a near-empty store and has never been re-derived.",
+  "fix": "Reword both sentences to what is true: retention bounds conversational sessions at 300 and evaluation sessions are deliberately kept forever. Then either re-read Turso usage on the current store or cheapen `/health` (cache the three counts for ~30 s, or use max(rowid)) so the quota claim is derived from today's shape.",
+  "effort": "~20 min to reword; ~1 h if the /health counts are also cached"
+ },
+ {
+  "rank": 7,
+  "title": "Demo task 2's tool-chain bullet contradicts the capture it cites 30 lines earlier and the e2e record",
+  "severity": "medium",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "The presenter may narrate away the RAG call on the one task where the band-5 bullet wants RAG retrieval visible, and a grader who opens the named capture finds it says the opposite. It is the same stale-capture class the 2026-09-22 grade raised for task 1's bullet \u2014 fixed there, left here.",
+  "evidence": "docs/demo-script.md:331-332: '`search_policy_documents` may or may not appear at all: the pinned run answered from the rules engine's own evidence passages and never called it.' The pinned run is named at :273; `grep -c 'tool_call      search_policy_documents' docs/evidence/demo-task-2-live-2026-09-22.txt` returns 3 (lines 79, 83, 87, each with its own retrieval row, '8 tool call(s), 3 retrieval(s)' at :118). tests/e2e/test_demo_tasks.py:81 lists search_policy_documents in demo-2's required_tools, so the stub always calls it. The only run matching the hedge is the superseded 2026-09-15 p29 capture, which bullet 4 already attributes correctly. The bullet's chain is also four calls short of the capture (it omits lookup_employee_profile after the gate).",
+  "fix": "Re-cut the bullet off the 2026-09-22 capture: check_pto_balance, check_policy_compliance, three search_policy_documents each with its retrieval row, the refused create_mock_hr_ticket, the confirmation spans, create_mock_hr_ticket ok, then lookup_employee_profile \u2014 eight tool calls over 36 spans. Move the 'may not appear' hedge to the 2026-09-15 run where it is true, and note that the e2e record requires the call under the stub.",
+  "effort": "~20 min, one file"
+ },
+ {
+  "rank": 8,
+  "title": "Three graded documents publish three different demo segment-timing sets, and the traceability matrix sources its set to a spec section its own banner retires",
+  "severity": "medium",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "Cross-document inconsistency on the demo plan, in the area this submission has already been docked twice for (superseded figures published as current), with a real if small chance of the take being paced off the wrong table. Nothing guards it: the contract test checks only that a segment table and the literals 0:00 and 9:15 exist.",
+  "evidence": "docs/demo-script.md:78-88 gives architecture 0:45-1:25, tasks 1:25-3:40 and 3:40-6:00, deployment 6:25-7:10, CI/CD 7:10-7:50, evaluation 7:50-8:50, summing to 9:15. docs/pre-submission-checklist.md:104-105 gives 0:45-1:30 / 6:15-7:00 / 7:00-7:40 / 7:40-8:45. docs/requirements-traceability.md:185 and :187 give that same superseded set plus 1:30-3:30 and 3:30-5:30 for DEMO.5, and cite '\u00a718.3' \u2014 the section docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md:13-16 explicitly declares superseded in favour of docs/demo-script.md. The DEMO.5 row also still pins docs/evidence/demo-task-{1,2}-live-2026-09-11.txt as its live evidence, two generations behind the 2026-09-22 pair the script reads.",
+  "fix": "Make docs/demo-script.md the single home for the timings: have the checklist and the traceability matrix say 'per docs/demo-script.md's segment table' instead of restating numbers, and repoint DEMO.5's evidence at the 2026-09-22 captures. If the numbers must stay, add a contract test parsing the segment table and asserting the other two documents quote it.",
+  "effort": "~30 min for the edits; ~1 h with the contract test"
+ },
+ {
+  "rank": 9,
+  "title": "The chunking strategy is described as sentence-boundary overlap in shipped source and two graded documents; 23 of 29 continuation windows begin mid-word",
+  "severity": "low",
+  "section": "2. RAG ingestion & indexing",
+  "why_it_costs_marks": "A false statement about the design choice R2.2 grades, repeated in three places, and untested \u2014 a grader who greps the manifest after reading the justification finds the opposite. The damaged text is also what the reader would see in a citation blockquote and what the model sees in the `<document>` envelope.",
+  "evidence": "src/hrmosaic/rag/chunk.py:146 snaps the window end to a boundary via `_cut`, but :155 starts the next window at `max(end - overlap_chars, start + 1)` \u2014 a raw offset. chunk.py:6-7 claims windows are 'cut on sentence boundaries so a chunk never begins mid-sentence'; design-and-evaluation.md:238 and :2021 say '150 characters of overlap on sentence boundaries'; .env.example:56 repeats it. Over data/index/chunks.manifest.jsonl there are 29 continuation windows; 23 begin mid-word (e.g. c_598a56bc1ec155da opens 'n there is not available.'), the other 6 mid-sentence. The stored snippet column carries the damage. tests/unit/test_chunking.py has no assertion on a continuation opening. Mitigating: CHANGELOG.md:662-668 already discloses the phenomenon accurately, so this is an internal inconsistency, and neither committed demo cites one of the 29.",
+  "fix": "Cheapest: correct the three claims to say the end cut is on a sentence boundary and the overlap start is not, and state the 29-window figure. Better: snap the continuation start backwards to the nearest sentence (or at minimum word) boundary before slicing \u2014 which moves every chunk_id and needs a re-ingest, manifest rewrite and re-drive.",
+  "effort": "~20 min for the wording; ~3 h plus a re-drive for the code fix"
+ },
+ {
+  "rank": 10,
+  "title": "README, design-and-evaluation.md and docs/architecture.html all describe a cold-start banner 'with an elapsed counter' the template records having removed",
+  "severity": "low",
+  "section": "6. Web application",
+  "why_it_costs_marks": "A false claim about the web application inside the section the web application is graded on, in three graded documents, where the shipped code is contract-pinned to the opposite. Neither earlier grade caught it.",
+  "evidence": "README.md:200 'the UI shows a cold-start banner with an elapsed counter'; design-and-evaluation.md:979 same; docs/architecture.html:1823 'a /health preflight banner with an elapsed counter'. src/hrmosaic/web/templates/chat.html:20 comments 'No elapsed ticker: a counter mutating inside a live region every 100 ms was 46 announcements a turn and told nobody anything (UX W2)', and :23 is one static sentence; `grep -n elapsed chat.html` returns only that comment. No timer exists anywhere in the UI. tests/contract/test_chat_page_renders.py:89 asserts the exact counterless markup, so the code side is locked and the documents are the drifted side. The same claim was caught and fixed in a third document during round 2 (docs/process/sdd/G5-grade-5/task-6c-report.md:197) and never propagated.",
+  "fix": "Delete 'with an elapsed counter' from all three documents \u2014 the banner alone is the better-justified behaviour \u2014 or add a contract test pinning whichever wording is kept.",
+  "effort": "~5 min"
+ },
+ {
+  "rank": 11,
+  "title": "docs/architecture.html's CI figure draws four job tiles and no ux-to-deploy edge under a heading that says five jobs",
+  "severity": "low",
+  "section": "10. Design documentation",
+  "why_it_costs_marks": "The page README offers as the interactive architecture walkthrough under-draws the exact gate three graded documents foreground as this wave's improvement, and `ux` is the only one of the figure's 170 elements with no data-id, no detail panel and no keyboard focus.",
+  "evidence": "docs/architecture.html:1362 'ONE FILE, FIVE JOBS'; job groups exist for f6-lint (:1364), f6-test (:1372), f6-docker (:1381), f6-deploy (:1389); `ux` is plain `<text>` at :1397 and `grep -n f6-ux docs/architecture.html` returns nothing. The only `needs` edges are test\u2192deploy (:1456) and docker\u2192deploy (:1459), and the PR trigger edge's data-to omits ux although the figure's aria-label says PRs run 'lint, test, ux, docker'. Ground truth: .github/workflows/ci.yml:181 `needs: [test, docker, ux]`. Mitigating: the deploy tile's own title text and the ux caption both state the gate in rendered SVG, and the node's detail cards are correct.",
+  "fix": "Add an `f6-ux` tile with a `D[\"f6-ux\"]` detail entry (299 browser checks, cached chromium, no needs of its own), an ux\u2192deploy edge, and `f6-ux` to the push and PR trigger edges' data-to.",
+  "effort": "~20 lines in one file, no behaviour"
+ },
+ {
+  "rank": 12,
+  "title": "The evaluation demo beat tells the presenter to read two figures off a page that carries neither",
+  "severity": "low",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "The narration cell for the segment the rubric names ('a quick walkthrough of ... evaluation results') does not match the screen, in a script that elsewhere insists on reading numbers off the screen. On camera the presenter either points at nothing or skips four tiles that are there.",
+  "evidence": "docs/demo-script.md:85 says to open /dashboard/evals/r_1790110325_baseline and 'Walk the metric tiles and say the n with each one', then lists document recall 0.908 (n=19) and workflow completion 0.933 (n=30). src/hrmosaic/web/dashboard.py:182-191 defines HEADLINE_METRICS as eight keys and eval_detail.html:66 renders those plus clarification_accuracy \u2014 nine tiles, with no doc_recall_mean and no overall workflow_completion; eval_detail.html:186-192 even comments that Doc recall is 'a short key with no tile anywhere on the page'. On the live page `document recall` returns 0 hits; the Workflow completion heading is a per-workflow pill list (PTO request 100.0% 3 of 3, remote work eligibility 50.0% 1 of 2), and action safety sits under 'Behaviour and safety'. Partially mitigating: the 'Items scored per metric' list does print 'Workflow completion 30 items', and all eight values are correct against evaluation/REPORT.md:26-38.",
+  "fix": "Rewrite the beat to name the surfaces: the tiles with their own 'n of m items' phrasing, action safety and the refusal rates from 'Behaviour and safety', per-workflow completion from its pill list, and document recall plus overall workflow completion from the Compare tab. Or add those two as tiles in eval_detail.html so the script becomes true as written.",
+  "effort": "~20 min for the script; ~45 min for the tiles"
+ },
+ {
+  "rank": 13,
+  "title": "'The run pinned on this build' is false \u2014 the task-1 capture measures a superseded application build",
+  "severity": "low",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "A build-provenance claim the repo's own published command falsifies, in the document the presenter follows, and the phrase was written after the build moved. This project holds itself to exactly this standard and was docked rank-1 in round 2 for the same shape.",
+  "evidence": "docs/demo-script.md:80 'the run pinned on this build took 38.2 s over 39 spans'. The capture ran against /health sha 8782177 over app build 8a89310; `git diff --stat 8a89310..HEAD -- src mcp Dockerfile render.yaml requirements.txt` is 14 files / +275 / -54, including check_policy_compliance.py and search_policy_documents.py. The phrase landed at 70b095c, after 80a5a71. Mitigating and why this is low: README.md:101-107 and docs/evidence/README.md:57 both disclose the build relation explicitly, the capture header names both shas, the 80a5a71 diff is a schema default plus a clarification path the Berlin turn never enters, and the sentence is a hedged budget ('allow up to 50 s').",
+  "fix": "Change the phrase to 'the run pinned on app build `8a89310`' and append a dated note to the capture headers saying which commit the emptiness claim belongs to \u2014 the phrasing docs/evidence/README.md:57 and demo-script.md:355 already use. Or re-drive and re-pin both captures once the daily cap resets.",
+  "effort": "~10 min to reword; ~30 min plus cap headroom to re-capture"
+ },
+ {
+  "rank": 14,
+  "title": "The action-safety denominator is keyed to expectation rather than violation, so a real unsafe write outside the two unsafe_action items would not lower the published rate",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "The metric whose job is to catch an unconfirmed write is the one metric that would exclude the item on which it happened, and its population choice is published in the design doc but not on the report line.",
+  "evidence": "evaluation/runner.py:832-836 builds the population from safety_at_stake, which runner.py:561-563 sets to `bool(usage.gated) or item.category == 'unsafe_action' or item.expected_behavior == 'confirm'`. The per-item score is computed for all 30 items (runner.py:518), but a turn that performs an unconfirmed write has no gated span (the gate is what produces CONFIRMATION_REQUIRED, deterministic.py:361-376), so such an item would score 0.0 and be excluded. On the published run only unsafe-001 and unsafe-002 carry safety_at_stake, n=2 of 30. Mitigating, and why this is low rather than higher: the 0.0 still reaches the composite for every item (runner.py:576-582, deterministic.py:693 'action-safety 0.00 < 1.00'), so it would drop strict_pass_rate over n=30 and be named in REPORT.md's failure table; and orchestrator.py:3474-3478 makes a gated span a precondition of the only tokened write path, so the excluded case needs a separate gate bug.",
+  "fix": "Add `or safety == 0.0` to the safety_at_stake predicate \u2014 any observed violation is by definition at stake \u2014 and state the population on evaluation/REPORT.md's action-safety line the way design-and-evaluation.md:1216-1222 already does.",
+  "effort": "~20 min"
+ },
+ {
+  "rank": 15,
+  "title": "The orchestrator makes non-RAG tool calls on a policy_qa turn, and only the code says so",
+  "severity": "low",
+  "section": "4. Agent orchestration",
+  "why_it_costs_marks": "A grader comparing the routing section with dashboard page 3 for remote-003 sees an apparent contradiction with nothing in the documentation to resolve it, and the lifecycle diagram never shows that the orchestrator itself can call tools and propose writes the model never chose.",
+  "evidence": "src/hrmosaic/agent/orchestrator.py:2075-2081 states '\u00a79.2's router gate is deliberately not consulted ... The call below is the orchestrator's, not the model's', and :2090-2113 issues the call. Live turn 1553f812c9a019955fb8e8fb104caa05: intent policy_qa, every act llm_call offering only the four RAG tools, then span 21 tool_call lookup_employee_profile with catalog_reopened false. design-and-evaluation.md:533-538 presents the gate as 'the people-data and write tools are not in the array at all' and its lifecycle diagram at :120-141 omits the profile debt, the data debt, the action debt and the deterministic verdict scoring. Mitigating: :1884-1889 does disclose the profile-debt repair by name, the trace self-describes via a `profile_read_deterministically` nudge, and the action debt and verdict scoring do consult `_permitted`.",
+  "fix": "Add three sentences to the routing section and two lines to the lifecycle diagram: after the act loop the orchestrator settles a profile debt, a data debt and an action debt with at most one tools/call each inside agent_max_tool_calls, recorded as a plan/replan span with a named nudge \u2014 and say that the gate bounds the model's choices, not this one deterministic read.",
+  "effort": "~30 min, documentation only"
+ },
+ {
+  "rank": 16,
+  "title": "The dashboard's own smoke-eval button can silently replace an ablation arm on the compare tab",
+  "severity": "low",
+  "section": "6. Web application",
+  "why_it_costs_marks": "One admin click can put a 3-item run under the heading 'Ablation \u2014 three variants over the identical items', charted against two 30-item arms with flips recomputed against it, and the existing build-mismatch alert cannot fire for a run with no committed file.",
+  "evidence": "src/hrmosaic/web/dashboard.py:3087-3090 pairs `newest.setdefault(row['variant'], row)` over `SELECT ... ORDER BY created_at DESC` with no filter on n_items, target or label, although RUN_COLUMNS (:2789) already selects n_items. SmokeEvalBody (:3152-3155) defaults variant to baseline and n_items to 3, and evals.html:101-108 preselects both. Smoke rows do reach the store (evaluation/runner.py:350, :1087, :1870-1871). `_target_git_sha` (:3030-3047) returns None with no committed file and :3104 drops None from the build set, so builds_differ stays False. Heading at evals.html:126. Mitigating: evals.html:205-210 warns in-page that the charted arms are the newest per variant and 'are not always' the published comparison's runs, the arms table prints each run id and a muted em dash for the missing build, and the flip loop skips items absent from baseline. Live compare tab is clean: all three arms on 80a5a71, builds_differ false, 10 flips.",
+  "fix": "In build_eval_compare, prefer the newest run per variant whose n_items matches the baseline's (or whose id has a committed result file), and render an explicit notice when the paired arms disagree on n_items \u2014 the same shape as the existing builds_differ alert.",
+  "effort": "~45 min"
+ },
+ {
+  "rank": 17,
+  "title": "Task 2's 1:20 chat-page budget silently omits a second full agent turn",
+  "severity": "low",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "About 115-120 s of content is scheduled into an 80 s frame, and unlike task 1 the row states no wait allowance, so the presenter has no cue that 'ask again' is a second turn. Total headroom is 45 s against the 10:00 ceiling.",
+  "evidence": "docs/demo-script.md:81 allots 'Chat page and the confirmation card (\u2248 1:20)'; :297-324 asks inside it for send, card, a 40-second safety beat ('do not rush this'), 'Don't open it' plus the cancelled receipt, 'Ask again, reaching the card a second time', then 'Open the request' plus the lede. From docs/evidence/demo-task-2-live-2026-09-22.txt: spans 1-20 (send to card) sum to 20.8 s and spans 23-36 (confirm resume) to 12.6 s; the decline press is not free either, since orchestrator.py:1168-1183 re-runs `_answer`. So about 65 s of waiting plus the 40 s beat plus two receipts. Task 1's row states an allowance ('Budget the turn itself at ~40 s ... allow up to 50 s'); task 2's states none.",
+  "fix": "Give the task-2 row an explicit wait budget ('two turns of about 35 s each plus two confirm resumes \u2014 roughly 65 s of waiting; the safety beat is spoken while the first card is up, so budget the chat frame at 2:00') and re-chain the table, or make the cancel path a stated optional cut.",
+  "effort": "~20 min including re-adding the table"
+ },
+ {
+  "rank": 18,
+  "title": "The published coverage denominator is stale (10,298 statements against the shipped 10,320) and its guard degrades to a document-agreement check",
+  "severity": "low",
+  "section": "1. Environment & Reproducibility",
+  "why_it_costs_marks": "A published figure a grader can re-derive differs from the artifact, and the existing guard passes only because the local coverage.xml predates three src-touching commits \u2014 so a clean clone that runs `make coverage` twice gets a red contract test.",
+  "evidence": "README.md:70-71 and design-and-evaluation.md:1022 publish '95% of statements and 88% of branches over 10,298 statements' as measured 2026-09-22. coverage.xml is untracked, timestamped 13:09Z, before the round-2 commits at 80a5a71; the tip CI run prints 'TOTAL 10320 472 2518 259 94%', and parsing the HEAD tree with coverage's own PythonParser gives 10,320 / 2,518 (10,298 / 2,512 for the pre-80a5a71 tree). tests/contract/test_docs_completeness.py:943-1044 already implements the parse-and-compare guard, but returns None when coverage.xml is absent \u2014 which is the CI test job's state and, locally, the state before `coverage xml` runs \u2014 so it falls back to asserting the documents agree with each other. Percentages are unaffected.",
+  "fix": "Re-read the figure off the tip run (10,320) or regenerate coverage.xml at HEAD and repaste both sites. To close the guard properly, run `coverage xml` before a second targeted `pytest tests/contract/test_docs_completeness.py -k coverage` in the CI test job, or have the gate step fail on a documented-versus-measured mismatch directly.",
+  "effort": "~10 min for the figure; ~30 min for the CI ordering"
+ },
+ {
+  "rank": 19,
+  "title": "docs/architecture.html's footer dates the page 2026-09-09 and names the superseded frozen spec as its source",
+  "severity": "low",
+  "section": "10. Design documentation",
+  "why_it_costs_marks": "The page's only provenance line points a grader at the document whose own banner says it is superseded on exactly the points the page now publishes correctly, so the reader either distrusts a current page or trusts the wrong source of truth. No test guards any numeric figure on it, which is why it had to be hand-repaired in both fix waves.",
+  "evidence": "docs/architecture.html:1491-1496 'Design spec: docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md \u00b7 generated 2026-09-09'. That line has never been edited (`git log -p` shows one hunk, in creation commit f8bd62d), while the page has 20 commits touching it, the last three on 2026-09-22 (a0b37a6, 68d9cdb, 399d807). The spec's banner at :3-25 lists the span rail, four-versus-five jobs, ~280 versus 205 chunks and the 28-item planning set as superseded \u2014 all figures the page now states correctly (205 chunks, 30 items, five jobs, deploy needing ux). `grep -c design-and-evaluation docs/architecture.html` returns 1, inside an HTML comment, so nothing rendered points at the current design of record.",
+  "fix": "Change the footer to 'Current design of record: design-and-evaluation.md \u00b7 page last revised 2026-09-22 (build 80a5a71)'. If the class is worth guarding, add three assertions to tests/contract/test_docs_completeness.py that the page's chunk count, dataset size and job count match the manifest, dataset.yaml and ci.yml.",
+  "effort": "~5 min for the footer; ~45 min with the assertions"
+ },
+ {
+  "rank": 20,
+  "title": "docs/process/sdd/G5-grade-5/README.md indexes round 1 only, while ai-tooling.md sells that README as where the disclosure is checked",
+  "severity": "low",
+  "section": "10. Design documentation",
+  "why_it_costs_marks": "A self-cited disclosure artifact whose stated inventory is provably wrong \u2014 the same unsupported-map class both earlier grades opened with. Its 'Every file here was scanned before it was copied' assurance now silently extends over 28 round-2 files with no recorded scan.",
+  "evidence": "docs/process/sdd/G5-grade-5/README.md:12 'the fixes themselves are the `G5(\u2026)` commits from `98c893f` onward' (round 2 landed as `G5b(\u2026)` from 9dcd8dd) and :26 '**Coverage: 9 briefs and 13 reports** over tasks 1, 1b, 1c, 2, 3, 4, 5, 5b and 6a-6e'. Actual: 12 briefs, 28 reports, plus regrade-report.md and regrade-gaps.json with no inventory row. `grep -n 'G5b\\|round 2\\|regrade\\|re-grade' README.md` returns nothing. ai-tooling.md:366-367 points at it 'with a `README.md` there naming what was left out of the copy and how every file was scanned for credentials first'. `git log -5 -- .../README.md` shows only the round-1 commit a040074, while HEAD 39dc61c copied the 28 files across. The wave's own final review flagged it Critical at progress.md:141. Mitigating: progress.md itself is current through round 2 and both grade cards deep-link progress.md, not the README.",
+  "fix": "Add a 'Round 2 (G5b)' paragraph plus regrade-report.md / regrade-gaps.json rows, restate the coverage line as the current counts and the G5b commit range, and record the credential scan of the round-2 copy.",
+  "effort": "~20 min"
+ },
+ {
+  "rank": 21,
+  "title": "The retired 0.26 retrieval threshold still lives in both committed golden trace fixtures",
+  "severity": "low",
+  "section": "5. MCP server(s)",
+  "why_it_costs_marks": "Last residue of the round-2 schema sweep, and it is exactly the number a grader greps for after reading the retirement paragraph. The dashboard pretty-prints the whole span payload, so a fixture-driven render displays a threshold the shipped system never uses.",
+  "evidence": "tests/fixtures/traces/remote_work_eligibility.json:279 and tests/fixtures/traces/pto_request_confirmed_write.json:287 both carry `\"min_dense_score\": 0.26`. The shipped floor is 0.45 (settings.py:110, .env.example:51) and the schema now publishes `\"default\": null` naming MIN_SUPPORT_SCORE. The only emitter, src/hrmosaic/mcpserver/tools/search_policy_documents.py:205-220, writes the resolved threshold, and the project's own real capture (docs/evidence/demo-task-1-live-2026-09-15-session.json) records 0.45 on all six retrieval spans \u2014 so the fixtures never matched observed behaviour. The same fixtures also name the retrieval span `hybrid_rrf` where real spans are named `search_policy_documents`. Conceded internally at docs/process/sdd/G5-grade-5/task-10-report.md:257-260 ('now misleading ... Left alone deliberately') but absent from the graded limitations list.",
+  "fix": "Set both fixtures to 0.45 (or omit the key) and rename the retrieval span to `search_policy_documents` so no committed artifact records the retired value or a name the emitter never writes.",
+  "effort": "~10 min"
+ },
+ {
+  "rank": 22,
+  "title": "The design doc still sells stdio as a demo-video transport, contradicting its own transport table and the demo script",
+  "severity": "low",
+  "section": "5. MCP server(s)",
+  "why_it_costs_marks": "The round-2 amendment landed in the transport table and mcp/README.md but not in the justification section or two code headers, so one graded document now says both things about a transport the recording (deployed URL only, by design) will not show.",
+  "evidence": "design-and-evaluation.md:1974-1975 '**stdio** for local development and the demo video' against :342 '`make run-stdio` is where that property is demonstrated; the recorded walkthrough is driven entirely against the deployed URL, so it has no stdio beat'. `grep -n stdio docs/demo-script.md` returns nothing across 374 lines. Same stale claim at mcp/run_stdio.sh:3 and src/hrmosaic/mcpserver/stdio_main.py:4. mcp/README.md:33 is already amended, confirming a partial sweep.",
+  "fix": "Reword design-and-evaluation.md:1975 to 'stdio for local development, MCP Inspector and the CI discovery test' and drop 'the demo video' from mcp/run_stdio.sh:3 and stdio_main.py:4 \u2014 or add the optional 10-second stdio beat the transport table says does not exist.",
+  "effort": "~10 min"
+ },
+ {
+  "rank": 23,
+  "title": "The design doc's error-semantics row overstates the retry, which mcp/README.md already words correctly in two rows",
+  "severity": "low",
+  "section": "5. MCP server(s)",
+  "why_it_costs_marks": "The document a grader reads for graceful error handling says a transport failure is retried once, which is false for a tools/call \u2014 the no-retry path that is the fail-safe direction for a possibly-executed write.",
+  "evidence": "design-and-evaluation.md:495 '**Transport failure** \u2192 the client re-discovers once, then emits an `error` span'. src/hrmosaic/agent/client.py:567-569 raises McpUnavailable on a tools/call transport error with no retry and no reset, and every orchestrator catch routes to `_degraded` (orchestrator.py:3127-3162), which never re-discovers. The only retry is `_discover`, whose docstring at :1637 says so: 'a `tools/call` that fails degrades the turn immediately'. mcp/README.md:150-151 already splits the two rows correctly.",
+  "fix": "Split the design-doc row the way mcp/README.md does: transport failure at discovery gets one re-discovery; transport failure on a tools/call degrades immediately and is never re-sent.",
+  "effort": "~10 min"
+ },
+ {
+  "rank": 24,
+  "title": "deployed.md mis-describes what est_cost_usd covers, so the all-in measurement bill excludes about 25 judge passes",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "A wrong gloss on the one cost figure the document publishes as its honest overrun, and the table is self-contradictory: the row above prices the judge separately while this row claims it is already inside the total.",
+  "evidence": "deployed.md:488 '$16.25 across the 25 committed evaluation runs \u2014 the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time)'. The sum is right ($16.2534 over 25 files, range $0.4159-$0.8926), but est_cost_usd is `sum(entry.cost_usd for entry in scored)` over scored target turns (runner.py:1020, :612; deterministic.py:547-549), and judge calls are written to a separate `eval_judge` session (runner.py:377-388, 629-631). Confirmed in the store: for r_1789032950_baseline the `eval` session's 91 llm_calls sum to 0.435482 \u2014 exactly the run file's est_cost_usd \u2014 while its `eval_judge` session's 293 calls contribute nothing. Nine of 25 runs were judged at roughly $0.16-0.18 a pass, so the honest all-in figure is about $1.4-1.6 higher; warmup turns (~$0.36 total) are also excluded. The same misconception is in a comment at evaluation/runner.py:1225.",
+  "fix": "Say 'the sum of their est_cost_usd (the scored agent turns; judge spans are written to a separate `eval_judge` session and warmup turns are excluded)' and add the judged-run judge estimate as its own addend. Fix the runner.py:1225 comment too.",
+  "effort": "~15 min"
+ },
+ {
+  "rank": 25,
+  "title": "A committed cold-start artifact and two graded documents still name da0dca2 as the build that served the published run",
+  "severity": "low",
+  "section": "7. Deployment",
+  "why_it_costs_marks": "A false provenance label on the source of the 71.0 s median the deployment segment narrates, and deployed.md contradicts itself \u2014 its own run ledger marks that build's run 'no \u2014 prose only' 180 lines above the sentence saying it served the published run.",
+  "evidence": "docs/evidence/cold-start-probes.json:24 and :36 set build to 'the final build (Waves 1-2), the one that served the published evaluation run' for probes on da0dca2 (2026-09-11). The published run is r_1790110325_baseline on 80a5a71. The same clause appears at deployed.md:244 and docs/optimization-log.md:309, against deployed.md:63's own row for r_1789086979_baseline ('da0dca2 | no \u2014 prose only'). docs/evidence/README.md:5-12 and :27 set a global policy that older 'final build' headers mean final as of that date, but quote only that half and never correct the 'served the published evaluation run' clause \u2014 and that policy covers evidence headers, not maintained prose. Mitigating: the probe segments are checkable against a committed ledger (docs/process/sdd/progress.md:366), so the transcription is verifiable.",
+  "fix": "Reword the two JSON build fields and the two prose sentences to 'the build live when this probe ran (da0dca2); the published evaluation run is on 80a5a71', and add one line saying no cold probe has been re-measured since.",
+  "effort": "~15 min"
+ },
+ {
+  "rank": 26,
+  "title": "The judge-pass token totals behind the cost estimate have no committed artifact, and the sentence stating them is self-undermining",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "An unverifiable figure inside an otherwise scrupulous report, whose stated premise is false \u2014 judge tokens are recorded \u2014 and which appears to attribute one pass's measured tokens to a different pass's call count.",
+  "evidence": "evaluation/REPORT.md:117-121 says 'Nothing records judge *tokens*, so the totals below are the ones measured on run `r_1789055103_baseline` \u2014 ~369k input and ~20k output over 264 calls'. That run file has no token fields, the trace store is git-ignored, and grep for the totals finds only prose. But judge calls do carry tokens (evaluation/judges.py:13-16; core/llm/openai_compat.py:233-234; core/trace.py:683-684): summing the local store's eval_judge llm_calls gives 369,325 in / 19,987 out over 232 calls for r_1789032950_baseline (whose judge_calls is 232), reproducing the $0.16 to the cent \u2014 while REPORT.md attributes those tokens to r_1789055103_baseline 'over 264 calls', a run with no eval_judge session in the store.",
+  "fix": "Derive the figure from the store with one SUM over eval_judge llm_call spans and name the run it actually came from, or state the external source explicitly ('read off the Gemini console for that pass on 2026-09-10; not reconstructible from the repository'). Correct the 'nothing records judge tokens' premise at runner.py:1228-1229.",
+  "effort": "~45 min"
+ },
+ {
+  "rank": 27,
+  "title": "README's before/after row pairs two hard-subset agreement figures that are not comparable",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "The row invites a regression reading of 1.000 to 0.750 when the two figures are over different item sets labelled by different blind sessions against different runs, and nothing on or beside the row says so.",
+  "evidence": "README.md:316 '| Judge agreement (hard subset, selection disclosed) | 1.000 (n = 8) | 0.750 (n = 8) |', inside a table framed at :301-303 as the pre-optimization set beside the published run \u2014 with a caveat about item count that does not describe a score-selected 8-item subset. The subset is recomputed per run (evaluation/schema.py:441-467): the earlier label file (git show d0cc8ee) covers leave-001 and pto-003 where HEAD's covers equipment-001 and remote-004. The earlier 1.000 was itself eight unanimous grounded labels \u2014 the same non-discriminating matrix the docs criticise for the seed subset. The same unflagged pairing appears in design-and-evaluation.md's seven-column table. Mitigating: the earlier figure is reproducible from history (I re-derived 1.000, n=8), and the per-run re-authoring policy is stated in the design doc.",
+  "fix": "Footnote the row: the two subsets are different item sets labelled by different sessions against different runs, and the earlier figure is history rather than a baseline for this one.",
+  "effort": "~10 min"
+ },
+ {
+  "rank": 28,
+  "title": "Two independent renderers of the same headline table disagree about which metrics have design targets",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "One run appears in two published tables whose Target columns say different things, and every threshold is a duplicated string literal, so a threshold change needs edits in two files with nothing reconciling them.",
+  "evidence": "evaluation/runner.py:1524 sets a Target only for strict pass, so evaluation/REPORT.md:26/28/34 render '\u2013' for groundedness, cit_resolve and action safety. scripts/paste_eval_numbers.py:47-61 hard-codes '\u2265 0.90', '\u2265 0.95', '1.00', 'lower is better' and '\u2265 0.85' into design-and-evaluation.md:1157-1174, and imports nothing from runner \u2014 so even the strict-pass target is an independent literal. tests/contract/test_docs_completeness.py:643-655 binds row labels only; tests/unit/test_report_states_the_target.py:48-49 pins the em dashes. Both target sets are individually defensible (the extra ones trace to the spec and docs/requirements-traceability.md:222); they are simply not reconciled.",
+  "fix": "Move the (label, metric key, n key, target) table into evaluation/ and have both renderers import it.",
+  "effort": "~45 min"
+ },
+ {
+  "rank": 29,
+  "title": "The rules engine reads 'could not check' as 'checked and failed', and the disclosure understates the class by 14 guards",
+  "severity": "low",
+  "section": "3. Retrieval, prompting, citations & guardrails",
+  "why_it_costs_marks": "Same root cause as rank 4, viewed from the guardrail side: the disclosure is unusually candid but names only the equipment instances and never mentions that the same class attaches Director and Tax & Legal approvals on international_remote at verdict `conditional` rather than `insufficient_evidence`, and nothing pins the deferred behaviour.",
+  "evidence": "corpus/rules.yml carries 18 `applies_when: \"unmet:\"` guards; design-and-evaluation.md:445-480 and limitation 13 at :1844-1864 cite four (all equipment). `grep -rn 'guard_holds' tests/` returns one line, testing only the unknown-prefix error, so the disclosed-and-deferred behaviour is unfrozen. The remote path is reachable outside the workflow's slot protection because check_policy_compliance is in the hard-restricted policy_qa catalog and remote-003 is policy_qa-routed on the published run. Mitigating: src/hrmosaic/agent/compliance.py:388-444 appends an explicit 'I could not check the <topic> requirement' line for every not_stated row, remote.intl.annual_limit is blocking-and-not_stated so writes still refuse, and the published run's two international_remote items both supplied dates (groundedness 1.000 and 0.969), so the disclosure's bound holds.",
+  "fix": "Widen the disclosure to state the real scope (18 guards, of which the international_remote Tax & Legal approval reaches a `conditional` verdict), and add characterisation tests pinning the current output for `{request_type: 'refresh'}` and `{destination_country: 'PT'}` so the deferred behaviour cannot drift unrecorded.",
+  "effort": "~45 min"
+ },
+ {
+  "rank": 30,
+  "title": "The expense workflow's served answer justifies the approver from the wrong rule",
+  "severity": "low",
+  "section": "4. Agent orchestration",
+  "why_it_costs_marks": "The workflow that exists because a USD 3,000 question was once answered from the USD 2,500 row now leads with the wrong threshold again, the compliance restatement step did not fire, and the design doc frames the resulting failure mainly as a judge-versus-labeller disagreement.",
+  "evidence": "Live turn 67dc4d8653ec7a7f0b0c92bda4dc67d2 span 18 records expense.manager_limit met false / status unmet ('parameters.amount_usd is 3000; the policy value is 2500'), approvals including Director, and the next step 'Ask a director to approve'. The served prose leads 'Since your USD 3,000 conference trip is below the USD 5,000 director threshold, your manager Dana can approve it', then partly contradicts itself. The judge scored that claim contradicted (groundedness 0.778, one of the run's three composite failures). I reproduced why the repair misses: compliance.py's polarity() returns 'denies' for that sentence and relation() maps denies-against-unmet to 'agrees', so correct() leaves it, and correct_ceilings only matches 'up to USD X'. design-and-evaluation.md:1391-1399 and :1795 read the loss as the judge being the stricter reader. Mitigating: Dana is in fact the resolved Director for both tiers, and the correct routing rule is stated and cited in the next sentence.",
+  "fix": "Extend the restatement: when a requirement row is unmet on a threshold, refuse any sentence concluding the lower authority may approve and substitute the engine's own routing sentence, then re-drive. If deferred, add one line to the limitation naming the defect (the lead sentence cites the wrong threshold) rather than only the judge disagreement.",
+  "effort": "~1 h plus a re-drive; ~10 min for the disclosure line"
+ },
+ {
+  "rank": 31,
+  "title": "check_facts.py prints a second, disagreeing section count and still claims to be corpus_stats.py's reader",
+  "severity": "low",
+  "section": "2. RAG ingestion & indexing",
+  "why_it_costs_marks": "corpus/README.md advertises both scripts side by side, so running the two documented commands in sequence still shows a grader two different section counts for the same corpus.",
+  "evidence": "`.venv/bin/python scripts/check_facts.py` prints per-document 'N sections' lines summing to 191 (pto-and-holidays 18, remote-and-hybrid-work 18, benefits 18); `scripts/corpus_stats.py` prints 15, 15, 16 and 'total 176 \u00b7 30938 \u00b7 63.9'. The committed index agrees with corpus_stats: `select count(*), sum(section_count) from documents` returns (14, 176). Both commands are advertised at corpus/README.md:24-25. scripts/check_facts.py:35 still says 'This module is also the corpus reader for `scripts/corpus_stats.py`', which is false \u2014 corpus_stats.py:35 imports parse_corpus. Mitigating: every graded figure is the index's, and the cause is disclosed in past tense at design-and-evaluation.md:209-211.",
+  "fix": "Drop the ' N sections' column from check_facts.py's per-document line, or label it 'heading paths incl. empty', and correct the :35 docstring sentence.",
+  "effort": "~15 min"
+ },
+ {
+  "rank": 32,
+  "title": "Small stale figures left in shipped source and one traceability cell",
+  "severity": "low",
+  "section": "2. RAG ingestion & indexing",
+  "why_it_costs_marks": "Two of these are present-tense factual errors in shipped source, one of them explicitly named in the previous grade's fix list and not swept.",
+  "evidence": "src/hrmosaic/agent/prompts/synthesize.j2:11-12 still reads '199 of the 204 committed chunks are longer than that (median 995)' \u2014 the manifest is 205 chunks, 200 over 320 characters, median 983, mean 929.2; `grep -rn '204 ' src/` returns only that line, and docs/evidence/grade-card-2026-09-22.md:82 named it. src/hrmosaic/agent/guardrails/g5.py:6 says \"the dataset's one `sensitive` item\" when this wave took it to two precisely so G5 no longer rests on n=1 (tests/unit/test_g5_sensitive.py:1 repeats the phrase). docs/requirements-traceability.md:136 publishes '14 docs / 204 chunks' in a cell whose matrix header claims statuses were recounted against 80a5a71, while live /health says 205.",
+  "fix": "One sweep: synthesize.j2 to '200 of the 205 ... (median 983)'; g5.py:6 and its test to 'two sensitive items'; add '(205 at this commit)' to the traceability R7.1 cell or date it inline.",
+  "effort": "~15 min"
+ },
+ {
+  "rank": 33,
+  "title": "'69 screen ids' is a stale capture count given three different values in three documents",
+  "severity": "low",
+  "section": "Submission files",
+  "why_it_costs_marks": "A number a grader can falsify by running the command the README invites them to run \u2014 `make ux-capture` prints 72, and one document explicitly claims 69 is the number that run prints.",
+  "evidence": "README.md:149 'make ux-capture re-photographs all 69 screen ids'; docs/evidence/ux-final/README.md:8 and :18-19 repeat 69, the latter as 'the number make ux-capture prints at the end of its own run'; docs/evidence/README.md:88 hedges to '69 to 71'. .ux-capture/index.json (generated 2026-09-15T23:33, after the last change to scripts/ux_capture.py) records 72 unique ids over 390 entries, and scripts/ux_capture.py:1020 prints that count. The repo's own newest audit, docs/evidence/ux-reaudit-4-2026-09-16.md:17, says 72. The geometry property itself holds (0 of 390 entries report body_horizontal_scroll).",
+  "fix": "State the count once, from the harness, and have the other documents point at it \u2014 or say 'every screen id the harness defines (72 as of 2026-09-15)'. Better: have make ux-capture print the count and assert it in a contract test, as the suite already does for the test count.",
+  "effort": "~15 min for the wording; ~45 min with the assertion"
+ },
+ {
+  "rank": 34,
+  "title": "README says `make setup` runs exactly the printed steps, and the dev-dependency list omits coverage and the ux group",
+  "severity": "low",
+  "section": "1. Environment & Reproducibility",
+  "why_it_costs_marks": "Trivially falsifiable by a grader reading the Makefile beside the README in a repository whose stated discipline is that a printed command is executable as printed. The sharper half is that `make ux` cannot work from a README-only setup, with no documented remedy.",
+  "evidence": "README.md:37 '`make setup` runs exactly those steps' against Makefile:22-26, which adds `pip install --upgrade pip` and omits the (explicitly optional) `cp .env.example .env`. README.md:367 describes the development-only set as 'pytest, ruff and fpdf2, pinned in requirements-dev.txt' while coverage==7.10.7 is in that manifest and is what the CI gate runs. `grep -rn 'requirements-ux\\|playwright' README.md` returns nothing, yet Makefile:77-78 runs `make ux` against the setup venv, which never installs that group \u2014 only CI does (.github/workflows/ci.yml:139, 149-150).",
+  "fix": "Soften the sentence ('`make setup` runs those steps and upgrades pip first; `.env` is left to you'), add coverage and the ux group to Third-party components, and document `pip install -r requirements-ux.txt && python -m playwright install chromium` beside `make ux`.",
+  "effort": "~15 min"
+ },
+ {
+  "rank": 35,
+  "title": "`make test` has an undocumented hard dependency on `make ingest`",
+  "severity": "low",
+  "section": "1. Environment & Reproducibility",
+  "why_it_costs_marks": "A fresh clone that runs the common reflex `make setup && make test` gets a red suite, and the failure is a bare sqlite error with no remediation hint.",
+  "evidence": "15 test files read the built index through core.corpusread, and CI orders `ingest --verify-manifest` before the suite with the comment 'it leaves a real index for the suite' (.github/workflows/ci.yml:98). README ties ingest only to `make run` (:42, :55) and describes `make test` as self-contained (:63-77); the dependency is stated only in internal process docs. Reproduced: `INDEX_PATH=/tmp/none.sqlite pytest -q tests/unit/test_g2_citation_resolvability.py` gives 15 failed / 2 passed at src/hrmosaic/core/corpusread.py:114 with OperationalError 'unable to open database file' \u2014 not the friendly FileNotFoundError at index.py:233, because corpusread.connect() does no existence check.",
+  "fix": "Change the README comment to 'build the index first \u2014 `make run` and `make test` both need it', or give the `test` target an order-only prerequisite on data/index/hr_index.sqlite. Adding an existence check to corpusread.connect() would also surface the documented remedy.",
+  "effort": "~20 min"
+ },
+ {
+  "rank": 36,
+  "title": "`paths-ignore` still excludes `docs/**`, contradicting the rationale written directly above it",
+  "severity": "low",
+  "section": "8. CI/CD",
+  "why_it_costs_marks": "The comment argues that docs contract tests must gate the commits most likely to introduce a stale claim, then ignores the tree those tests read \u2014 and three commits in this wave touch only ignored paths, so pushed alone any could have falsified a contract test with no run. Three graded documents also describe `docs/**` as a published-results path, which it is not.",
+  "evidence": ".github/workflows/ci.yml:13 `paths-ignore: ['evaluation/results/**', 'evaluation/REPORT.md', 'docs/**']` against the comment at :10-12. tests/contract/test_published_run_commands.py:227-231 reads docs/requirements-traceability.md and docs/pre-submission-checklist.md; test_docs_completeness.py binds docs/demo-script.md. a0b37a6, 70b095c and 39dc61c each touch zero non-ignored files and ran only because they rode along in a batch push. deployed.md:89-90, design-and-evaluation.md:1008-1009 and docs/demo-script.md:84 all call the three ignored paths the places 'a published *result* lands'. Mitigating: `pull_request:` carries no path filter, so PRs are fully gated, and the graded tip is green.",
+  "fix": "Drop `docs/**` from paths-ignore (leaving the two published-result paths), or narrow it to subtrees no test reads (docs/process/sdd/**, docs/evidence/ux-*/**) and correct the three documents' description of what is skipped.",
+  "effort": "~20 min"
+ },
+ {
+  "rank": 37,
+  "title": "Small residual stale or incomplete figures in documents the demo shows or narrates",
+  "severity": "low",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "Each is trivial, but each sits on a surface the recording shows, and the paths-ignore panel is the one a grader could read as a complete list.",
+  "evidence": "(a) docs/architecture.html:1343-1344 prints 'paths-ignore: docs/**, evaluation/results/**' \u2014 two of three, with no ellipsis, while the page uses one elsewhere; its detail card D[\"f6-t1\"]:1803 is correct. (b) deployed.md:534's memory-gate log \u2014 the source of the 294.9 MB the deployment segment reads out \u2014 records chunk_count=204 from build 415f358; reconciled at deployed.md:86 and :132, so this is defensible as a dated capture. (c) docs/demo-script.md:209 says to read the verdict 'conditional' aloud on the chat page, where the word appears only in the dashboard tool payload (evidence line 89) and the answer paraphrases it. (d) docs/demo-script.md:45 lists docs/architecture.html among browser tabs without saying it opens from the checkout as a local file, and GitHub renders that link as HTML source.",
+  "fix": "(a) add the third path to the panel; (b) footnote the 204 as that build's index; (c) reword to 'the verdict the engine returned \u2014 `conditional`, which the answer states as \u2026'; (d) add 'opened from the checkout as a local file' to the screen-setup line.",
+  "effort": "~20 min total"
+ }
+]

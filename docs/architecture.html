@@ -1340,8 +1340,8 @@ footer .mono{font-size:12px}
           <g class="node fam-web" data-id="f6-t1" tabindex="0" aria-label="push to main">
             <rect class="tile" x="16" y="96" width="190" height="64" rx="2"/>
             <text class="t-title" x="28" y="118">Push to main</text>
-            <text class="t-sub" x="28" y="138">paths-ignore: docs/**,</text>
-            <text class="t-sub" x="28" y="152">evaluation/results/**</text>
+            <text class="t-sub" x="28" y="138">paths-ignore: two entries &mdash;</text>
+            <text class="t-sub" x="28" y="152">the published results only</text>
           </g>
           <g class="node fam-web" data-id="f6-t2" tabindex="0" aria-label="pull request">
             <rect class="tile" x="16" y="176" width="190" height="64" rx="2"/>
@@ -1394,7 +1394,10 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="550" y="324">wait_for_deploy.py --timeout 900</text>
             <text class="t-sub" x="550" y="340">smoke_deployed.py</text>
           </g>
-          <text class="t-sub" x="292" y="382" style="font-size:9.5px;paint-order:stroke;stroke:var(--fig-bg);stroke-width:3px;stroke-linejoin:round">ux &mdash; the browser suite; deploy needs it</text>
+          <g class="node fam-agent" data-id="f6-ux" tabindex="0" aria-label="ux job">
+            <rect class="tile" x="280" y="364" width="492" height="26" rx="2"/>
+            <text class="t-title" x="292" y="381" style="font-size:10px">ux &mdash; 299 browser checks, cached chromium, no needs of its own &mdash; and deploy needs it</text>
+          </g>
 
           <g class="node fam-ext" data-id="f6-hook" tabindex="0" aria-label="Render deploy (API)">
             <rect class="tile" x="846" y="96" width="318" height="76" rx="2"/>
@@ -1444,13 +1447,13 @@ footer .mono{font-size:12px}
             <text class="t-sub" x="422" y="546" style="font-size:9px">APP_ACCESS_TOKEN</text>
           </g>
 
-          <g class="edge" data-id="f6-e-t1" data-from="f6-t1" data-to="f6-lint f6-test f6-docker f6-deploy" tabindex="0" aria-label="push trigger">
+          <g class="edge" data-id="f6-e-t1" data-from="f6-t1" data-to="f6-lint f6-test f6-ux f6-docker f6-deploy" tabindex="0" aria-label="push trigger">
             <path class="hitline" d="M206,128 H266"/><path class="conn" d="M206,128 H266" marker-end="url(#ar)"/>
             <text class="elab" x="236" y="120" text-anchor="middle">on: push</text></g>
-          <g class="edge" data-id="f6-e-t2" data-from="f6-t2" data-to="f6-lint f6-test f6-docker" tabindex="0" aria-label="pull request trigger">
+          <g class="edge" data-id="f6-e-t2" data-from="f6-t2" data-to="f6-lint f6-test f6-ux f6-docker" tabindex="0" aria-label="pull request trigger">
             <path class="hitline" d="M206,208 H266"/><path class="conn" d="M206,208 H266" marker-end="url(#ar)"/>
             <text class="elab" x="236" y="200" text-anchor="middle">on: pull_request</text></g>
-          <g class="edge" data-id="f6-e-t3" data-from="f6-t3" data-to="f6-lint f6-test f6-docker" tabindex="0" aria-label="dispatch trigger">
+          <g class="edge" data-id="f6-e-t3" data-from="f6-t3" data-to="f6-lint f6-test f6-ux f6-docker" tabindex="0" aria-label="dispatch trigger">
             <path class="hitline" d="M206,294 H236 V232 H266"/><path class="conn" d="M206,294 H236 V232 H266" marker-end="url(#ar)"/>
             <text class="elab" x="262" y="224" text-anchor="end">dispatch</text></g>
           <g class="edge" data-id="f6-e-need1" data-from="f6-test" data-to="f6-deploy" tabindex="0" aria-label="needs test">
@@ -1459,6 +1462,9 @@ footer .mono{font-size:12px}
           <g class="edge" data-id="f6-e-need2" data-from="f6-docker" data-to="f6-deploy" tabindex="0" aria-label="needs docker">
             <path class="hitline" d="M514,305 H538"/><path class="conn" d="M514,305 H538" marker-end="url(#ar)"/>
             <text class="elab" x="526" y="297" text-anchor="middle">needs</text></g>
+          <g class="edge" data-id="f6-e-need3" data-from="f6-ux" data-to="f6-deploy" tabindex="0" aria-label="needs ux">
+            <path class="hitline" d="M772,377 H796 V330 H772"/><path class="conn" d="M772,377 H796 V330 H772" marker-end="url(#ar)"/>
+            <text class="elab" x="790" y="356" text-anchor="end">needs</text></g>
           <g class="edge" data-id="f6-e-hook" data-from="f6-deploy" data-to="f6-hook" tabindex="0" aria-label="POST the deploy">
             <path class="hitline" d="M772,290 H812 V134 H846"/><path class="conn" d="M772,290 H812 V134 H846" marker-end="url(#ar)"/>
             <text class="elab" x="806" y="232" text-anchor="end">POST deploy</text></g>
@@ -1490,8 +1496,10 @@ footer .mono{font-size:12px}
 
 <footer>
   <div class="wrap">
-    Design spec: <span class="mono">docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md</span>
-    &middot; generated 2026-09-09
+    Current design of record: <span class="mono">design-and-evaluation.md</span>
+    &middot; page last revised 2026-09-23 (published build <span class="mono">34d50fb</span>)
+    &middot; first generated 2026-09-09 from the since-superseded
+    <span class="mono">docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md</span>
   </div>
 </footer>
 
@@ -1552,7 +1560,7 @@ D["f1-mock"]={t:"Mock structured data",f:"data",p:"Six committed JSON files load
 D["f1-tracewriter"]={t:"Trace writer",f:"trace",p:"One module owns every INSERT into sessions, turns and spans. A grep-based conventions test asserts that, which is what keeps the five readers of the audit trail looking at identical rows.",
  k:[["Module","src/hrmosaic/core/trace.py"],["Writes","two per turn: a small synchronous batch at turn start, then one batched flush at turn end"],["Live","each closed span is published to the SSE listener immediately and appended to the buffer"],["redact()","key-name denylist, provider-key regexes, and an exact-match sweep over every os.environ value whose key ends _KEY, _TOKEN or _SECRET — with one carve-out: catalog_sha, corpus_sha256 and manifest_sha256 survive when the value is a bare 64-hex digest, since a sha256 otherwise reads as a long base64 secret"],["Shutdown","SIGTERM / SIGINT / atexit handlers flush open turns; a startup sweep closes anything left open over 5 minutes"]],
  c:["Agent Orchestrator, Guardrails and MCP Client (spans)","Audit / trace store"]};
-D["f1-stdio"]={t:"Transport variant — stdio",f:"mcp",p:"The same server, spawned as a visibly separate OS process. It is what the demo video shows and what the fast CI discovery test uses.",
+D["f1-stdio"]={t:"Transport variant — stdio",f:"mcp",p:"The same server, spawned as a visibly separate OS process. It is what local development, MCP Inspector and the fast CI discovery test use; the recorded walkthrough is driven entirely against the deployed URL and has no stdio beat.",
  k:[["Command","python mcp/server_entrypoint.py --stdio"],["Selector","MCP_TRANSPORT=stdio"],["Difference","structured_content came back populated over HTTP but None over stdio in the probe, so both read paths exist and both are tested"],["Recorded","sessions.mcp_transport = 'stdio'"]],
  c:["MCP server (same build_hr_server factory)"]};
 D["f1-remote"]={t:"Transport variant — remote",f:"mcp",p:"Point the client at any external MCP endpoint. CI proves it by booting a second uvicorn on another port and running discovery plus a call against it.",
@@ -1800,7 +1808,7 @@ D["f5-e-met"]={t:"Scored per item, aggregated per run",f:"edge",p:"Every judged 
 
 /* ---------- Figure 6: CI/CD ---------- */
 D["f6-t1"]={t:"Push to main",f:"web",p:"The only automatic deploy trigger, and it skips runs that changed nothing but a published artifact.",
- k:[["paths-ignore","evaluation/results/**, evaluation/REPORT.md, docs/** — the three paths a published artifact lands in"],["Not ignored","corpus/** stays gated — and since G5b so does *.md at the repo root: the last commit before submission is a root README edit, and the docs contract tests are the guard that has to gate it"],["Why","rerunning the suite over a published result proves nothing, and the free tier is 500 build minutes a month"]],c:["test job"]};
+ k:[["paths-ignore","evaluation/results/** and evaluation/REPORT.md — the two paths a published result lands in, and nothing else"],["Not ignored","corpus/** has always been gated; *.md at the repo root left the list in G5b and docs/** left it in G5c, so a documentation commit anywhere runs the suite and deploys — the last commit before submission is a root README edit, and the docs contract tests are the guard that has to gate it"],["Why","rerunning the suite over a published result proves nothing, and the free tier is 500 build minutes a month"]],c:["test job"]};
 D["f6-t2"]={t:"Pull request",f:"web",p:"Everything runs, nothing deploys — Actions skips a job whose if-condition excludes it.",
  k:[["Runs","lint, test, ux, docker"],["Also","docs checks that push skips run here, where test_docs_completeness.py is what matters"]],c:["test job"]};
 D["f6-t3"]={t:"workflow_dispatch",f:"web",p:"One input, used to carry a committed results set into the live image — and to record the red-run evidence.",
@@ -1811,6 +1819,9 @@ D["f6-test"]={t:"Job — test",f:"agent",p:"The whole pytest suite in one comman
  k:[["Environment","LLM_PROVIDER: stub"],["Chunking gate","python -m hrmosaic.rag.ingest --verify-manifest, byte-comparing against the committed manifest"],["Suite","unit, contract, integration and end-to-end with the stub, in one pytest -q"],["MCP coverage","discovery over stdio and mounted HTTP, a real tool call on both, and a remote MCP_SERVER_URL against a second uvicorn"],["Then","scripts/pii_check.py and scripts/check_facts.py"],["One network fetch","the fastembed model, restored from actions/cache; on a miss it retries, then falls back to EMBED_PROVIDER=fake so an upstream outage cannot block a deploy"]],c:["deploy job"]};
 D["f6-docker"]={t:"Job — docker",f:"agent",p:"Builds the real image and health-checks the running container, so “it starts” is proved on the artifact that ships.",
  k:[["Build","docker build --build-arg GIT_SHA=${{ github.sha }}"],["Probe","enable_load_extension → sqlite_vec.load → SELECT vec_version() inside python:3.12-slim, on every run"],["Run","the container with LLM_PROVIDER=stub, then wait_for_health.py"],["Assert","assert_health.py checks mcp.connected, tool_count == 9, index.loaded and doc_count == 14"],["Always","docker logs app on the way out"]],c:["deploy job"]};
+D["f6-ux"]={t:"Job — ux",f:"agent",p:"The browser suite, in a job of its own — and since G5b inside deploy's needs clause, because §8's bullet is \u201cdeployment must only occur if tests pass\u201d and 299 browser checks are tests.",
+ k:[["Command","pytest -q -m ux — the 299 tests the other job deselects through addopts"],["Needs","none of its own: nothing has to finish before a browser can start"],["In deploy's needs","yes, since 2026-09-22; run 35723846982 is the recorded demonstration of the old arrangement, a red ux beside a green deploy"],["Chromium","cached on the pinned playwright version, which is most of what keeps an ~11-minute job affordable"],["Cost","every deploy now waits for it, and a flaky browser check can hold a release — accepted deliberately"]],c:["deploy job"]};
+D["f6-e-need3"]={t:"needs: ux",f:"edge",p:"The browser suite is inside the gate, so all 3,469 collected tests have to be green before anything ships.",k:[["Declared","needs: [test, docker, ux] in the deploy job"],["Effect","a red ux skips the deploy exactly as a red test does"]],c:["ux job","deploy job"]};
 D["f6-deploy"]={t:"Job — deploy",f:"agent",p:"needs: [test, docker, ux] is what makes “deployment only occurs if tests pass” literally true, because Actions skips a job whose needs failed.",
  k:[["Condition","a push on main, or a workflow_dispatch with deploy_only true"],["needs","test, docker and ux — the browser suite joined the gate in G5b, after run 35723846982 paired a red ux with a green deploy"],["Step 1","curl -fsS -X POST https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys with RENDER_API_KEY; the deploy hook when RENDER_DEPLOY_HOOK_URL happens to be set"],["Step 2","python scripts/wait_for_deploy.py --url $DEPLOY_URL --timeout 900"],["Step 3","python scripts/smoke_deployed.py --url $DEPLOY_URL, which asserts GIT_SHA is not \"dev\" on the live instance"]],c:["Render deploy (API)"]};
 D["f6-hook"]={t:"Render deploy (API)",f:"ext",p:"Belt and braces: the CI gate makes the deploy conditional, and the platform setting makes this the only door.",
@@ -1820,12 +1831,12 @@ D["f6-build"]={t:"Render build",f:"ext",p:"The index is built on the two-CPU bui
 D["f6-live"]={t:"Live service",f:"web",p:"Degradation is a status string, never a 5xx, so a provider hiccup or a slow model load never makes the platform restart-loop the instance.",
  k:[["healthCheckPath","/health, always 200 while the process is up"],["/ready","503 until the ONNX model and the index are resident; warm-up issues one loopback tools/call, not a direct import"],["degradations[]","llm_api_key_missing, index_model_mismatch, mcp_disconnected, trace_store_unreachable, access_token_missing \u2014 exactly five possible strings"],["Reports","live rss_mb and rss_peak_mb; the dashboard plots turns.rss_mb_at_end"],["Spend","llm.agent.calls_today against llm.agent.daily_call_cap, so the remaining model budget is visible without opening the dashboard — reaching the cap is an outcome, not a sixth degradation string"],["Budgets","750 instance-hours per workspace per month and 500 build minutes; a script warns above 600 and 400"]],c:["Cold start"]};
 D["f6-cold"]={t:"Cold start",f:"trace",p:"Measured and published before it was mitigated — and still what a visitor gets whenever the mitigation is off. The keep-alive added on 2026-09-11 has two layers: the primary one pings this service's own public /health from inside the process and starts only when KEEP_ALIVE_URL holds that origin, which is unset by default and carried by render.yaml for a blueprint apply. It has been armed on the live service since 2026-09-11 14:26Z, when that variable and KEEP_ALIVE_INTERVAL_S=600 were set with a single-key PUT; /health's app.uptime_ms crossing the 15-minute idle timer (60 min at 18:37Z, 124.5 min at 00:51Z the next day) is the evidence. Armed it holds the instance awake round the clock at about 744 of the 750 monthly hours; deleting the variable and disabling the workflow in the Actions tab restores exactly these numbers.",
- k:[["Spin-up to /health 200","44.8 s median (43.5–52.4) on the live free instance, each probe after 1,000 s idle"],["/health 200 to /ready 200","0.1 s median — 2.8 s on the readiness-fix build, 0.1 s on the final build"],["Model mmap","0.06–0.40 s from the baked cache, against 16–63 s if it downloaded"],["First POST /chat","23.9 s median — first request total 71.0 s median, 67.5–77.6 s"],["Warm turn","22.5 s median (22.5–23.9), about 89 % of it provider time"],["Sample size","n = 3, measured 2026-09-10 and 2026-09-11 without keep-alive; raw segments in docs/evidence/cold-start-probes.json"],["Mitigations","an in-process self-ping every KEEP_ALIVE_INTERVAL_S while KEEP_ALIVE_URL is set, which is set on the live service since 2026-09-11 14:26Z, .github/workflows/keepalive.yml every ten minutes behind it as the best-effort second layer, a /health preflight banner with an elapsed counter, and cold versus warm reported separately"]],c:["Live service"]};
+ k:[["Spin-up to /health 200","44.8 s median (43.5–52.4) on the live free instance, each probe after 1,000 s idle"],["/health 200 to /ready 200","0.1 s median — 2.8 s on the readiness-fix build, 0.1 s on the final build"],["Model mmap","0.06–0.40 s from the baked cache, against 16–63 s if it downloaded"],["First POST /chat","23.9 s median — first request total 71.0 s median, 67.5–77.6 s"],["Warm turn","22.5 s median (22.5–23.9), about 89 % of it provider time"],["Sample size","n = 3, measured 2026-09-10 and 2026-09-11 without keep-alive; raw segments in docs/evidence/cold-start-probes.json"],["Mitigations","an in-process self-ping every KEEP_ALIVE_INTERVAL_S while KEEP_ALIVE_URL is set, which is set on the live service since 2026-09-11 14:26Z, .github/workflows/keepalive.yml every ten minutes behind it as the best-effort second layer, a /health preflight banner — one static sentence, deliberately with no elapsed ticker, because a counter mutating inside a live region every 100 ms was 46 screen-reader announcements a turn (UX W2) — and cold versus warm reported separately"]],c:["Live service"]};
 D["f6-ghsec"]={t:"GitHub repository secrets",f:"data",p:"Three, and none of them is an LLM key — which is why the deploy path is fast, offline and free of rate-limit failures.",
  k:[["DEPLOY_URL","used by wait_for_deploy.py and smoke_deployed.py"],["RENDER_API_KEY","used by the deploy trigger and by check_render_hours.py, which warns and never fails"],["RENDER_SERVICE_ID","the service the deploy job POSTs to"],["RENDER_DEPLOY_HOOK_URL","optional — no REST endpoint publishes it, so the job POSTs /v1/services/{id}/deploys instead and uses the hook only if the secret exists"],["Set by","scripts/provision_render.py and provision_turso.py via gh secret set"],["Repo","public, which removes the private-repo Actions minute cap"]],c:["deploy job"]};
 D["f6-renv"]={t:"Render environment",f:"data",p:"Every variable appears in .env.example with a default, a REQUIRED or OPTIONAL marker and a signup URL — and that parity is itself a test in both directions.",
  k:[["Plain values","APP_ENV=render, LLM_PROVIDER=anthropic, LLM_MODEL=claude-haiku-4-5, OMP_NUM_THREADS=1; the fallback and judge base URLs and model ids default to Gemini in settings.py"],["sync: false","ANTHROPIC_API_KEY, LLM_FALLBACK_API_KEY, JUDGE_API_KEY, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, APP_ACCESS_TOKEN"],["LLM_DAILY_CALL_CAP","default 1500 Anthropic calls per UTC day; at the cap /chat still answers 200, with outcome error and error_kind daily_cap_reached"],["APP_ACCESS_TOKEN","required on the graded deployment; provision_render.py generates it with secrets.token_urlsafe(32) and sets it on Render, so there is no user step. Unset with APP_ENV=render, every gated route 403s and /health reports access_token_missing"],["ACCESS_RATE_LIMIT_PER_MIN","default 30, applied per IP on POST /chat and on the /mcp-server/mcp mount"],["Validation","structural checks at import fail fast; credentials are validated lazily at the point of use, so boot always succeeds"],["Missing key","the app boots, /health is 200 degraded, the dashboard is browsable, and /chat returns 200 with outcome configuration_required naming the variable"],["Deliberately absent","no SEED, no NOW_OVERRIDE, no EVAL_FIXED_NOW, no OTEL exporter endpoint"]],c:["Live service"]};
-D["f6-e-t1"]={t:"on: push",f:"edge",p:"Branches [main], with a paths-ignore list that keeps published-artifact commits off the build budget — docs/** and the two evaluation results paths, no longer every root-level *.md.",k:[["Runs","lint, test, ux and docker, and then deploy"]],c:["Push to main","all five ci.yml jobs"]};
+D["f6-e-t1"]={t:"on: push",f:"edge",p:"Branches [main], with a paths-ignore list that keeps published-result commits off the build budget — the two evaluation results paths, and since G5c nothing else: neither root-level *.md nor docs/**.",k:[["Runs","lint, test, ux and docker, and then deploy"]],c:["Push to main","all five ci.yml jobs"]};
 D["f6-e-t2"]={t:"on: pull_request",f:"edge",p:"The same jobs, minus the deploy — the if-condition restricts deploys to main pushes and deliberate dispatches.",k:[["Effect","a pull request can never deploy"]],c:["Pull request","lint, test, ux and docker"]};
 D["f6-e-t3"]={t:"workflow_dispatch",f:"edge",p:"Reaches the deploy job only after the suite it still depends on.",k:[["Input","deploy_only: true"],["Use","carrying a committed eval results set into the live image, verified by /health.trace_store.eval_runs_imported"]],c:["workflow_dispatch","lint, test, ux and docker — deploy is reached only through needs"]};
 D["f6-e-need1"]={t:"needs: test",f:"edge",p:"The literal mechanism behind the deployment gate. A failed dependency means the job never runs.",k:[["Shown as","skipped with reason “dependent job failed”"]],c:["test job","deploy job"]};
