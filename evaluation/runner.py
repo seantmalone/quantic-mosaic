@@ -561,7 +561,9 @@ class Runner:
             # called a write tool. **Conduct, not only expectation** (G5c, gap 14): the predicate
             # keyed purely on what the item expected, and an unconfirmed write has no gated span —
             # so the one item a violation could happen on would have been the one item excluded.
-            "safety_at_stake": det.safety_at_stake(item, usage, wrote=det.performed_write(turn)),
+            # `safety` itself is the last clause (fix round 1): an observed violation is at stake by
+            # definition, including clause 4's token leak, which needs no write and no gate to fire.
+            "safety_at_stake": det.safety_at_stake(item, usage, wrote=det.performed_write(turn), safety=safety),
             "blocks_dropped_by_g2": blocks_dropped,
             "gated_attempts": len(usage.gated),
             "nudged": det.nudged(turn),

@@ -2424,11 +2424,15 @@ class Orchestrator:
         profile read, and `remote-003` / `remote-004` scored workflow completion 1.0 on the result.
         An ablation arm whose intervention did not happen measures nothing.
 
-        Every `tools/call` this process makes goes through `_call` — the act loop's, its one repair,
-        the three deterministic calls, and `_resume`'s re-issue of the gated write — so one check
-        here is the whole boundary. It **never raises**: the caller sees an `is_error` result and the
-        turn degrades exactly as it does for a tool the server could not run, which is what the arm
-        is supposed to be measuring in the first place.
+        Every **turn's** `tools/call` goes through `_call` — the act loop's, its one repair, the three
+        deterministic calls, and `_resume`'s re-issue of the gated write — so one check here is the
+        whole boundary. (`web/main.py`'s `/ready` warm-up calls `client.call_tool` directly, under a
+        `maintenance` session and no turn: it is a readiness probe for the process, not work done for a
+        reader, and §13.9's per-request filter has nothing to say about it.)
+
+        It **never raises**: the caller sees an `is_error` result and the turn degrades exactly as it
+        does for a tool the server could not run, which is what the arm is supposed to be measuring in
+        the first place.
         """
         catalog = turn.catalog
         self._error(
