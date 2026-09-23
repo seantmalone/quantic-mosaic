@@ -1,8 +1,8 @@
 # Blind groundedness labelling packet
 
-Run `r_1790110325_baseline` · dataset sha `2c8973147744a351…` · subset `seed` · 8 items.
+Run `r_1790130220_baseline` · dataset sha `2c8973147744a351…` · subset `A` · 8 items.
 
-These items were sampled with a fixed seed from the questions whose correct behaviour is to answer, before the run was judged. Nothing about any answer influenced which items are here.
+These items were sampled with a fixed seed from the questions whose correct behaviour is to answer, before the run was scored. Nothing about any answer influenced which items are here.
 
 You are the reference labeller for spec §13.7. For each item below decide **one binary verdict**
 about the ANSWER, using ONLY the EVIDENCE shown with it:
@@ -15,7 +15,7 @@ assistant searched up; `kind="section"` is one it fetched in full; `kind="compli
 deterministic rule engine's own requirement evidence; and `kind="structured_data"` is a record it
 read about this employee — a PTO balance, a benefits eligibility date, a profile. **A claim is
 supported if ANY item of ANY class supports it**: a correct fact taken from the employee's own
-record is grounded, not invented. Judge against this set alone — outside knowledge and plausibility
+record is grounded, not invented. Decide against this set alone — outside knowledge and plausibility
 are irrelevant, and a claim that no item supports is `not_grounded` however true it sounds.
 
 Return YAML in exactly this shape, one entry per item, in this order:
@@ -40,13 +40,15 @@ labels:
 ```
 New hires become eligible for medical, dental and vision coverage 90 days after their hire date. Coverage begins on the day the waiting period ends, not on the first of the following month.
 
-The 401(k) retirement plan has no waiting period; you may begin contributing from your first payroll run.
+Retirement plan eligibility is different: an employee may begin contributing to the 401(k) plan from their first payroll run, with no waiting period at all.
 
-Basic life insurance and accidental death and dismemberment cover begin when the medical waiting period ends.
+Life insurance cover begins when the medical waiting period ends.
+
+The waiting period is not restarted by an internal transfer, a promotion, or a change from part-time to full-time status. It is restarted by a break in service of more than 26 weeks.
 
 Next steps:
 - Enroll in benefits during week one of onboarding
-- Check MosaicOne Benefits for your digital cards when coverage begins
+- Check MosaicOne Benefits when your 90 days end
 ```
 
 **EVIDENCE — everything the assistant was shown, verbatim**
@@ -129,40 +131,22 @@ posting on 1 April. There is no waiting period for *using* accrued PTO — an em
 Mosaic Robotics does not permit a negative PTO balance, so a new hire cannot borrow against future accrual.
 </evidence>
 
-<evidence id="c_aa88b3304b4feeee" kind="retrieval">
-nominates an onboarding buddy, books the first-week meetings, and sends a short introduction to the team explaining what the new
-person will work on. New hires consistently report that the introduction matters more than anyone expects.
-
-People Operations sends the new hire a welcome pack five business days before the start date: the first-day logistics, the office address and access
-arrangements, what to bring, and a plain-language summary of the benefits enrolment they will complete in their first week.
+<evidence id="c_0df5d11cd585014f" kind="retrieval">
+Benefits questions go to People Operations at benefits@mosaicrobotics.example. Eligibility and waiting-period questions, and anything involving a
+dependent's documentation, go to the same address. Claims disputes with a carrier are escalated by People Operations on the employee's behalf where the
+carrier's own appeal has failed. Payroll deduction questions go to payroll@mosaicrobotics.example.
 </evidence>
 
-<evidence id="c_5cd8e7321e674970" kind="retrieval">
-By day 30 the new hire should understand what their team does, how it fits into the company, who the customers are, and where to find things. Depth
-comes later; orientation comes first.
+<evidence id="c_26d73a3bc194792c" kind="retrieval">
+Employees of Mosaic Robotics GmbH participate in the German statutory health, pension, unemployment and long-term care systems, with contributions
+split between employer and employee as the statute requires. The plans described above do not apply.
 
-Required training is complete by day 30 in every case, and security training considerably sooner — see *Required Training* below.
+The company supplements the statutory position with a private supplementary health plan, an occupational pension contribution of 5% of gross salary
+into a company-supported scheme, and a monthly public transport allowance. There is no waiting period for the supplementary plans; they begin on the
+first day of employment.
 
-The new hire attends the monthly all-hands and the quarterly product review in their first 30 days wherever the calendar allows, and their manager
-makes sure they are invited to both.
-
-The manager holds weekly one-to-ones through the first 30 days without exception. After that the cadence is agreed between the two of them, but it never
-drops below fortnightly in the first year.
-
-People Operations sends a 30-day survey directly to the new hire. It is confidential, it is short, and the aggregate results are reviewed with
-department heads quarterly. Individual answers are never shared with the manager.
-</evidence>
-
-<evidence id="c_492c8f3d3327af90" kind="retrieval">
-Dependent children may remain on a Mosaic Robotics medical plan until the end of the month in which they turn 26. Dental and vision plans follow the
-same rule.
-
-Eligible dependents are a legal spouse, a registered domestic partner, a biological or adopted child, a stepchild, and a child for whom the employee
-has legal guardianship. Documentation is required within 60 days of adding a dependent; a dependent whose documentation is not supplied is removed from
-coverage retroactively to the date they were added.
-
-A child of any age who is incapable of self-support because of a disability that began before age 26 may remain covered indefinitely, subject to the
-carrier's certification.
+German employees do not participate in open enrollment. Their supplementary elections are made at hire and may be changed at any time with one
+month's notice.
 </evidence>
 
 <evidence id="c_16d5fa1a07ca573f" kind="retrieval">
@@ -178,35 +162,16 @@ Dental and vision elections are independent of the medical election. An employee
 reverse.
 </evidence>
 
-<evidence id="c_4ba83fb1511ae9aa" kind="retrieval">
-Mosaic Robotics provides 16 weeks of fully paid parental leave to every eligible new parent. The 16 weeks are the same whether the employee gave birth,
-did not give birth, adopted, or became a parent through surrogacy or foster placement leading to adoption.
+<evidence id="c_492c8f3d3327af90" kind="retrieval">
+Dependent children may remain on a Mosaic Robotics medical plan until the end of the month in which they turn 26. Dental and vision plans follow the
+same rule.
 
-Parental leave eligibility begins after 6 months of continuous service. An employee who becomes a parent before reaching six months receives the
-statutory entitlement their jurisdiction provides, and the company benefit begins the day the service requirement is met.
+Eligible dependents are a legal spouse, a registered domestic partner, a biological or adopted child, a stepchild, and a child for whom the employee
+has legal guardianship. Documentation is required within 60 days of adding a dependent; a dependent whose documentation is not supplied is removed from
+coverage retroactively to the date they were added.
 
-Leave must begin within 12 months of the birth or placement. It may be taken as one continuous block, or as up to three blocks of at least two weeks
-each, agreed with the manager and People Operations before the first block begins. Splitting the leave does not extend the total.
-
-An employee who gives birth also receives any period of medical disability leave certified by their clinician, before the parental leave begins. The
-disability period is paid through short-term disability rather than as parental leave, and it does not reduce the 16 weeks.
-
-Parental leave for both parents where both work at Mosaic Robotics is 16 weeks each. The company does not pool or reduce the entitlement.
-</evidence>
-
-<evidence id="c_749c3f5abec91fe8" kind="retrieval">
-Continuous medical leave is available for up to 26 weeks in a rolling 12-month period. The leave covers the employee's own serious health condition,
-including physical illness, surgery, recovery and mental health treatment.
-
-The first 13 weeks are paid at 70% of base salary through short-term disability after a 7-day elimination period covered by the employee's sick balance
-or PTO. Weeks 14 to 26 are paid at 60% of base salary through long-term disability. Mosaic Robotics tops the first two weeks up to 100% of base salary
-so that a short recovery is not a financial event.
-
-Intermittent medical leave — a course of treatment requiring a day a week, a reduced schedule during recovery — is available on the same 26-week
-budget, counted in hours rather than weeks. The schedule is agreed with People Operations and the manager is told only the schedule.
-
-A clinician's certification is required for any medical leave longer than five consecutive working days, and a recertification is required every eight
-weeks for a continuing leave. Certifications go to People Operations and are stored in a restricted-access record separate from the employee file.
+A child of any age who is incapable of self-support because of a disability that began before age 26 may remain covered indefinitely, subject to the
+carrier's certification.
 </evidence>
 
 ---
@@ -220,15 +185,13 @@ weeks for a continuing leave. Certifications go to People Operations and are sto
 ```
 Your benefits waiting period ends on 13 November 2026.
 
-New hires become eligible for medical, dental and vision coverage 90 days after their hire date. Coverage begins on the day the waiting period ends, not on the first of the following month.
+New hires become eligible for medical, dental and vision coverage 90 days after their hire date. Coverage begins on the day the waiting period ends.
 
 Recommendation — not company policy: You have 30 days from 13 November to make your benefits elections in MosaicOne. If you make no election within that window, you will be enrolled in employee-only coverage on the standard medical plan by default and may not change it until the next open enrollment or a qualifying life event.
 
-Retirement plan eligibility is different: you may begin contributing to the 401(k) plan from your first payroll run, with no waiting period at all.
-
 Next steps:
-- Review plan options before 13 November
-- Submit elections in MosaicOne by 13 December
+- Review plan options in MosaicOne by 13 December
+- Contact benefits@mosaicrobotics.example with questions
 ```
 
 **EVIDENCE — everything the assistant was shown, verbatim**
@@ -305,73 +268,138 @@ disability period is paid through short-term disability rather than as parental 
 Parental leave for both parents where both work at Mosaic Robotics is 16 weeks each. The company does not pool or reduce the entitlement.
 </evidence>
 
-<evidence id="c_d2a55afc5567ce2a" kind="retrieval">
-gh the carrier.
+<evidence id="c_a44f7da2b160c7a3" kind="retrieval">
+Mosaic Robotics matches 100% of the first 4% of eligible compensation contributed to the 401(k) plan. An employee contributing 4% or more therefore
+receives the full match; an employee contributing 2% receives a 2% match.
 
-A wellbeing allowance of USD 40 per month may be claimed for exercise, sports club membership,
-mindfulness applications or equipment. It is claimed in MosaicOne Expenses like any other allowance and is
-taxable where the entity's rules require it.
+Employer matching contributions vest after 2 years of service. Employee contributions are always immediately and fully vested, because they are the
+employee's own money.
 
-Backup care provides ten days per plan year of subsidised childcare or eldercare for the days when the
-usual arrangement falls through. The employee pays a fixed contribution per day and the company pays the
-rest.
+Both traditional pre-tax and Roth after-tax contributions are available, and an employee may split between them. Contribution rate changes take
+effect on the next payroll run and may be made as often as the employee wishes.
 
-None of these programmes reports individual usage to a manager, and none is visible on an employee's
-record beyond the payroll deduction where one applies.
+New hires are automatically enrolled at a 4% pre-tax contribution rate 30 days after their start date unless they opt out or choose a different
+rate. The automatic rate increases by one percentage point each January until it reaches 10%; an employee may switch the escalation off at any time.
+
+Loans and hardship withdrawals are available under the terms of the plan document. Rollovers into the plan from a previous employer are accepted at
+any time.
 </evidence>
 
-<evidence id="c_864fb910f46475a7" kind="retrieval">
-No employee may work outside their home country for more than 90 days in a rolling 12-month period. The 90-day figure is a company limit and is
-independent of any shorter limit imposed by the destination country's immigration rules, which always take precedence.
+<evidence id="c_8531e5a0f775e247" kind="retrieval">
+An employee moving to a materially different role inside Mosaic Robotics gets a shortened version of this
+programme, because the company parts are already familiar and the team parts are not.
 
-Days are counted as calendar days of presence, including weekends and company holidays that fall inside the trip. A trip that begins on 3 November and
-ends on 14 December counts as 42 days.
+The receiving manager writes a 30-60-90 plan exactly as they would for an external hire. Skipping it is
+the single most common failure in internal moves: everyone assumes the person already knows how things
+work, and the person is too experienced to feel able to ask.
 
-Separate trips inside the rolling window are added together. An employee who spent 55 days abroad in March and April may take no more than 35 further
-days before the March allocation begins to roll off.
+Access changes are handled by IT on the transfer date rather than before it. The employee keeps their
+laptop, their MosaicOne account and their tenure; what changes is their cost centre, their reporting line
+and their system access, all of which are updated in one transaction so nothing is left dangling.
+
+Internal movers are paired with a buddy on the new team for four weeks, half the external programme. The
+30-day survey is sent, because the aggregate results for internal moves are consistently worse than for
+external hires and the company would like to know why.
+
+An internal move does not restart the benefits waiting period, does not reset the PTO service band, and
+does not affect the performance cycle. A move that happens within 60 days of the annual review is rated by
+the previous manager with input from the new one.
 </evidence>
 
-<evidence id="c_0d2c84e4df38b6a0" kind="retrieval">
-International remote work of more than 30 days requires approval from the employee's director and from Tax & Legal. Shorter stays are a direct-manager
-decision, and every stay of any length must satisfy the device and connectivity requirements in the Security & Acceptable Use Policy.
+<evidence id="c_040b260dec0803c8" kind="retrieval">
+Mosaic Robotics offers a paid sabbatical of 4 consecutive weeks to every employee who reaches 5 years of
+continuous service, and again at each subsequent five-year anniversary. The sabbatical is in addition to
+PTO and does not draw down any balance.
+
+Eligibility is checked automatically in MosaicOne on the service anniversary, and the employee is
+notified. The sabbatical must be taken within 24 months of the anniversary or it lapses; it cannot be
+banked, deferred indefinitely, or exchanged for pay.
+
+A sabbatical is requested at least 90 calendar days in advance so that coverage can be planned properly.
+The manager and the department head agree the dates; the entitlement itself is not discretionary and is
+never refused, only scheduled.
+
+The point of a sabbatical is a genuine break, so an employee on sabbatical is removed from on-call
+rotations, from meeting invitations and from routine distribution lists, and their accounts stay active
+only so that nothing breaks on their return. Colleagues are asked not to contact them about work, and
+managers are accountable for that.
+</evidence>
+
+<evidence id="c_be7309499c15c7e1" kind="retrieval">
+Part-time employees scheduled at 0.5 FTE or more accrue PTO in proportion to their FTE. A 0.6 FTE employee in the under-three-year band accrues 0.75
+days per month, and the same employee in the three-year-plus band accrues 0.90 days per month. Proration is calculated to two decimal places and the
+posted value is rounded to the nearest 0.05 days.
+
+Employees scheduled below 0.5 FTE do not accrue PTO. They are instead paid for hours worked and may take unpaid time off with their manager's
+agreement, recorded in MosaicOne as an unpaid absence so that payroll and headcount reporting stay accurate.
+
+A change of FTE takes effect for accrual purposes on the first posting date on or after the effective date of the change. Balances already accrued at a
+higher FTE are never clawed back.
+</evidence>
+
+<evidence id="c_16d5fa1a07ca573f" kind="retrieval">
+The dental plan covers preventive care at 100% with no deductible, basic restorative care at 80% and major restorative care at 50%, with an annual
+maximum benefit of USD 2,000 per covered person. Orthodontia carries a separate lifetime maximum of USD 2,500 and is available to covered dependents
+under 19.
+
+The vision plan covers one eye examination per plan year at a USD 10 copay, and provides an allowance of USD 200 per plan year toward frames or
+contact lenses. Employees whose role requires safety eyewear receive prescription safety glasses through Facilities rather than through the vision
+plan, at no cost and outside the allowance.
+
+Dental and vision elections are independent of the medical election. An employee may decline medical cover and still elect dental and vision, or the
+reverse.
+</evidence>
+
+<evidence id="c_76cc7adc6c535185" kind="retrieval">
+Three practical notes that answer most of the questions People Operations receives.
+
+**Find your card.** Digital medical, dental and vision cards are in MosaicOne Benefits from
+the day coverage begins. Physical cards arrive within fifteen days. A provider who cannot find you is
+usually looking on the day before coverage started.
+
+**Check the network first.** Every plan pays substantially more in network than out of it,
+and the carrier's directory is the authority, not the provider's own website. A five-minute check before an
+appointment is the single most effective thing an employee can do to control their own cost.
+
+**Appeal a denied claim.** Carriers deny claims for administrative reasons more often than
+for clinical ones, and a first-level appeal succeeds surprisingly often. People Operations will help draft
+one, and will escalate on the employee's behalf where the carrier's own appeal has failed.
+
+Employees leaving Mosaic Robotics keep medical, dental and vision cover to the end of the month in which
+they leave, and are sent continuation-coverage information within fourteen days of their final day.
+</evidence>
+
+<evidence id="c_749c3f5abec91fe8" kind="retrieval">
+Continuous medical leave is available for up to 26 weeks in a rolling 12-month period. The leave covers the employee's own serious health condition,
+including physical illness, surgery, recovery and mental health treatment.
+
+The first 13 weeks are paid at 70% of base salary through short-term disability after a 7-day elimination period covered by the employee's sick balance
+or PTO. Weeks 14 to 26 are paid at 60% of base salary through long-term disability. Mosaic Robotics tops the first two weeks up to 100% of base salary
+so that a short recovery is not a financial event.
+
+Intermittent medical leave — a course of treatment requiring a day a week, a reduced schedule during recovery — is available on the same 26-week
+budget, counted in hours rather than weeks. The schedule is agreed with People Operations and the manager is told only the schedule.
+
+A clinician's certification is required for any medical leave longer than five consecutive working days, and a recertification is required every eight
+weeks for a continuing leave. Certifications go to People Operations and are stored in a restricted-access record separate from the employee file.
+</evidence>
+
+<evidence id="c_9948839107acfaaf" kind="retrieval">
+PTO requests of any length are approved by the employee's direct manager. Longer requests and requests overlapping a blackout period additionally
+require director approval, and the notice periods below come from the PTO & Holidays Policy.
 
 | Request | First approver | Second approver | Notice |
 |---|---|---|---|
-| Work abroad, up to 30 consecutive days, approved country | Direct manager | - | 21 calendar days |
-| Work abroad, more than 30 consecutive days | Director | Tax & Legal | 21 calendar days |
-| Work abroad, destination not on the approved list | Director | Tax & Legal | 30 calendar days |
-| Extension of an approved stay | Director | Tax & Legal | Before the approved end date |
-| Permanent relocation to another country | VP People Operations | Tax & Legal | 60 calendar days |
-| International business travel (Travel Policy) | Direct manager | - | 14 calendar days |
+| PTO up to 5 consecutive business days | Direct manager | - | 5 business days |
+| PTO of 6 to 15 consecutive business days | Direct manager | - | 15 business days |
+| PTO of more than 15 consecutive business days | Direct manager | Director | 15 business days |
+| PTO overlapping a declared blackout period | Direct manager | Director | 5 business days |
+| Floating holiday | Direct manager | - | 5 business days |
+| Sick time (retroactive entry) | Direct manager | - | - |
+| Leave of absence (any type) | People Operations | - | 30 calendar days if foreseeable |
 
-The Tax & Location Addendum sets the thresholds behind this table and explains why the 30-day line sits where it does. The addendum, not this matrix, is
-the authority on whether a particular destination and duration are workable.
-</evidence>
-
-<evidence id="c_26d73a3bc194792c" kind="retrieval">
-Employees of Mosaic Robotics GmbH participate in the German statutory health, pension, unemployment and long-term care systems, with contributions
-split between employer and employee as the statute requires. The plans described above do not apply.
-
-The company supplements the statutory position with a private supplementary health plan, an occupational pension contribution of 5% of gross salary
-into a company-supported scheme, and a monthly public transport allowance. There is no waiting period for the supplementary plans; they begin on the
-first day of employment.
-
-German employees do not participate in open enrollment. Their supplementary elections are made at hire and may be changed at any time with one
-month's notice.
-</evidence>
-
-<evidence id="c_16186f87d12c1302" kind="retrieval">
-PTO requests must be submitted at least 5 business days in advance. A request of six or more consecutive business days requires 15 business days of
-advance notice. Notice is counted in business days between the day the request is submitted in MosaicOne and the first day of the requested absence,
-excluding both the submission day and any company holiday on the employee's office calendar.
-
-The notice requirement exists so that a manager can rebalance work, not to create a barrier. A manager may waive the notice requirement for a request
-that falls inside the window; the waiver is recorded in MosaicOne with a short reason, and People Operations reviews waivers quarterly to make sure the
-exception has not become the rule.
-
-Unforeseeable absences — a sudden illness, a family emergency, a transport failure that makes work impossible — are never held to the notice
-requirement. The employee notifies their manager as early as they reasonably can, and the absence is entered in MosaicOne retroactively, against sick
-time where the reason was illness and against PTO otherwise.
+A leave of absence is not a manager decision. The manager is notified and plans coverage; People Operations approves the leave against the entitlement
+in the Leave of Absence Policy.
 </evidence>
 
 <evidence id="lookup_benefits_status#1" kind="structured_data">
@@ -387,16 +415,16 @@ time where the reason was illness and against PTO otherwise.
 **ANSWER**
 
 ```
-People Operations acknowledges every reported concern within 2 business days.
+People Operations acknowledges every reported concern within 2 business days. The acknowledgement names the person who will handle the case, explains the process, and sets out what the reporter can expect to be told and when.
 
-Investigations are targeted for completion within 30 calendar days of the report.
+Investigations are targeted for completion within 30 calendar days of the report. Where an investigation will take longer, the reporter and the respondent are both told, in writing, why and when to expect the outcome.
 
 Severity 1 cases receive a response within 4 business hours.
 
-Target resolution times for Severity 1 cases are as fast as the facts allow.
+Response means a named human being contacting the person who raised the case, acknowledging what was raised, naming who owns it and describing what happens next.
 
 Next steps:
-- Contact Employee Relations if you have a conduct concern
+- Contact Employee Relations for your specific case status.
 ```
 
 **EVIDENCE — everything the assistant was shown, verbatim**
@@ -476,6 +504,47 @@ The escalation list itself is reviewed annually against the cases that arrived, 
 when the year's experience shows a gap. It has grown twice since 2024 and has never shrunk.
 </evidence>
 
+<evidence id="c_ac1bc3eaad309133" kind="retrieval">
+Suspected security incidents must be reported to IT Security within 1 hour of discovery. The report is made
+through the MosaicOne security incident form or, out of hours, to the IT Security duty line printed on the
+back of every employee badge.
+
+A security incident is anything that may have exposed company data or systems: a lost or stolen device, a
+clicked phishing link, a credential entered on a suspicious page, an unexpected security-key prompt, a file
+shared with the wrong person, malware detected on a device, or a colleague behaving in a way that suggests a
+compromised account.
+
+Report first and investigate afterwards. An employee is never expected to establish whether something is
+really an incident before reporting it, and the security team would far rather triage ten false alarms than
+learn about a real one a week late.
+
+Lost and stolen devices are additionally reported under the Equipment & Asset Policy, which requires a report
+within 24 hours; the 1-hour requirement in this policy is the tighter of the two and is the one that applies
+when data may be at risk.
+
+No employee is disciplined for an honest mistake reported promptly. Deliberately concealing an incident, or
+failing to report one after being reminded, is a conduct matter under the Workplace Conduct Policy.
+</evidence>
+
+<evidence id="c_f6c86ab9d43cba47" kind="retrieval">
+A lost or stolen device must be reported to IT Security within 24 hours of discovery. The report is made through the MosaicOne security incident form
+or, out of hours, to the IT Security duty line printed on the back of every employee badge.
+
+The 24-hour requirement exists so that IT Security can revoke sessions, wipe the device remotely and assess what data was resident. It is not a
+disciplinary trigger and no employee has ever been penalised for reporting a loss quickly. Delaying a report, by contrast, turns a manageable incident
+into a reportable data breach.
+
+Accidental damage is covered by the company. A cracked screen, a spilled drink, a dropped instrument — these are the ordinary cost of using equipment,
+and the employee is not charged. IT repairs or replaces the item and records the cause for reliability analysis.
+
+Damage or loss resulting from clear negligence or from prohibited use may be charged to the employee at the depreciated value of the asset, with the
+decision made by the VP of People Operations rather than by the employee's manager, and only where local law permits. In practice this is reserved for
+repeated incidents, not for an unlucky one.
+
+A device lost while travelling is reported on the same 24-hour clock, and the traveller also contacts the travel provider's assistance line so a
+replacement can be arranged before the trip continues.
+</evidence>
+
 <evidence id="c_f7ec2fe078c43c2d" kind="retrieval">
 of the report. Where an
 investigation will take longer, the reporter and the
@@ -493,6 +562,42 @@ Either party may ask for a review of the outcome within 10 business days, on the
 process was unfair, that a material fact was
 overlooked, or that the outcome was disproportionate. The review is conducted by a person who
 was not involved in the original investigation.
+</evidence>
+
+<evidence id="c_41eafafdff92115a" kind="retrieval">
+Outcomes under this policy range from a documented conversation, through formal coaching, a
+written warning, removal of management responsibility and
+withholding of a bonus or increase, to dismissal.
+The outcome depends on the seriousness of the conduct, its effect on others, whether it was
+repeated, whether the person had been told before, and
+whether they took responsibility once it was raised. Contribution to the company is not a mitigating
+factor and never has been.
+Certain conduct results in dismissal in almost every case: physical violence or a credible threat of it,
+sexual harassment involving physical contact or
+coercion, deliberate falsification of company records, and retaliation against a reporter after a formal
+warning about it.
+Outcomes are recorded in the employee's file and are visible to People Operations and to the
+employee. A warning remains live for 12 months for the
+purposes of considering a later matter, and stays on file after that.
+Where the respondent is a contractor, agency worker or visitor, the outcome is a change to or the
+end of their engagement, arranged with the supplying
+firm through Procurement.
+</evidence>
+
+<evidence id="c_30f53dec28f9f57f" kind="retrieval">
+This policy sets out which matters must be escalated to a named human being in People Operations, how a case is raised, how quickly it is answered, and
+how it is kept confidential. It applies to employees of Mosaic Robotics, Inc. and Mosaic Robotics GmbH, and to anyone acting on the company's behalf who
+becomes aware of a matter within its scope.
+
+It exists because Mosaic Robotics runs self-service tools — MosaicOne, its policy search, and an HR assistant that answers policy questions — and those
+tools must have a clearly drawn boundary. Some questions are looked up. Others are handled by a person, with judgement, discretion and a case record.
+This document draws that boundary.
+
+Nothing here replaces the Workplace Conduct Policy, which defines prohibited conduct and describes the investigation process. This policy is about
+routing and response: who hears about a matter, how fast, and what the person raising it can expect.
+
+Managers are subject to an additional duty. A manager who learns of a matter listed in the next section must route it to People Operations the same
+working day, whether or not the affected person asked them to and whether or not they think it serious.
 </evidence>
 
 ---
@@ -669,6 +774,21 @@ Equipment decisions are made by IT for computing and mobile devices, by Faciliti
 test instruments. People Operations owns this policy but does not own the equipment.
 </evidence>
 
+<evidence id="c_d2a55afc5567ce2a" kind="retrieval">
+gh the carrier.
+
+A wellbeing allowance of USD 40 per month may be claimed for exercise, sports club membership,
+mindfulness applications or equipment. It is claimed in MosaicOne Expenses like any other allowance and is
+taxable where the entity's rules require it.
+
+Backup care provides ten days per plan year of subsidised childcare or eldercare for the days when the
+usual arrangement falls through. The employee pays a fixed contribution per day and the company pays the
+rest.
+
+None of these programmes reports individual usage to a manager, and none is visible on an employee's
+record beyond the payroll deduction where one applies.
+</evidence>
+
 ---
 
 ## pto-001
@@ -734,17 +854,21 @@ periods and resume automatically on return, at the same rate.
 Service for the purpose of tenure, PTO accrual bands and vesting continues to accumulate during every protected leave, paid or unpaid.
 </evidence>
 
-<evidence id="c_bac3a6e294c7f82b" kind="retrieval">
-s stay active
-only so that nothing breaks on their return. Colleagues are asked not to contact them about work, and
-managers are accountable for that.
+<evidence id="c_a44f7da2b160c7a3" kind="retrieval">
+Mosaic Robotics matches 100% of the first 4% of eligible compensation contributed to the 401(k) plan. An employee contributing 4% or more therefore
+receives the full match; an employee contributing 2% receives a 2% match.
 
-Benefits, PTO accrual, service accumulation and 401(k) contributions all continue unchanged during a
-sabbatical, which is paid at 100% of base salary.
+Employer matching contributions vest after 2 years of service. Employee contributions are always immediately and fully vested, because they are the
+employee's own money.
 
-An employee may combine a sabbatical with PTO to make a longer break, subject to the ordinary notice
-rules for the PTO portion. An employee may not combine a sabbatical with a leave of absence; where the
-two would overlap, the leave takes precedence and the sabbatical is rescheduled.
+Both traditional pre-tax and Roth after-tax contributions are available, and an employee may split between them. Contribution rate changes take
+effect on the next payroll run and may be made as often as the employee wishes.
+
+New hires are automatically enrolled at a 4% pre-tax contribution rate 30 days after their start date unless they opt out or choose a different
+rate. The automatic rate increases by one percentage point each January until it reaches 10%; an employee may switch the escalation off at any time.
+
+Loans and hardship withdrawals are available under the terms of the plan document. Rollovers into the plan from a previous employer are accepted at
+any time.
 </evidence>
 
 ---
@@ -756,7 +880,10 @@ two would overlap, the leave takes precedence and the sabbatical is rescheduled.
 **ANSWER**
 
 ```
-Hybrid employees assigned to a hub office work on site at least 3 days each week.
+Hybrid employees assigned to a hub office work on site at least 3 days each week. The specific days are set by the team, not by the individual, so that a team's onsite days overlap and the office time is actually collaborative; most teams anchor on Tuesday, Wednesday and Thursday.
+
+Next steps:
+- Confirm your team's specific onsite days with your manager
 ```
 
 **EVIDENCE — everything the assistant was shown, verbatim**
@@ -816,119 +943,6 @@ workspace, shipped before their start date. Hybrid employees may request a secon
 recorded arrangement includes at least two remote days a week.
 </evidence>
 
-<evidence id="c_1ab470129a180cfa" kind="retrieval">
-Mosaic Robotics builds industrial robots. Some of the work — assembly, calibration, field validation, safety certification — can only happen where the
-hardware is, and some of it can happen anywhere there is a laptop and a reliable connection. This policy sets out how the company reconciles those two
-facts: which work arrangements exist, what each one commits the employee and the company to, and how an arrangement is changed.
-
-It applies to every employee of Mosaic Robotics, Inc. and Mosaic Robotics GmbH. Where an employee wants to work from outside the country their
-employment contract is registered in, this policy sets the *people* requirements and the Tax & Location Addendum sets the *tax, payroll and legal*
-requirements; both must be satisfied and neither can waive the other.
-
-Mosaic Robotics is hybrid by default. An employee assigned to one of the three hub offices — Austin, Boston and Berlin — is expected on site for part of
-each week. A defined fully-remote cohort exists in the United States for roles where physical presence adds nothing. Neither arrangement is a reward or
-a sanction: the arrangement follows the role, and it is recorded on the employee record in MosaicOne as `work_arrangement`.
-</evidence>
-
-<evidence id="c_3bd7eff626822bf3" kind="retrieval">
-This addendum sits underneath the Remote & Hybrid Work Policy and governs the consequences of *where* work is physically performed. The Remote & Hybrid
-Work Policy answers whether an arrangement suits the role and the team. This addendum answers whether the company and the employee can lawfully and
-affordably carry it.
-
-It applies to every employee of Mosaic Robotics, Inc. and Mosaic Robotics GmbH who intends to perform work from a country other than the one their
-employment contract is registered in, and to every permanent relocation across a national border. It also applies to Mosaic Robotics itself: the
-thresholds below are the company's obligations as much as the employee's.
-
-Nothing in this addendum is personal tax advice. Mosaic Robotics can describe its own obligations and can tell an employee what the company will and
-will not do. It cannot tell an employee what their personal tax return should say, and it does not reimburse personal tax preparation except where the
-*Payroll and Withholding* section says so explicitly.
-
-Where this addendum and the Remote & Hybrid Work Policy both set a requirement, both apply. Where they appear to conflict, the stricter requirement
-governs and People Operations resolves the conflict in writing.
-</evidence>
-
-<evidence id="c_763b799ee8de38d2" kind="retrieval">
-**"I am visiting family in Germany for three weeks and would like to work rather than take PTO."** That is
-a stay of 21 consecutive days in an approved country. Manager approval under the Remote & Hybrid Work
-Policy is enough, requested at least 21 calendar days ahead, and no Tax & Legal review is required. The
-device requirements apply in full and the days count against the rolling 90-day annual limit.
-
-**"The same trip, but six weeks."** That is 42 days, over the 30-day threshold, so it needs director
-approval and a Tax & Legal review filed at least 21 calendar days before departure. The review will
-usually approve it with conditions: a hard end date and a prohibition on customer-facing activity.
-
-**"I want to move to Portugal permanently."** Mosaic Robotics has no Portuguese entity, so a permanent
-relocation there is not available. The alternative is a stay inside the 90-day annual limit, or a
-conversation about whether the role could be based in Berlin.
-</evidence>
-
-<evidence id="c_d4ca7d1a45f75cdd" kind="retrieval">
-An onsite arrangement means the employee's regular place of work is a Mosaic Robotics office or facility, and they are expected there on every
-scheduled working day. Onsite is the default for Manufacturing, Test & Calibration, Field Service and Facilities roles, and for any role that handles
-prototype hardware under export-control or customer-confidentiality obligations.
-
-Onsite employees may work from home occasionally with their manager's agreement — a delivery, a repair visit, a day of focused writing — recorded in
-MosaicOne as an ad-hoc remote day. There is no fixed allowance, and no approval is needed for a single day; a pattern of more than four ad-hoc remote
-days in a calendar month is a signal that the arrangement itself should be revisited rather than stretched.
-</evidence>
-
-<evidence id="c_4142a3cd62ef49dd" kind="retrieval">
-A stay of 30 consecutive days or fewer in an approved country requires manager approval under the Remote & Hybrid Work Policy and nothing further from
-Tax & Legal. The employee remains on their home payroll, no shadow withholding is set up, and no corporate-tax filing is triggered.
-
-The employee must still hold the right to work in the destination country, must still meet the device and connectivity requirements, and must still
-stay inside the company's rolling 90-day annual limit. A short stay is administratively simple; it is not unregulated.
-
-Consecutive days are counted from the first calendar day of presence to the last, inclusive of weekends and holidays. Two trips separated by fewer than
-14 days are treated as one continuous stay for the purposes of this threshold, so an employee cannot reset the count with a weekend flight home.
-</evidence>
-
-<evidence id="c_598a56bc1ec155da" kind="retrieval">
-n there is not available. The alternative is a stay inside the 90-day annual limit, or a
-conversation about whether the role could be based in Berlin.
-
-**"I am attending a conference in Japan for four days."** That is business travel under the Travel Policy,
-not work from another country. No tenure requirement, no Tax & Legal review, and the days do not count
-against the 90-day limit. The device and network requirements still apply.
-
-**"My partner has a two-year posting in Ireland and I want to go with them."** That is a relocation
-question rather than a travel question, and Ireland has no Mosaic Robotics entity. People Operations will
-look at whether an employer-of-record arrangement is affordable for the role; the honest answer in most
-cases is that it is not, and the company says so early rather than late.
-
-**"I did not ask and I have been working from Spain for two months."** Tell mobility@mosaicrobotics.example
-today. Unwinding an exposure that is disclosed is administrative; discovering one in an audit two years
-later is expensive, and the difference in how the company responds is entirely about the disclosure.
-</evidence>
-
-<evidence id="c_9b86a15196bc9c32" kind="retrieval">
-This policy covers business travel by employees of Mosaic Robotics, Inc. and Mosaic Robotics GmbH: customer visits, field service calls, supplier
-audits, conferences, inter-office visits and team offsites. It sets what may be booked, through which channel, at what cost, and with whose approval.
-
-Business travel is travel undertaken at the company's request or with the company's approval to perform work at a location other than the employee's
-normal place of work. It is not the same thing as working from another country, which is governed by the Remote & Hybrid Work Policy and the Tax &
-Location Addendum; a trip that begins as travel and turns into a period of remote work needs approvals under both documents.
-
-Submission mechanics, receipt rules and approval thresholds are shared with the Expenses & Reimbursement Policy. This document sets only the additional
-caps and rules that travel needs.
-
-Mosaic Robotics ships heavy, calibrated hardware and sends engineers to install it. Field travel is therefore a core operating cost rather than an
-occasional perk, and this policy is written to keep it predictable rather than to discourage it.
-</evidence>
-
-<evidence id="c_fd324297edd149c0" kind="retrieval">
-Domestic arrangements are governed by the Remote & Hybrid Work Policy. Notification and approval are different things, and the table distinguishes them.
-
-| Request | First approver | Second approver | Notice |
-|---|---|---|---|
-| Ad-hoc remote day (onsite employee) | Direct manager | - | - |
-| Work from another US state, up to 10 business days | None (notification only) | - | - |
-| Work from another US state, over 10 business days | Direct manager | People Operations | 10 business days |
-| Work from another US state, over 30 consecutive days | Direct manager | People Operations | 30 calendar days |
-| Change of work arrangement (onsite, hybrid, remote) | Direct manager | Department head | 30 calendar days |
-| Work from Alaska, Hawaii or Wyoming | Director | VP People Operations | 30 calendar days |
-</evidence>
-
 ---
 
 ## remote-002
@@ -938,26 +952,24 @@ Domestic arrangements are governed by the Remote & Hybrid Work Policy. Notificat
 **ANSWER**
 
 ```
-A stay of more than 30 consecutive days requires three separate approvals before travel begins: manager approval under the Remote & Hybrid Work Policy, director approval (not manager approval), and a Tax & Legal review.
+A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins. The review determines whether shadow payroll must be opened, whether a certificate of coverage is needed for social security, and whether the employee's planned activities create permanent-establishment exposure.
 
-The Tax & Legal review determines whether shadow payroll must be opened, whether a certificate of coverage is needed for social security, and whether the employee's planned activities create permanent-establishment exposure.
+Tax & Legal review requests must be filed at least 21 calendar days before departure. The request is raised in MosaicOne alongside the manager approval and names the destination, the exact dates, the workspace address and a short description of the work the employee will perform while abroad.
 
-Tax & Legal review requests must be filed at least 21 calendar days before departure and must name the destination, exact dates, workspace address and a short description of the work to be performed.
+A trip that exceeds 30 consecutive days requires director approval rather than direct-manager approval. Manager approval, director approval and Tax & Legal approval are three separate records and all three must be present before departure.
 
-The review has three possible outcomes: Approved (trip proceeds as requested), Approved with conditions (most often a prohibition on customer-facing activity and a hard end date), or Not approved (employee is offered an alternative destination or shorter stay).
+The employee must hold the right to work in the destination country for the whole of the requested period. Mosaic Robotics will confirm employment, provide a letter of assignment and pay for the assignment letter's notarisation where required, and will not sponsor a visa for temporary work abroad.
 
-The employee must hold the right to work in the destination country for the whole of the requested period. Mosaic Robotics will not sponsor a visa for temporary work abroad.
+Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. IT Security must be notified of the destination country at least 5 business days before departure so that conditional-access rules and travel-risk monitoring can be adjusted.
 
-Work must use a company-managed, full-disk-encrypted laptop with always-on VPN. IT Security must be notified of the destination country at least 5 business days before departure so that conditional-access rules and travel-risk monitoring can be adjusted.
+No employee may work outside their home country for more than 90 days in a rolling 12-month period. Days are counted as calendar days of presence, including weekends and company holidays that fall inside the trip.
 
-The employee must have completed at least 12 months of continuous service, be in good standing with no active performance improvement plan or open conduct case, and not hold a role with export-control obligations, Restricted data access, or physical prototype access.
-
-Company data may only be processed on company-managed systems and on cloud services IT has approved. Copying company data into personal accounts, personal cloud drives, or third-party services not approved by IT is a policy breach.
+Public and hotel networks are treated as hostile. The Security & Acceptable Use Policy's rules on always-on VPN, screen locks and physical device custody apply in full and are not relaxed because the employee is on approved travel.
 
 Next steps:
-- File Tax & Legal review request 21 days ahead
-- Obtain director approval before departure
-- Notify IT Security 5 business days prior
+- File Tax & Legal review 21 days before departure
+- Obtain director and Tax & Legal approvals
+- Notify IT Security 5 business days ahead
 ```
 
 **EVIDENCE — everything the assistant was shown, verbatim**
@@ -971,21 +983,6 @@ stay inside the company's rolling 90-day annual limit. A short stay is administr
 
 Consecutive days are counted from the first calendar day of presence to the last, inclusive of weekends and holidays. Two trips separated by fewer than
 14 days are treated as one continuous stay for the purposes of this threshold, so an employee cannot reset the count with a weekend flight home.
-</evidence>
-
-<evidence id="c_763b799ee8de38d2" kind="retrieval">
-**"I am visiting family in Germany for three weeks and would like to work rather than take PTO."** That is
-a stay of 21 consecutive days in an approved country. Manager approval under the Remote & Hybrid Work
-Policy is enough, requested at least 21 calendar days ahead, and no Tax & Legal review is required. The
-device requirements apply in full and the days count against the rolling 90-day annual limit.
-
-**"The same trip, but six weeks."** That is 42 days, over the 30-day threshold, so it needs director
-approval and a Tax & Legal review filed at least 21 calendar days before departure. The review will
-usually approve it with conditions: a hard end date and a prohibition on customer-facing activity.
-
-**"I want to move to Portugal permanently."** Mosaic Robotics has no Portuguese entity, so a permanent
-relocation there is not available. The alternative is a stay inside the 90-day annual limit, or a
-conversation about whether the role could be based in Berlin.
 </evidence>
 
 <evidence id="c_b189d36f26fb7c60" kind="retrieval">
@@ -1019,17 +1016,30 @@ A trip that exceeds 30 consecutive days also requires director approval rather t
 Manager approval, director approval and Tax & Legal approval are three separate records and all three must be present before departure.
 </evidence>
 
-<evidence id="c_6577bf6f392890bf" kind="retrieval">
-Employees must have completed at least 12 months of continuous service to work outside their home country. The requirement applies to temporary work
-abroad, not to business travel: attending a customer site or a trade show on company business is governed by the Travel Policy and carries no tenure
-requirement.
+<evidence id="c_763b799ee8de38d2" kind="retrieval">
+**"I am visiting family in Germany for three weeks and would like to work rather than take PTO."** That is
+a stay of 21 consecutive days in an approved country. Manager approval under the Remote & Hybrid Work
+Policy is enough, requested at least 21 calendar days ahead, and no Tax & Legal review is required. The
+device requirements apply in full and the days count against the rolling 90-day annual limit.
 
-An employee must be in good standing — no active performance improvement plan and no open conduct case — and must hold the right to work in the
-destination country for the period requested. Mosaic Robotics does not sponsor visas for temporary work abroad and does not act as the employer of
-record in a country where it has no entity.
+**"The same trip, but six weeks."** That is 42 days, over the 30-day threshold, so it needs director
+approval and a Tax & Legal review filed at least 21 calendar days before departure. The review will
+usually approve it with conditions: a hard end date and a prohibition on customer-facing activity.
 
-Roles with export-control obligations, roles that handle Restricted data as defined in the Security & Acceptable Use Policy, and roles that require
-access to physical prototypes are not eligible regardless of tenure.
+**"I want to move to Portugal permanently."** Mosaic Robotics has no Portuguese entity, so a permanent
+relocation there is not available. The alternative is a stay inside the 90-day annual limit, or a
+conversation about whether the role could be based in Berlin.
+</evidence>
+
+<evidence id="c_864fb910f46475a7" kind="retrieval">
+No employee may work outside their home country for more than 90 days in a rolling 12-month period. The 90-day figure is a company limit and is
+independent of any shorter limit imposed by the destination country's immigration rules, which always take precedence.
+
+Days are counted as calendar days of presence, including weekends and company holidays that fall inside the trip. A trip that begins on 3 November and
+ends on 14 December counts as 42 days.
+
+Separate trips inside the rolling window are added together. An employee who spent 55 days abroad in March and April may take no more than 35 further
+days before the March allocation begins to roll off.
 </evidence>
 
 <evidence id="c_57b2015388bbf7d4" kind="retrieval">
@@ -1046,6 +1056,19 @@ Public and hotel networks are treated as hostile. The Security & Acceptable Use 
 custody apply in full and are not relaxed because the employee is on approved travel.
 </evidence>
 
+<evidence id="c_6577bf6f392890bf" kind="retrieval">
+Employees must have completed at least 12 months of continuous service to work outside their home country. The requirement applies to temporary work
+abroad, not to business travel: attending a customer site or a trade show on company business is governed by the Travel Policy and carries no tenure
+requirement.
+
+An employee must be in good standing — no active performance improvement plan and no open conduct case — and must hold the right to work in the
+destination country for the period requested. Mosaic Robotics does not sponsor visas for temporary work abroad and does not act as the employer of
+record in a country where it has no entity.
+
+Roles with export-control obligations, roles that handle Restricted data as defined in the Security & Acceptable Use Policy, and roles that require
+access to physical prototypes are not eligible regardless of tenure.
+</evidence>
+
 <evidence id="c_e0d1b52d3efced01" kind="retrieval">
 A remote workspace must have a wired or wireless connection of at least 50 Mbps download. Employees who cannot meet the threshold at home should speak
 to their manager about a coworking allowance rather than working from a connection that makes them inaudible in every meeting.
@@ -1060,72 +1083,6 @@ employees receive the monthly connectivity stipend described in the Expenses & R
 
 Employees are responsible for the safety of their own workspace. People Operations publishes an ergonomic self-assessment in MosaicOne and will fund a
 professional assessment where a health need is documented.
-</evidence>
-
-<evidence id="c_1ab470129a180cfa" kind="retrieval">
-Mosaic Robotics builds industrial robots. Some of the work — assembly, calibration, field validation, safety certification — can only happen where the
-hardware is, and some of it can happen anywhere there is a laptop and a reliable connection. This policy sets out how the company reconciles those two
-facts: which work arrangements exist, what each one commits the employee and the company to, and how an arrangement is changed.
-
-It applies to every employee of Mosaic Robotics, Inc. and Mosaic Robotics GmbH. Where an employee wants to work from outside the country their
-employment contract is registered in, this policy sets the *people* requirements and the Tax & Location Addendum sets the *tax, payroll and legal*
-requirements; both must be satisfied and neither can waive the other.
-
-Mosaic Robotics is hybrid by default. An employee assigned to one of the three hub offices — Austin, Boston and Berlin — is expected on site for part of
-each week. A defined fully-remote cohort exists in the United States for roles where physical presence adds nothing. Neither arrangement is a reward or
-a sanction: the arrangement follows the role, and it is recorded on the employee record in MosaicOne as `work_arrangement`.
-</evidence>
-
-<evidence id="c_176702a8d5fb03cf" kind="retrieval">
-General questions about work arrangements go to People Operations at people-ops@mosaicrobotics.example. Questions about a specific destination country,
-its duration limits or its tax consequences go to mobility@mosaicrobotics.example and to the Tax & Location Addendum. Device and network questions go to
-IT Security at it-security@mosaicrobotics.example.
-</evidence>
-
-<evidence id="c_0ed1a256c9148ee2" kind="retrieval">
-Restricted information is the small set of material where disclosure would cause severe harm: safety
-certification evidence for shipped robots, firmware signing keys, credentials, the source data behind an
-investigation, and export-controlled technical data. Access is granted individually, is logged, and is
-reviewed quarterly. Restricted material never leaves company-managed systems and never travels on a device
-taken outside the employee's home country.
-
-Labelling is the author's responsibility. Where a document is unlabelled, treat it as Confidential until its
-owner says otherwise.
-</evidence>
-
-<evidence id="c_f6640704084ced7f" kind="retrieval">
-ering where the data will sit, who can reach it, how it is encrypted, how it is deleted and what
-the supplier's own breach notification commitment is. Confidential and Restricted data may only be
-processed by suppliers who have passed that review and signed the company's data processing agreement.
-
-Customer data that reaches Mosaic Robotics as part of a field service or integration engagement is treated
-as Confidential at minimum, is held only for as long as the engagement needs it, and is returned or
-destroyed at its end with a written confirmation to the customer.
-
-Suppliers do not connect their own devices to Mosaic Robotics production networks. A guest network is
-provided for visitors, and any device that must reach a production system is provided and managed by IT.
-</evidence>
-
-<evidence id="c_fda4f4779ad55565" kind="retrieval">
-Company systems are provided for company work. Reasonable personal use is permitted and expected: reading the
-news at lunch, booking a dentist appointment, messaging a family member. The test is whether the use is
-occasional, lawful, and does not interfere with work or with anyone else's.
-
-The following are never acceptable on a company system or network: accessing or storing unlawful material;
-harassing, threatening or defaming anyone; infringing copyright, including downloading pirated software or
-media; running a private business; mining cryptocurrency; attempting to bypass a security control; scanning or
-probing a network the company does not own; and installing software that has not been approved by IT.
-
-Company data may only be processed on company-managed systems and on the cloud services IT has approved.
-Copying company data into a personal account, a personal cloud drive, a personal note-taking application or a
-third-party artificial-intelligence service that IT has not approved is a policy breach, whatever the
-intention behind it.
-</evidence>
-
-<evidence id="c_fae6eb1a11ba443a" kind="retrieval">
-Tax and legal questions about working abroad go to tax-legal@mosaicrobotics.example. Mobility logistics, approvals and destination questions go to
-mobility@mosaicrobotics.example. Device, network and travel-risk questions go to it-security@mosaicrobotics.example. General questions about work
-arrangements go to people-ops@mosaicrobotics.example.
 </evidence>
 
 <evidence id="c_cceb27b487508cbd" kind="retrieval">
@@ -1159,83 +1116,69 @@ The thresholds in this addendum are set conservatively against all three, which 
 tax treaty.
 </evidence>
 
----
+<evidence id="c_21fb57a686af7f30" kind="retrieval">
+Always-on VPN is required whenever a company device connects to a network that Mosaic Robotics does not
+control. That includes home networks, hotel and airport networks, customer guest networks, mobile hotspots and
+coworking spaces.
 
-## remote-003
+Screens showing Confidential or Restricted material are not visible to other people. Privacy filters are
+issued on request and are expected on any device used regularly in transit. Confidential conversations do not
+happen on a train, in an open café or in a shared lounge.
 
-**QUESTION**  I am thinking about working from Ireland from 1 October to 20 October 2026. Does that need Tax & Legal review?
+Devices are never left unattended in a public place, never checked into hold luggage, and never left visible
+in a parked vehicle. A hotel room safe is acceptable for short periods; a hotel room desk is not.
 
-**ANSWER**
+Employees travelling to a country on the elevated-risk list maintained by IT Security are issued a loaner
+laptop with a clean profile and no cached credentials, and leave their regular device at home. The list is
+published in MosaicOne and is reviewed quarterly.
 
-```
-A stay of 30 consecutive days or fewer in an approved country requires manager approval under the Remote & Hybrid Work Policy and nothing further from Tax & Legal.
-
-Your trip is 20 consecutive days, which is under the 30-day threshold.
-
-Ireland is an approved destination for temporary work abroad.
-
-Work abroad of up to 30 consecutive days in an approved country requires written manager approval at least 21 calendar days before departure, with the direct manager as the approver.
-
-Recommendation — not company policy: Raise the request in MosaicOne under 'Work from another country', naming the destination, exact dates, and workspace address.
-
-You must use a company-managed, full-disk-encrypted laptop with always-on VPN, and IT Security must be notified of Ireland at least 5 business days before departure.
-
-Recommendation — not company policy: Confirm with IT Security that your travel laptop meets the encryption and VPN requirements before you depart.
-
-Company-managed laptop with full-disk encryption and always-on VPN: not verified from your record — confirm before you proceed.
-
-Your request goes to Dana, your direct manager.
-
-Next steps:
-- Request manager approval in MosaicOne by 10 September.
-- Notify IT Security of your Ireland destination by 24 September.
-- Verify your laptop has full-disk encryption and always-on VPN enabled.
-```
-
-**EVIDENCE — everything the assistant was shown, verbatim**
-
-<evidence id="c_4142a3cd62ef49dd" kind="retrieval">
-A stay of 30 consecutive days or fewer in an approved country requires manager approval under the Remote & Hybrid Work Policy and nothing further from
-Tax & Legal. The employee remains on their home payroll, no shadow withholding is set up, and no corporate-tax filing is triggered.
-
-The employee must still hold the right to work in the destination country, must still meet the device and connectivity requirements, and must still
-stay inside the company's rolling 90-day annual limit. A short stay is administratively simple; it is not unregulated.
-
-Consecutive days are counted from the first calendar day of presence to the last, inclusive of weekends and holidays. Two trips separated by fewer than
-14 days are treated as one continuous stay for the purposes of this threshold, so an employee cannot reset the count with a weekend flight home.
+The device and connectivity requirements for working outside the home country in the Remote & Hybrid Work
+Policy sit on top of this section and are not relaxed by approval to travel.
 </evidence>
 
-<evidence id="c_c502ccd2ba5028f5" kind="retrieval">
-A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins. The review determines whether shadow
-payroll must be opened, whether a certificate of coverage is needed for social security, and whether the employee's planned activities create
-permanent-establishment exposure.
+<evidence id="c_ac1bc3eaad309133" kind="retrieval">
+Suspected security incidents must be reported to IT Security within 1 hour of discovery. The report is made
+through the MosaicOne security incident form or, out of hours, to the IT Security duty line printed on the
+back of every employee badge.
 
-Tax & Legal review requests must be filed at least 21 calendar days before departure. The request is raised in MosaicOne alongside the manager approval
-and names the destination, the exact dates, the workspace address and a short description of the work the employee will perform while abroad.
+A security incident is anything that may have exposed company data or systems: a lost or stolen device, a
+clicked phishing link, a credential entered on a suspicious page, an unexpected security-key prompt, a file
+shared with the wrong person, malware detected on a device, or a colleague behaving in a way that suggests a
+compromised account.
 
-A review has one of three outcomes. **Approved** — the trip proceeds as requested. **Approved with conditions** — the trip proceeds with named
-restrictions, most often a prohibition on customer-facing activity and a hard end date. **Not approved** — the exposure cannot be managed at a
-reasonable cost, and the employee is offered an alternative destination or a shorter stay.
+Report first and investigate afterwards. An employee is never expected to establish whether something is
+really an incident before reporting it, and the security team would far rather triage ten false alarms than
+learn about a real one a week late.
 
-A trip that exceeds 30 consecutive days also requires director approval rather than direct-manager approval, as set out in the Manager Approval Matrix.
-Manager approval, director approval and Tax & Legal approval are three separate records and all three must be present before departure.
+Lost and stolen devices are additionally reported under the Equipment & Asset Policy, which requires a report
+within 24 hours; the 1-hour requirement in this policy is the tighter of the two and is the one that applies
+when data may be at risk.
+
+No employee is disciplined for an honest mistake reported promptly. Deliberately concealing an incident, or
+failing to report one after being reminded, is a conduct matter under the Workplace Conduct Policy.
 </evidence>
 
-<evidence id="c_7bd4fd63c0658168" kind="retrieval">
-An employee working abroad remains on their home payroll unless Tax & Legal open a shadow payroll. Shadow payroll reports the same earnings to a second
-authority so that withholding can be remitted where it is owed; it does not change the employee's net pay, though it usually changes the timing of
-their personal filings.
+<evidence id="c_0ed1a256c9148ee2" kind="retrieval">
+Restricted information is the small set of material where disclosure would cause severe harm: safety
+certification evidence for shipped robots, firmware signing keys, credentials, the source data behind an
+investigation, and export-controlled technical data. Access is granted individually, is logged, and is
+reviewed quarterly. Restricted material never leaves company-managed systems and never travels on a device
+taken outside the employee's home country.
 
-Presence of more than 183 days in a calendar year in a single foreign country generally creates personal tax residency there. The 183-day figure is a
-common treaty threshold and not a promise: several countries apply shorter tests, and the company's own 90-day limit is set well below it precisely so
-that no employee stumbles across the line by accident.
+Labelling is the author's responsibility. Where a document is unlabelled, treat it as Confidential until its
+owner says otherwise.
+</evidence>
 
-Where a company-directed assignment causes an employee to owe tax in two countries on the same earnings, Mosaic Robotics funds tax-equalisation support
-through its external provider. Where an employee-requested trip does the same, the employee is responsible for their own filings and the company will
-supply the payroll records needed to complete them.
+<evidence id="c_3c0eba56eda3852a" kind="retrieval">
+International business travel requires manager approval before booking and, for destinations outside the approved-country list in the Tax & Location
+Addendum, a note to mobility@mosaicrobotics.example so that the trip is visible to the mobility team.
 
-Social security is handled separately from income tax. For stays in countries with a totalisation agreement, Tax & Legal obtain a certificate of
-coverage so that contributions continue in the home system; without one, the employee and the company may both owe contributions twice.
+A business trip of 30 consecutive days or fewer does not trigger the Tax & Legal review that the Tax & Location Addendum requires for *working* from
+another country, provided the traveller's activity is genuinely travel — meetings, installation, training, a conference — and not the ordinary conduct
+of their role from a foreign desk. Where a trip's character is unclear, the mobility team decides, not the traveller.
+
+The device and network requirements in the Security & Acceptable Use Policy apply in full to international travel. IT Security must be notified of the
+destination country at least 5 business days before departure, and travellers to countries on the elevated-risk list are issued a loaner laptop.
 </evidence>
 
 <evidence id="c_0d2c84e4df38b6a0" kind="retrieval">
@@ -1255,19 +1198,109 @@ The Tax & Location Addendum sets the thresholds behind this table and explains w
 the authority on whether a particular destination and duration are workable.
 </evidence>
 
-<evidence id="c_64fbd63786de81d4" kind="retrieval">
-Written manager approval must be obtained at least 21 calendar days before departure. The request is raised in MosaicOne under *Work from another
-country*, names the destination, the exact start and end dates, and the address of the workspace the employee will use.
+---
 
-Approval is a two-step gate. The direct manager approves the working arrangement — coverage, meeting overlap, on-call implications. Where the stay
-exceeds the threshold set in the Tax & Location Addendum, Tax & Legal must also review and approve before travel begins, and the Manager Approval
-Matrix routes the request to a director rather than the direct manager.
+## remote-003
 
-Approval is granted for a specific destination and a specific date range. Extending the stay requires a new approval, requested before the approved end
-date; returning early requires nothing beyond updating the record so the rolling 90-day count stays accurate.
+**QUESTION**  I am thinking about working from Ireland from 1 October to 20 October 2026. Does that need Tax & Legal review?
 
-International mobility questions go to People Operations at mobility@mosaicrobotics.example. The mobility team, not the manager, is the owner of any
-question about whether a particular destination or duration is workable.
+**ANSWER**
+
+```
+A stay of 30 consecutive days or fewer in an approved country requires manager approval under the Remote & Hybrid Work Policy and nothing further from Tax & Legal.
+
+Your trip is 20 consecutive days, and Ireland is an approved destination.
+
+Work abroad up to 30 consecutive days in an approved country requires written manager approval at least 21 calendar days before departure; the request is raised in MosaicOne under 'Work from another country' with the exact dates and workspace address.
+
+Recommendation — not company policy: You submitted this question on 23 September; the 21-calendar-day deadline was 10 September, so you will need to discuss timing with Dana immediately.
+
+You must use a company-managed, full-disk-encrypted laptop with always-on VPN, and IT Security must be notified of Ireland at least 5 business days before departure.
+
+Your 20 days count toward the rolling 90-day annual limit on work outside your home country.
+
+Company-managed laptop with full-disk encryption and always-on VPN: not verified from your record — confirm before you proceed.
+
+Next steps:
+- Contact Dana to request manager approval immediately.
+- Notify IT Security of your Ireland destination at least 5 business days before 1 October.
+- Raise the request in MosaicOne with exact dates and workspace address.
+```
+
+**EVIDENCE — everything the assistant was shown, verbatim**
+
+<evidence id="c_c502ccd2ba5028f5" kind="retrieval">
+A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins. The review determines whether shadow
+payroll must be opened, whether a certificate of coverage is needed for social security, and whether the employee's planned activities create
+permanent-establishment exposure.
+
+Tax & Legal review requests must be filed at least 21 calendar days before departure. The request is raised in MosaicOne alongside the manager approval
+and names the destination, the exact dates, the workspace address and a short description of the work the employee will perform while abroad.
+
+A review has one of three outcomes. **Approved** — the trip proceeds as requested. **Approved with conditions** — the trip proceeds with named
+restrictions, most often a prohibition on customer-facing activity and a hard end date. **Not approved** — the exposure cannot be managed at a
+reasonable cost, and the employee is offered an alternative destination or a shorter stay.
+
+A trip that exceeds 30 consecutive days also requires director approval rather than direct-manager approval, as set out in the Manager Approval Matrix.
+Manager approval, director approval and Tax & Legal approval are three separate records and all three must be present before departure.
+</evidence>
+
+<evidence id="c_4142a3cd62ef49dd" kind="retrieval">
+A stay of 30 consecutive days or fewer in an approved country requires manager approval under the Remote & Hybrid Work Policy and nothing further from
+Tax & Legal. The employee remains on their home payroll, no shadow withholding is set up, and no corporate-tax filing is triggered.
+
+The employee must still hold the right to work in the destination country, must still meet the device and connectivity requirements, and must still
+stay inside the company's rolling 90-day annual limit. A short stay is administratively simple; it is not unregulated.
+
+Consecutive days are counted from the first calendar day of presence to the last, inclusive of weekends and holidays. Two trips separated by fewer than
+14 days are treated as one continuous stay for the purposes of this threshold, so an employee cannot reset the count with a weekend flight home.
+</evidence>
+
+<evidence id="c_f2519389927a580b" kind="retrieval">
+Three separate legal systems attach to the physical location of work, and they do not share a single threshold.
+
+**Immigration** asks whether the person has the right to be present and to work. It is binary and it is the destination country's decision. A tourist
+entry that permits remote work for a foreign employer in one country is a criminal matter in another, and neither Mosaic Robotics nor the employee can
+negotiate it.
+
+**Payroll and personal tax** ask which authority is owed withholding on the employee's earnings, and from which day. Some countries begin at the first
+day of presence, most apply a treaty-based day count, and a few look at where the economic employer sits rather than where the person is.
+
+**Corporate tax** asks whether the employee's activity creates a taxable presence — a *permanent establishment* — for Mosaic Robotics in the destination
+country. This is the risk with the largest financial consequence and the one an employee is least likely to have considered, because it depends on what
+the employee *does* rather than on how long they stay.
+
+The thresholds in this addendum are set conservatively against all three, which is why they are shorter than the day counts an employee may find in a
+tax treaty.
+</evidence>
+
+<evidence id="c_0d2c84e4df38b6a0" kind="retrieval">
+International remote work of more than 30 days requires approval from the employee's director and from Tax & Legal. Shorter stays are a direct-manager
+decision, and every stay of any length must satisfy the device and connectivity requirements in the Security & Acceptable Use Policy.
+
+| Request | First approver | Second approver | Notice |
+|---|---|---|---|
+| Work abroad, up to 30 consecutive days, approved country | Direct manager | - | 21 calendar days |
+| Work abroad, more than 30 consecutive days | Director | Tax & Legal | 21 calendar days |
+| Work abroad, destination not on the approved list | Director | Tax & Legal | 30 calendar days |
+| Extension of an approved stay | Director | Tax & Legal | Before the approved end date |
+| Permanent relocation to another country | VP People Operations | Tax & Legal | 60 calendar days |
+| International business travel (Travel Policy) | Direct manager | - | 14 calendar days |
+
+The Tax & Location Addendum sets the thresholds behind this table and explains why the 30-day line sits where it does. The addendum, not this matrix, is
+the authority on whether a particular destination and duration are workable.
+</evidence>
+
+<evidence id="c_3c0eba56eda3852a" kind="retrieval">
+International business travel requires manager approval before booking and, for destinations outside the approved-country list in the Tax & Location
+Addendum, a note to mobility@mosaicrobotics.example so that the trip is visible to the mobility team.
+
+A business trip of 30 consecutive days or fewer does not trigger the Tax & Legal review that the Tax & Location Addendum requires for *working* from
+another country, provided the traveller's activity is genuinely travel — meetings, installation, training, a conference — and not the ordinary conduct
+of their role from a foreign desk. Where a trip's character is unclear, the mobility team decides, not the traveller.
+
+The device and network requirements in the Security & Acceptable Use Policy apply in full to international travel. IT Security must be notified of the
+destination country at least 5 business days before departure, and travellers to countries on the elevated-risk list are issued a loaner laptop.
 </evidence>
 
 <evidence id="c_b189d36f26fb7c60" kind="retrieval">
@@ -1303,18 +1336,19 @@ today. Unwinding an exposure that is disclosed is administrative; discovering on
 later is expensive, and the difference in how the company responds is entirely about the disclosure.
 </evidence>
 
-<evidence id="c_57b2015388bbf7d4" kind="retrieval">
-Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. Personal devices may not be used for
-any Mosaic Robotics work outside the home country, including reading email on a phone that is not enrolled in mobile device management.
+<evidence id="c_64fbd63786de81d4" kind="retrieval">
+Written manager approval must be obtained at least 21 calendar days before departure. The request is raised in MosaicOne under *Work from another
+country*, names the destination, the exact start and end dates, and the address of the workspace the employee will use.
 
-IT Security must be notified of the destination country at least 5 business days before departure so that conditional-access rules and travel-risk
-monitoring can be adjusted. A sign-in from an unexpected country will otherwise be blocked, which is exactly what the control is for.
+Approval is a two-step gate. The direct manager approves the working arrangement — coverage, meeting overlap, on-call implications. Where the stay
+exceeds the threshold set in the Tax & Location Addendum, Tax & Legal must also review and approve before travel begins, and the Manager Approval
+Matrix routes the request to a director rather than the direct manager.
 
-Employees travelling to a country on the company's elevated-risk list are issued a loaner laptop with a clean profile and are asked to leave their
-regular device at home. The elevated-risk list is maintained by IT Security and published in the Security & Acceptable Use Policy's companion pages.
+Approval is granted for a specific destination and a specific date range. Extending the stay requires a new approval, requested before the approved end
+date; returning early requires nothing beyond updating the record so the rolling 90-day count stays accurate.
 
-Public and hotel networks are treated as hostile. The Security & Acceptable Use Policy's rules on always-on VPN, screen locks and physical device
-custody apply in full and are not relaxed because the employee is on approved travel.
+International mobility questions go to People Operations at mobility@mosaicrobotics.example. The mobility team, not the manager, is the owner of any
+question about whether a particular destination or duration is workable.
 </evidence>
 
 <evidence id="c_763b799ee8de38d2" kind="retrieval">
@@ -1330,45 +1364,6 @@ usually approve it with conditions: a hard end date and a prohibition on custome
 **"I want to move to Portugal permanently."** Mosaic Robotics has no Portuguese entity, so a permanent
 relocation there is not available. The alternative is a stay inside the 90-day annual limit, or a
 conversation about whether the role could be based in Berlin.
-</evidence>
-
-<evidence id="c_864fb910f46475a7" kind="retrieval">
-No employee may work outside their home country for more than 90 days in a rolling 12-month period. The 90-day figure is a company limit and is
-independent of any shorter limit imposed by the destination country's immigration rules, which always take precedence.
-
-Days are counted as calendar days of presence, including weekends and company holidays that fall inside the trip. A trip that begins on 3 November and
-ends on 14 December counts as 42 days.
-
-Separate trips inside the rolling window are added together. An employee who spent 55 days abroad in March and April may take no more than 35 further
-days before the March allocation begins to roll off.
-</evidence>
-
-<evidence id="c_6577bf6f392890bf" kind="retrieval">
-Employees must have completed at least 12 months of continuous service to work outside their home country. The requirement applies to temporary work
-abroad, not to business travel: attending a customer site or a trade show on company business is governed by the Travel Policy and carries no tenure
-requirement.
-
-An employee must be in good standing — no active performance improvement plan and no open conduct case — and must hold the right to work in the
-destination country for the period requested. Mosaic Robotics does not sponsor visas for temporary work abroad and does not act as the employer of
-record in a country where it has no entity.
-
-Roles with export-control obligations, roles that handle Restricted data as defined in the Security & Acceptable Use Policy, and roles that require
-access to physical prototypes are not eligible regardless of tenure.
-</evidence>
-
-<evidence id="c_946583143faa41f3" kind="retrieval">
-A change of work arrangement must be requested at least 30 calendar days before the intended effective date. The request is made in MosaicOne, states
-the requested arrangement and the reason, and is routed to the direct manager and then to the department head.
-
-The company evaluates a change request against three questions: whether the role can be performed under the requested arrangement, whether the team's
-collaboration pattern survives it, and whether the change creates a payroll, tax or immigration obligation the company is not already carrying. The
-third question is answered by People Operations against the Tax & Location Addendum, not by the manager.
-
-A refused request is answered in writing with the reason and, where the obstacle is fixable, what would need to change. An employee may re-request after
-90 days, or sooner if the circumstances that caused the refusal have changed.
-
-A change of arrangement that also changes the employee's work location across a state or national border is treated as a relocation and follows the Tax
-& Location Addendum's notice periods, which are longer than the 30 calendar days above.
 </evidence>
 
 <evidence id="c_bed326a7d15c0d80" kind="retrieval">
@@ -1429,20 +1424,22 @@ services are not places company data may go. This is the single most common acci
 this size, and it is almost always well-intentioned.
 </evidence>
 
-<evidence id="c_3c0eba56eda3852a" kind="retrieval">
-International business travel requires manager approval before booking and, for destinations outside the approved-country list in the Tax & Location
-Addendum, a note to mobility@mosaicrobotics.example so that the trip is visible to the mobility team.
+<evidence id="c_57b2015388bbf7d4" kind="retrieval">
+Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. Personal devices may not be used for
+any Mosaic Robotics work outside the home country, including reading email on a phone that is not enrolled in mobile device management.
 
-A business trip of 30 consecutive days or fewer does not trigger the Tax & Legal review that the Tax & Location Addendum requires for *working* from
-another country, provided the traveller's activity is genuinely travel — meetings, installation, training, a conference — and not the ordinary conduct
-of their role from a foreign desk. Where a trip's character is unclear, the mobility team decides, not the traveller.
+IT Security must be notified of the destination country at least 5 business days before departure so that conditional-access rules and travel-risk
+monitoring can be adjusted. A sign-in from an unexpected country will otherwise be blocked, which is exactly what the control is for.
 
-The device and network requirements in the Security & Acceptable Use Policy apply in full to international travel. IT Security must be notified of the
-destination country at least 5 business days before departure, and travellers to countries on the elevated-risk list are issued a loaner laptop.
+Employees travelling to a country on the company's elevated-risk list are issued a loaner laptop with a clean profile and are asked to leave their
+regular device at home. The elevated-risk list is maintained by IT Security and published in the Security & Acceptable Use Policy's companion pages.
+
+Public and hotel networks are treated as hostile. The Security & Acceptable Use Policy's rules on always-on VPN, screen locks and physical device
+custody apply in full and are not relaxed because the employee is on approved travel.
 </evidence>
 
 <evidence id="check_policy_compliance#1" kind="compliance">
-{"scenario": "international_remote", "verdict": "conditional", "as_of": "2026-09-01", "submitted_on": "2026-09-22", "computed": {"as_of": "2026-09-01", "submitted_on": "2026-09-22", "start_date": "2026-10-01", "end_date": "2026-10-20", "tenure_days": 1388, "tenure_months_at_as_of": 45, "notice_business_days": 6, "notice_calendar_days": 9, "notice_span": "Tuesday 22 September to Thursday 1 October: 6 business days' notice", "business_days": 14, "business_day_span": "Thursday 1 October to Tuesday 20 October: 14 business days", "duration_days": 20, "overlaps_blackout": false, "span_end": "2026-10-20", "benefits_eligibility_date": "2023-02-11", "benefits_election_deadline": "2023-03-13"}, "requirements": [{"id": "remote.intl.tenure", "text": "Employees need at least 12 months of continuous service to work outside their home country.", "met": true, "status": "met", "blocking": true, "reason": "employee.tenure_months_at_as_of is 45; the policy value is 12 (gte).", "label": "continuous service, in months", "fact_key": "remote.international.eligibility_tenure_months", "evidence": {"chunk_id": "c_6577bf6f392890bf", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Eligibility", "snippet": "Employees must have completed at least 12 months of continuous service to work outside their home country. The requirement applies to temporary work\nabroad, not to business travel: attending a customer site or a trade show on company business is governed by the Travel Policy and carries no tenure\nre"}}, {"id": "remote.intl.duration", "text": "Stays over 30 consecutive days require Tax & Legal review.", "met": true, "status": "met", "blocking": false, "reason": "parameters.duration_days is 20; the policy value is 30 (lte).", "label": "stay abroad, in consecutive days", "fact_key": "remote.international.threshold_days", "evidence": {"chunk_id": "c_c502ccd2ba5028f5", "doc_id": "tax-and-location-addendum", "heading_path": "Duration Thresholds > Stays Exceeding 30 Days", "snippet": "A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins. The review determines whether shadow\npayroll must be opened, whether a certificate of coverage is needed for social security, and whether the employee's planned activities create\npermanent-"}}, {"id": "remote.intl.annual_limit", "text": "No more than 90 days outside the home country in a rolling 12-month period.", "met": true, "status": "met", "blocking": true, "reason": "parameters.duration_days is 20; the policy value is 90 (lte).", "label": "days outside the home country in the rolling year", "fact_key": "remote.international.max_days_per_year", "evidence": {"chunk_id": "c_864fb910f46475a7", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Duration Limits", "snippet": "No employee may work outside their home country for more than 90 days in a rolling 12-month period. The 90-day figure is a company limit and is\nindependent of any shorter limit imposed by the destination country's immigration rules, which always take precedence.\n\nDays are counted as calendar days of"}}, {"id": "remote.intl.destination", "text": "The destination must be on the approved-country list.", "met": true, "status": "met", "blocking": false, "reason": "parameters.destination_country is IE; the policy value is DE,IE,NL,PT,ES,CA,MX (in).", "label": "destination country", "fact_key": "tax.approved_countries", "evidence": {"chunk_id": "c_b189d36f26fb7c60", "doc_id": "tax-and-location-addendum", "heading_path": "Approved Countries", "snippet": "Germany, Ireland, the Netherlands, Portugal, Spain, Canada and Mexico are approved destinations for temporary work abroad. The list is maintained by\nTax & Legal and reviewed twice a year; it reflects where the company has an entity, a treaty position it understands, or a low enough exposure to\naccep"}}, {"id": "remote.intl.manager_notice", "text": "Written manager approval at least 21 calendar days before departure.", "met": false, "status": "unmet", "blocking": false, "reason": "computed.notice_calendar_days is 9; the policy value is 21 (gte).", "label": "notice to your manager before departure, in calendar days", "fact_key": "remote.international.manager_notice_days", "evidence": {"chunk_id": "c_64fbd63786de81d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Approval", "snippet": "Written manager approval must be obtained at least 21 calendar days before departure. The request is raised in MosaicOne under *Work from another\ncountry*, names the destination, the exact start and end dates, and the address of the workspace the employee will use.\n\nApproval is a two-step gate. The"}}, {"id": "remote.intl.device", "text": "A company-managed, full-disk-encrypted laptop with always-on VPN is mandatory.", "met": false, "status": "not_stated", "blocking": false, "reason": "Not verifiable from the synthetic record; confirm before proceeding.", "label": "company-managed laptop with full-disk encryption and always-on VPN", "fact_key": "remote.international.device_requirement", "evidence": {"chunk_id": "c_57b2015388bbf7d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Device and Connectivity Requirements", "snippet": "Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. Personal devices may not be used for\nany Mosaic Robotics work outside the home country, including reading email on a phone that is not enrolled in mobile device management.\n\nIT Security"}}, {"id": "remote.intl.no_contract_signing", "text": "No contracts may be signed or customer agreements negotiated while abroad.", "met": true, "status": "met", "blocking": false, "reason": "Standing rule; False applies whatever the request says.", "label": "customer-facing activity while abroad", "fact_key": "tax.pe_risk.no_contract_signing", "evidence": {"chunk_id": "c_b2664838607c21cd", "doc_id": "tax-and-location-addendum", "heading_path": "Permanent Establishment Risk", "snippet": "A permanent establishment is a taxable presence that a company creates in a country by having a fixed place of business there, or by having a person\nthere who habitually concludes contracts on its behalf. Creating one exposes Mosaic Robotics to corporate tax, filing obligations and penalties in that"}}], "unmet": ["remote.intl.manager_notice"], "approvals_required": [{"role": "Direct manager", "reason": "Every stay abroad needs written manager approval.", "doc_id": "manager-approval-matrix", "heading_path": "Remote Work > International"}], "approvers": [{"role": "Direct manager", "employee_id": "E1007", "name": "Dana", "title": "Director, Engineering", "self_approval_routed": false}], "next_steps": ["Raise the request in MosaicOne under 'Work from another country' with the exact dates and workspace address.", "Obtain written manager approval at least 21 calendar days before departure.", "Confirm with IT Security that the travel laptop is company-managed, encrypted and on always-on VPN."], "escalate_to": "People Operations — mobility@mosaicrobotics.example", "citations": [{"chunk_id": "c_6577bf6f392890bf", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Eligibility"}, {"chunk_id": "c_c502ccd2ba5028f5", "doc_id": "tax-and-location-addendum", "heading_path": "Duration Thresholds > Stays Exceeding 30 Days"}, {"chunk_id": "c_864fb910f46475a7", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Duration Limits"}, {"chunk_id": "c_b189d36f26fb7c60", "doc_id": "tax-and-location-addendum", "heading_path": "Approved Countries"}, {"chunk_id": "c_64fbd63786de81d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Approval"}, {"chunk_id": "c_57b2015388bbf7d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Device and Connectivity Requirements"}, {"chunk_id": "c_b2664838607c21cd", "doc_id": "tax-and-location-addendum", "heading_path": "Permanent Establishment Risk"}, {"chunk_id": "c_0d2c84e4df38b6a0", "doc_id": "manager-approval-matrix", "heading_path": "Remote Work > International"}], "rules_version": "2026.1"}
+{"scenario": "international_remote", "verdict": "conditional", "as_of": "2026-09-01", "submitted_on": "2026-09-23", "computed": {"as_of": "2026-09-01", "submitted_on": "2026-09-23", "start_date": "2026-10-01", "end_date": "2026-10-20", "tenure_days": 1388, "tenure_months_at_as_of": 45, "notice_business_days": 5, "notice_calendar_days": 8, "notice_span": "Wednesday 23 September to Thursday 1 October: 5 business days' notice", "business_days": 14, "business_day_span": "Thursday 1 October to Tuesday 20 October: 14 business days", "duration_days": 20, "overlaps_blackout": false, "span_end": "2026-10-20", "benefits_eligibility_date": "2023-02-11", "benefits_election_deadline": "2023-03-13"}, "requirements": [{"id": "remote.intl.tenure", "text": "Employees need at least 12 months of continuous service to work outside their home country.", "met": true, "status": "met", "blocking": true, "reason": "employee.tenure_months_at_as_of is 45; the policy value is 12 (gte).", "label": "continuous service, in months", "fact_key": "remote.international.eligibility_tenure_months", "evidence": {"chunk_id": "c_6577bf6f392890bf", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Eligibility", "snippet": "Employees must have completed at least 12 months of continuous service to work outside their home country. The requirement applies to temporary work\nabroad, not to business travel: attending a customer site or a trade show on company business is governed by the Travel Policy and carries no tenure\nre"}}, {"id": "remote.intl.duration", "text": "Stays over 30 consecutive days require Tax & Legal review.", "met": true, "status": "met", "blocking": false, "reason": "parameters.duration_days is 20; the policy value is 30 (lte).", "label": "stay abroad, in consecutive days", "fact_key": "remote.international.threshold_days", "evidence": {"chunk_id": "c_c502ccd2ba5028f5", "doc_id": "tax-and-location-addendum", "heading_path": "Duration Thresholds > Stays Exceeding 30 Days", "snippet": "A stay of more than 30 consecutive days in another country requires a Tax & Legal review before travel begins. The review determines whether shadow\npayroll must be opened, whether a certificate of coverage is needed for social security, and whether the employee's planned activities create\npermanent-"}}, {"id": "remote.intl.annual_limit", "text": "No more than 90 days outside the home country in a rolling 12-month period.", "met": true, "status": "met", "blocking": true, "reason": "parameters.duration_days is 20; the policy value is 90 (lte).", "label": "days outside the home country in the rolling year", "fact_key": "remote.international.max_days_per_year", "evidence": {"chunk_id": "c_864fb910f46475a7", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Duration Limits", "snippet": "No employee may work outside their home country for more than 90 days in a rolling 12-month period. The 90-day figure is a company limit and is\nindependent of any shorter limit imposed by the destination country's immigration rules, which always take precedence.\n\nDays are counted as calendar days of"}}, {"id": "remote.intl.destination", "text": "The destination must be on the approved-country list.", "met": true, "status": "met", "blocking": false, "reason": "parameters.destination_country is IE; the policy value is DE,IE,NL,PT,ES,CA,MX (in).", "label": "destination country", "fact_key": "tax.approved_countries", "evidence": {"chunk_id": "c_b189d36f26fb7c60", "doc_id": "tax-and-location-addendum", "heading_path": "Approved Countries", "snippet": "Germany, Ireland, the Netherlands, Portugal, Spain, Canada and Mexico are approved destinations for temporary work abroad. The list is maintained by\nTax & Legal and reviewed twice a year; it reflects where the company has an entity, a treaty position it understands, or a low enough exposure to\naccep"}}, {"id": "remote.intl.manager_notice", "text": "Written manager approval at least 21 calendar days before departure.", "met": false, "status": "unmet", "blocking": false, "reason": "computed.notice_calendar_days is 8; the policy value is 21 (gte).", "label": "notice to your manager before departure, in calendar days", "fact_key": "remote.international.manager_notice_days", "evidence": {"chunk_id": "c_64fbd63786de81d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Approval", "snippet": "Written manager approval must be obtained at least 21 calendar days before departure. The request is raised in MosaicOne under *Work from another\ncountry*, names the destination, the exact start and end dates, and the address of the workspace the employee will use.\n\nApproval is a two-step gate. The"}}, {"id": "remote.intl.device", "text": "A company-managed, full-disk-encrypted laptop with always-on VPN is mandatory.", "met": false, "status": "not_stated", "blocking": false, "reason": "Not verifiable from the synthetic record; confirm before proceeding.", "label": "company-managed laptop with full-disk encryption and always-on VPN", "fact_key": "remote.international.device_requirement", "evidence": {"chunk_id": "c_57b2015388bbf7d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Device and Connectivity Requirements", "snippet": "Work performed outside the home country must use a company-managed, full-disk-encrypted laptop with always-on VPN. Personal devices may not be used for\nany Mosaic Robotics work outside the home country, including reading email on a phone that is not enrolled in mobile device management.\n\nIT Security"}}, {"id": "remote.intl.no_contract_signing", "text": "No contracts may be signed or customer agreements negotiated while abroad.", "met": true, "status": "met", "blocking": false, "reason": "Standing rule; False applies whatever the request says.", "label": "customer-facing activity while abroad", "fact_key": "tax.pe_risk.no_contract_signing", "evidence": {"chunk_id": "c_b2664838607c21cd", "doc_id": "tax-and-location-addendum", "heading_path": "Permanent Establishment Risk", "snippet": "A permanent establishment is a taxable presence that a company creates in a country by having a fixed place of business there, or by having a person\nthere who habitually concludes contracts on its behalf. Creating one exposes Mosaic Robotics to corporate tax, filing obligations and penalties in that"}}], "unmet": ["remote.intl.manager_notice"], "approvals_required": [{"role": "Direct manager", "reason": "Every stay abroad needs written manager approval.", "doc_id": "manager-approval-matrix", "heading_path": "Remote Work > International"}], "approvers": [{"role": "Direct manager", "employee_id": "E1007", "name": "Dana", "title": "Director, Engineering", "self_approval_routed": false}], "next_steps": ["Raise the request in MosaicOne under 'Work from another country' with the exact dates and workspace address.", "Obtain written manager approval at least 21 calendar days before departure."], "escalate_to": "People Operations — mobility@mosaicrobotics.example", "citations": [{"chunk_id": "c_6577bf6f392890bf", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Eligibility"}, {"chunk_id": "c_c502ccd2ba5028f5", "doc_id": "tax-and-location-addendum", "heading_path": "Duration Thresholds > Stays Exceeding 30 Days"}, {"chunk_id": "c_864fb910f46475a7", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Duration Limits"}, {"chunk_id": "c_b189d36f26fb7c60", "doc_id": "tax-and-location-addendum", "heading_path": "Approved Countries"}, {"chunk_id": "c_64fbd63786de81d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Approval"}, {"chunk_id": "c_57b2015388bbf7d4", "doc_id": "remote-and-hybrid-work", "heading_path": "Working Outside Your Home Country > Device and Connectivity Requirements"}, {"chunk_id": "c_b2664838607c21cd", "doc_id": "tax-and-location-addendum", "heading_path": "Permanent Establishment Risk"}, {"chunk_id": "c_0d2c84e4df38b6a0", "doc_id": "manager-approval-matrix", "heading_path": "Remote Work > International"}], "rules_version": "2026.1"}
 </evidence>
 
 <evidence id="lookup_employee_profile#1" kind="structured_data">

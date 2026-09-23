@@ -23,30 +23,31 @@ protocol:
     vendor as the agent (Anthropic claude-haiku-4-5), a different model, in an independent session
     that read only the packet — and a different vendor and family from the judge (Google
     gemini-3.5-flash-lite)
-  labelled_on: "2026-09-22"
+  labelled_on: "2026-09-23"
   blinding: >-
-    Authored on 2026-09-22 against the published run `r_1790110325_baseline` (deployed commit
-    80a5a71, 30 items). That is the only run in this protocol, and the packet carried that run's own
-    served answers: for each item, the question, the answer `r_1790110325_baseline` served, and —
-    verbatim — every evidence item the synthesis prompt carried for that turn, each labelled with
-    its class. The session was fresh and read only that packet. The packet is judge-free by
-    construction of its builder: `scripts/gen_label_packet.py` reads the dataset, the run file's
-    `item_id` → `turn_id` mapping and served answer, and the trace store's spans, and it never reads
-    `scores` or `verdicts` — so no verdict, no per-claim verdict, no rationale and no groundedness
-    score was in front of the labeller. What the files themselves evidence about the order is this
-    and only this: the packet was written at 21:16:08Z on 2026-09-22 and the judged run file at
-    21:27:40Z, so the packet predates the judged run file — but the judge pass was already in flight
-    when the packet was built (its first call is logged at 21:00:23Z), so this paragraph does not
-    claim that no judge verdict existed anywhere upstream. The session read no run file, no
-    REPORT.md, no CHANGELOG and no phase report.
+    Authored on 2026-09-23 against the published run `r_1790130220_baseline` (deployed commit
+    34d50fb, 30 items). That is the only run in this protocol, and the packet carried that run's
+    own served answers: for each item, the question, the answer `r_1790130220_baseline` served,
+    and — verbatim — every evidence item the synthesis prompt carried for that turn, each
+    labelled with its class. The session was fresh and read only that packet. Its header
+    identified the subset by a neutral token — `subset A` — rather than by the selection's name,
+    and no score, verdict, per-claim verdict or rationale appeared anywhere in it: the packet is
+    judge-free by construction of its builder, because `scripts/gen_label_packet.py` reads the
+    dataset, the run file's `item_id` → `turn_id` mapping and served answer, and the trace
+    store's spans, and never reads `scores` or `verdicts`. What the files themselves evidence
+    about the order is this and only this: the packet was written at 02:38:54Z on 2026-09-23 and
+    the judged run file at 02:59:40Z, so the packet predates the judged run file — but the judge
+    pass was already in flight when the packet was built (its first call is logged at
+    02:32:03Z), so this paragraph does not claim that no judge verdict existed anywhere
+    upstream. The session read no run file, no REPORT.md, no CHANGELOG and no phase report.
   selection: >-
     `evaluation.schema.reference_subset()` over the items whose gold behaviour is `answer` — a
     refusal, a clarification and an escalation carry no policy claims to ground.
   seed: 1729
-  subset: seed_1729_8
   # The sample is a seeded draw over the gold-`answer` population and consumes no judge output at
   # all, so no judge output — not even the ordering of one — informed which items are in it. The
   # hard-case subset of `reference_labels_hard.yaml` is the opposite and says so.
+  subset: seed_1729_8
   selection_disclosed: false
   method: >-
     Binary, answer-level: `grounded` iff every statement of company policy in the answer is
@@ -58,77 +59,74 @@ protocol:
     supports it.
 
 # Each label also carries the `turn_id` of the served answer it was authored against, read from
-# `r_1790110325_baseline`'s own `items[]`. A verdict is a judgement about one answer, and an answer
+# `r_1790130220_baseline`'s own `items[]`. A verdict is a judgement about one answer, and an answer
 # belongs to one turn of one run, so `evaluation.runner.recompute_agreement()` refuses to fold this
 # file into a run whose turn for an item differs — the blinding paragraph's "that run's own served
 # answers" is then checkable rather than merely asserted (§13.7).
 labels:
   - item_id: benefits-001
-    turn_id: 742c0469df2858c23a15a2ba1dcea12d
+    turn_id: b9eddc7f3814a10ea27d30db7bb066e3
     verdict: grounded
     rationale: >-
-      The 90-day waiting period, coverage starting the day the period ends, the 401(k) having
-      no waiting period, and life/AD&D beginning with the medical waiting period all appear
-      verbatim in c_7566e6e377678fcd and c_88f9cf68022eeaea; the two next steps (week-one
-      enrolment, digital cards in MosaicOne Benefits) are in c_5892cd18e5f9cae8 and
-      c_76cc7adc6c535185.
+      Every claim tracks the passages: the 90-day waiting period, same-day coverage start,
+      no-waiting-period 401(k), the transfer/promotion/26-week break rules (c_7566e6e377678fcd),
+      life cover beginning when the medical waiting period ends (c_88f9cf68022eeaea), and
+      week-one enrolment plus MosaicOne Benefits (c_5892cd18e5f9cae8, c_7566e6e377678fcd).
   - item_id: benefits-002
-    turn_id: 17a3ef2de2219f9b8d97b05d89d4a668
+    turn_id: 74a4b5b76c66445e5dbab882b0fac658
     verdict: grounded
     rationale: >-
-      The employee-specific date "waiting period ends 13 November 2026" comes from the
-      employee's own record (lookup_benefits_status#1, waiting_period_ends 2026-11-13), and
-      the 90-day rule, 30-day election window and default enrolment are verbatim in
-      c_7566e6e377678fcd; the "by 13 December" next step is 13 Nov + the 30 days shown in that
-      same passage.
+      The 13 November 2026 end date comes from the employee's own record
+      (lookup_benefits_status#1, waiting_period_ends 2026-11-13) and the 90-day rule, 30-day
+      election window and default employee-only enrolment come from c_7566e6e377678fcd; the 13
+      December next-step date is exactly 30 days after 13 November and
+      benefits@mosaicrobotics.example appears in c_0df5d11cd585014f.
   - item_id: conduct-001
-    turn_id: de87e7eaec39306c85f0ec51459aad15
+    turn_id: 61f36f081081c53569e30901cccd6195
     verdict: grounded
     rationale: >-
-      Acknowledgement within 2 business days and investigation within 30 calendar days are in
-      c_faa7e3e074e0f281, the Severity 1 response of 4 business hours is in
-      c_8befbf9c1eefd50e, and "as fast as the facts allow" for Severity 1 resolution is in
-      c_8e5b6fa6417ebbd2; Employee Relations as a contact is named in c_b1b9f056ae7f2f27.
+      Acknowledgement within 2 business days and the 30-calendar-day investigation target are
+      verbatim in c_faa7e3e074e0f281, the Severity 1 four-business-hour response is in
+      c_8befbf9c1eefd50e, and the definition of "response" is in c_8e5b6fa6417ebbd2; Employee
+      Relations is a named route in c_b1b9f056ae7f2f27.
   - item_id: expenses-001
-    turn_id: dfb11c4c8464c290de6d029bef7f8295
-    verdict: grounded
+    turn_id: ce61681618db9686cb4066b7bfff37ea
+    verdict: not_grounded
     rationale: >-
-      The USD 750 per plan year cap, the example item list, the 1 January reset with no
-      carry-over and the exclusion of laptops/monitors/peripherals are all verbatim in
-      c_c0b4b1d7c6436137, and the next steps name only MosaicOne Expenses and the
-      20th-of-month payroll cut-off, both shown in c_9ce35f1b68d5c0f8.
+      The next-step deadline "Submit claims by 20th of month for same-month reimbursement"
+      restates the policy's condition incorrectly: c_9ce35f1b68d5c0f8 keys same-month payroll to
+      an expense *approved* by the 20th, not submitted by it, so the submission deadline as
+      stated is unsupported (the USD 750 cap, 1 January reset and equipment carve-out in
+      c_c0b4b1d7c6436137 are all fine).
   - item_id: pto-001
-    turn_id: 765c42d2379fab4e108a3a53ca1da864
+    turn_id: 4cf975779ef902e8d105e6e327cdb8df
     verdict: grounded
     rationale: >-
-      The single claim — 1.50 days of PTO per month for full-time employees with three or more
-      years of service — is stated word for word in c_e178629918c7cd96.
+      "Full-time employees with three or more years of service accrue 1.50 days of PTO per
+      month" is verbatim in c_e178629918c7cd96.
   - item_id: remote-001
-    turn_id: f74ebb05bad537522915e674e4ac27d7
+    turn_id: e41ac6b6921a4e873cb878ddce14d329
     verdict: grounded
     rationale: >-
-      The claim that hybrid employees assigned to a hub office work on site at least 3 days
-      each week is stated verbatim in c_cf43ea100f30ec65.
+      The at-least-3-days-on-site requirement, team-set days and the Tuesday/Wednesday/Thursday
+      anchor are verbatim in c_cf43ea100f30ec65, which also makes managers responsible for the
+      requirement (the confirm-with-your-manager next step).
   - item_id: remote-002
-    turn_id: 0eb0eec0c5eaa84efa305f90888938e8
+    turn_id: 2fdf333a11687a82c9d9270a30d1b66d
     verdict: grounded
     rationale: >-
-      Every requirement listed — three separate approval records, the 21-calendar-day Tax &
-      Legal filing with destination/dates/workspace address/work description, the three review
-      outcomes, the 12-month tenure and good-standing/ineligible-role rules, the managed
-      encrypted laptop with always-on VPN and 5-business-day IT Security notice, and the
-      company-data restriction — maps to c_c502ccd2ba5028f5, c_6577bf6f392890bf,
-      c_57b2015388bbf7d4, c_cceb27b487508cbd and c_fda4f4779ad55565.
+      Tax & Legal review over 30 days, the 21-calendar-day filing notice, the MosaicOne request
+      contents and the three separate approval records are in c_c502ccd2ba5028f5;
+      right-to-work/letter of assignment in c_cceb27b487508cbd, device plus 5-business-day IT
+      Security notice in c_57b2015388bbf7d4, and the rolling 90-day calendar-day limit in
+      c_864fb910f46475a7.
   - item_id: remote-003
-    turn_id: 1553f812c9a019955fb8e8fb104caa05
+    turn_id: 5fcc375157bd09eb76143e3e602b4f46
     verdict: grounded
     rationale: >-
-      The 20-consecutive-day duration and "no Tax & Legal review under 30 days" come from
-      check_policy_compliance#1 and c_4142a3cd62ef49dd, Ireland's approved status from
-      c_b189d36f26fb7c60, the 21-day written manager approval raised in MosaicOne under "Work
-      from another country" from c_64fbd63786de81d4, the device/5-business-day IT Security
-      notice from c_57b2015388bbf7d4, the unverified-device caveat from the compliance
-      record's not_stated requirement, and "Dana, your direct manager" from
-      lookup_employee_profile#1; the 10 September and 24 September next-step dates are derived
-      from the 1 October departure plus the 21-calendar-day and 5-business-day counts shown in
-      the evidence.
+      1-20 October is 20 consecutive days (check_policy_compliance#1 duration_days 20), Ireland
+      is approved (c_b189d36f26fb7c60), so no Tax & Legal review under c_4142a3cd62ef49dd; the
+      21-calendar-day manager notice and MosaicOne "Work from another country" request are in
+      c_64fbd63786de81d4, the 10 September deadline is exactly 21 days before 1 October against
+      submitted_on 2026-09-23, Dana is the named approver in check_policy_compliance#1, and the
+      device caveat matches that record's not_stated status.

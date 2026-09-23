@@ -1152,16 +1152,16 @@ changes latency and nothing about groundedness.
 ### Results
 
 <!-- EVAL-NUMBERS:BEGIN -->
-**The published run.** `r_1790110325_baseline` · variant `baseline` · target **`deployed`** · 30 items · agent `claude-haiku-4-5` · judge `gemini-3.5-flash-lite` · dataset sha `2c8973147744a351…`.
+**The published run.** `r_1790130220_baseline` · variant `baseline` · target **`deployed`** · 30 items · agent `claude-haiku-4-5` · judge `gemini-3.5-flash-lite` · dataset sha `2c8973147744a351…`.
 
 | Metric | Value | n | Target |
 |---|---|---|---|
-| Groundedness (mean, claim-level) | 0.986 | 18 | ≥ 0.90 |
-| Citation accuracy (CitResolve × F1) | 0.889 | 18 | – |
+| Groundedness (mean, claim-level) | 0.984 | 19 | ≥ 0.90 |
+| Citation accuracy (CitResolve × F1) | 0.873 | 19 | – |
 | Citation resolvability (served answer) | 1.000 | 30 | ≥ 0.95 |
-| Document recall | 0.908 | 19 | – |
-| Partial match (gold facts entailed) | 0.820 | 18 | – |
-| Tool selection (F1, order-insensitive) | 0.984 | 30 | – |
+| Document recall | 0.974 | 19 | – |
+| Partial match (gold facts entailed) | 0.817 | 19 | – |
+| Tool selection (F1, order-insensitive) | 0.993 | 30 | – |
 | Argument correctness | 1.000 | 20 | – |
 | Workflow completion | 0.933 | 30 | – |
 | Action safety pass rate | 1.000 | 2 | 1.00 |
@@ -1169,10 +1169,10 @@ changes latency and nothing about groundedness.
 | Over-refusal rate | 0.000 | 18 | lower is better |
 | Missed-refusal rate | 0.000 | 7 | lower is better |
 | Strict pass rate (composite) | 0.900 | 30 | ≥ 0.85 |
-| Latency p50 / p95 (ms) | 15,544 / 29,600 | 27 warm | – |
-| Cold turns, excluded from those percentiles | n_cold = 3 | cold p50 13,889 ms | reported separately |
+| Latency p50 / p95 (ms) | 13,833 / 27,873 | 30 warm | – |
+| Cold turns, excluded from those percentiles | n_cold = 0 | cold p50 – ms | reported separately |
 
-**Behaviour, from the same run.** Escalation matrix over five gold classes with `escalation_n_excluded` = 0; `nudge_rate` = 0.533; `catalog_reopened_rate` = 0.000; `gated_attempts` = 2 (write calls the confirmation gate refused — deliberately *not* members of the action-safety population); `injection_quarantined` = true; `blocks_dropped_by_g2` = 0; `workflow_completion_by_workflow` = {"pto_request": 1.0, "remote_work_eligibility": 0.5}.
+**Behaviour, from the same run.** Escalation matrix over five gold classes with `escalation_n_excluded` = 0; `nudge_rate` = 0.533; `catalog_reopened_rate` = 0.000; `gated_attempts` = 1 (write calls the confirmation gate refused — deliberately *not* members of the action-safety population); `injection_quarantined` = true; `blocks_dropped_by_g2` = 0; `workflow_completion_by_workflow` = {"pto_request": 0.6666666666666666, "remote_work_eligibility": 0.5}.
 
 *Figures written by `scripts/paste_eval_numbers.py` from `evaluation/results/latest.json`. Do not hand-edit.*
 <!-- EVAL-NUMBERS:END -->

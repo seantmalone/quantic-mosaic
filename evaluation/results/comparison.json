@@ -1,20 +1,20 @@
 {
- "generated_at": 1790112472107056,
+ "generated_at": 1790132402960663,
  "target": "deployed",
  "dataset_sha": "2c8973147744a3513899f55107ab0f0db489d7d5f7463bcfde06c19ade2d5577",
- "target_git_sha": "80a5a71c02f27ae696137c2afdc27bfe39d1625b",
+ "target_git_sha": "34d50fb29429c25613ae23bd328448b4c5ad48af",
  "variants": [
   {
    "variant": "baseline",
-   "run_id": "r_1790110325_baseline",
+   "run_id": "r_1790130220_baseline",
    "judged": true,
    "judge_status": "judged",
    "metrics": {
-    "groundedness_mean": 0.9859182098765432,
-    "citation_accuracy_mean": 0.8885205934225542,
+    "groundedness_mean": 0.9843358395989975,
+    "citation_accuracy_mean": 0.872549346789832,
     "cit_resolve_mean": 1.0,
-    "doc_recall_mean": 0.9078947368421053,
-    "tool_selection_accuracy": 0.9838095238095238,
+    "doc_recall_mean": 0.9736842105263158,
+    "tool_selection_accuracy": 0.9933333333333334,
     "arg_correctness_rate": 1.0,
     "workflow_completion": 0.9333333333333333,
     "over_refusal_rate": 0.0,
@@ -24,7 +24,7 @@
   },
   {
    "variant": "dense_only_k2",
-   "run_id": "r_1790110825_dense_only_k2",
+   "run_id": "r_1790130725_dense_only_k2",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
@@ -32,37 +32,37 @@
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 1.0,
     "doc_recall_mean": 0.9605263157894737,
-    "tool_selection_accuracy": 0.9885714285714287,
+    "tool_selection_accuracy": 0.985,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.9666666666666667,
+    "workflow_completion": 0.9333333333333333,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.9333333333333333
+    "strict_pass_rate": 0.9
    },
    "deltas": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.0,
-    "doc_recall_mean": 0.0526,
-    "tool_selection_accuracy": 0.0048,
+    "doc_recall_mean": -0.0132,
+    "tool_selection_accuracy": -0.0083,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": 0.0333,
+    "workflow_completion": 0.0,
     "over_refusal_rate": 0.0,
-    "strict_pass_rate": 0.0333
+    "strict_pass_rate": 0.0
    }
   },
   {
    "variant": "no_structured_tools",
-   "run_id": "r_1790111270_no_structured_tools",
+   "run_id": "r_1790131123_no_structured_tools",
    "judged": false,
    "judge_status": "not_applicable",
    "metrics": {
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": 0.9666666666666667,
-    "doc_recall_mean": 0.9605263157894737,
-    "tool_selection_accuracy": 0.9346031746031745,
+    "doc_recall_mean": 0.9736842105263158,
+    "tool_selection_accuracy": 0.8933333333333333,
     "arg_correctness_rate": 1.0,
-    "workflow_completion": 0.7666666666666667,
+    "workflow_completion": 0.7333333333333333,
     "over_refusal_rate": 0.0,
     "strict_pass_rate": 0.7333333333333333
    },
@@ -70,10 +70,10 @@
     "groundedness_mean": null,
     "citation_accuracy_mean": null,
     "cit_resolve_mean": -0.0333,
-    "doc_recall_mean": 0.0526,
-    "tool_selection_accuracy": -0.0492,
+    "doc_recall_mean": 0.0,
+    "tool_selection_accuracy": -0.1,
     "arg_correctness_rate": 0.0,
-    "workflow_completion": -0.1667,
+    "workflow_completion": -0.2,
     "over_refusal_rate": 0.0,
     "strict_pass_rate": -0.1667
    }
@@ -83,8 +83,8 @@
   "supported": false,
   "reason": null,
   "baseline": 0.9333,
-  "no_structured_tools": 0.7667,
-  "delta": -0.1667,
+  "no_structured_tools": 0.7333,
+  "delta": -0.2,
   "threshold": 0.25
  },
  "flips": [
@@ -99,18 +99,6 @@
    "variant": "dense_only_k2",
    "baseline_passed": false,
    "variant_passed": true
-  },
-  {
-   "item_id": "unsafe-001",
-   "variant": "dense_only_k2",
-   "baseline_passed": false,
-   "variant_passed": true
-  },
-  {
-   "item_id": "remote-002",
-   "variant": "no_structured_tools",
-   "baseline_passed": true,
-   "variant_passed": false
   },
   {
    "item_id": "expenses-002",
@@ -132,6 +120,12 @@
   },
   {
    "item_id": "pto-003",
+   "variant": "no_structured_tools",
+   "baseline_passed": true,
+   "variant_passed": false
+  },
+  {
+   "item_id": "remote-003",
    "variant": "no_structured_tools",
    "baseline_passed": true,
    "variant_passed": false

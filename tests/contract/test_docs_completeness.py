@@ -63,27 +63,31 @@ LABELLER_CLAIM_DOCUMENTS = [
     REPO_ROOT / "evaluation" / "reference_labels_hard.yaml",
 ]
 
-#: §13.7 / re-grade-2 gap 1 — the run whose two labelling packets were rendered *before*
+#: §13.7 / re-grade-2 gap 1, **retired**. The two 2026-09-22 packets were rendered before
 #: `scripts/gen_label_packet.py` stopped interpolating the `--subset` CLI value into the header, so
-#: `docs/evidence/label-packet-hard-2026-09-22.md:3` prints ``subset `judge_lowest` `` five lines
-#: above its own promise that the criterion is withheld. Those two files are what the labelling
-#: sessions read, byte for byte, and their labels are published — so they are **not** rewritten to
-#: match the fixed builder, and the leak is disclosed in prose instead (the label files'
-#: `protocol.blinding`). Every other run's packets, including the re-driven one this allowance exists
-#: to be deleted for, must be clean: the allowance is keyed on the run id in the packet's own header,
-#: so regenerating either file — even under the same name, on the same day — retires it.
-RUN_BEFORE_THE_NEUTRAL_HEADER = "r_1790110325_baseline"
+#: `label-packet-hard-2026-09-22.md:3` printed ``subset `judge_lowest` `` five lines above its own
+#: promise that the criterion is withheld. They could not be rewritten — their labels were published
+#: — so a frozen four-position allowance (`RUN_BEFORE_THE_NEUTRAL_HEADER` and
+#: `PACKET_CRITERION_BASELINE`) tolerated it for a packet whose own header named that run. The run
+#: was re-driven on build `34d50fb`, both packets were rebuilt by the fixed builder and re-labelled,
+#: and the superseded pair was removed from `docs/evidence/`, so the allowance is **gone** and every
+#: committed packet must now be clean. Do not reintroduce it: a packet that names its own selection
+#: criterion is rebuilt, not exempted.
 
-#: Where that run's packets name a criterion-bearing word, `<file>:<line>`. A frozen baseline, not a
-#: blanket exemption: a *new* leak, anywhere in either file, is a new entry and a failure.
-PACKET_CRITERION_BASELINE: dict[str, list[str]] = {
-    # line 3 is the header's ``subset `judge_lowest` ``; line 18 is "Judge against this set alone",
-    # the instruction verb the fixed builder renders as "Decide against this set alone".
-    "label-packet-hard-2026-09-22.md": ["label-packet-hard-2026-09-22.md:3", "label-packet-hard-2026-09-22.md:18"],
-    # line 5 is the seed note's "before the run was judged" — a timing claim, not this subset's
-    # criterion, but the guard does not read intent and the fixed builder says "scored".
-    "label-packet-seed-2026-09-22.md": ["label-packet-seed-2026-09-22.md:5", "label-packet-seed-2026-09-22.md:18"],
-}
+
+def criterion_word_pattern(word: str) -> re.Pattern[str]:
+    """`word` as a whole word, so a quoted policy passage is not read as a leak.
+
+    The guard inside the builder matches substrings, which is right for text the builder itself
+    writes: it must refuse `judged` as well as `judge`. A committed packet also carries the corpus,
+    and `equipment-001`'s evidence quotes *"handled by a person, with judgement, discretion and a
+    case record"* — the word `judgement`, in a passage the builder copied verbatim out of a policy
+    document and could not have learned from a verdict. Matching whole words with the inflections a
+    leak would actually use (`judged`, `judges`, `judging`) keeps *"the judge scored this lowest"* a
+    failure while letting the corpus through.
+    """
+    return re.compile(rf"\b{re.escape(word)}(?:s|d|ing)?\b", re.IGNORECASE)
+
 
 #: A line that carries a groundedness score. `groundedness` alone is in every packet's own title, so
 #: the pattern is the word followed by a digit on the same line — the shape a leaked score has.
@@ -504,6 +508,7 @@ def test_judge_methodology_names_the_labeller_and_the_blinding():
     criterion_words = _attribute_from_module(
         REPO_ROOT / "scripts" / "gen_label_packet.py", "_gen_label_packet_for_docs", "CRITERION_WORDS"
     )
+    criterion_patterns = [criterion_word_pattern(word) for word in criterion_words]
     packets = sorted(EVIDENCE.glob("label-packet-*.md"))
     assert packets, "no labelling packet is committed, so §13.7's blinding is asserted rather than inspectable"
     for packet in packets:
@@ -513,15 +518,14 @@ def test_judge_methodology_names_the_labeller_and_the_blinding():
         named = [
             f"{packet.name}:{number}"
             for number, line in enumerate(lines, start=1)
-            if any(word in line.lower() for word in criterion_words)
+            if any(pattern.search(line) for pattern in criterion_patterns)
         ]
-        allowed = PACKET_CRITERION_BASELINE.get(packet.name, []) if run_id == RUN_BEFORE_THE_NEUTRAL_HEADER else []
-        assert named == allowed, (
-            f"{packet.name} (run {run_id}) names its own selection criterion at {named}, expected "
-            f"{allowed}: a blind labelling packet may not carry any of {list(criterion_words)}. "
+        assert named == [], (
+            f"{packet.name} (run {run_id}) names its own selection criterion at {named}: a blind "
+            f"labelling packet may not carry any of {list(criterion_words)} as a whole word. "
             "Rebuild it with `python scripts/gen_label_packet.py … --subset judge_lowest`, which "
-            "prints an opaque subset token; if this is the pre-fix run, update "
-            "PACKET_CRITERION_BASELINE and say so in the label file's `protocol.blinding`."
+            "prints an opaque subset token. There is no allowance for a pre-fix packet any more: "
+            "the 2026-09-22 pair that had one was superseded and removed."
         )
         scored = [
             f"{packet.name}:{number}"
