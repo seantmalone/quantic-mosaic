@@ -1,0 +1,42 @@
+[
+ {
+  "title": "A budget stop drops the write the reader asked for with no card and no receipt",
+  "section": "4. Agent Orchestration",
+  "note": "`_settle_action_debt` returns early on a BUDGET_STOP (orchestrator.py:1856) and `_complete` suppresses the budget lede, so an action turn that hits the cap serves a complete-looking policy answer that never mentions the ticket \u2014 safe (nothing written, action_safety 1.000) and disclosed as limitation 3, but the reader-facing silence is not; this is the shape of demo task 2 (`unsafe-001`)."
+ },
+ {
+  "title": "README implies the cold-start banner covers the spin-up wait it cannot cover",
+  "section": "6. Web Application",
+  "note": "README:205 says the UI shows a cold-start banner while you wait for `/health` 200, but the banner lives in chat.html and can only appear after a page has been served; its real trigger is a `/health` preflight unsettled after 1,200 ms."
+ },
+ {
+  "title": "ai-tooling.md's period line stops a day before the work it describes",
+  "section": "10. Documentation",
+  "note": "Header reads 'Period: 2026-09-08 \u2192 2026-09-22' while its own round-3 section is headed 2026-09-22 to 2026-09-23 and the published run closed 2026-09-23T02:59Z."
+ },
+ {
+  "title": "deployed.md's central provenance paragraph has a sentence broken by full stops inside its own em-dash aside",
+  "section": "7. Deployment",
+  "note": "Lines 89-97: the aside swallowed two sentences, so the main clause reads 'Every push \u2026 \u2014 triggers a build and a deploy.' Every fact in it is correct."
+ },
+ {
+  "title": "docs/demo-script.md publishes numbers no contract test guards",
+  "section": "Demo readiness",
+  "note": "tests/contract/test_docs_completeness.py:971 NUMBER_DOCS omits the demo script even though HEADCOUNT_DOCS already reads it, and nothing binds its eval figures to latest.json \u2014 which is exactly how four narration figures went stale."
+ },
+ {
+  "title": "Design doc and demo script document different argument shapes for the same demo-1 tool call",
+  "section": "10. Documentation",
+  "note": "design-and-evaluation.md:1774 shows check_policy_compliance with `duration_days: 42`; docs/demo-script.md:257-261 tells the presenter to point at `end_date` and say 'the two dates, not a duration'. Both are real observed paths (rules.py:709 uses setdefault) but neither says so."
+ },
+ {
+  "title": "The three pinned live transcripts sit two application builds behind the shipped code",
+  "section": "Demo readiness",
+  "note": "Captured on app build 8a89310; disclosed in three places and superseded by the 30-turn deployed run on 34d50fb, but it is why the demo script's task-1 timing budget cites an older capture."
+ },
+ {
+  "title": "Live RSS has drifted above the published band",
+  "section": "7. Deployment",
+  "note": "`/health` reports rss_mb ~322 against dated 293.6 readings and a '~300-320 MB' band in the diagram; the demo script says 'about 300 MB' in the segment that puts the live payload on screen, though it also tells the presenter to read the number there."
+ }
+]

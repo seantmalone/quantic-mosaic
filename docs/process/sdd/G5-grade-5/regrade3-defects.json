@@ -1,0 +1,162 @@
+[
+ {
+  "rank": 1,
+  "title": "Chunk overlap is described as landing on sentence boundaries in shipped source, the design document (twice) and .env.example \u2014 and the ledger records the fix as made",
+  "severity": "medium",
+  "section": "2. Corpus Ingestion & Indexing (also 10)",
+  "why_it_costs_marks": "Four live locations, two of them in the primary graded deliverable, assert a property the committed manifest falsifies 29 times out of 29 \u2014 and docs/process/sdd/G5-grade-5/progress.md:148 rules the gap 'fixed by describing what the code does' when no wording changed, so the trail claims a repair that did not land. The reader-visible tail is real: snippet_of() takes the first 320 characters, so 28 stored snippets open mid-word and two committed demo captures already carry one.",
+  "evidence": "src/hrmosaic/rag/chunk.py:6-7 'overlap by CHUNK_OVERLAP_CHARS, cut on sentence boundaries so a chunk never begins mid-sentence'; only the window END is snapped by _cut() \u2014 chunk.py:155 is `start = max(end - overlap_chars, start + 1)`. design-and-evaluation.md:238 and :2145 '150 characters of overlap on sentence boundaries'; .env.example:56 same. python over data/index/chunks.manifest.jsonl grouped by (doc_id, heading_path): 205 chunks, 29 continuation windows, 28 starting lowercase. docs/process/sdd/G5-grade-5/progress.md:148 records the ruling.",
+  "fix": "Change the three live sentences plus the chunk.py docstring to say the window END is cut on a sentence boundary while the continuation start is a raw offset back by CHUNK_OVERLAP_CHARS (state the 29-window figure), and add one assertion in tests/unit/test_chunking.py pinning the actual opening behaviour so it cannot drift again. Correct progress.md:148 to 'left' if the wording is not changed. Do NOT re-snap the chunker \u2014 that moves every chunk_id, the manifest, fixtures and pinned citations.",
+  "effort": "20 min"
+ },
+ {
+  "rank": 2,
+  "title": "docs/demo-script.md tells the presenter remote-004 fails on tool recall 0.75; the published run scores it 1.00 and the same file says so twice",
+  "severity": "medium",
+  "section": "Demo readiness (also 9, 10)",
+  "why_it_costs_marks": "This is scripted narration about the project's own headline run, in the segment where the run detail page is on screen, and line 383 explicitly instructs 'say that out loud rather than around it'. A grader with the run file open sees the script contradict itself two pages apart.",
+  "evidence": "docs/demo-script.md:240-242 'not calling it is exactly the tool recall 0.75 that fails the dataset twin remote-004 on the published run' and :383 'failing its tool-recall and workflow-completion clauses'. python over evaluation/results/r_1790130220_baseline.json: remote-004 = {tool_recall 1.0, tool_selection 1.0, workflow 0.0, doc_recall 0.5}, tools_called includes get_policy_section; set of tool_recall over all 30 items = {1.0}. Contradicted in-file at :164 ('Every item in the run scores tool recall 1.00') and :205-207; evaluation/REPORT.md's clause table names only 'workflow completion 0.00 < 1.00' for remote-004.",
+  "fix": "Rewrite :240-242 to say get_policy_section is optional because a search hit already carries the whole chunk (the design doc's own reason), and rewrite :383 to 'failing its workflow-completion clause, with document recall 0.50'. Keep the 'read the names on screen' instruction.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 3,
+  "title": "design-and-evaluation.md publishes a tool-schema 'loose end' \u2014 twice, once as Known Limitation 14 \u2014 that the shipped schema closed in the published build",
+  "severity": "medium",
+  "section": "5. MCP Servers & Tools / 10. Documentation",
+  "why_it_costs_marks": "A Known-Limitations entry describing a limitation that no longer exists is the single most expensive kind of stale sentence: it is the list a strict grader spot-checks, and one grep of the named file falsifies it. It also contradicts the same paragraph's provenance argument and the commit message of 6a4821a, and it survived the commit titled 'the falsifiable sentences are corrected' (240c388).",
+  "evidence": "design-and-evaluation.md:477-481 and :1954-1963 both say the schema 'still names request_type and its three values without naming device_age_months ... so it waits for the next build'. mcp/tools/check_policy_compliance.schema.json parameters.description names device_age_months twice and days_since_final_day twice; `git merge-base --is-ancestor 6a4821a 34d50fb` exits 0 and `git show 34d50fb:...schema.json | grep -c device_age_months` is non-zero; `git log --oneline 34d50fb..HEAD -- mcp/ src/ corpus/` is empty. Third copy at docs/optimization-log.md:1068. Live deployed tools/list carries the new description.",
+  "fix": "Delete both paragraphs and replace with one sentence recording that the deciding fields are named in the published description as of 6a4821a and therefore in build 34d50fb; retire limitation 14 so the list carries no closed item. Date or drop docs/optimization-log.md:1068. No code or schema change needed.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 4,
+  "title": "Demo script narrates p50 15.5 s where the published run and every other document say 13.8 s",
+  "severity": "medium",
+  "section": "Demo readiness (also 9)",
+  "why_it_costs_marks": "It is the only p50 'now' figure in the script, spoken in the segment that claims 'nothing here is a remembered number', while the page on screen renders 13,833 ms. 15.5 s is round 2's warm p50 and is explicitly the superseded column in the project's own comparison table.",
+  "evidence": "docs/demo-script.md:134 'p50 was 22.6 s at its worst and is **15.5 s** now.' vs evaluation/results/r_1790130220_baseline.json latency_p50_ms 13833.0; evaluation/REPORT.md 'p50 **13833 ms**', README.md:321 '13.8 s / 27.9 s', docs/optimization-log.md:1000 lists 15.5 s as the prior column. docs/demo-script.md:85 already pins the same segment to r_1790130220_baseline.",
+  "fix": "Change :134 to 13.8 s (optionally 'down from 15.5 s last round'), and add docs/demo-script.md to NUMBER_DOCS in tests/contract/test_docs_completeness.py with an assertion that its p50 equals latest.json's run's latency_p50_ms to 0.1 s.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 5,
+  "title": "render.yaml's own comment states the deploy gate as `needs: [test, docker]`",
+  "severity": "low",
+  "section": "8. CI/CD",
+  "why_it_costs_marks": "The service manifest is the one file a grader reads literally for the R8.4 safety argument, and `grep -n 'needs: \\[' .github/workflows/ci.yml` falsifies it in one command \u2014 twelve lines below, ci.yml:207 already prints the correct three-job form.",
+  "evidence": "render.yaml:7 'Either way that job carries `needs: [test, docker]`'; .github/workflows/ci.yml:188 `needs: [test, docker, ux]`; same stale form in scripts/provision_render.py:414 (a runtime error string) and tests/unit/test_provision_render.py:222; tests/contract/test_deploy_manifests.py:330 asserts the three-job list.",
+  "fix": "Update the three occurrences to `needs: [test, docker, ux]`. Dated planning records under docs/superpowers/ can stay.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 6,
+  "title": "G1's refuse-and-redirect is described as read from the real document list; it is a hardcoded five-topic tuple, and the code comment cites a function that does not exist",
+  "severity": "low",
+  "section": "3. RAG & Guardrails",
+  "why_it_costs_marks": "design-and-evaluation.md:805 is the guardrail-table row a grader reads for requirement 3's refuse/redirect bullet, and the repo's own contract test asserts the opposite of what it says \u2014 so the drift is not loose wording but a removed mechanism still being published in two places.",
+  "evidence": "design-and-evaluation.md:805 '...naming what the corpus *does* cover, read from the real document list'. src/hrmosaic/agent/guardrails/g1.py builds next_steps from the EXAMPLE_TOPICS tuple; its docstring says 'Since UX W6 it reads nothing at all'; g1.py:84 still says 'built from the real index by `coverage()`' and `grep -rn 'def coverage' src/` returns nothing. tests/contract/test_policy_library.py asserts 'topics, never document titles'.",
+  "fix": "Reword :805 to 'naming five fixed corpus topics and linking /policy, with no tools/call and no index read', and drop the coverage() clause from g1.py:83-84.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 7,
+  "title": "Task-2 tool-name checklist gives the last two tool calls in reverse order, contradicting the pinned capture the presenter is told to read",
+  "severity": "low",
+  "section": "Demo readiness",
+  "why_it_costs_marks": "Spans render in seq order (dashboard.py:1859 `ORDER BY seq`), so a presenter reading the waterfall while narrating this clause is visibly out of step, and the list as written makes the very next sentence's 'the write comes last' false of itself.",
+  "evidence": "docs/demo-script.md:336-338 '...create_mock_hr_ticket again, this time ok, and finally lookup_employee_profile.' vs docs/evidence/demo-task-2-live-2026-09-22.txt: seq 20 create_mock_hr_ticket paused, seq 23 lookup_employee_profile ok, seq 28 create_mock_hr_ticket ok. design-and-evaluation.md:1817 'the write comes last'.",
+  "fix": "Swap the clause to '... then lookup_employee_profile, and finally create_mock_hr_ticket again, this time `ok`'.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 8,
+  "title": "The process-trail README's coverage count is false at HEAD, and the README prints the command that falsifies it",
+  "severity": "low",
+  "section": "10. Documentation",
+  "why_it_costs_marks": "It says '12 briefs and 26 reports at this commit' and invites the reader to count; the count is 30. The adjacent paragraph 'Round 3's task files are not all here yet' is also false at HEAD, which is the commit that brought them. This same file's count drifted in the previous round too, and nothing recounts it.",
+  "evidence": "`ls docs/process/sdd/G5-grade-5/task-*-report.md | wc -l` \u2192 30 (briefs \u2192 12, correct); README:45 says 26, README:54 says the round-3 files are not all present; `git show --stat f7852bb` adds task-14/15/16/5e reports without touching the README.",
+  "fix": "Set 30, add tasks 14/15/16/5e to the round-3 inventory, and rewrite the 'not all here yet' paragraph in past tense. Then mirror tests/contract/test_docs_completeness.py:881's commit-census recount with a glob recount so it cannot drift a third time.",
+  "effort": "10 min"
+ },
+ {
+  "rank": 9,
+  "title": "'Three different clauses, one each' is contradicted by its own next sentence and by REPORT.md's clause table",
+  "severity": "low",
+  "section": "9. Evaluation / Demo readiness",
+  "why_it_costs_marks": "Scripted for the close, and self-refuted two sentences later \u2014 REPORT.md names workflow completion twice and gives unsafe-001 two clauses, i.e. four clause failures over three items.",
+  "evidence": "docs/demo-script.md:155 and docs/optimization-log.md:1006 both say 'three different clauses, one each'; evaluation/REPORT.md's failures table: expenses-002 groundedness; remote-004 workflow completion; unsafe-001 workflow completion AND behaviour class. Both files then say 'unsafe-001 on workflow completion **and** behaviour class'.",
+  "fix": "Replace with 'groundedness once, workflow completion twice, and behaviour class once on top of it' in both files.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 10,
+  "title": "ai-tooling.md's trailer-narrowing disclosure enumerates two grade rounds where three exist",
+  "severity": "low",
+  "section": "10. Documentation",
+  "why_it_costs_marks": "An honesty disclosure that under-covers the most recent seven commits, contradicting the same document's own round-3 narrative and the trail README that forwards readers to this sentence.",
+  "evidence": "ai-tooling.md:370-371 'both rounds, `G5(\u2026)` and `G5b(\u2026)`' vs ai-tooling.md:155 'Round three (**G5c**)' and docs/process/sdd/G5-grade-5/README.md:72. All seven G5c commits (7919e94\u2026f7852bb) carry the Fable trailer.",
+  "fix": "Change to 'all three rounds, `G5(\u2026)`, `G5b(\u2026)` and `G5c(\u2026)`'.",
+  "effort": "2 min"
+ },
+ {
+  "rank": 11,
+  "title": "README calls the Demo & grader controls panel 'collapsed by default'; the shipped panel is always expanded",
+  "severity": "low",
+  "section": "6. Web Application",
+  "why_it_costs_marks": "A grader who reads the sentence and opens the tokenized link sees the opposite \u2014 the cheapest kind of credibility loss in an otherwise evidence-disciplined document.",
+  "evidence": "README.md:146 'at the foot of the chat page, collapsed by default'; src/hrmosaic/web/templates/_demo_controls.html:18 '**Always expanded** \u2026 No `<summary>`, no collapsed state'; chat.html:552-553 repeats it; tests/contract/test_demo_controls_are_quarantined.py:89 asserts no `<details>`/`<summary>`; the served page has zero `<summary>`.",
+  "fix": "Describe it as one dashed, muted, always-expanded section below the conversation, below the fold.",
+  "effort": "2 min"
+ },
+ {
+  "rank": 12,
+  "title": "The folded-agreement disclosure identifies the label file's turn_ids as another run's, which is no longer true",
+  "severity": "low",
+  "section": "9. Evaluation / 10. Documentation",
+  "why_it_costs_marks": "Present-tense and unscoped, and contradicted by the same document 170 lines later ('Both label files record labelled_on: 2026-09-23 against the published run r_1790130220_baseline'). The substance of the disclosure is fine; only the identification is falsifiable and false.",
+  "evidence": "design-and-evaluation.md:1400-1403 'all eight of the label file's turn_ids belong to r_1790074972_baseline's turns'; recomputed: evaluation/reference_labels.yaml matches r_1790130220_baseline 8/8 and r_1790074972_baseline 0/8. Conflicting statement at design-and-evaluation.md:1571.",
+  "fix": "Past tense and pin the round: 'the eight labels it was folded against were authored for r_1790074972_baseline's answers (the current label file is bound to r_1790130220_baseline's turn_ids)'.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 13,
+  "title": "REPORT.md's ablation banner says the arm 'did not move Workflow completion' while printing a \u22120.200 move three lines later",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "Self-contradictory on its face in a published evaluation artifact, and the design doc already carries the corrected wording, so the two texts disagree. It regenerates wrong because the string is in source.",
+  "evidence": "evaluation/REPORT.md's NOT-supported banner vs the same banner's 'baseline 0.933 and no_structured_tools 0.733 (delta -0.200)'; source string evaluation/ablation.py:56-62; corrected wording at design-and-evaluation.md:1694 ('far enough') and ablation.py:341 ('past the 0.25 threshold').",
+  "fix": "Change the banner's first clause to 'did not move Workflow completion past \u00a713.9's bar', then re-render with `--report <run_id>` / `make ablation`.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 14,
+  "title": "REPORT's judge-cost paragraph hardcodes a judge-call range that a committed judged run falls below",
+  "severity": "low",
+  "section": "9. Evaluation",
+  "why_it_costs_marks": "The literal sits beside a derived per-run count, so `rewrite_report` pointed at r_1789032950_baseline would emit 'made 232 calls; a pass runs 249\u2013296 calls' in one sentence. Both range endpoints come from the same dataset generation as the 232, so the 'current dataset' reading does not rescue it, and the docstring above records that this literal has already been wrong once.",
+  "evidence": "evaluation/runner.py:1250 'a pass runs 249\u2013296 calls and \u2248 $0.16\u2013$0.18'; committed judged baselines: 232, 249, 252, 263, 264, 266, 268, 273, 291, 296; r_1789032950_baseline is judge_status judged / status complete with judge_calls 232. Unscoped copies at deployed.md:493, :635, design-and-evaluation.md:680, docs/requirements-traceability.md:55, :139.",
+  "fix": "Derive min/max of judge_calls from the committed judged runs at render time, or scope the sentence to the 30-item dataset.",
+  "effort": "15 min"
+ },
+ {
+  "rank": 15,
+  "title": "Stale chunk-count figure in a live prompt comment (and a test docstring)",
+  "severity": "low",
+  "section": "2. Corpus Ingestion & Indexing",
+  "why_it_costs_marks": "A present-tense falsifiable sentence in shipped source: the manifest has carried 205 chunks since the equipment repair. Zero behavioural impact (it is inside a Jinja comment) and the argument it supports is strengthened by the true numbers.",
+  "evidence": "src/hrmosaic/agent/prompts/synthesize.j2:11 '199 of the 204 committed chunks are longer than that (median 995)'; manifest: 205 chunks, 200 over the 320-char SNIPPET_CHARS cap, median 983. Same sentence in tests/contract/test_prompt_golden.py:218 (docstring only).",
+  "fix": "Update both to '200 of the 205 committed chunks \u2026 (median 983)' at the next app-tree rebuild, or restate as a dated measurement.",
+  "effort": "5 min"
+ },
+ {
+  "rank": 16,
+  "title": "README says `make setup` runs 'exactly those steps' when it runs one more and one fewer",
+  "severity": "low",
+  "section": "1. Environment & Reproducibility",
+  "why_it_costs_marks": "A literal claim in a project that elsewhere holds itself to literal claims; `cat Makefile` disproves it. The resulting venv is identical either way, so the only cost is to the repo's own standard.",
+  "evidence": "README.md:29-37 prints four lines then 'make setup runs exactly those steps'; Makefile:34-37 adds `pip install --upgrade pip` and omits the (explicitly optional) `cp .env.example .env`. `grep -rn 'upgrade pip'` finds only Makefile:35.",
+  "fix": "'`make setup` runs the same install, plus a pip self-upgrade; the `.env` copy stays manual.'",
+  "effort": "2 min"
+ }
+]
