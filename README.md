@@ -8,7 +8,7 @@ State-changing actions are mock and pass a one-time human confirmation gate befo
 written.
 
 Deployed: https://mosaic-hr-copilot.onrender.com/?access=FaGQUENKinWIfcD5yp3XMzD-GqH9oxJDXesOIinFKcY
-Demo video: pending: gate 6 — the walkthrough is recorded from [`docs/demo-script.md`](docs/demo-script.md) and its link is pasted on this line at submission
+Demo video: https://drive.google.com/file/d/1hgD73nrhBYTG1eBRQ7JCfIINOcyXW-uz/view?usp=sharing
 Repo: https://github.com/seantmalone/quantic-mosaic
 
 Documentation: [`design-and-evaluation.md`](design-and-evaluation.md) (architecture, RAG and MCP

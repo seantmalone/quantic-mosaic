@@ -23,7 +23,7 @@ numbered against the gate it belongs to rather than renumbering the list.
 
 ## Open gates
 
-- [ ] **6 — Record the 7–10 minute demo video.**
+- [x] **6 — Record the 7–10 minute demo video.** Done 2026-10-03; link on README's `Demo video:` line.
       On camera, audible narration, government ID shown, **both agentic tasks executed live
       against the deployed URL**, plus design / deployment / CI-CD / evaluation walkthroughs.
       Irreducibly human. **~60–90 minutes including rehearsal and retakes.**
@@ -37,7 +37,7 @@ numbered against the gate it belongs to rather than renumbering the list.
 - [ ] **7 — Submit the two links** through the Quantic dashboard's *Submit Project* button.
       Only the enrolled student can submit. **~2 minutes.** Both links are pre-staged in the first
       20 lines of `README.md`, so it is a copy-paste.
-      Needed by: the deadline. Blocked by gate 6.
+      Needed by: the deadline. Unblocked — gate 6 is done.
 
 ## Discharged
 
@@ -271,7 +271,7 @@ the CI graph twice and sent two fix rounds hunting for a name that was never mis
 | Both demo scripts run against the live URL | 2 + 4 | `BASE_URL="$DEPLOY_URL" bash scripts/demo_task_{1,2}.sh` | **done** 2026-09-10 — demo 2 wrote `MOCK-HR-000001` behind the gate |
 | `/health.trace_store.eval_runs_imported` at least the committed run-file count, with the published run among them | 2 + 4 | the block in step 4 above | **done** — **29** imported against **25** committed files, read 2026-09-22 21:58Z. The four extras are drives kept in the store with no committed result file: `r_1790106448` (19:47Z, build `7ada32e`, never judged) and `r_1790062696` (07:38Z, build `82994ce`), both discarded by ruling during the grade-and-fix wave, plus `r_1789547562` and `r_1789534779` of 2026-09-16, which predate the published build. Those four times are UTC and come from the run **id** — the drive's start — because a drive with no committed file has no `created_at` to read. None can be reconstructed into a run file — `GET /api/eval/runs/{run_id}` serves the dashboard's view-model, which carries neither `dataset_sha` nor `target_git_sha` — so they are disclosed rather than committed (see the note in step 4) |
 | The R8.4 red-run screenshot and `docs/evidence/*.png` | 2 (a repo push is enough for the graph) | the block above | **done** — all three committed |
-| The demo video, and therefore `README.md`'s `Demo video:` link | **6** | `docs/demo-script.md` | **open** |
+| The demo video, and therefore `README.md`'s `Demo video:` link | **6** | `docs/demo-script.md` | **done** 2026-10-03 |
 | The `quantic-grader` invitation confirmed as sent or accepted | **7** | `docs/pre-submission-checklist.md` `- [x] SUB.3` | **done** — accepted, re-verified 2026-09-11 |
 | The submission itself | **7** | the Quantic dashboard | **open** |
 | Gemini rate limits for the failover project (the judge's is on paid billing since 2026-09-10) | an authenticated AI Studio session | https://aistudio.google.com/rate-limit | still unread — affects nothing a published run depends on |
