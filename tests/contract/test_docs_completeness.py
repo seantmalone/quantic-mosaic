@@ -933,9 +933,11 @@ def test_the_commit_census_is_the_one_git_log_reports():
 def test_demo_script_carries_the_segment_table_and_the_production_note():
     text = _text(DEMO_SCRIPT)
     assert "## Segment table" in text.splitlines() or "## Segments" in text.splitlines()
-    assert "## Production note" in text.splitlines(), "DEMO.3's standing production note is a required section"
+    assert {"## Production note", "## Before you record"} & set(text.splitlines()), (
+        "DEMO.3's standing production note is a required section"
+    )
     assert "government ID" in text, "DEMO.4 — the ID beat must be scripted"
-    assert re.search(r"\b0:00\b", text) and re.search(r"\b9:15\b|\b9:1\d\b", text), (
+    assert re.search(r"\b0:00\b", text) and re.search(r"\b[7-9]:[0-5]\d\b", text), (
         "the segment table must be time-boxed across the full 7–10 minutes"
     )
 

@@ -94,7 +94,7 @@ video link and the dashboard submission — are the `DEMO.1` and `SUB.1` boxes b
 
 - [ ] **DEMO.1** — a recorded screen-share of the **deployed** application, with screen capture
       and voiceover, the deployed URL visible in the browser address bar.
-- [ ] **DEMO.2** — total length is between **7:00 and 10:00**. (The scripted plan totals 9:15.)
+- [ ] **DEMO.2** — total length is between **7:00 and 10:00**. (The scripted plan totals 8:30.)
 - [ ] **DEMO.3** — the presenter speaks throughout and is on camera for the **full** recording:
       full frame at the open, then a picture-in-picture overlay that is never cut away during any
       screen-share segment.
