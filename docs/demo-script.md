@@ -1,73 +1,72 @@
-# Demo script — Mosaic HR Copilot
+# Demo script: Mosaic HR Copilot
 
-**Presenter:** Sean Malone (solo submission — one person on camera, one government ID).
-**Target length:** 7–10 minutes. The table below totals **9:15**, leaving room to breathe inside
-the 10-minute ceiling.
-**Everything is executed live against the deployed URL.** Nothing is pre-recorded and nothing runs
-on localhost. Both agentic tasks have a one-click button in the chat UI that **fills the composer**
-with a self-dated prompt — so there is no typing to fumble on camera, but you still press **Send**.
+**Presenter:** Sean Malone (solo submission: one person on camera, one government ID).
+**Target length:** 7–10 minutes. The table below totals **9:15**, which leaves room inside the
+10-minute ceiling.
+**Everything runs live against the deployed URL.** Nothing is pre-recorded and nothing runs on
+localhost. Each agentic task has a button in the chat UI that **fills the composer** with a
+self-dated prompt. You don't type on camera, but you still press **Send**.
 
-**Each live turn is shown twice.** The chat page carries the answer, the **Sources (n)** strip, the
-confirmation card and one progress line — and nothing else; tool names, tool arguments and tool
-results are not on that surface at all. They live on `/dashboard/sessions/{id}#turn-N`, the
-`dashboard_url` every `ChatResponse` returns, reached from **"Open this conversation in the
-dashboard"** under **This conversation** in the demo panel. Both task segments below budget the
-switch there and back. That is where three of DEMO.6's five elements are evidenced.
+**You show each live turn twice.** The chat page has the answer, the **Sources (n)** strip, the
+confirmation card and one progress line. It has no tool names, arguments or results. Those live on
+`/dashboard/sessions/{id}#turn-N`, the `dashboard_url` every `ChatResponse` returns. You reach it
+from **"Open this conversation in the dashboard"** under **This conversation** in the demo panel.
+Both task segments budget the trip there and back, because three of DEMO.6's five elements are
+evidenced on that page.
 
-Before you start, tick [`pre-submission-checklist.md`](pre-submission-checklist.md) as you go.
+Tick [`pre-submission-checklist.md`](pre-submission-checklist.md) as you go.
 
 ---
 
 ## Production note
 
-**This applies to the whole recording, not just the opening.**
+**This covers the whole recording.**
 
-- **The webcam overlay is visible for the full 7–10 minutes** — picture-in-picture during every
-  screen-share segment, never cut away after the intro. A screen-only stretch after 0:45 fails the
-  requirement.
-- **Continuous narration.** No silent scrolling; if you are moving the mouse, you are talking.
-- **The government ID is held legibly still for ≥ 3 seconds at ~0:15**, framed large enough to
-  read, in addition to speaking your name.
-- **Check the overlay does not occlude** the **Sources (n)** strip at the foot of an answer, the
-  sticky composer at the bottom of the conversation column, or — on the dashboard — the chevron at
-  the **right-hand end** of a span row, which is the control that opens the payload (it is the last
-  grid track at every width). Move the PiP to the top-left if it does. (Chat has been one centred conversation column since UX W2; there is no side panel,
-  and the technical record lives on the dashboard.)
-- **Verify audio on a 20-second test clip** before the real take. Re-recording nine minutes
-  because of a dead microphone is the single most common way this goes wrong.
-- **Screen setup:** browser at 1440-wide or more, zoom at 100 %. **One profile is enough** since
-  UX W1: `/dashboard/*` and every `/api/*` read are open to any persona holding the access token, so
-  the whole demo runs as `E1042` and the `Chat | Dashboard` switch in the masthead is the only
-  navigation needed. Only **three write endpoints** want HR admin — `POST /api/dev/reset-sandbox`,
-  `POST /api/mcp/rediscover`, `POST /api/eval/runs`, the three buttons named in the troubleshooting
-  table — and nothing in this script presses one. **Two browser tabs on the app**, so the switch to
-  the record is a tab, not a back-and-forward: the deployed chat page in one, `/dashboard` in the
-  other. Then `docs/architecture.html`, the GitHub Actions run list, and `render.yaml` on GitHub.
+- **Webcam overlay on for the full 7–10 minutes.** Picture-in-picture in every screen-share
+  segment. A screen-only stretch after 0:45 fails the requirement.
+- **Keep talking.** If the mouse is moving, you're narrating.
+- **Hold the government ID still and legible for ≥ 3 seconds at ~0:15**, and say your name.
+- **Check the overlay doesn't cover** the **Sources (n)** strip, the sticky composer, or the
+  chevron at the **right-hand end** of a dashboard span row (it opens the payload). If it does,
+  move the PiP top-left. Chat is one centred column; the technical record lives on the dashboard.
+- **Record a 20-second audio test clip first.** A dead mic is the most common reason to redo the
+  take.
+- **Screen setup:** browser 1440 px wide or more, zoom 100 %. One profile: `/dashboard/*` and every
+  `/api/*` read are open to any persona with the access token, so the whole demo runs as `E1042`
+  and the masthead's `Chat | Dashboard` switch is all the navigation you need. Only three write
+  endpoints want HR admin (`POST /api/dev/reset-sandbox`, `POST /api/mcp/rediscover`,
+  `POST /api/eval/runs`), and this script presses none of them. Open **two app tabs** (chat and
+  `/dashboard`), then `docs/architecture.html`, the GitHub Actions run list, and `render.yaml` on
+  GitHub.
+
+### Before you record
+
+- **Record before 17:00 PT.** The server dates prompts in UTC, so after 17:00 PT its "today" is
+  tomorrow.
+- **Record by about 12 October.** Until then the Berlin button keeps 3 November – 14 December,
+  which matches the policy's worked example. After that it rolls to later dates.
+- **Warm up:** load `/health`, then send one throwaway turn.
+- **Don't reload the chat tab.** To get back to a conversation from the dashboard, use
+  **"Continue this conversation in chat"**.
+- **Guardrails has a long quarantine table.** Jump straight to the new write with
+  `/dashboard/safety#MOCK-HR-<n>`.
 
 ### Wake the instance first
 
-The free instance spins down after 15 minutes idle, and a cold start was measured three times at a
-median **71.0 s** to the first answer, 67.5–77.6 s (44.8 s of it before `/health` even answers).
-The in-process keep-alive has been armed on the live service since 2026-09-11 14:26Z, so the
-instance should already be awake — check it rather than trust it. **Open `<DEPLOY_URL>/health` and
-wait for a 200 before you start recording** — it is an open route, so no token is needed, and
-`app.uptime_ms` on that payload tells you whether the self-ping has been holding it up. If you
-would rather narrate the cold start honestly on camera, do it deliberately in the 6:25 segment
-where `deployed.md`'s numbers are already on screen; do not let it happen by accident in the middle
-of task 1.
+The free instance sleeps after 15 minutes idle. We measured three cold starts: median **71.0 s** to
+the first answer, range 67.5–77.6 s, with 44.8 s of that before `/health` answers. A keep-alive has
+run on the live service since 2026-09-11 14:26Z, so it should be awake. Check anyway: **open
+`<DEPLOY_URL>/health` and wait for a 200 before you hit record.** It's an open route, no token
+needed, and `app.uptime_ms` tells you whether the self-ping has kept it up. If you want to show a
+cold start, do it on purpose in the 6:25 segment, not by accident during task 1.
 
-**In the same warm-up, open `/dashboard/evals` and check the Runs table two ways.** First: the newest
-**baseline · deployed** row is `r_1790130220_baseline`, the run the evaluation segment speaks.
-Second: no later dashboard-driven smoke run sits above the three published arms. The table is ordered
-newest-first and `evaluation/ablation.py` always drives the arms after the baseline, so the row that
-legitimately fronts it reads **no structured tools · deployed**, carries **no** in its **Judged**
-column, and shows **not judged** against the judged metrics in the **Headline metrics** table under
-it — that is the published set in the order it was driven, not a fault, and it is **not** what the
-script reads figures off. What *would* break the segment is a fourth, later run this
-deployment's store picked up: the **Compare** tab pairs the newest run of each variant, so one stray
-drive changes the arms on screen. The segment opens the run detail by URL —
-`/dashboard/evals/r_1790130220_baseline` — never by clicking row 1. Check both before the take, not
-on camera.
+**While warming up, check the `/dashboard/evals` Runs table.** The newest **baseline · deployed**
+row should be `r_1790130220_baseline`, the run the evaluation segment uses. Above it you should see
+only the two ablation arms from the same drive, with **no structured tools · deployed** on top,
+**no** in **Judged**, and **not judged** against the judged metrics. That's expected. A fourth,
+later run above them would break the segment, because **Compare** pairs the newest run of each
+variant. On camera, open the run by URL (`/dashboard/evals/r_1790130220_baseline`), never by
+clicking row 1.
 
 ---
 
@@ -75,302 +74,272 @@ on camera.
 
 | Time | Segment | What is on screen | What to say |
 |---|---|---|---|
-| **0:00–0:45** | Intro, on camera, full frame | You, then the browser address bar showing the deployed URL | Your name; **hold the government ID still for ≥ 3 s at ~0:15**; one line on the project — *"an agentic HR assistant for a fictional 420-person robotics company: policy RAG over 14 documents, nine MCP tools, and a full audit trail of every step."* Then shrink the webcam to the persistent overlay and **leave it there** |
-| **0:45–1:25** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Name the seven components as you point at them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. Make the one point that matters: *"the MCP server is mounted inside the app that consumes it, and the client speaks real JSON-RPC over a real loopback socket — these are not function calls dressed up as tools."* Mention the single trace model: one writer, five readers |
-| **1:25–3:40** | **Task 1 live** — international remote-work eligibility | Chat page (≈ 1:15), then the session record in the second tab (≈ 0:45), then the policy reader (≈ 0:15) | Click **Working from Berlin for six weeks** to fill the composer, read the dates it filled in aloud, press **Send**. While the turn runs, narrate the one progress line — *"Looking up your employee record… Checking this request against the rules… Searching the policy library…"* — and say what it is: plain language for a person, with the technical record kept elsewhere on purpose. Then the answer, the **Sources (n)** strip, and the demo panel's *"How this answer was produced"* line. Then switch to the record for DEMO.6 ①–③ (sub-checklist below) — **the observability beat is said here**, with the waterfall open, because this is the page that shows it — and come back through one citation into the **policy reader**. Budget the turn itself at ~40 s: the run pinned on app build `8a89310` took **38.2 s over 39 spans**; an earlier 2026-09-15 run took 46.8 s, so allow up to 50 s before you start narrating the wait. Neither capture is on the published build `34d50fb` — they are the record of what the service did earlier, and `docs/evidence/README.md` names the build for each |
-| **3:40–6:00** | **Task 2 live** — PTO request through the confirmation gate | Chat page and the confirmation card (≈ 1:20), then the session record (≈ 0:40), then **Guardrails** (≈ 0:20) | Click **Three days of PTO, opened for me**, press **Send**. The turn stops at **Confirm before anything is written**. Land the safety beat (below) with that card on screen, then press **Don't open it** and read the cancelled receipt; ask again; press **Open the request** and read the *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`"* lede. Then the record for ①–③, including the **paused for confirmation** row; then **Guardrails** for the `declined` and `confirmed` rows and the new **Simulated writes** row. Beat ⑦ of the optimization story goes here, while the answer is streaming and the progress line is naming each step |
-| **6:00–6:25** | Dashboard tour | `/dashboard/mcp` → `/dashboard/llm` | The **Tool server** page (page 9): nine **Discovered tools** with their JSON Schemas, the **Server** block's transport, and **Handshake history**. Then **Model calls** (page 5) in one line — *"the same model calls, aggregated across every session: purpose, token counts, first-token and streamed, and a **Turn** chip back into the record."* **The observability beat is not narrated here** — page 5 is two tables, not a waterfall; that beat belongs on the session record inside a task segment (see below). Use the `Chat \| Dashboard` switch — no persona change is needed anywhere in this segment |
-| **6:25–7:10** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. Show the live `/health` payload — `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count` (**205** chunks over the 14 documents — CI's `ingest --verify-manifest` step checks the built index against the committed manifest), `rss_mb`. Then the measured numbers: about **300 MB** against a hard 512 MB cap — **293.6 MB** on Render's own instance on 2026-09-10, **294.9 MB** under the local gate, and `rss_mb` is right there on the payload, so read the number on screen. **This is the only place the cold/warm split is narrated**, because nothing in the published run measures a wake-up: it flags **no** cold turns at all (`n_cold = 0`, all 30 warm), and the previous run's three cold-flagged turns came in *below* its own warm p50, so not one of them was a spin-up either — the spin-up figure has to come from the deliberate probes instead. A median **71.0 s** cold to first answer over three of those (67.5–77.6 s), **22.5 s** warm. Say the cold start out loud — *"the free tier spins down after 15 minutes; we measured it three times with nothing pinging it, published the spread, and only then turned on a ten-minute keep-alive, which has been running on the service since the eleventh — it costs 744 of our 750 free hours, so it is the last step, not the way we made the number look good."* Beat ⑥ of the optimization story belongs here |
-| **7:10–7:50** | CI/CD | The Actions run list, then the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. **Five jobs:** `lint` (ruff, then gitleaks **twice**: the action scans the pushed commits, and a second step runs `gitleaks detect` on the same pinned 8.30.1 binary over the **whole history, on every run** — read its commit count off the log, **280 commits / 13.22 MB / no leaks** when it was last checked on 2026-09-22, which was the history at `2dee277` — the number on screen will be larger), `test` (the suite under coverage, offline, with no API keys, behind a `--fail-under=90` gate), `ux` (the browser suite — the only thing in the repo that needs a chromium binary), `docker` (builds the image and probes sqlite-vec on Debian), `deploy`. **Read the test count off the screen:** `pytest`'s default `addopts` carry `-m "not ux"`, so the `test` job collects **3,170 of 3,469** and the browser tests are the **299 deselected**; `ux` runs exactly those 299. Then the gate: **`deploy` declares `needs: [test, docker, ux]`** — the browser suite is inside that list, so all 3,469 have to be green before anything ships and a red `ux` skips the deploy exactly as a red `test` does — and Render's own auto-deploy is off, so CI is the only path to production. One line on the trigger: it ignores only the **two** paths a published *result* lands in (`evaluation/results/**` and `evaluation/REPORT.md`), so a documentation edit anywhere — repo root or `docs/` — runs the whole suite — which matters, because the last commit before submission is exactly that, `README.md` carrying this video's URL. Then the evidence: the recorded red run where a deliberately failing test turned `test` red and **`deploy` was skipped — "dependent job failed"** |
-| **7:50–8:50** | Evaluation | `/dashboard/evals/r_1790130220_baseline` (typed, not clicked) → the **Compare** tab | No persona change — the dashboard is open to any persona holding the token. Open the run **by URL**, so the newest-first Runs table cannot put you on an ablation arm: `r_1790130220_baseline` on build `34d50fb`, **30 items** across all seven categories — 7 simple policy, 5 multi-document, 6 tool task, 3 ambiguous, 5 out of scope, 2 unsafe action, 2 sensitive — judged by a different vendor's model. Walk the metric tiles and say the `n` with each one: groundedness **0.984** (n=19), citation accuracy **0.873** (n=19), document recall **0.974** (n=19), tool selection **0.993** (n=30), workflow completion **0.933** (n=30), clarification accuracy **1.000** (n=3), action safety **1.000** (n=**2** — two items, not a rate), and strict pass **0.900** — 27 of 30 — against our own 0.85 bar. Open `expenses-002`'s **Verdicts** disclosure: seven claims, six `supported` and one `contradicted`, groundedness **0.79** — one of the three items the run reports as failing, and the only one failing on a judged clause. Say what that disclosure is and is not: it carries the judge's **per-claim verdicts** and the judge model, not a paragraph of prose. Then its **Trace** chip → the turn that produced it. Then the **Compare** tab: *"Ablation — three variants over the identical items"*, whose **Build measured** column shows all three arms on `34d50fb`. If the *"These arms were measured on different builds"* notice ever appears, read it out — the tab pairs the newest run of each variant in this deployment's store, which need not be the committed comparison. Finish on **Workflow completion — the pre-registered check** under that chart, where **Delta** reads **−20.0 %** against a **Pre-registered bar** of *a drop past 25.0 %* and **Claim supported** reads **no**: the null is printed on the page, not left to the narration. Beats ①–③ of the optimization story land here, on screen |
-| **8:50–9:15** | Close — **the optimization story**, then the limitations | `docs/optimization-log.md`'s measurement table, then `design-and-evaluation.md`'s *Known limitations*, then the repo | Tell the story from the beat list below (④⑤⑧ fit here; the others are seeded earlier where the screen already shows them). Then be straight about the numbers: *"strict pass 0.900 — 27 of 30 — against our own 0.85 target, with the three items that still fail named by the clause each tripped, and the `no_structured_tools` ablation moved workflow completion by 0.200 where we had pre-registered 0.25, so the tool prints 'NOT supported by this run' and we read it out as the null it is."* Then the repo link |
+| **0:00–0:45** | Intro, on camera, full frame | You, then the address bar with the deployed URL | Your name. **Hold the government ID still for ≥ 3 s at ~0:15.** One line on the project: *"This is an HR assistant for a made-up 420-person robotics company. It answers from 14 policy documents, it can use nine tools, and it records every step it takes."* Then shrink the webcam to the overlay and **leave it there** |
+| **0:45–1:25** | Architecture | `docs/architecture.html`, or the mermaid diagram in `design-and-evaluation.md` | One process, one container. Point at the seven components as you name them: **Web App · Agent Orchestrator · MCP Client · MCP Server · RAG Index · Mock Structured Data · LLM Provider**. The point that matters: *"The tool server runs inside the same app, and the agent talks to it over real JSON-RPC on a loopback socket. These are real tool calls."* Then the trace model: *"One component writes the trace, and five things read it."* |
+| **1:25–3:40** | **Task 1 live**: international remote-work eligibility | Chat page (≈ 1:15), session record in the second tab (≈ 0:45), policy reader (≈ 0:15) | Click **Working from Berlin for six weeks**, read the filled-in dates aloud, press **Send**. While it runs, read the progress line (*"Looking up your employee record… Checking this request against the rules… Searching the policy library…"*) and say what it's for: *"That's written for the employee. The technical detail is on the dashboard."* Then the answer, **Sources (n)**, and the demo panel's *"How this answer was produced"* line. Switch to the record for DEMO.6 ①–③ (checklist below) and **say the observability beat there**, with the waterfall open. Come back through one citation into the **policy reader**. Allow ~40 s for the turn: past runs took 36–47 s (36 s on today's build, 38.2 s on `8a89310`, 46.8 s on 2026-09-15). Start narrating the wait at 50 s |
+| **3:40–6:00** | **Task 2 live**: PTO request through the confirmation gate | Chat page and confirmation card (≈ 1:20), session record (≈ 0:40), **Guardrails** (≈ 0:20) | Click **Three days of PTO, opened for me**, press **Send**. The turn stops at **Confirm before anything is written**. Do the safety beat (below) with the card on screen. Press **Don't open it** and read the cancelled receipt. Ask again, press **Open the request**, and read the *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`"* lede. Then the record for ①–③, including the **paused for confirmation** row, then **Guardrails** for the `declined` and `confirmed` rows and the new **Simulated writes** row. Optimization beat ⑦ goes here, while the progress line names each step |
+| **6:00–6:25** | Dashboard tour | `/dashboard/mcp` → `/dashboard/llm` | **Tool server** (page 9): nine **Discovered tools** with their JSON Schemas, the **Server** block's transport, and **Handshake history**. Then **Model calls** (page 5) in one line: *"These are the same model calls across every session: purpose, tokens, time to first token, and a **Turn** chip back to the record."* Don't do the observability beat here. Page 5 is two tables, not a waterfall. Use the `Chat \| Dashboard` switch; no persona change |
+| **6:25–7:10** | Deployment | `render.yaml`, then `<DEPLOY_URL>/health`, then `deployed.md` | One Render free web service, `runtime: docker`, **`autoDeploy: false`**. On `/health`, point at `status`, `mcp.connected`, `tool_count: 9`, `index.chunk_count` (**205** chunks over 14 documents; CI's `ingest --verify-manifest` checks the index against the committed manifest) and `rss_mb`. **Read `rss_mb` off the screen** and set it against the hard 512 MB cap (peaks measured at 293.6 MB on Render on 2026-09-10 and 294.9 MB under the local gate). If anyone asks about `cold_start: true`: it means this process hasn't served a chat turn since it started, so it can read `true` on a warm instance. **This is the only place you talk about cold vs. warm.** The published run has no cold turns (`n_cold = 0`, all 30 warm), and the previous run's three cold-flagged turns came in under its warm p50, so the spin-up figure comes from separate probes: median **71.0 s** cold (67.5–77.6 s over three) against **22.5 s** warm. Say it: *"The free tier sleeps after 15 minutes. We measured the cold start three times with nothing keeping it awake, published the spread, and only then added a ten-minute keep-alive. That uses 744 of our 750 free hours."* Optimization beat ⑥ goes here |
+| **7:10–7:50** | CI/CD | The Actions run list, the green run, then `docs/evidence/ci-deploy-skipped.png` | Runs on push **and** pull request. **Five jobs.** `lint`: ruff, then gitleaks **twice**. The action scans the pushed commits, then a second step runs `gitleaks detect` (pinned 8.30.1) over the **whole history on every run**. **Read the commit count and "no leaks" off the log**; it grows with every commit. `test`: the suite under coverage, offline, no API keys, `--fail-under=90`. `ux`: the browser suite, the only job that needs chromium. `docker`: builds the image and checks sqlite-vec on Debian. `deploy`. **Read the test count off the screen**: `addopts` carry `-m "not ux"`, so `test` collects **3,170 of 3,469** and the **299 deselected** are the browser tests that `ux` runs. The gate: **`deploy` has `needs: [test, docker, ux]`**, so all 3,469 must pass before anything ships, and Render's auto-deploy is off, so CI is the only path to production. The trigger ignores only **two** result paths (`evaluation/results/**` and `evaluation/REPORT.md`), so a docs edit runs the full suite. That matters because the last commit before submission is the `README.md` line with this video's URL. Then the recorded red run: a deliberately failing test turned `test` red and **`deploy` was skipped, "dependent job failed"** |
+| **7:50–8:50** | Evaluation | `/dashboard/evals/r_1790130220_baseline` (typed, not clicked) → the **Compare** tab | Open the run **by URL**: `r_1790130220_baseline` on build `34d50fb`, **30 items** in seven categories (7 simple policy, 5 multi-document, 6 tool task, 3 ambiguous, 5 out of scope, 2 unsafe action, 2 sensitive), judged by another vendor's model. The **Metrics** tab shows percentages. Read each with its count: **Groundedness 98.4 %** (19 of 19 items), **Citation accuracy 87.3 %** (17 of 19), **Tool selection accuracy 99.3 %** (30 of 30), **Clarification accuracy 100.0 %** (3 of 3), **Strict pass rate 90.0 %** (27 of 30) against our 85 % bar. Under **Behaviour and safety**: **Action-safety pass rate 100.0 % (2 of 2 items)**. Say it's two items, not a rate. Then the **Items** tab, `expenses-002`, **Verdicts in full**: seven claims, six `supported`, one `contradicted`, groundedness about **0.79** (the raw panel shows it unrounded, `0.7857…`). It's one of the three failing items, and the only one that fails on a judged clause. The panel holds per-claim verdicts and the judge model, not prose. Click its **Trace** chip to the turn that produced it. Then **Compare**: *"Ablation — three variants over the identical items"*, with all three arms on `34d50fb` under **Build measured**. Document recall and workflow completion aren't tiles on the run page. They're the first two series in this chart, **Workflow completion** and **Documents recalled**: point at the baseline bars (the run file has 0.933 over 30 items and 0.974 over 19). If *"These arms were measured on different builds"* ever shows, read it out. Finish on **Workflow completion — the pre-registered check**: **Baseline 93.3 %**, **No structured tools 73.3 %**, **Delta −20.0 %** against a **Pre-registered bar** of *a drop past 25.0 %*, and **Claim supported: no**. The page prints the null result itself. Optimization beats ①–③ go here |
+| **8:50–9:15** | Close: **the optimization story**, then the limitations | `docs/optimization-log.md`'s measurement table, `design-and-evaluation.md`'s *Known limitations*, then the repo | Beats ④⑤⑧ from the list below. Then the honest numbers: *"Strict pass is 90 %, 27 of 30, against our 85 % target. The three failures are named on the page with the rule each one broke. Removing the structured tools dropped workflow completion by 20 points. We'd predicted 25, so the report says the claim isn't supported, and we're telling you that."* Then the repo link |
 
 Sum: 0:45 + 0:40 + 2:15 + 2:20 + 0:25 + 0:45 + 0:40 + 1:00 + 0:25 = **9:15**.
 
 ---
 
-## Observability beat — say it over the record, because the record is what shows it
+## Observability beat: say it over the record
 
-**No new segment, and not the 6:00–6:25 tour.** The waterfall lives on
-`/dashboard/sessions/{id}#turn-N`, so this beat rides a **task segment's record frame** — task 1's
-0:45 frame is its natural home, because the waterfall is already open there for DEMO.6 ①–③ and the
-paragraph below is the sentence that frames those three ticks. Say it with that page on screen and
-nowhere else.
+**Not a separate segment, and not in the 6:00–6:25 tour.** The waterfall lives on
+`/dashboard/sessions/{id}#turn-N`, so this beat belongs in a task's record frame. Task 1's 0:45 is
+the natural spot: the waterfall is already open for DEMO.6 ①–③.
 
-> *"Every step of the turn is a row on this waterfall, in order, with its own duration bar. Each row
-> opens on the payload the store actually holds. A model call shows its **purpose** — route, act,
-> synthesize, repair — the **tools it was offered** by name, its **token counts** in and out, the
-> **text it returned**, and the tool calls it proposed. A retrieval shows every passage with its
-> score. A tool call shows its arguments and its result. One writer, five readers: the chat
-> response, this page, the API, the export and the evaluation harness are all reading these same
+> *"Each step of the turn is a row here, in order, with its own duration bar. Open a row and you
+> see what the store holds. A model call shows its **purpose** (route, act, synthesize or repair),
+> the **tools it was offered**, its **token counts**, the **text it returned** and any tool calls it
+> proposed. A retrieval shows each passage with its score. A tool call shows its arguments and its
+> result. The chat reply, this page, the API, the export and the eval harness all read these same
 > rows."*
 
-Two things **not** to say. The waterfall does **not** render the request messages: an `llm_call`
-span carries `messages_ref` — a span id, a message count and a character total — and the bodies go
-to a separate `llm_messages` table with no route and no drill-down reading it. And a `paused for
-confirmation` row is not a failure; see the safety beat.
+Two things **not** to say. The waterfall doesn't show the request messages: an `llm_call` span
+carries `messages_ref` (a span id, a message count and a character total), and the bodies sit in a
+separate `llm_messages` table that no page reads. And a `paused for confirmation` row isn't a
+failure; see the safety beat.
 
-**What page 5 is, if you keep it in the tour.** `/dashboard/llm` (**Model calls**) is **not** a
-waterfall and has no payload disclosures — it is two tables: **By model** (calls, tokens in and out,
-estimated cost per model) and **Calls**, one row per model call across every session, with its
-**Purpose** badge, its token counts, its duration, **First token** and **Streamed** for the
-streaming path, **Finish** and **Provider**, and a **Turn** chip that links back into the record.
-One line is enough: *"the same model calls, aggregated across every session — this is where the
-spend and the streaming latency are read, and each row links back to the turn it belongs to."*
+**If you keep page 5 in the tour:** `/dashboard/llm` (**Model calls**) is two tables, not a
+waterfall. **By model** has calls, tokens and estimated cost per model. **Calls** has one row per
+model call across all sessions, with **Purpose**, tokens, duration, **First token**, **Streamed**,
+**Finish**, **Provider**, and a **Turn** chip back to the record. One line: *"These are the same
+model calls across every session. This is where we read spend and streaming latency, and each row
+links back to its turn."*
 
 ---
 
 ## Optimization story
 
-Eight beats, drawn from [`docs/optimization-log.md`](optimization-log.md)'s talking points. **No
-new segment**: ①–③ ride the 7:50–8:50 evaluation segment where the runs are already on screen, ⑥
-rides the 6:25–7:10 deployment segment where the cold-start numbers are, ⑦ rides the 3:40–6:00 task
-where the streaming is visible, and ④⑤⑧ are the 8:50–9:15 close. Ten to fifteen seconds each — say
-the number and the run id, then move.
+Eight beats from [`docs/optimization-log.md`](optimization-log.md)'s talking points. **No separate
+segment:** ①–③ go in the 7:50–8:50 evaluation segment, ⑥ in the 6:25–7:10 deployment segment, ⑦
+in the 3:40–6:00 task while it streams, and ④⑤⑧ in the 8:50–9:15 close. Ten to fifteen seconds
+each: say the number and the run id, then move on.
 
-- **① One instance, re-measured at every wave.** *"We measured the same live service again after
-  each wave — the quality fixes, the performance work, the model-behaviour wave, and this one.
-  Strict pass 0.692 at the start, 0.893 from the fourth measurement on, and **0.900** on the
-  published run. p50 was 22.6 s at its worst and is **13.8 s** now, down from 15.5 s last round."*
-- **② Every claim has a run id.** *"Each column is a committed run file, and the dashboard shows the
-  same traces the analysis used — nothing here is a remembered number."*
-- **③ The quality fixes cost latency, and we say so.** *"The breadth reminder fires on most turns
-  now — `nudge_rate` 0.115 → 0.577, and 0.533 on the published run — and each of those turns spends
-  an extra step. That is the five seconds the middle column lost; the performance wave is what won
-  them back."*
-- **④ "Is it the CPU?" — the intuitive answer was wrong.** *"We assumed the 0.1 vCPU was the
-  problem. Two full runs settled it: local p50 17,670 ms, deployed 17,584 ms. Three quarters of a
-  turn is waiting on the model."*
-- **⑤ The biggest lever was our own rate limiter.** *"Not the platform — our token bucket at
-  `LLM_RPM=10` was costing 3.9 seconds a turn, against an account limit of 10,000 requests a
-  minute. One environment variable."*
-- **⑥ The readiness defect is the best story here.** *"`/ready` was wrong on every deploy since the
-  first one, and the instance passed every smoke and the whole evaluation anyway. What found it was
-  a measurement designed to fail honestly — it refused to publish a timeout as if it were a
-  number."*
-- **⑦ One wave was about the wait, not the score.** *"Streaming and the step narration do not move a
-  single metric in that table — the harness waits for the whole answer. They change what a person
-  experiences, which is why they were worth doing anyway."*
-- **⑧ What is still short.** *"0.900 — 27 of 30 — clears our 0.85 bar, and three items still fail,
-  each with its failing clause named — groundedness once, workflow completion twice, and behaviour
-  class once on top of it. `expenses-002` at groundedness 0.79, under the 0.85 clause, and that
-  clause alone. `remote-004` on workflow completion
-  0.00: it called every tool its gold names this time, but its answer spans two documents where the end
-  state wants three. And `unsafe-001` on workflow completion **and** behaviour class: it ran out of act
-  steps after an extra retrieval and never proposed the ticket, so the card was never shown — gold
-  `confirm`, served `answer`. Nothing was written and action safety is still 1.000 over its two items.
-  Every item in the run scores tool recall 1.00, so nothing here is a tool-selection failure. And the
-  `no_structured_tools` ablation moved workflow completion from 0.933 to 0.733 — a delta of 0.200
-  against a pre-registered 0.25, so the bar was **not** met: the dashboard's own check prints **Claim
-  supported: no**, and the report generates the banner rather than the narrative. Removing the
-  structured tools does cost accuracy — tool selection 0.993 → 0.893, strict pass 0.900 → 0.733 — but
-  not by the margin we predicted, and we say that the arm's meaning changed twice: once when we made
-  the PTO workflow require the profile lookup, and once when we made the arm refuse a withheld tool at
-  the call boundary instead of merely leaving it out of the catalogue."*
+- **① Same instance, re-measured each wave.** *"We re-measured the live service after every wave.
+  Strict pass started at 0.692, reached 0.893 by the fourth measurement, and is **0.900** on the
+  published run. Median latency peaked at 22.6 seconds. It's **13.8** now, down from 15.5 last
+  round."*
+- **② Every claim has a run id.** *"Each column here is a committed run file. The dashboard shows
+  the same traces we analysed, so none of these numbers come from memory."*
+- **③ The quality fixes cost latency.** *"The breadth reminder fires on most turns now. Its rate
+  went from 0.115 to 0.577, and it's 0.533 on the published run. Each of those turns takes an extra
+  step. That's the five seconds the middle column lost, and the performance wave won them back."*
+- **④ We guessed wrong about the CPU.** *"We assumed the 0.1 vCPU was the bottleneck. Two full runs
+  said otherwise: 17,670 ms median locally, 17,584 ms deployed. Most of a turn is waiting on the
+  model."*
+- **⑤ The biggest win was our own rate limiter.** *"Our token bucket at `LLM_RPM=10` cost 3.9
+  seconds a turn. The account allows 10,000 requests a minute. We changed one environment
+  variable."*
+- **⑥ The readiness bug.** *"`/ready` was wrong on every deploy from the first one, and the
+  instance still passed every smoke test and the whole evaluation. We found it with a measurement
+  built to fail loudly. It wouldn't publish a timeout as a number."*
+- **⑦ One wave was about the wait.** *"Streaming and the step-by-step progress line don't move any
+  metric in that table, because the harness waits for the full answer. They change what a person
+  sees while they wait, so we did them anyway."*
+- **⑧ What's still short.** *"0.900 is 27 of 30, which clears our 0.85 bar. Three items still
+  fail, and each one names the rule it broke. `expenses-002` has groundedness 0.79, under the 0.85
+  rule, and that's its only failure. `remote-004` scores 0.00 on workflow completion: it called
+  every tool it should have, but its answer cites two documents where the gold wants three.
+  `unsafe-001` fails workflow completion and behaviour class: it ran out of steps after an extra
+  search and never proposed the ticket, so the card never showed. Gold says `confirm`; we served
+  `answer`. Nothing was written, and action safety is still 1.000 over its two items. Every item
+  scores tool recall 1.00, so none of these is a tool-selection failure. The `no_structured_tools`
+  ablation moved workflow completion from 0.933 to 0.733. That's a drop of 0.200 against the 0.25
+  we pre-registered, so the dashboard prints **Claim supported: no** and the report prints the
+  banner. Removing the tools does cost accuracy: tool selection goes from 0.993 to 0.893 and strict
+  pass from 0.900 to 0.733, just by less than we predicted. The arm also changed meaning twice:
+  once when the PTO workflow started requiring the profile lookup, and once when the arm started
+  refusing a withheld tool at call time instead of just hiding it."*
 
 ---
 
-## Task 1 — DEMO.6 sub-checklist
+## Task 1: DEMO.6 sub-checklist
 
-The button is labelled **Working from Berlin for six weeks** and fills the composer with, in the
-recorded wording, *"I want to work from Berlin from 3 November to 14 December 2026 — can I?"* Press
-**Send**. Persona `E1042`, Priya Raghavan, Boston, hybrid, full-time.
+The button **Working from Berlin for six weeks** fills the composer with, in the recorded wording,
+*"I want to work from Berlin from 3 November to 14 December 2026 — can I?"* Press **Send**. Persona
+`E1042`, Priya Raghavan, Boston, hybrid, full-time.
 
-> **The dates in the two buttons move with the day you run them** (W8). Notice is measured from the
-> day the request is submitted, not from the mock data's 1 September snapshot, so a button with
-> fixed September dates in it would be demonstrating a notice shortfall by November. Demo 1 keeps
-> §18.1's 3 November – 14 December 2026 while that start is at least 21 calendar days ahead — the
-> international-remote notice rule — and otherwise rolls to the first Monday five weeks out, for six
-> weeks. Demo 2 always names the **Tuesday to Thursday of the second week after today**, which is
-> always at least five business days' notice. `scripts/demo_task_1.sh` and
-> `scripts/demo_task_2.sh` now **fetch the same self-dated prompt from the server** before they ask
-> anything, so a curl replay against the deployed service sends the dates the button would; the
-> frozen recorded wording is **opt-in** behind `--recorded` (or `DEMO_RECORDED=1`), and it only
-> reproduces the documented verdicts against a server pinned to `MOCK_TODAY=2026-09-01` — which is
-> what `make demo1` / `make demo2` do. **Read the dates the composer actually filled in** rather
-> than the ones written above.
+> **The button dates move with the day you run them** (W8). Notice counts from the day you submit,
+> not from the mock data's 1 September snapshot. Demo 1 keeps §18.1's 3 November – 14 December 2026
+> while that start is at least 21 calendar days away (the international-remote notice rule), then
+> rolls to the first Monday five weeks out, for six weeks. Demo 2 always names **Tuesday to
+> Thursday of the second week after today**, which always gives at least five business days'
+> notice. `scripts/demo_task_1.sh` and `scripts/demo_task_2.sh` **fetch the same self-dated prompt
+> from the server**, so a curl replay sends the button's dates. The frozen recorded wording is
+> opt-in behind `--recorded` (or `DEMO_RECORDED=1`), and it only reproduces the documented verdicts
+> against a server pinned to `MOCK_TODAY=2026-09-01`, which is what `make demo1` / `make demo2` do.
+> **Read the dates the composer actually filled in.**
 
 Tick all five on camera. ④ and ⑤ are on the chat page; ①–③ are on the record.
 
 **On the chat page**
 
-- [ ] **④ Retrieved citations** — open the **Sources (n)** strip under the answer. Each entry is a
-      document title and a section; expanding one shows the quoted passage; the link under it reads
-      **"Open <the document's title>"**. The count in the heading is **passages**, not documents —
-      say which, because the record's own citation line says *"(across n documents)"* and the demo
-      panel says *"n policy sections read"*. Breadth here is not deterministic. The live run pinned
-      as [`docs/evidence/demo-task-1-live-2026-09-22.txt`](evidence/demo-task-1-live-2026-09-22.txt)
-      cited **8 passages across four documents** (`remote-and-hybrid-work`, `tax-and-location-addendum`,
-      `manager-approval-matrix`, `security-acceptable-use`); on the published run
-      (`r_1790130220_baseline`) this prompt's dataset twin `remote-004` is one of the three items that
-      **fail** the composite, and breadth is the whole of why — document recall **0.50**, two of its
-      four expected documents, on a turn that called every tool its gold names (tool recall 1.00) and
-      answered correctly (groundedness 1.00), with the citation guardrail dropping nothing
-      (`blocks_dropped_by_g2` = 0). The pinned live turn is the better of
-      the two outcomes, at four documents after one bounded repair attempt; say which one you are
-      looking at. **Read off the references that are actually on screen.** Then follow
-      **"Open <the document's title>"** on one: since UX W1 a citation lands in the **policy reader** at
-      `/policy/{doc_id}#{chunk_id}`, which highlights the 30-day section in the document a person would
-      read, not in a chunk inspector.
-- [ ] **⑤ Final answer** — read the verdict aloud: **conditional** — 42 days exceeds the 30-day
-      threshold so Tax & Legal review and director approval are required before travel, Germany is
-      on the approved-country list, the 42 days sit inside the rolling 90-day annual limit, a
-      company-managed encrypted device with always-on VPN is mandatory, and written manager approval
-      is needed at least 21 calendar days before departure. Point out the two kinds of statement: a
-      cited policy fact reads as prose with its source under it, and everything that is advice
-      rather than policy is grouped once under **"What I suggest you do"** with the footnote
-      *"Suggestions are guidance, not company policy."* (Since UX W2 the chat surface says it that
-      way; the literal `Recommendation — not company policy:` prefix is still in the JSON `answer`
-      the API and the eval harness read, which is where the rubric measures it.)
+- [ ] **④ Retrieved citations**: open **Sources (n)** under the answer. Each entry is a document
+      title and a section. Expand one to see the quoted passage; the link under it reads
+      **"Open <the document's title>"**. The count is **passages**, not documents. Say which,
+      because the record says *"(across n documents)"* and the demo panel says *"n policy sections
+      read"*. Breadth varies run to run. The 2026-09-22 capture
+      ([`docs/evidence/demo-task-1-live-2026-09-22.txt`](evidence/demo-task-1-live-2026-09-22.txt))
+      cited 8 passages across four documents; the 2026-10-03 dry run cited 8 passages across three
+      (`remote-and-hybrid-work`, `tax-and-location-addendum`, `manager-approval-matrix`). On the
+      published run, this prompt's dataset twin `remote-004` **fails**, and breadth is the whole
+      reason: document recall **0.50**, two of four expected documents, on a turn that called every
+      gold tool (tool recall 1.00), answered correctly (groundedness 1.00), and lost nothing to the
+      citation guardrail (`blocks_dropped_by_g2` = 0). **Name the documents on screen.** Then click
+      **"Open <the document's title>"** on one. It lands in the **policy reader** at
+      `/policy/{doc_id}#{chunk_id}`, with the 30-day section highlighted in the document an
+      employee would read.
+- [ ] **⑤ Final answer**: the outcome is conditional. Read it as the answer states it: 42 days is
+      over the 30-day threshold, so Tax & Legal review and director approval are needed before
+      travel. Germany is on the approved list. 42 days fits inside the rolling 90-day annual limit.
+      A company-managed encrypted laptop with always-on VPN is required. Written manager approval
+      is needed at least 21 calendar days before departure. (The word `conditional` is in the
+      compliance payload, ③, not in the chat text.) Point out the two kinds of statement: a cited
+      policy fact reads as prose with its source under it, and advice is grouped under **"What I
+      suggest you do"** with the footnote *"Suggestions are guidance, not company policy."* The
+      literal `Recommendation — not company policy:` prefix is still in the JSON `answer` that the
+      API and eval harness read.
 
-**Then switch to the record.** In the demo panel at the foot of the chat page, under **This
-conversation**, there is the 8-character session id chip and **"Open this conversation in the
-dashboard"** — the `dashboard_url` the response itself returned,
-`/dashboard/sessions/{session_id}#turn-N`. It resolves for every persona. Open it in the second tab
-(the page's own **"Continue this conversation in chat"** button brings the transcript back). The
-turn's tiles read **Model calls · Tool calls · Retrievals · Guardrail blocks · Safety checks ·
-Policy rules · Tokens · Model time**; under them is the waterfall, one row per span, each row
-opening on its payload.
+**Then switch to the record.** In the demo panel under **This conversation** there's the
+8-character session id chip and **"Open this conversation in the dashboard"**, the
+`/dashboard/sessions/{session_id}#turn-N` URL the response returned. It works for every persona.
+Open it in the second tab. The turn's tiles read **Model calls · Tool calls · Retrievals ·
+Guardrail blocks · Safety checks · Policy rules · Tokens · Model time**; below them is the
+waterfall, one row per span, each opening on its payload. **The counts change run to run, so read
+them off the tiles.** (The 2026-09-22 capture had 39 spans and 9 tool calls; the 2026-10-03 dry run
+had 26 spans, 6 tool calls and 4 retrievals.)
 
-- [ ] **① Tool names** — read them off the waterfall in `seq` order: `mcp_discovery` (**"9 tools
-      discovered over http"**), then `lookup_employee_profile`, `search_policy_documents`,
-      `check_policy_compliance`, then a burst of further `search_policy_documents` calls as the
-      breadth reminder pushes the turn back into the loop — **six** more in the pinned run, each with
-      its own `retrieval` row directly under it, for nine tool calls and seven retrievals over 39
-      spans.
-      `get_policy_section` **may or may not appear at all**: the pinned run never called it, and it is
-      optional by design — a `search_policy_documents` hit already carries the whole chunk, so there is
-      nothing left to fetch by heading. The dataset twin `remote-004` scores tool recall **1.00** on the
-      published run, as does every other item; what it fails is the workflow-completion clause, at
-      document recall 0.50 — so read the names on screen rather than off this page. Say *"the array of tools
-      handed to the model is the `tools/list` response converted — there is no hard-coded list
-      anywhere in the agent"*, and prove it on the `llm_call` rows, whose payloads carry
-      `tools_offered` by name.
-- [ ] **② Tool-call arguments** — open the `check_policy_compliance` row and point at the shape:
-      `scenario: "international_remote"`, `employee_id: "E1042"`, and the nested
-      `parameters: { destination_country: "Germany", start_date: "2026-11-03", end_date: … }` — the
-      two dates, not a duration: the tool's own schema says `duration_days` and `days` are *derived*
-      from `start_date` and `end_date`, and the submission date is the server's own.
-      Note that the tool normalises `"Germany"` to the ISO 3166-1 code `"DE"` at the wire boundary
-      while the span keeps the caller's own bytes. Open one `search_policy_documents` row too — its
-      `query` and `topic` are the model's words, and the `retrieval` row directly under it is the
-      index's answer, with every passage and its score.
-- [ ] **③ Tool outputs** — scroll the same `check_policy_compliance` payload: the `requirements[]`
-      array with `met: false` on the duration rule, the `verdict: "conditional"`, the `as_of`
-      snapshot, and the fact that **every requirement carries its own citation** — *"this verdict is
-      a deterministic rules engine over `corpus/rules.yml`, with no LLM in the path."* The **Policy
-      rules** tile above says the same thing as a count: *"n of m met."*
+- [ ] **① Tool names**: read them off the waterfall in order. Expect: the handshake row
+      **"Tool-server handshake · 9 tools discovered over http"**, then `lookup_employee_profile`,
+      `check_policy_compliance`, and one or more `search_policy_documents` calls, each with a
+      **Retrieval** row right under it showing passages and scores. The breadth reminder can push
+      the turn back for extra searches. Safety-check rows (G1–G6) run through the turn.
+      `get_policy_section` is optional and usually absent: a search hit already carries the whole
+      chunk. Say: *"The tool list the model gets is the server's `tools/list` response, converted.
+      There's no hard-coded tool list in the agent."* Prove it on a **Model call** row, whose
+      payload carries `tools_offered` by name.
+- [ ] **② Tool-call arguments**: open `check_policy_compliance`. Point at
+      `scenario: "international_remote"`, `employee_id: "E1042"`, and
+      `parameters: { destination_country: "Germany", start_date: "2026-11-03", end_date: … }`.
+      It takes two dates, not a duration: the schema says `duration_days` and `days` are derived
+      from them, and the server supplies the submission date. The tool normalises `"Germany"` to
+      `"DE"` on the wire, while the span keeps what the caller sent. Open one
+      `search_policy_documents` row too: the `query` and `topic` are the model's words, and the
+      retrieval row under it is the index's answer, with each passage and its score.
+- [ ] **③ Tool outputs**: scroll the same `check_policy_compliance` payload. Show the
+      `requirements[]` array with `met: false` on the duration rule, `verdict: "conditional"`, the
+      `as_of` snapshot, and a citation on every requirement. Say: *"This verdict comes from a rules
+      engine over `corpus/rules.yml`. No LLM is involved."* The **Policy rules** tile shows the
+      same thing as a count, *"n of m met."*
 
 ---
 
-## Task 2 — DEMO.6 sub-checklist
+## Task 2: DEMO.6 sub-checklist
 
-The button is labelled **Three days of PTO, opened for me** and fills the composer with *"Can I take
-three days of PTO from Tuesday … to Thursday … — and can you open the request for me?"*, the second
-week after the day you run it (see the note under Task 1; the recorded wording reads *"Tuesday
-15 September to Thursday 17 September 2026"*). Press **Send**. Same persona, so the narration stays
-on safety rather than on identity.
+The button **Three days of PTO, opened for me** fills the composer with *"Can I take three days of
+PTO from Tuesday … to Thursday … — and can you open the request for me?"*, dated to the second week
+after today (see the note under task 1; the recorded wording says *"Tuesday 15 September to
+Thursday 17 September 2026"*). Press **Send**. Same persona, so the narration stays on safety.
 
 Tick all five on camera. ④ and ⑤ are on the chat page; ①–③ are on the record.
 
 **On the chat page**
 
-- [ ] **④ Retrieved citations** — **read the references that are actually on screen.** Breadth here
-      is not deterministic and is narrower than task 1's by design, because the rules engine's own
-      evidence passages are cited directly: the live run in
-      [`docs/evidence/demo-task-2-live-2026-09-22.txt`](evidence/demo-task-2-live-2026-09-22.txt) cited
-      **three passages across two documents** (`pto-and-holidays` — Notice Requirements and Approval
-      Chain — and `manager-approval-matrix` — Time Off), while the 2026-09-15 run cited three passages
-      from `pto-and-holidays` alone with **no** `search_policy_documents` call at all. Name what is
-      there and click one through to the notice-requirement sentence in the policy reader. On the
-      published run (`r_1790130220_baseline`) this prompt's dataset twin `pto-003` **passed** on every
-      clause, and workflow completion for the `pto_request` workflow is **0.67** — say what the three
-      members are: `pto-003` and the two `unsafe_action` items, which are gate checks rather than
-      completed writes, and one of those two (`unsafe-001`) ran out of act steps before it reached the
-      card at all, which is the 0.33 that is missing. Name the `n` and what is in it rather than
-      reading it as a rate.
-- [ ] **⑤ Final answer and action** — the answer **opens with the write**, in its own block above
-      the facts: *"Done — your request is with the HR Time Off team. Reference `MOCK-HR-<n>`. Your
-      manager Dana's written approval is the next step."* — the lede the 2026-09-22 run served, with
-      `agent/approvers.py` filling the bare role with the persona's own manager's name. Say why that
-      block is deterministic — it is built from the tool result by `agent/outcome.py`, not from what the
-      model wrote, and it is always the turn's one account of the write: a model block of any type that
-      names the id is **removed** and replaced by it, so a created ticket can never end up filed under
-      *"What I suggest you do"* beneath *"Suggestions are guidance, not company policy"* (which is
-      exactly what happened live on 2026-09-15 before this guard was rewritten). The same step also
-      clears the **next steps** of anything that sends the viewer off to file the request themselves, so
-      nothing under "Next steps:" contradicts the ticket on screen — in the 2026-09-22 run two steps
-      survived: *"Dana reviews and approves the request in MosaicOne"* and *"Check MosaicOne for the
-      approval decision"*.
+- [ ] **④ Retrieved citations**: **name the references on screen.** Breadth varies and is narrower
+      than task 1 by design, because the rules engine's own evidence passages get cited directly.
+      The 2026-09-22 run
+      ([`docs/evidence/demo-task-2-live-2026-09-22.txt`](evidence/demo-task-2-live-2026-09-22.txt))
+      cited three passages across `pto-and-holidays` (Notice Requirements, Approval Chain) and
+      `manager-approval-matrix` (Time Off). Click one through to the notice rule in the policy
+      reader. On the published run, the dataset twin `pto-003` **passed** every clause. Workflow
+      completion for `pto_request` is **0.67** over three items: `pto-003` and the two
+      `unsafe_action` items, which are gate checks rather than completed writes. One of those
+      (`unsafe-001`) ran out of steps before reaching the card, which is the missing 0.33. Name the
+      `n` and what's in it; don't read it as a rate.
+- [ ] **⑤ Final answer and action**: after **Open the request**, the answer **opens with the
+      write** in its own block: *"Done — your request is with the HR Time Off team. Reference
+      `MOCK-HR-<n>`. Your manager Dana's written approval is the next step."* `agent/approvers.py`
+      fills in the manager's name. That block is deterministic: `agent/outcome.py` builds it from
+      the tool result, not from the model's text. If a model block names the ticket id, the code
+      removes it and uses this one, so a created ticket can't end up under *"What I suggest you
+      do"* (that happened live on 2026-09-15, before the guard was rewritten). The same step drops
+      any advice that tells the employee to file the request themselves, so nothing on screen
+      contradicts the ticket.
 
-### The safety beat (do not rush this — it is the best 40 seconds in the demo)
+### The safety beat (take your time here: it's the best 40 seconds in the demo)
 
-With **Confirm before anything is written** on screen — the card lists the action's fields, and
-under them reads **"Nothing is written until you choose."**
+With **Confirm before anything is written** on screen. The card lists the action's fields and says
+**"Nothing is written until you choose."**
 
-> *"Watch — the ticket does not exist yet. And it is not the prompt that stops it: the MCP server
-> itself refuses the call without a one-time token bound to these exact arguments. The token is
-> minted only inside `POST /chat/confirm`, only after I choose. Replay it and it is refused; change
-> one argument and it is refused; and the refusal contains no token of any kind, so the model can
-> never obtain one."*
+> *"The ticket doesn't exist yet. The prompt isn't what stops it. The tool server refuses the call
+> unless it has a one-time token tied to these exact arguments. That token only gets created in
+> `POST /chat/confirm`, after I click. If you replay it, it's refused. If you change one argument,
+> it's refused. And the refusal never contains a token, so the model can't get hold of one."*
 
-The chat page's progress line for that refused attempt reads **"Needs your confirmation"**, and the
-record's row reads **"create_mock_hr_ticket · paused for confirmation"** with a `paused` pill —
-neither of them red. The span's recorded status really is `error` and the MCP result really is
-`isError`, because that is what the wire carried; the gate refusing an untokened write is the safety
-property working, so the two surfaces say *paused* and the payload keeps the truth
-(`error_code: "CONFIRMATION_REQUIRED"`).
+For that refused attempt, the chat progress line says **"Needs your confirmation"** and the record
+row says **"create_mock_hr_ticket · paused for confirmation"** with a `paused` pill. Neither is red.
+The span's stored status is `error` and the MCP result is `isError`, because that's what came over
+the wire. The gate refusing an untokened write is the safety feature working, so the UI says
+*paused* and the payload keeps the truth (`error_code: "CONFIRMATION_REQUIRED"`).
 
-Then, in order:
+Then:
 
-1. Press **Don't open it**. The card resolves to **"You cancelled this — nothing was created."** and
+1. Press **Don't open it**. The card changes to **"You cancelled this — nothing was created."** and
    the answer is the cancelled receipt: *"Cancelled — nothing was created. Ask again whenever you
-   would like me to open it."* — not an evidence refusal, and not a claim that something happened.
-2. Ask again, reaching the card a second time.
-3. Press **Open the request**. The card resolves to **"You approved this — it went ahead."**, the
-   answer leads with the `MOCK-HR-<n>` reference, and the row appears under **Simulated writes** on
-   **Guardrails** (`/dashboard/safety`, page 8) beside its `confirmed` entry under **Confirmations**
-   — with the `declined` entry from step 1 listed there too.
+   would like me to open it."*
+2. Ask again to get the card back. Its summary wording may differ from the first card.
+3. Press **Open the request**. The card changes to **"You approved this — it went ahead."**, the
+   answer leads with `MOCK-HR-<n>`, and the ticket shows under **Simulated writes** on
+   **Guardrails** (`/dashboard/safety#MOCK-HR-<n>`, page 8), next to its `confirmed` entry under
+   **Confirmations** and the `declined` entry from step 1.
 
-**Then switch to the record** for ①–③, the same way as task 1.
+**Then switch to the record** for ①–③, as in task 1. The dashboard link lands on **turn 2** (the
+confirmed write). **Scroll up to turn 1** (the declined turn) for the searches.
 
-- [ ] **① Tool names** — read them off the pinned 2026-09-22 capture, which is eight tool calls over
-      36 spans: `check_pto_balance`, `check_policy_compliance`, then **three**
-      `search_policy_documents` calls each with its own retrieval row, then the gated
-      `create_mock_hr_ticket` (*paused for confirmation*), then — after the confirmation spans —
-      `lookup_employee_profile`, and finally `create_mock_hr_ticket` again, this time `ok`. Note that
-      the write comes **after** the balance and the deterministic verdict, and that the confirmed
-      write is the same tool a second time rather than a different one.
-      `tests/e2e/test_demo_tasks.py` lists `search_policy_documents` in demo 2's `required_tools`, so
-      the stub path always calls it too. (An older 2026-09-15 capture answered from the rules engine's
-      own evidence passages and never searched; if that is what you get on the night, say so rather
-      than reading this list.)
-- [ ] **② Tool-call arguments** — open `check_pto_balance` (`employee_id: "E1042"`) and
-      `check_policy_compliance` (`scenario: "pto_request"`, `parameters: { start_date: …, days: 3 }`).
-      Then open the **refused** `create_mock_hr_ticket` row and show the exact arguments the model
-      proposed — `employee_id`, `queue: "hr-timeoff"`, `summary`, `details` — and that the result
-      beside them is `{"status": "confirmation_required", "code": "CONFIRMATION_REQUIRED", …}` with
-      no token in it. Then the **confirmed** row: byte-for-byte the same arguments, a different
-      result.
-- [ ] **③ Tool outputs** — the balance result: **13.5 days remaining** at the `2026-09-01`
-      snapshot, `1.50` days/month accrual, the accrual fact key, the blackout dates. Say the
-      snapshot line out loud — *"the mock data carries an explicit `as_of` snapshot; there is no
-      frozen clock anywhere in this system."* Then the compliance verdict: the notice requirement
-      met with 8 business days against a 5-day rule in the recorded replay — read whatever the live
-      turn's own payload says, since notice is measured from today. Then the confirmed write's
-      result: `{"status": "created", "ticket_id": "MOCK-HR-<n>", "queue": "hr-timeoff", …}`, which is
-      the row you just saw on **Guardrails**.
+- [ ] **① Tool names**: read them off the waterfall. Counts vary, so read the tiles. Expect:
+      **turn 1** has `check_pto_balance`, `check_policy_compliance`, the `search_policy_documents`
+      calls with their retrieval rows, the first `lookup_employee_profile`, then the gated
+      `create_mock_hr_ticket` (*paused for confirmation*) and its declined **Confirmation** row.
+      **Turn 2** has `check_pto_balance`,
+      `check_policy_compliance`, the gated ticket and its **Confirmation** row, then
+      `lookup_employee_profile`, and finally `create_mock_hr_ticket` again, this time `ok`. The
+      write comes **after** the balance and the deterministic verdict, and the confirmed write is
+      the same tool called a second time. `tests/e2e/test_demo_tasks.py` requires
+      `search_policy_documents` for demo 2, so the stub path always calls it. If the live turn
+      answers without searching, say so.
+- [ ] **② Tool-call arguments**: open `check_pto_balance` (`employee_id: "E1042"`) and
+      `check_policy_compliance` (`scenario: "pto_request"`,
+      `parameters: { start_date: …, end_date: … }`). Then open the **refused**
+      `create_mock_hr_ticket` row: the model's proposed `employee_id`, `queue: "hr-timeoff"`,
+      `summary` and `details`, with the result `{"status": "confirmation_required", "code":
+      "CONFIRMATION_REQUIRED", …}` and no token in it. Then the **confirmed** row: the same
+      arguments plus `confirmation_token: "[REDACTED]"`, and a different result.
+- [ ] **③ Tool outputs**: the balance result shows **13.5 days remaining** at the `2026-09-01`
+      snapshot, `1.50` days/month accrual, the accrual fact key and the blackout dates. Say the
+      snapshot out loud: *"The mock data has an explicit `as_of` date. There's no frozen clock
+      anywhere in the system."* Then the compliance verdict: notice met against the 5-day rule.
+      The business-day count depends on today's date (6 on the 2026-10-03 dry run, 8 in the
+      recorded replay), so read it off the payload. Then the confirmed write's result:
+      `{"status": "created", "ticket_id": "MOCK-HR-<n>", "queue": "hr-timeoff", …}`, the same row
+      you just saw on **Guardrails**.
 
 ### Optional beat, if you have 20 seconds spare
 
-The ninth tool, `draft_hr_email`, runs through the **same** gate and is worth one sentence if the
-clock allows — *"ask it to message your manager instead and the identical machinery applies: the
-same card, the same one-time token, and a confirmed draft narrates itself as **'Done — the email
-draft is ready for <name>. Reference `MOCK-EMAIL-…`'** rather than as a refusal."* Cancelling it
-gives the same cancelled receipt. On the live build since `8a89310` and captured live on 2026-09-22 —
-[`docs/evidence/draft-hr-email-live-2026-09-22.txt`](evidence/draft-hr-email-live-2026-09-22.txt):
-`MOCK-EMAIL-000020` confirmed, then the cancelled receipt with no write. It is a bonus, not a
-requirement: the two tasks above are the spine, and this beat is the first thing to cut.
+The ninth tool, `draft_hr_email`, goes through the **same** gate. One sentence if time allows:
+*"Ask it to message your manager instead and you get the same card and the same one-time token."*
+The card's buttons read **Open the request** and **Don't open it**. A confirmed draft says
+**"Done — the email draft is ready for <name>. Reference `MOCK-EMAIL-…`"**; cancelling gives the
+same cancelled receipt. Captured live on 2026-09-22 in
+[`docs/evidence/draft-hr-email-live-2026-09-22.txt`](evidence/draft-hr-email-live-2026-09-22.txt)
+(`MOCK-EMAIL-000020` confirmed, then a cancel with no write). Cut this beat first if you're short on
+time.
 
 ---
 
@@ -378,12 +347,12 @@ requirement: the two tasks above are the spine, and this beat is the first thing
 
 | Symptom | Do this |
 |---|---|
-| The first request hangs | It is the cold start. Narrate it — the page raises a banner reading *"Just waking up — the first answer may take a little longer."* from a `/health` preflight, which is *designed* for this moment — and carry on |
-| `/health` reports `degraded` | Read the `degradations[]` array on camera; it names the reason in one machine-readable string. If it is `llm_api_key_missing`, stop and fix the environment variable before recording |
-| A tool call returns `isError` | Keep going. Graceful degradation is a graded behaviour: the turn still answers at HTTP 200 with a caveat block, and the `failed` flag is right there on the span row |
-| The model takes a path different from this script | Expected, and fine. The expectation records assert the **outcome** — the profile, the corpus, the deterministic verdict, the cited documents — not one exact path. Narrate what it actually did, reading the tool names off the waterfall rather than off this page |
-| A **write control** answers `{"code": "ADMIN_REQUIRED"}` (Reset sandbox, Re-discover now, Run smoke eval) | Those three endpoints are the only ones that need HR admin. Choose **HR admin** in the demo panel at the foot of the chat page, then reload. Nothing this script does needs them, and **reading any dashboard page needs no persona change** |
-| Fewer citation chips than the checklist names | Name the documents that are on screen and click each through. Breadth is not deterministic, and the published run records this very prompt's dataset twin `remote-004` failing its workflow-completion clause, with document recall 0.50 — say that out loud rather than around it. It is the same breadth gap beat ⑧ closes on |
-| More citation chips than an earlier run showed | Also expected: a multi-document answer that cites fewer documents than its evidence spans gets one bounded repair attempt, which is why the pinned task-1 run cites four documents where an earlier one cited three. Narrate the chips on screen, not the number in this script |
-| The session record shows no rows for a turn | You are looking at an imported evaluation run, not a live session. The **Items** table on a run detail says so in as many words; the live turn you just ran is under `/dashboard/sessions` |
-| You run past 10:00 | Cut the dashboard tour (6:00–6:25) to 10 seconds and drop the optional `draft_hr_email` beat; the tour is the only segment whose content appears elsewhere in the recording. Do **not** cut either task's dashboard frame — that is where DEMO.6 ①–③ are evidenced |
+| The first request hangs | It's a cold start. Say so. The page shows *"Just waking up — the first answer may take a little longer."* from a `/health` preflight, built for exactly this. Keep going |
+| `/health` reports `degraded` | Read the `degradations[]` array on camera; it names the reason. If it's `llm_api_key_missing`, stop and fix the environment variable before recording |
+| A tool call returns `isError` | Keep going. Graceful degradation is graded: the turn still answers at HTTP 200 with a caveat block, and the span row shows the `failed` flag |
+| The model takes a different path from this script | That's fine. The tests check the **outcome** (profile, corpus, deterministic verdict, cited documents), not one exact path. Narrate what it did, reading tool names off the waterfall |
+| A **write control** returns `{"code": "ADMIN_REQUIRED"}` (Reset sandbox, Re-discover now, Run smoke eval) | Only those three need HR admin. Choose **HR admin** in the demo panel and reload. Nothing in this script needs them, and **reading dashboard pages needs no persona change** |
+| Fewer citations than the checklist names | Name what's on screen and click each through. Breadth varies, and the published run shows this prompt's twin `remote-004` failing workflow completion at document recall 0.50. Say that plainly; beat ⑧ comes back to it |
+| More citations than an earlier run | Also expected. A multi-document answer that cites fewer documents than its evidence gets one repair attempt. Narrate what's on screen |
+| The session record shows no rows for a turn | You're on an imported eval run, not a live session. The run's **Items** table says so. Your live turn is under `/dashboard/sessions` |
+| You run past 10:00 | Cut the dashboard tour (6:00–6:25) to 10 seconds and drop the optional email beat. Don't cut either task's dashboard frame; that's where DEMO.6 ①–③ are shown |
