@@ -1,7 +1,6 @@
 """`agent/snapshot.py` — the post-synthesis snapshot-consistency step (spec §7.4, P29).
 
-The two live sentences this exists for, both from the 2026-09-15 turns on `ebd665a`
-(`docs/evidence/demo-task-1-live-2026-09-15-session.json` and `…-2-…`):
+The two live sentences this exists for, both from the 2026-09-15 live turns on `ebd665a`:
 
 * *"You have completed 45 months of continuous service as of 1 September 2026, which exceeds the
   12-month minimum…"* — the snapshot date restated above the page's own footer, and a tenure the

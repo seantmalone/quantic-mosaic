@@ -41,7 +41,7 @@ report has a judged "before" column; re-drive all three deployed arms after the 
 that R5 changes what the `no_structured_tools` arm disables; report the higher `nudge_rate` as a
 diagnostic, not a regression.
 
-**Implemented (P13, six commits ending b24ad32; 1,703 tests, 21 new).** Every mandated wording is
+**Implemented (six commits ending b24ad32; 1,703 tests, 21 new).** Every mandated wording is
 verbatim. Two facts a reader should know: the route prompt now lists the corpus titles read from
 the committed index manifest, with a test that fails if the two ever drift; and G1 scores
 compliance-engine evidence on the identical dense path retrieval uses, so a chunk that scores
@@ -175,16 +175,16 @@ labels 1.00 on the seed subset (n=7) and 1.00 on the hard subset (n=8).
 
 Ablation unchanged: `no_structured_tools` moves workflow completion by −0.154 against the
 pre-registered 0.25 threshold, so the hypothesis stays "not supported". This table is the column
-every P13 and performance change is measured against.
+every quality and performance change is measured against.
 
 ---
 
-## 2026-09-10 — After the quality fixes: the P13 column (deployed, `r_1789069158_baseline`)
+## 2026-09-10 — After the quality fixes (deployed, `r_1789069158_baseline`)
 
 Same 26 items, same live instance, same judge model, one code change between the columns (the seven
 mitigations) plus the rate-limiter setting on the service. 296 judge calls (≈ $0.18).
 
-| Metric | Before | After P13 |
+| Metric | Before | After quality fixes |
 |---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.692 | **0.808** |
 | Groundedness | 0.979 | 1.000 |
@@ -203,7 +203,7 @@ mitigations) plus the rate-limiter setting on the service. 296 judge calls (≈ 
 remaining strict-pass gap to 0.85 is five items. The price is visible in two rows: the breadth
 reminder now fires on most single-search turns (nudge rate 0.115 → 0.577), and each of those turns
 spends one more act step, so the median turn is ~5 s slower even with the limiter raised; the tail
-improved because the worst turns no longer stall. The performance waves are what claw the median
+improved because the worst turns no longer stall. The performance changes are what claw the median
 back. This column carries no human-agreement figure: the blind reference labels are re-authored
 once, for the final published run.
 
@@ -216,44 +216,43 @@ latency, a fitted latency model); (2) a map of the turn's serial structure from 
 budgeted live latency probe of Haiku (input tokens, output tokens, JSON-schema output, prompt
 caching); (4) three independent proposals from different angles (fewest round-trips, per-call
 latency, infra and overlap); (5) two adversarial reviewers per lever (latency realism; quality and
-grading risk); (6) one ordered plan in waves — zero-cost/no-spec-change, zero-cost/re-evaluated,
-paid/owner-approval. Results and the plan will be appended here and filed under
-`docs/superpowers/plans/`.
+grading risk); (6) one ordered plan in tiers — zero-cost/no-spec-change, zero-cost/re-evaluated,
+paid/owner-approval. Results and the plan are appended here.
 
-**Result (49 agents; plan filed at `docs/superpowers/plans/2026-09-10-performance-plan.md`).** Every
+**Result (49 agents).** Every
 lever was proposed from one of three angles, then put through two adversarial reviewers (latency
 realism; quality and grading risk); only levers both kept survive, at the reviewers' figures.
 
-| Wave | What it contains | Predicted p50 / p95 after | Cost | Needs |
+| Tier | What it contains | Predicted p50 / p95 after | Cost | Needs |
 |---|---|---|---|---|
 | Baseline | — | 17.6 s / 47.7 s | — | — |
-| 1 · zero cost, no graded change | rate-limiter hygiene (measurement only; 0 ms interactive), query-embedding memo (−0.3 s), trace store off the request path (−0.1 s) | 13.7 s / 35.2 s | $0 | docs updates only |
-| 2 · zero cost, changes graded behaviour | act loop stops writing a throw-away 224-token answer (−1.5 s), synthesis output diet (−0.5 s), full chunk text on search hits so a fetch step disappears (−0.4 s), input diet (cost only), streaming the answer (first prose 3 s sooner at p50, 17 s at p95) | 11.4 s / 33.1 s | $0 | a new sweep + judge + labels; one spec non-goal reversed for streaming |
+| 1 · zero cost, no evaluated change | rate-limiter hygiene (measurement only; 0 ms interactive), query-embedding memo (−0.3 s), trace store off the request path (−0.1 s) | 13.7 s / 35.2 s | $0 | docs updates only |
+| 2 · zero cost, changes evaluated behaviour | act loop stops writing a throw-away 224-token answer (−1.5 s), synthesis output diet (−0.5 s), full chunk text on search hits so a fetch step disappears (−0.4 s), input diet (cost only), streaming the answer (first prose 3 s sooner at p50, 17 s at p95) | 11.4 s / 33.1 s | $0 | a new sweep + judge + labels; one spec non-goal reversed for streaming |
 | 3 · paid | Render Starter 0.5 CPU ≈ −0.45 s; keep-alive pinger | not credited | $7/month | owner approval; not recommended |
 
-Wave 3's "keep-alive pinger" is the *paid* version of the idea — it is priced there beside Render
+Tier 3's "keep-alive pinger" is the *paid* version of the idea — it is priced there beside Render
 Starter and is still not recommended. The free GitHub Actions pinger decided on later that day (see
 *Cold start, measured three times*, below) costs nothing but free instance-hours and is a separate
 call.
 
-The largest single interactive win is in Wave 2: nearly half of all act-loop output tokens are a
-closing answer that nothing reads. Wave 1 is being implemented in the final fix wave (P14); Wave 2
+The largest single interactive win is in Tier 2: nearly half of all act-loop output tokens are a
+closing answer that nothing reads. Tier 1 is being implemented in the next fix phase; Tier 2
 awaits Sean's decision because it re-drives the evaluation and re-labels.
 
 ---
 
-## 2026-09-10 — Wave 1 and Wave 2 implemented; streaming verified live
+## 2026-09-10 — Tier 1 and Tier 2 implemented; streaming verified live
 
-- **Wave 1 (P14, 1,745 tests):** query-embedding memo (the same question was embedded twice on most
+- **Tier 1 (1,745 tests):** query-embedding memo (the same question was embedded twice on most
   turns), trace-store reads off the request path, the limiter documented with the measured account
   limits, a contamination gate that refuses to publish a run with any failover or retry, and the
   Gemini price table corrected for the paid tier.
-- **Wave 2 A–D (P15, 1,767 tests), one commit each:** the act loop's closing step is one sentence
+- **Tier 2 A–D (1,767 tests), one commit each:** the act loop's closing step is one sentence
   instead of a discarded 224-token answer; synthesis output trimmed on the two de-risked clauses;
   search hits carry the whole passage (with the quarantine shield: a poisoned chunk's text never
   reaches the model); the model-facing tool envelopes drop telemetry keys, with one shared
   definition of which envelopes count as evidence.
-- **Wave 2 E (P16, 1,814 tests):** the answer streams to the browser block by block and is replaced
+- **Tier 2 E (1,814 tests):** the answer streams to the browser block by block and is replaced
   by the final version when the guardrails finish; the chat page narrates each step as it starts
   ("Searching the policy library…", "Checking your PTO balance…", "Writing the answer…"); the
   per-string span cap raised to 24 KB so a search result is stored whole.
@@ -261,18 +260,18 @@ awaits Sean's decision because it re-drives the evaluation and re-labels.
   first answer block arrived while later blocks were still being written, eleven progress lines, a
   fully cited answer, no errors. Reviewers had flagged this as the one thing tests could not prove.
 
-Next: one deploy carrying all three phases, the final three-arm sweep with the judge, blind labels,
-and the before / after-P13 / final comparison.
+Next: one deploy carrying all three changes, the final three-arm sweep with the judge, blind labels,
+and the before / after-quality-fixes / final comparison.
 
 ---
 
-## 2026-09-11 — The final column: after Waves 1 and 2 (deployed, `r_1789086979_baseline`)
+## 2026-09-11 — The final column: after Tiers 1 and 2 (deployed, `r_1789086979_baseline`)
 
-One deploy carrying P14, P15 and P16; the same 26 items, judge and instance as the two earlier
+One deploy carrying both tiers; the same 26 items, judge and instance as the two earlier
 columns. 249 judge calls (≈ $0.15). Blind reference labels re-authored for these answers before the
 judge ran: agreement 1.00 on the seed subset (n=8).
 
-| Metric | Before | After P13 (quality) | Final (quality + performance) |
+| Metric | Before | After quality fixes | Final (quality + performance) |
 |---|---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.692 | 0.808 | **0.808** |
 | Groundedness | 0.979 | 1.000 | 0.982 |
@@ -286,7 +285,7 @@ judge ran: agreement 1.00 on the seed subset (n=8).
 | Latency p95 | 47.7 s | 39.2 s | **32.4 s** |
 | Ablation delta (tools removed) | −0.154 | −0.192 | −0.231 (bar 0.25) |
 
-**Reading it.** The performance waves gave back the five seconds the quality fixes had cost at the
+**Reading it.** The performance changes gave back the five seconds the quality fixes had cost at the
 median and cut the tail by a third, with no quality metric moving more than noise (groundedness
 1.000 → 0.982 is one item; citation accuracy and tool selection improved). Five items still fail
 strict pass: two lose one answer block to the citation guardrail (a citation to an id that does not
@@ -323,8 +322,8 @@ wall clock rather than the sum of its rounded segments. Probe 1's 2.8 s to `/rea
 readiness-fix build reloading a cold ONNX session; probes 2 and 3 answered `/ready` in 0.1 s, which
 is what the baked model cache buys once the instance is up. The script prints its table and writes
 no file, so the three probes are transcribed into
-[`docs/evidence/cold-start-probes.json`](evidence/cold-start-probes.json) with their timestamps,
-their shas and the ledger entry each came from.
+[`docs/evidence/cold-start-probes.json`](evidence/cold-start-probes.json) with their timestamps
+and their shas.
 
 **Decision (Sean, 2026-09-10 20:40Z, taken before these probes ran).** Measure the cold start first,
 then remove it: keep the table above as the documented no-ping behaviour — it is the number the
@@ -346,7 +345,7 @@ disabling the workflow puts the service back to them.**
 
 ## 2026-09-11 — What a real browser showed, and the last fixes
 
-A live session in Chrome through the grader link (after the final review's fixes were deployed):
+A live session in Chrome through the access link (after the final review's fixes were deployed):
 
 - **Worked as designed.** Cookie exchange from the tokenized link; a PTO question narrated on the rail
   step by step in plain language; a cited answer with policy-fact and recommendation blocks; demo 2
@@ -355,12 +354,12 @@ A live session in Chrome through the grader link (after the final review's fixes
   ticket MOCK-HR-000002 written.
 - **Defect 1 — the keep-alive was not keeping anything alive.** GitHub's scheduler ran the `*/10`
   workflow twice in nine hours (09:48Z and 13:53Z), so the instance was asleep when the page was
-  opened. Fix (P21): a self-ping inside the app every ten minutes through its own public hostname,
+  opened. Fix: a self-ping inside the app every ten minutes through its own public hostname,
   which runs exactly when the instance is up and needs no scheduler; the Actions workflow stays as a
   second layer and the docs state the measured scheduler behaviour.
 - **Defect 2 — a confirmed write was denied by the answer.** The synthesis prompt carried the created
   ticket verbatim, yet the model closed with an escalation saying it could not open PTO requests.
-  Fix (P22): a deterministic "outcome consistency" step builds the first answer block from the tool
+  Fix: a deterministic "outcome consistency" step builds the first answer block from the tool
   result ("Done: HR ticket … was opened in queue …"), replaces an escalation that denies a performed
   action, drops a next step that asks for the write again, and a prompt rule points the model the
   same way; the stub demo and the live rehearsal script now assert the ticket id appears.
@@ -370,33 +369,33 @@ A live session in Chrome through the grader link (after the final review's fixes
 - **CI.** The new coverage tracer halved the CI runner's speed and exposed a race in a health-check
   test (the boot-time import of twelve evaluation runs was still running); the test now waits for the
   import instead of racing it. Coverage gate: 90% enforced in CI; measured 95.5% lines / 87% branches
-  before the last two waves, 94% with the branch-weighted total afterwards.
+  before the last two fix phases, 94% with the branch-weighted total afterwards.
 
 Final suite: 1,933 tests, pristine under `filterwarnings = error`.
 
 ---
 
-## 2026-09-11 — The independent grade, and the last two waves
+## 2026-09-11 — An independent rubric review, and the fixes it prompted
 
-An independent grading pass (22 agents: inventory, one grader per rubric bullet, a skeptic on every
-score, a synthesized card — committed under `docs/evidence/`) put the project at band 5 with two
-bullets at 4.5. Everything checkable that it found was fixed in two waves:
+An independent, read-only rubric review (22 agents: inventory, one reviewer per rubric bullet, a
+skeptic on every finding, a synthesized summary) checked the project against the rubric. Everything
+checkable that it found was fixed in two phases:
 
-- **Grade-card fixes (P23).** The deployed MCP endpoint had been rejecting external clients with
+- **Review fixes.** The deployed MCP endpoint had been rejecting external clients with
   HTTP 421 (the SDK's DNS-rebinding protection defaults to loopback hosts) while the documents
-  invited a grader to attach MCP Inspector; the allowlist is now a setting, set on the service, and
+  invited a reader to attach MCP Inspector; the allowlist is now a setting, set on the service, and
   an external `initialize` answered 200 at 20:32Z. Stale test and statement counts, a 120- versus
   420-person headcount contradiction, a stale traceability row, run files that recorded the commit as
   "dev", an overstated labeller-independence claim, and an architecture page that loaded web fonts
-  against a "no network" claim were all corrected; the process trail (briefs, reports, ledger) is now
-  committed under `docs/process/sdd/`, and live demo transcripts are pinned under `docs/evidence/`.
-- **Model-behaviour fixes (P24, approved by Sean).** Multi-document answers now cite every document
+  against a "no network" claim were all corrected, and live demo transcripts are pinned under
+  `docs/evidence/`.
+- **Model-behaviour fixes (approved by Sean).** Multi-document answers now cite every document
   their evidence spans, with one bounded repair call when they do not; two HR-adjacent
   out-of-corpus questions (tuition reimbursement, referral bonus) joined the dataset, which is now
   28 items; the two citation-guardrail block drops were traced to a quarantined chunk carrying a
   citable id and a one-character transcription slip, both fixed at the root.
 
-| Metric | Before | After quality fixes | After perf waves | **Final (P24)** |
+| Metric | Before | After quality fixes | After performance changes | **Final (model-behaviour fixes)** |
 |---|---|---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.692 | 0.808 | 0.808 | **0.893** |
 | Groundedness | 0.979 | 1.000 | 0.982 | 0.984 |
@@ -417,15 +416,14 @@ rather than 1.0 and why "ground the next steps" is the recorded follow-up. The a
 
 ---
 
-## 2026-09-12 — Re-grade after the fixes
+## 2026-09-12 — Re-review after the fixes
 
-The four rubric bullets the independent card had capped were re-graded by fresh agents, each with a
-skeptic: RAG bullet 4.5 → 4.6, MCP bullet 4.8 → 5.0, architecture bullet 4.8 → 4.8, completion and
-integrity 4.5 → 4.8 (the rest unchanged at 5). Band 5 either way; mean ≈ 4.92, weakest 4.6. Demo 2 was
-re-run live on the final build during the re-grade: confirmation card, Confirm, ticket MOCK-HR-000006
+The four rubric areas the independent review had flagged (RAG, MCP, architecture, completion and
+integrity) were re-reviewed by fresh agents, each with a skeptic. Demo 2 was
+re-run live on the final build during the re-review: confirmation card, Confirm, ticket MOCK-HR-000006
 named first in the answer, four citations from two documents, 40 s.
 
-What the skeptic still holds against the RAG bullet, recorded here as the honest tail: remote-004 (the
+What the skeptic still holds against the RAG work, recorded here as the honest tail: remote-004 (the
 demo-1 mirror) cites two of four expected documents because retrieval never surfaced the other two;
 unsafe-001, the dataset's only confirmation-gate probe, escalated instead of proposing the gated write
 in the final run (the live demo path itself works, as above); gold-fact coverage dipped
@@ -444,8 +442,7 @@ page, and a needless "assume the HR admin role" step before the dashboard.
 **Method.** A headless browser captured 53 screens (every page and state at desktop, laptop and phone
 widths, with every visible number and every overflow measured); seven auditors reviewed the renders
 through separate lenses; skeptics confirmed each serious finding against its screenshot; the result was
-155 verified findings and a plan with 15 principles, each carrying a mechanical detection rule
-(`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md`, screens under `docs/evidence/ux-audit-2026-09-14/`).
+155 verified findings and a plan with 15 principles, each carrying a mechanical detection rule.
 
 **Target.** Three surfaces behind one shell: a chat that reads as a consumer product (one conversation
 column, plain language, sources as friendly references, a calm progress line, sticky composer), a
@@ -453,14 +450,14 @@ clearly labelled Demo & grader panel (persona, scripted prompts that prefill, th
 session in the dashboard, a plain "how this answer was produced"), and a dashboard that keeps every
 technical detail but is tidy and open to anyone holding the token.
 
-**Waves.** W0 a light brand identity (a resolving-mosaic mark, verdigris accent, Archivo + Public Sans
-self-hosted at 103 KB, 70/70 contrast pairs). W1 one masthead on every page, one gate (roles gate only
+**Fix batches.** First, a light brand identity (a resolving-mosaic mark, verdigris accent, Archivo + Public Sans
+self-hosted at 103 KB, 70/70 contrast pairs). Then one masthead on every page, one gate (roles gate only
 the three writes), themed error pages, a policy reader route, conversations that survive a reload, and a
-Playwright harness whose principle checks run in CI. W2 the chat redesign with jargon denylists as
-permanent tests. W3 the demo panel, an outcome-aware live region, refusals that name five example
-policies and link the library. W4 one formatter path for every number, ledes and breadcrumbs, tables
+Playwright harness whose principle checks run in CI. Then the chat redesign with jargon denylists as
+permanent tests. Then the demo panel, an outcome-aware live region, refusals that name five example
+policies and link the library. Then one formatter path for every number, ledes and breadcrumbs, tables
 that scan, KPI tiles that agree with their detail, and the tools rollup no longer counting the
-confirmation gate as an error. W5 skip link, focus management, 44 px targets, token and painted
+confirmation gate as an error. Finally skip link, focus management, 44 px targets, token and painted
 contrast checks, dark-theme captures, tenure in words at the tool boundary.
 
 | Measure | Before | After |
@@ -472,18 +469,18 @@ contrast checks, dark-theme captures, tenure in words at the tool boundary.
 | Internal identifiers in chat | span kinds, guardrail names, token counts | 0 (denylist test) |
 | Steps to reach the dashboard | assume admin, then navigate | one click from any page |
 
-Each wave shipped with before/after screens (`docs/evidence/ux-w1` … `ux-w5`, `ux-final`). The
-independent re-audit's score is appended below when it lands.
+The final screens are committed under `docs/evidence/ux-final/`. The independent re-audit's score is
+appended below.
 
-## 2026-09-15 — After the independent re-audit: the residual wave, and a budget that had become marginal
+## 2026-09-15 — After the independent re-audit: the residual fixes, and a budget that had become marginal
 
-The 48-agent re-audit of the five waves (`docs/evidence/ux-reaudit-2026-09-15.md`) verified 138 of
-the 155 inventory findings fixed and the demo-panel and dashboard goals met, and failed its own
-gate on four Criticals — three of them regressions the waves had introduced: every dashboard chart
+The 48-agent re-audit of those fix batches verified 138 of
+the 155 inventory findings fixed and the demo-panel and dashboard goals met, and fell short of its own
+pass threshold on four Criticals — three of them regressions the fix batches had introduced: every dashboard chart
 collapsed to about a quarter of its panel; a completed HR ticket rendered under "What I suggest you
 do" with the "not company policy" footnote beneath it; the model's own `next_steps` painted with a
 deadline computed a month early and an employee id; and following a citation left the reader with
-no way back to the conversation. W6 fixed each at its cause rather than at the screen — a sized
+no way back to the conversation. The next fix batch fixed each at its cause rather than at the screen — a sized
 chart container; a `performed` block type that only the outcome step may write, with a model-emitted
 one demoted before anything else runs; `next_steps` rendered only on outcomes that group nothing;
 a date-consistency step that recomputes or removes "(N days before <date>)" arithmetic; the chat URL
@@ -493,45 +490,44 @@ the same question and requires one answer. The recorded demo fixtures (verbatim 
 recordings against the old prompt) were then amended so the chat surface no longer restates the
 data snapshot date or gives tenure in months, with a contract test that fails on the old text.
 
-A live run of the flagship demo prompt on the W6 build surfaced something the evaluation had not:
+A live run of the flagship demo prompt on that build surfaced something the evaluation had not:
 the model made eight tool calls — profile, compliance, a section read and one breadth search per
 relevant document — and asked for a ninth, so the turn stopped at `AGENT_MAX_TOOL_CALLS=8`, was
 labelled partial with the "tool-call limit" preface on top of a complete nine-block answer, and
 skipped the breadth repair (two documents cited, the third retrieved but unused). The 2026-09-11 run
-of the same prompt needed seven. P24's breadth rules had made a cap of 8 marginal for a
-four-document question; the cap is now 12 (P28), with the six-step and 90 s bounds unchanged.
-Evidence: `docs/evidence/demo-task-1-live-2026-09-15-cap8-partial.txt` and the re-run after P28.
+of the same prompt needed seven. The model-behaviour fixes' breadth rules had made a cap of 8 marginal
+for a four-document question; the cap is now 12, with the six-step and 90 s bounds unchanged.
 
-| Measure | After W5 | After W6 + P28 |
+| Measure | After the first fix batches | After the residual fixes and the cap of 12 |
 |---|---|---|
 | Tests | 2,186 + 71 browser | 3,040 + 299 browser (final) |
 | Browser routes under test | 3 | 18 |
 | Re-audit: inventory items verified fixed | 138 / 155 | 150 / 155 (re-audit #2), then four further audits on new residuals |
 | Re-audit: principles passing | 6 / 15 | 9 / 15 (re-audit #4) |
-| Re-audit: Critical residuals | 4 | 1 (a nav-height regression, fixed in W9) |
-| Owner goals met | (b), (c) | (b), (c); (a) still gated on residuals each audit finds in the previous wave |
+| Re-audit: Critical residuals | 4 | 1 (a nav-height regression, fixed later) |
+| Owner goals met | (b), (c) | (b), (c); (a) still blocked by residuals each audit finds in the previous batch |
 | Demo-1 live: outcome / documents cited | partial / 2 (cap 8) | answered / 4 (cap 12) |
 | Demo-2 live: the confirmed write's account | a recommendation under "What I suggest you do" | the `performed` lede, first |
 
-**What the stubs could not show.** Re-running both demo tasks live on the P28 build (both answered;
+**What the stubs could not show.** Re-running both demo tasks live on the cap-12 build (both answered;
 demo 1 made nine tool calls and cited four documents) exposed two defects that only a real model
 produces. First, after the confirmed ticket write the model itself wrote "HR ticket MOCK-HR-000007
 has been created" — as a *recommendation*. The outcome step's one-account guard saw the id in the
 model's block, kept that block as the account, and so the "Done" lede never appeared: the re-audit's
 Critical was back on the live path, under "What I suggest you do", with the not-company-policy footnote.
 Second, the snapshot-date rule in the synthesis prompt held in one run ("3 years 9 months", no date)
-and not in the next ("45 months of continuous service as of 1 September 2026"). P29 made both
-deterministic: a model block that names the write id is removed and the statement built from the
+and not in the next ("45 months of continuous service as of 1 September 2026"). A follow-up fix made
+both deterministic: a model block that names the write id is removed and the statement built from the
 tool result always leads; a snapshot step strips any restatement of a tool result's `as_of` date in
 any format and rewrites a month-count tenure to the tool's own words, and records what it changed.
-Evidence: `docs/evidence/demo-task-{1,2}-live-2026-09-15*.txt/.json` (before) and `…-p29.txt` (after): demo 1 now
+After it, demo 1
 reads "3 years 9 months of continuous service" with no date; demo 2 leads with "Done: your request is with the
 HR Time Off team. Reference MOCK-HR-000008."
 
-**The second re-audit, W7, and the logic review.** Re-audit #2 (45 agents) failed its gate on one
-Critical — a W6 regression where a phone never scrolled to the newest answer — while passing 8 of 15
+**The second re-audit, the fixes after it, and the logic review.** Re-audit #2 (45 agents) fell
+short of its pass threshold on one Critical — a regression from the residual fixes where a phone never scrolled to the newest answer — while passing 8 of 15
 principles (was 6; human precision, no internal identifiers and no dead links passed for the first
-time) and both the demo-panel and dashboard goals. W7 closed it with 31 Importants: the chat picks its
+time) and both the demo-panel and dashboard goals. The next fix batch closed it with 31 Importants: the chat picks its
 scroller at runtime and re-measures on resize, the reader's own record is a `record` block rather than
 disclaimed advice, the demo panel is always expanded (owner decision), the dashboard menu's group labels
 are eyebrows and its page links pills (owner decision), run labels and enum cells are humanised once,
@@ -547,12 +543,12 @@ logically wrong for their persona. The pattern was one: the deterministic layer 
 were never reconciled — the engine scored the notice requirement met and the answer called it unmet;
 a non-compliant request was still filed and then denied; a director was told to get her director's
 approval; notice arithmetic was anchored on the data snapshot rather than the submission date; the
-follow-up turn remembered nothing; a confirmation could be replayed. W8 is the logic wave: verdicts,
-arithmetic, dates, approvers, ids and the account of a write are owned by the deterministic layer, and
-the model's prose is reconciled against it or replaced. Its measure is the re-run of the judged
+follow-up turn remembered nothing; a confirmation could be replayed. The first logic fix put verdicts,
+arithmetic, dates, approvers, ids and the account of a write in the hands of the deterministic layer,
+and the model's prose is reconciled against it or replaced. Its measure is the re-run of the judged
 evaluation and of the 16-scenario matrix after deploy (appended below).
 
-**Measured after W8 (interim, not published).** The judged 28-item run on the W8 build gave groundedness
+**Measured after the first logic fix (interim, not published).** The judged 28-item run on that build gave groundedness
 1.000 (was 0.984), document recall 0.961 and workflow completion 0.893 unchanged, and strict pass 0.821
 (was 0.893): two regressions — an out-of-corpus question answered with an escalation instead of a
 refusal, and a multi-document answer that lost one of its three documents to a post-synthesis step —
@@ -561,8 +557,8 @@ the remaining defects were deterministic gaps the first pass had not reached (th
 supply the submission date; a missing `days` argument made the balance rule "not stated" and a request
 the engine could not clear was still filed; approver names grafted into quoted policy text; a schema
 bug in the repair call). Re-audit #4 of the interface reached 9 of 15 principles (from 6 at the start).
-W9 fixed the evaluation regressions and the interface residuals; W10 closes the demo-path gaps; the
-published numbers below are from the run after both.
+A further fix closed the evaluation regressions and the interface residuals, and a last one the
+demo-path gaps; the published numbers below are from the run after both.
 
 **Published measurements at the time (run `r_1789555212_baseline`, build `bd4ac93`, 2026-09-16) —
 superseded on 2026-09-22 by `r_1790074972_baseline` (build `8a89310`); see the entry below.**
@@ -585,14 +581,14 @@ superseded on 2026-09-22 by `r_1790074972_baseline` (build `8a89310`); see the e
 | Tests (unit/contract/integration + browser) | 2,002 + 0 | 3,040 + 299 |
 | Coverage (statements / branches) | 94% | 95% / 87% |
 | UX principles passing (independent re-audit) | 6 / 15 (first audit) | 9 / 15 (fourth audit) |
-| Demo scenarios logically right (16 persona paths) | 5 / 16 (before W8) | 13 / 16 (final) |
+| Demo scenarios logically right (16 persona paths) | 5 / 16 (before the logic fixes) | 13 / 16 (final) |
 
 The evaluation's headline held at the target while the product underneath it changed shape: the
 deterministic layer now owns every verdict, date, approver, id and balance figure the answer states,
 which is why workflow completion rose and why the two judge-validation subsets moved apart in the
 right direction. The three items still failing are the same three long-standing near-misses (two tool
 recalls where the model skips a lookup on a policy question; one judge score of 0.80). What we did not
-get: the UX gate itself, which still fails on residuals each audit finds in the previous wave's fixes —
+get: the UX audit's pass threshold, which is still missed on residuals each audit finds in the previous batch's fixes —
 diminishing but non-zero — and 100% of the persona scenarios; both are listed as follow-ups.
 
 **And one row this table did not carry until 2026-09-21.** Clarification accuracy fell **0.667 → 0.333**
@@ -607,55 +603,52 @@ against the scenario's schema (a `days` that disagrees with the dates is an argu
 stated first on yes/no workflow questions; blocks typed by provenance (an engine next step is policy, not
 advice); approver names substituted at render for every role the engine resolved; the balance decomposition
 rendered only from the envelope with its as-of date; quick replies generated from the router's unfilled
-slots; one retrieval before any out-of-scope refusal. From the fourth UX audit: the P9/P10/P14 spellings
+slots; one retrieval before any out-of-scope refusal. From the fourth UX audit: the spellings
 and denominators, keyboard reach of scroll containers, the `projected_forfeit_on_31_dec` field naming, and
 the eval fixture's own denominators. One prose glitch visible on the live Berlin answer ("alongside your
 manager Dana approval") belongs to the approver-substitution item.
 
 ---
 
-## 2026-09-21 to 2026-09-22 — The grade-and-fix pass: an independent grading, three baseline drives, and what the fixes measured
+## 2026-09-21 to 2026-09-22 — An independent rubric review, three baseline drives, and what the fixes measured
 
-**Question.** The submission was complete and the deployed build warm. Graded against the rubric by
+**Question.** The submission was complete and the deployed build warm. Checked against the rubric by
 an *independent* reader rather than by its author, where does it actually stand, and which of the
 findings are real defects rather than taste?
 
-**Evidence.** An 82-agent grading workflow read the repository and the live service read-only at
+**Evidence.** An 82-agent review workflow read the repository and the live service read-only at
 `98c893f` — assessors over grouped rubric sections, one adversarial skeptic per flagged finding, one
-synthesising grader — and returned **band 4, top of the band**, with 27 confirmed gaps ranked by what
-they cost. The card and its machine twin are committed:
-[`docs/evidence/grade-card-2026-09-21.md`](evidence/grade-card-2026-09-21.md) and
-[`grade-card-2026-09-21-gaps.json`](evidence/grade-card-2026-09-21-gaps.json). What capped the grade
-was not capability but the final publish pass:
+synthesising reviewer — and returned a ranked list of confirmed findings. The most serious were
+not about capability but about the final publish pass:
 
 * `scripts/paste_eval_numbers.py --check` exited **1**. `latest.json` and `REPORT.md` published
   `r_1789555212_baseline`; `README.md`, `design-and-evaluation.md`, `deployed.md` and three more
   published `r_1789166880_baseline`, with eight headline figures different — four of them more
-  flattering in the graded documents.
+  flattering in the published documents.
 * `REPORT.md` contradicted itself: its ablation baseline column came from a **different run** than
   its own headline, under the sentence *"Every figure below comes from that one run."*
 * **Clarification accuracy 0.333 (n = 3)** appeared in `REPORT.md` and the dashboard and in no
   narrative document — the one metric of the 2026-09-16 run that had got worse, while the last
-  clarification figure this log carried was the **1.000** of the P13 column above.
+  clarification figure this log carried was the **1.000** of the quality-fixes column above.
 * *Known limitations* in `design-and-evaluation.md` described a superseded run's failures, and the
   action-safety row still read `n = 28` where the run scored it on `n = 1`.
 
 **Decision (Sean, 2026-09-21): fix the code defects, re-measure on the shipped build, and disclose the
-rest.** The rule for the wave was that no document is repaired by hand where a measurement can be
+rest.** The rule for this work was that no document is repaired by hand where a measurement can be
 re-taken, and no figure is quoted from a run the deployed build did not produce. Each task ran as an
 Opus implementer with an independent reviewer per task and adversarial verification of each finding.
 
 **The code changes that could move a metric.**
 
-* **Clarification** (gaps 4a, 4b). `_clarification_text` now joins **every** unfilled slot instead of
+* **Clarification.** `_clarification_text` now joins **every** unfilled slot instead of
   the first, `CLARIFY_QUESTIONS` gained an `employee_data` question, and — after the first re-drive
   showed the real cause — the workflow is inferred from the turn's topic words when the router names
   **none**, so a turn the router classes as policy QA still asks for the slots its topic needs.
-* **Profile debt** (gap 11). `_profile_outstanding` keys on the recorded *arguments* of the tools that
+* **Profile debt.** `_profile_outstanding` keys on the recorded *arguments* of the tools that
   need a profile rather than on an `employee_id` in the result body, so a `check_policy_compliance`
   call for the actor raises the debt. This is what closed `remote-003`'s four-run tool-recall miss.
-* **The write path** (gaps 19, 21, and two defects found by driving the live demo rather than the
-  suite). A *confirmed* `draft_hr_email` had been narrated as an evidence refusal — the draft existed,
+* **The write path** (two review findings, and two defects found by driving the live demo rather
+  than the suite). A *confirmed* `draft_hr_email` had been narrated as an evidence refusal — the draft existed,
   `MOCK-EMAIL-000018`, and the reader was told the policy library had nothing — because "draft me an
   email to my manager" searches nothing and G1 saw `candidates: 0`. G1 gained one exemption: a turn
   whose gated write has been performed is grounded by its receipt, and the clauses are still measured
@@ -714,8 +707,8 @@ the model kept searching and met the three-document end state it misses on basel
 **Cost and wall clock.** The two committed trios cost **$2.19** (`e85305b`: 0.7475 + 0.6171 + 0.8263)
 and **$2.24** (`8a89310`: 0.7731 + 0.6400 + 0.8244) in agent spend, each trio about 21–22 minutes of
 wall clock; the two judge passes made 252 and 268 calls at **≈ $0.16–$0.18** each. The discarded
-diagnostic drive is not in a committed file, so its cost is not quoted here. The whole wave's
-measurement bill is therefore about **$5** — the price of refusing to publish a number the shipped
+diagnostic drive is not in a committed file, so its cost is not quoted here. The whole measurement
+bill is therefore about **$5** — the price of refusing to publish a number the shipped
 build did not produce.
 
 **Published measurements (run `r_1790074972_baseline`, build `8a89310`, 2026-09-22).**
@@ -749,12 +742,12 @@ three (and met that end state on the previous published run, so some of it is si
 and `equipment-001` is a genuine wrong answer on a conflict inside the corpus — the USD 500 director
 threshold belongs to *Requesting Additional Equipment*, while the approval matrix routes a laptop
 *refresh* to the direct manager alone, and the dataset's own gold answer makes the same conflation.
-That last one is the most useful finding of the wave, because no prompt change fixes it: the corpus
+That last one is the most useful finding of this work, because no prompt change fixes it: the corpus
 has to decide what a priced refresh is.
 
 **What we did not get.** The ablation hypothesis is still unsupported after seven sweeps (−0.192,
 −0.154, −0.192, −0.231, −0.143, −0.179 and −0.143 against a 0.25 bar — this entry first listed five of
-the seven, omitting two of the morning's own drives; the round-3 entry below carries the full list). The blind agreement subset came back unanimous
+the seven, omitting two of the morning's own drives; the 2026-09-23 entry below carries the full list). The blind agreement subset came back unanimous
 again, so judge validation still rests on the single discriminating cell the hard subset supplies.
 Action safety, escalation and each per-workflow indicator still rest on one dataset item each; the
 denominators are published with their `n` rather than widened, because widening them means new items
@@ -762,30 +755,28 @@ and another drive.
 
 ---
 
-## 2026-09-22 — Round 2 of the grade-and-fix pass: a second re-grade, two more drives, and the denominators that were n = 1
+## 2026-09-22 — A second independent review: two more drives, and the denominators that were n = 1
 
-**Question.** The wave above closed 27 gaps and the tip was green and live. Re-graded from scratch at
-`2dee277`, does the work reach band 5 — and if not, what is left that a measurement rather than a
-rewrite has to settle?
+**Question.** The fixes above were in and the tip was green and live. Reviewed again from scratch at
+`2dee277`, what is left that a measurement rather than a rewrite has to settle?
 
-**Evidence.** A 78-agent grading workflow read the repository and the live service read-only at
-`2dee277` and returned **band 4 again, at the top of the band**, with **20 ranked gaps**
-(`regrade-gaps.json`, `regrade-report.md` in the wave's process trail). Nothing in the list was a
-capability failure. Two things capped it, and both were claims rather than code: the one-command
-build-provenance check four graded documents publish had stopped being true at `HEAD`, and — the
+**Evidence.** A 78-agent review workflow read the repository and the live service read-only at
+`2dee277` and returned a fresh ranked list of findings. Nothing in the list was a
+capability failure. The two most serious were claims rather than code: the one-command
+build-provenance check four published documents carry had stopped being true at `HEAD`, and — the
 finding that mattered — the flagship `clarification_accuracy = 1.000 (n = 3)` rested on an
 **off-topic question**. `clarify_topic_workflow` was matching its topic words against the router's
 free-text rationale *joined* with the reader's message, so an incidental "remote work" in the rationale
 outranked "time off" in the question: on the published run `amb-001` (*"Can I take some time off?"*) was
 served `amb-002`'s answer verbatim, asking for a destination country the item never needed. The judge
-passed it for naming missing information. Beside those: the graded corpus table came from a second
+passed it for naming missing information. Beside those: the published corpus table came from a second
 parser and disagreed with the deployed index on screen, a red `ux` job could ship a deploy, the
 published tool schema advertised a retrieval default the server never uses, and safety and escalation
 each rested on **one dataset item**.
 
 **Decision (Sean, 2026-09-22): fix the code and configuration, widen the two n = 1 denominators inside
 requirement 9's 20–30 band, resolve the `equipment-001` corpus incoherence editorially, then re-deploy
-and re-drive.** Same rule as round 1 — no document is repaired by hand where a measurement can be
+and re-drive.** Same rule as the first set of fixes — no document is repaired by hand where a measurement can be
 re-taken — with one addition: **no gold answer is edited to match a model**. Where a gold and the
 corpus disagreed, the corpus had to decide.
 
@@ -796,9 +787,9 @@ corpus disagreed, the corpus had to decide.
   (`orchestrator.py`, `clarify_topic_workflow`). And a **bare balance ask always clarifies**:
   `is_bare_balance_ask` fires when the router named no workflow, the intent is `employee_data`, the
   message asks about a balance and names neither which balance (twelve closed words) nor an employee
-  id — `amb-003` had been answered with the PTO balance on the first round-2 drive because the router
+  id — `amb-003` had been answered with the PTO balance on the first drive of this set because the router
   returned `needs_clarification: false`.
-* **The corpus stopped contradicting itself on `equipment-001`** — the wave's most useful finding, and
+* **The corpus stopped contradicting itself on `equipment-001`** — the most useful finding of this work, and
   the one no prompt change could fix. `equipment-and-asset` now says that a refresh falling due on the
   36-month cycle is an IT ticket and nothing else, *whatever the replacement costs*, that an **early**
   refresh is the direct manager's call, and that the USD 500 threshold governs *additional* equipment.
@@ -833,14 +824,14 @@ The first drive was discarded **before** anyone looked at its headline: it expos
 `expected_docs`/`expected_tools` were re-authored (retrieval stays permitted, it is no longer required —
 an email to "my manager" needs the profile and the balance, not a policy search), the bare-balance rule
 was written, `80a5a71` was deployed, and the re-drive is the published run. That is the same ruling as
-round 1's diagnostic drive and for the same reason: a figure measured against an expectation we were
+the first set's diagnostic drive and for the same reason: a figure measured against an expectation we were
 about to change is not a figure.
 
 **Published measurements at the time (run `r_1790110325_baseline`, build `80a5a71`, 30 items,
 2026-09-22) — superseded on 2026-09-23 by `r_1790130220_baseline` (build `34d50fb`); see the entry
 below.**
 
-| Measure | Round 1 (`r_1790074972`, 28 items) | Round 2 published (`r_1790110325`, 30 items) |
+| Measure | After the first fixes (`r_1790074972`, 28 items) | After the second fixes (`r_1790110325`, 30 items) |
 |---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.893 (25/28) | **0.900 (27/30)** |
 | Groundedness (judge) | 0.963 | 0.986 |
@@ -862,15 +853,15 @@ below.**
 | Items failing the composite | `remote-002`, `expenses-002`, `equipment-001` | `expenses-002`, `remote-004`, `unsafe-001` |
 | Tests (unit/contract/integration + browser) | 3,111 + 299 | **3,139 + 299** (collected at `44e5e9f`) |
 
-**Reading it.** `equipment-001` — the one genuinely wrong answer of round 1, at groundedness 0.688 —
+**Reading it.** `equipment-001` — the one genuinely wrong answer of the previous run, at groundedness 0.688 —
 scores **1.000** and passes, which is what the corpus fix bought. Its own *partial match* falls
 1.00 → 0.60 in the same move, against the five-fact-key gold the fix re-authored: a stricter gold costs
 a point on the metric that counts gold facts, and the run's partial-match mean rises anyway (on
 `inj-001`, 0.00 → 1.00). The two metrics that fall are the same
 two turns: `remote-004` never called `get_policy_section` (tool recall 0.75, document recall 0.50) and
 `unsafe-001` went straight to the confirmation card without the policy search its gold expects (tool
-recall 0.75, document recall 0.00) — both of them called that tool and met that end state on the round-1
-drive, and `remote-002`, which failed round 1's workflow clause, met its end state here. One item is
+recall 0.75, document recall 0.00) — both of them called that tool and met that end state on the previous
+published drive, and `remote-002`, which failed that drive's workflow clause, met its end state here. One item is
 0.033 on this set, and that is the whole of the movement in both directions. `expenses-002` fails a third
 time on the same contradicted claim.
 
@@ -913,8 +904,8 @@ shipped 1,100 is still chosen on chunk count and build time rather than on recal
 
 **Cost and wall clock.** The published trio cost **$2.28** in agent spend (0.8014 + 0.6799 + 0.7955),
 each arm 7–8 minutes of wall clock, and the judge pass made **266 calls at ≈ $0.16–$0.18**. The
-discarded drive is in no committed file, so its spend is not quoted. Round 2's measurement bill is
-therefore about **$2.5**, and the two rounds together about **$7.5** — the price of never publishing a
+discarded drive is in no committed file, so its spend is not quoted. This measurement bill is
+therefore about **$2.5**, and the two sets of fixes together about **$7.5** — the price of never publishing a
 figure the shipped build did not produce.
 
 **What we still did not get.** The ablation hypothesis remains unsupported after eight sweeps. `next_steps`
@@ -926,14 +917,13 @@ further would mean renegotiating the band, not writing more items.
 
 ---
 
-## 2026-09-23 — Round 3: a third re-grade, four application fixes, and an ablation arm that finally withholds
+## 2026-09-23 — A third independent review: four application fixes, and an ablation arm that finally withholds
 
-**Question.** Round 2 landed 20 fixes and the tip was green and live. Re-graded from scratch a third
+**Question.** The second set of fixes was in and the tip was green and live. Reviewed from scratch a third
 time at `39dc61c`, what is left — and how much of it is a *measurement* rather than a sentence?
 
-**Evidence.** The same read-only grading workflow returned **band 4 again, at the top of the band**, with
-**37 ranked gaps** (`regrade2-gaps.json`, `regrade2-report.md` in the wave's process trail). Again no
-capability failure. Four claims capped it, and this time three of the four were defects in the code or in
+**Evidence.** The same read-only review workflow returned a fresh ranked list of findings. Again no
+capability failure. Four claims led it, and this time three of the four were defects in the code or in
 a committed artifact rather than in prose:
 
 1. **The hard-subset labelling packet printed its own selection criterion.** `subset judge_lowest` stood
@@ -954,7 +944,7 @@ a committed artifact rather than in prose:
    −0.179.
 
 **Decision (Sean, 2026-09-22): fix the four at their cause, then re-deploy and re-drive the trio.** Same
-rule as the first two rounds — no document is repaired by hand where a measurement can be re-taken, and no
+rule as the first two sets of fixes — no document is repaired by hand where a measurement can be re-taken, and no
 gold answer is edited to match a model. The two fixes that can move a metric (the guard vocabulary and the
 tool-disabling boundary) had to be in a deployed build *before* any figure was quoted against them, which
 is why the published run is `34d50fb` and not `39dc61c`.
@@ -981,7 +971,7 @@ that exists to report it.
 
 **Published measurements (run `r_1790130220_baseline`, build `34d50fb`, 30 items, 2026-09-23).**
 
-| Measure | Round 2 published (`r_1790110325`, 30 items) | Round 3 published (`r_1790130220`, 30 items) |
+| Measure | Previously published (`r_1790110325`, 30 items) | Published (`r_1790130220`, 30 items) |
 |---|---|---|
 | Strict pass rate (target ≥ 0.85) | 0.900 (27/30) | **0.900 (27/30)** |
 | Groundedness (judge) | 0.986 | 0.984 |
@@ -1006,7 +996,7 @@ that exists to report it.
 **Reading it.** The same three items fail, and between them they trip **groundedness once, workflow
 completion twice, and behaviour class once on top of it** — which is the interesting part.
 `expenses-002` fails groundedness alone (0.79, six of seven claims supported, the seventh
-contradicted); its workflow clause, which failed in round 2, passes. `remote-004` fails workflow
+contradicted); its workflow clause, which failed on the previous run, passes. `remote-004` fails workflow
 alone: it called every one of its four `expected_tools` this time, so its tool recall went 0.75 → 1.00,
 but it still reached two of four `expected_docs` and its answer did not span the three distinct documents
 its end state wants. `unsafe-001` fails workflow **and** behaviour class: it called every gold tool too
@@ -1015,7 +1005,7 @@ its step cap before it proposed the ticket, so no confirmation card was ever ren
 written**, and `action_safety_pass_rate` is 1.000 over its two items beside that. Document recall and tool
 selection move up because of those same two turns. On this run **every one of the 30 items scores tool
 recall 1.00**, so no failure anywhere is attributable to tool selection — the claim the design document
-made one round too early is now true, and it is true of the run file rather than of a sentence.
+made one run too early is now true, and it is true of the run file rather than of a sentence.
 
 **The blind agreement figure got worse and that is the improvement.** `judge_agreement_rate` went
 1.000 → **0.875**, on `expenses-001`: reference `not_grounded`, judge `grounded` (1.000). Five of the
@@ -1028,7 +1018,7 @@ read as corroborating each other. Both blind sessions found the same defect inde
 same one the last two runs named: the next step *"Submit claims by 20th of month for same-month
 reimbursement"* restates a chunk that keys same-month payroll to an expense being **approved** by the
 20th. `next_steps` grounding remains the highest-value unimplemented fix in the project: it has now cost
-an agreement on 2026-09-11, on the round-2 run and on this one, and two independent blind sessions found
+an agreement on 2026-09-11, on the `r_1790110325` run and on this one, and two independent blind sessions found
 it on this run's answer without seeing each other's labels.
 
 **The ablation, re-driven on the shipped build — and for the first time the arm really withholds.**
@@ -1055,8 +1045,8 @@ cancelling — it gains `expenses-002`, whose only failing clause is the judged 
 true on an unjudged arm, and it loses `remote-002` on merit.
 
 **Cost and wall clock.** The published trio cost **$2.28** in agent spend (0.8015 + 0.6440 + 0.8387),
-7–8 minutes of wall clock each, and the judge pass made **273 calls at ≈ $0.16–$0.18**. Round 3's
-measurement bill is about **$2.5**; the three rounds together about **$10**, and the 28 committed run
+7–8 minutes of wall clock each, and the judge pass made **273 calls at ≈ $0.16–$0.18**. This
+measurement bill is about **$2.5**; the three sets of fixes together about **$10**, and the 28 committed run
 files sum to **$18.54** — which is past §9.8's "under $10 all-in" expectation, and `deployed.md`'s cost
 row says so rather than rounding it away.
 
@@ -1065,7 +1055,7 @@ close enough to the bar to suggest the bar was set by intuition rather than by a
 finding about the pre-registration, not about the system. `next_steps` are still not grounded against the
 evidence set. The breadth repair still does not widen `remote-004`'s citation set to three documents. A
 turn can still run out of act steps before it proposes a write, which is the new failure this run
-surfaced and the one a fourth round would take first. This paragraph also listed
+surfaced and the one a further fix would take first. This paragraph also listed
 `mcp/tools/check_policy_compliance.schema.json` as not naming `device_age_months`; **corrected
 2026-09-22** — the description has named that field and `days_since_final_day` since `6a4821a`, an
 ancestor of the published build `34d50fb`, so the documentary half of the guard defect was already
@@ -1073,13 +1063,13 @@ closed when this was written and nothing about it is deferred.
 
 ---
 
-## Demo talking points (to be finalised)
+## Demo talking points
 
 - The interface story: three independent audits of rendered screens, each one finding residuals in the
-  previous wave's fixes; principles passing went 6 → 8 → 7 → 9 of 15, and every regression class now has
+  previous batch's fixes; principles passing went 6 → 8 → 7 → 9 of 15, and every regression class now has
   a browser guard that fails on the build that had it.
 - The logic story: one screenshot ("Done — your request is with HR" next to "Submit the request") led to a
-  review of 512 captured turns and 16 fresh persona scenarios, 22 confirmed defect classes, and three waves
+  review of 512 captured turns and 16 fresh persona scenarios, 22 confirmed defect classes, and three fix batches
   that moved the deterministic layer in front of the prose — 5 → 8 → 13 of 16 scenarios logically right,
   with the evaluation's strict pass held at 0.893 and workflow completion up from 0.893 to 0.964.
 

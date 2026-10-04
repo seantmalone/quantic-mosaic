@@ -1,7 +1,7 @@
 """`agent/compliance.py` — the answer may not contradict the engine (W8, C03).
 
 The exhibits are the two demo-2 scenarios of the 2026-09-15 fresh run
-(`demo-path-review-2026-09-15.md` §5, rows 4 and 6), with the engine's own requirement rows as
+(a 2026-09-15 review of the demo paths), with the engine's own requirement rows as
 `check_policy_compliance` returned them on those turns.
 """
 

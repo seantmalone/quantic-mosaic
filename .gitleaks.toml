@@ -58,12 +58,10 @@ regexes = [
 # scan reads **history**: commit `16edf18` still carries both lines and no later commit can change
 # what an earlier one contains.
 #
-# `docs/process/sdd/` joins them for the same reason at one remove (P23). That directory is the
-# committed process trail — the phase briefs and reports, reproduced verbatim so the AI-use
-# disclosure can be audited — and `P11-report.md` pastes the CI docker job's own gate log, including
-# the three `-H "Authorization: Bearer ci-access-token"` curl lines above. The token is the same
-# throwaway literal, quoted inside a transcript of a container that was destroyed in 2026-09; the
-# alternative was to edit the trail, which would defeat the point of committing it.
+# `docs/process/sdd/` joins them for the same reason. That directory once held working notes, since
+# removed from the tree but still present in history, and one of them pastes the CI docker job's own
+# log, including the three `-H "Authorization: Bearer ci-access-token"` curl lines above. The token is
+# the same throwaway literal, quoted inside a transcript of a container that was destroyed in 2026-09.
 #
 # `condition = "AND"` binds all three criteria at once — the finding must come from
 # `curl-auth-header`, **and** from one of these paths, **and** carry one of these three line

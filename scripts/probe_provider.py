@@ -15,7 +15,7 @@ Three calls, deliberately tiny (spec §9.8, Appendix A row P6):
 3. **One Gemini judge call** returning schema-valid JSON, proving the judge path and its separate
    key work end to end.
 
-Outcome, measured prefix size and date go into `CHANGELOG.md`. Run it with the keys in `.env`:
+Outcome, measured prefix size and date are printed. Run it with the keys in `.env`:
 
     python scripts/probe_provider.py
 """
@@ -47,7 +47,7 @@ COMMITTED_TOOL_SCHEMAS = REPO_ROOT / "mcp" / "tools"
 #: *tools → system* (§9.8) and what is measured has to be what ships. `act.j2`'s system block is the
 #: longest of the three and the one every act step of every turn sends, so it is the prefix whose
 #: size decides whether Haiku 4.5's 4096-token floor is cleared. Re-measured whenever the prompt
-#: changes; the number goes in `CHANGELOG.md`.
+#: changes.
 SYSTEM_PROMPT = render("act.j2", persona="", question="")[0]
 
 
@@ -412,7 +412,7 @@ async def main(argv: list[str] | None = None) -> int:
     outcome = "PASS" if agent_ok and judge_ok else "FAIL"
     print(f"\n{outcome}")
     print(
-        f"CHANGELOG line: {today} — `scripts/probe_provider.py` {outcome}: "
+        f"Summary: {today} — `scripts/probe_provider.py` {outcome}: "
         f"{settings.llm_model} with the nine published tools (no `strict`) and an `output_config` "
         f"JSON schema; {note}; {settings.judge_model} judge returned schema-valid JSON."
     )

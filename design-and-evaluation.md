@@ -143,7 +143,7 @@ POST /chat
 
 `core/trace.py` is the **only** module that inserts into `sessions`, `turns` or `spans` — enforced
 by a grep in `tests/architecture/test_conventions.py`, not by convention alone. It has five
-readers, and they are the five surfaces this project is graded on:
+readers, and they are the five surfaces a reviewer reads:
 
 | Reader | Surface |
 |---|---|
@@ -202,11 +202,11 @@ are exercised by real content rather than by a fixture:
 | `travel-policy` | md | 11 | 4.0 | expenses, travel |
 | `workplace-conduct` | pdf | 12 | 7.0 | conduct |
 
-**Those figures and the deployed index are now one reading** (G5b). `scripts/corpus_stats.py` prints
+**Those figures and the deployed index are now one reading.** `scripts/corpus_stats.py` prints
 them from `hrmosaic.rag.parse.parse_corpus` — the same parser the ingest runs — so the table above
 equals the committed index's own `documents` table row for row: 14 documents, 176 sections, 30,938
 words, 63.9 pages, 205 chunks, which is also what the live corpus API and `/dashboard/corpus` show a
-grader on screen. Until this wave the table came from `scripts/check_facts.py`'s script-local reader,
+grader on screen. Until a later fix the table came from `scripts/check_facts.py`'s script-local reader,
 which counted markdown `##` markers as words and kept heading-only sections, and published 64.2 pages
 / 31,007 words / ten different per-document section counts against the index beside it.
 
@@ -344,7 +344,7 @@ mcp.server.mcpserver import MCPServer`), three transports from it:
 
 | Mode | `MCP_TRANSPORT` | Where used | Endpoint |
 |---|---|---|---|
-| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; external clients also need a `Host` on `MCP_ALLOWED_HOSTS` (below) |
+| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the production topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; external clients also need a `Host` on `MCP_ALLOWED_HOSTS` (below) |
 | **stdio subprocess** | `stdio` | local dev (`make run-stdio`, MCP Inspector) and the fast CI discovery test — a visibly separate OS process, and `make run-stdio` is where that property is demonstrated; the recorded walkthrough is driven entirely against the deployed URL, so it has no stdio beat | `python mcp/server_entrypoint.py --stdio` |
 | **remote** | any | proves requirement 7's separate-service path without paying for it | whatever `MCP_SERVER_URL` names; the session records `mcp_transport_effective = "remote"` |
 
@@ -359,11 +359,10 @@ pinned at
 [`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt):
 `initialize` 200 with a `mcp-session-id`, `notifications/initialized`, `tools/list` returning all
 nine tools, and a real `search_policy_documents` call answered out of the deployed index with its
-retrieval span attached. The rest of that session as the 2026-09-12 01:45Z re-grade reports it —
+retrieval span attached. The rest of that session —
 `check_pto_balance`, `create_mock_hr_ticket` refused `CONFIRMATION_REQUIRED` with no confirmation
 token and refused again with a forged one, and 401 to a request carrying no bearer — was not
-captured; it is attributed to that record rather than pinned, and both gates are held by the suite
-on every run regardless.
+captured, so it is not pinned here; both gates are held by the suite on every run regardless.
 [`mcp/README.md`](mcp/README.md) carries the SDK detail, the three transports and the live status.
 
 `app.mount("/mcp-server", mcp.streamable_http_app(transport_security=...))` with
@@ -393,9 +392,9 @@ inside a handler — `embed_query`, the sqlite-vec KNN, the FTS5 query, rules ev
    discovered_at, catalog_sha, tool_count, mcp_session_id}`. Without this, only the first turn
    after a boot would carry the primary MCP evidence. `mcp_session_id` is the server's own
    `Mcp-Session-Id`, read off the handshake **response header** by an httpx event hook on the client's
-   own `AsyncClient` (G5b): `mcp` 2.2.0's `ClientSession` exposes no session id and
+   own `AsyncClient`: `mcp` 2.2.0's `ClientSession` exposes no session id and
    `streamable_http_client` yields only the two streams, so the header is the one seam — which is why
-   it had been recorded as `null` on every span until this wave. It stays `null` on stdio, a transport
+   it had been recorded as `null` on every span until that fix. It stays `null` on stdio, a transport
    with no session id to carry.
 4. The catalog is converted per turn to the model's function-schema shape — **the array handed to
    the model is that conversion**, never a hard-coded list.
@@ -437,7 +436,7 @@ cited `next_steps[]` and `citations[]` whose `chunk_id`s resolve to real chunks 
 index. A deterministic verdict is what turns "the model said 42 days is too long" into "the rules
 engine says the 30-day threshold is exceeded, and here is the sentence".
 
-**What the model is not allowed to supply** (W10). `submitted_on` is no longer an input: notice is
+**What the model is not allowed to supply.** `submitted_on` is no longer an input: notice is
 *how much warning a request gives*, so the server measures it from its own today (`MOCK_TODAY` for
 the recorded stubs) and echoes the walk it made as `computed.notice_span`. `days` is derived from
 `start_date` and `end_date` as business days inclusive of both ends with the employee's own observed
@@ -467,7 +466,7 @@ a destination reached `conditional` with **Director and Tax & Legal attached bes
 the body contradicted itself inside one envelope: two approvals derived from rows the same body reports
 as unchecked.
 
-**The fix, G5c (gaps 4 and 29).** `guard_holds` now reads each decided row's `status` rather than a
+**The fix.** `guard_holds` now reads each decided row's `status` rather than a
 boolean: `unmet:<id>` holds only for `status == "unmet"`, `met:<id>` only for `status == "met"`, and a
 `not_stated` row satisfies **neither** form, so nothing attaches to a row nobody could check
 (`rules.py`, `guard_holds`). The verdict semantics are untouched — `insufficient_evidence` is still what
@@ -565,12 +564,12 @@ question it asks is built by `agent/orchestrator.py` rather than left to a promp
 the turn's workflow, filtered to the slots the turn has not filled. Three rules decide it, and each
 was added for a failure that had been measured on a published run:
 
-* **Every unfilled slot, not the first** (G5). `_clarification_text` joins all of them, so *"Can I
+* **Every unfilled slot, not the first.** `_clarification_text` joins all of them, so *"Can I
   take some time off?"* is answered with the dates **and** the number of days rather than whichever
   one the router's rationale happened to mention. `clarification_accuracy` had fallen to 0.333 (n = 3)
   on the 2026-09-16 run because the question named one thing and the gold expects both.
-* **The reader's own message picks the topic, and the router's rationale only fills a silence**
-  (G5b). When the router names no workflow, the topic words of one string decide which slot order to
+* **The reader's own message picks the topic, and the router's rationale only fills a silence.**
+  When the router names no workflow, the topic words of one string decide which slot order to
   walk — and the caller now asks `clarify_topic_workflow(message)` **first**, falling back to
   `clarify_topic_workflow(rationale_summary)`, as two calls rather than one match against the two
   joined. On the previous published run the joined form let an incidental *"remote work"* in the
@@ -579,9 +578,9 @@ was added for a failure that had been measured on a published run:
   country the item never needed. The judge passed it on *"named missing information"*, so the 1.000 it
   scored rested on an off-topic question; the fix is a two-line change and a unit test whose scripted
   rationale mentions remote work on a time-off question.
-* **A bare balance ask always clarifies** (G5b). *"Can you check the balance for me?"* — `amb-003` — is
+* **A bare balance ask always clarifies.** *"Can you check the balance for me?"* — `amb-003` — is
   gold `clarify`, and the record carries more than one balance, so answering it means silently picking
-  one; on the round-2 drive the router returned `needs_clarification: false` and the turn answered with
+  one; on an earlier drive the router returned `needs_clarification: false` and the turn answered with
   the PTO balance. `is_bare_balance_ask` now decides it deterministically, and it is deliberately
   narrow: it fires only when the router named **no** workflow, the intent is `employee_data`, the
   message asks about a balance (the word, or *how much/many … left/remaining*), and it names neither
@@ -626,7 +625,7 @@ rather than by a direct assertion of the true case.
 | Workflow | Required slots | `is_complete` |
 |---|---|---|
 | `remote_work_eligibility` | employee profile · duration_days · destination_country · policy evidence from ≥ 3 of {remote-and-hybrid-work, tax-and-location-addendum, security-acceptable-use, manager-approval-matrix} · a compliance verdict | a `lookup_employee_profile` result in state **and** a `check_policy_compliance` result with `verdict != insufficient_evidence` **and** citations spanning ≥ 3 distinct `doc_id`s |
-| `pto_request` | employee profile · PTO balance · requested days · policy evidence on notice and approval · a compliance verdict · (optional, gated) a created ticket | a `lookup_employee_profile` result in state (P13's R5) **and** a `check_pto_balance` result **and** a compliance verdict **and** either an answer with ≥ 2 citations or a confirmed `mock_writes` row |
+| `pto_request` | employee profile · PTO balance · requested days · policy evidence on notice and approval · a compliance verdict · (optional, gated) a created ticket | a `lookup_employee_profile` result in state **and** a `check_pto_balance` result **and** a compliance verdict **and** either an answer with ≥ 2 citations or a confirmed `mock_writes` row |
 | `expense_claim` | employee profile · the claim amount · policy evidence on expense limits and approval authority · a compliance verdict on the amount | a `lookup_employee_profile` result in state **and** a compliance verdict **and** ≥ 2 citable passages. A question carrying a money amount and an approval or expense term is routed here deterministically, the amount is seeded as a slot the compliance call inherits, and a turn that reaches synthesis without a verdict has one scored for it |
 
 **The structured-data slot is required, not merely listed.** An eligibility verdict reached
@@ -701,7 +700,7 @@ string-matches. Three deliberate Anthropic-side choices, each with a reason:
 - **Constrained JSON uses `output_config.format`** for `route` / `synthesize` / `repair`, so no
   prompted-JSON fallback exists on the agent path. That fallback lives only in the
   OpenAI-compatible adapter, where an endpoint may decline strict mode. The repair model's
-  arguments travel as **JSON text** (`arguments_json`) since W10: a free-form `dict[str, Any]`
+  arguments travel as **JSON text** (`arguments_json`): a free-form `dict[str, Any]`
   renders as an open `additionalProperties: true` object level, which strict mode rejects with a
   400, so §9.1's one repair round trip could not be made at all — `strict_json_schema` now checks
   every object level rather than only the ones carrying `properties`.
@@ -736,7 +735,7 @@ a *structured* result (`status` / `code` / `hint`) rather than an exception.
 order reflowed, generated `title` keys, the property descriptions and the per-hit sub-schemas
 elided); the authoritative version is the committed
 `mcp/tools/search_policy_documents.schema.json`, which the contract test compares against a live
-`tools/list`. **`min_dense_score` publishes no numeric default** (G5b): the parameter is
+`tools/list`. **`min_dense_score` publishes no numeric default**: the parameter is
 `float | None = None`, an omitted or `null` argument routes to the server's own support floor
 `MIN_SUPPORT_SCORE` = **0.45** — the calibrated threshold named under *Safety guardrails* below — and
 the property's own description says so. It used to publish `"default": 0.26`, the pre-calibration
@@ -786,7 +785,7 @@ The other eight, by their required inputs and the shape they return:
 |---|---|---|
 | `get_policy_section` | `doc_id` (+ exactly one of `heading_path` / `chunk_id`) | `text`, `heading_path`, `char_start`/`char_end`, `chunk_ids`, `resolved_by`, `prev_section`, `next_section`, `sibling_sections` |
 | `list_policy_documents` | — (optional `topic`) | `documents[]`, `corpus_version`, `total_documents`, `total_pages`, `total_chunks` |
-| `check_policy_compliance` | `scenario`, `employee_id` (**never** `submitted_on` — the server's date, W10) | `verdict`, `requirements[]` (each with `met`, `status`, `blocking` and a citation), `unmet[]`, `approvals_required[]`, `approvers[]`, `next_steps[]`, `escalate_to`, `citations[]`, `computed{}` (incl. `notice_span`, `business_day_span`, `tenure_eligible_on`), `submitted_on`, `rules_version` |
+| `check_policy_compliance` | `scenario`, `employee_id` (**never** `submitted_on` — the server's date) | `verdict`, `requirements[]` (each with `met`, `status`, `blocking` and a citation), `unmet[]`, `approvals_required[]`, `approvers[]`, `next_steps[]`, `escalate_to`, `citations[]`, `computed{}` (incl. `notice_span`, `business_day_span`, `tenure_eligible_on`), `submitted_on`, `rules_version` |
 | `lookup_employee_profile` | `employee_id` | `title`, `department`, `employment_type`, `fte`, `hire_date`, `tenure_months_at_as_of`, `work_arrangement`, `work_country`, `office`, `manager`, `skip_level` |
 | `check_pto_balance` | `employee_id` | `accrual_rate_days_per_month`, `accrual_fact_key`, `accrued_ytd`, `used_ytd`, `pending_days`, `carryover_*`, `carryover_cap_days`, `projected_forfeit_on_31_dec`, `remaining_days`, `next_accrual_date`, `blackout_dates` |
 | `lookup_benefits_status` | `employee_id` | `eligible`, `eligibility_reason`, `waiting_period_ends`, `elections[]`, `dependents[]`, `open_enrollment_window` |
@@ -808,7 +807,7 @@ page 8, each with its own unit suite:
 
 | id | Rule | Trigger | Action |
 |---|---|---|---|
-| **G1** | `evidence_gate` | `max_dense_score` over the fused candidate set < `MIN_EVIDENCE_SCORE` (0.60), **or** fewer than two chunks ≥ `MIN_SUPPORT_SCORE` (0.45). **At the shipped defaults the second clause is a second line of defence rather than an independent threshold:** `search_policy_documents` applies `MIN_SUPPORT_SCORE` itself when `min_dense_score` is omitted — and the agent always omits it — so the set the gate is handed is *already* floored at 0.45 and the clause reduces to *fewer than two candidates at all*. It becomes a threshold in its own right only when a call supplies a lower `min_dense_score`, which is a published parameter a model may set. Both clauses are still measured and recorded separately on the span | **Refuse and redirect**, naming five fixed corpus topics from a constant tuple and linking `/policy`, with **no index read** — the redirect is not derived from the document list. **No `tools/call` is made.** Never answer from parametric knowledge. **One exemption (G5):** on a turn whose confirmed write has already been performed the receipt is the evidence, so the turn is answered — G1 still runs once and still records its measured figures, with the reason prefixed `PERFORMED_WRITE` |
+| **G1** | `evidence_gate` | `max_dense_score` over the fused candidate set < `MIN_EVIDENCE_SCORE` (0.60), **or** fewer than two chunks ≥ `MIN_SUPPORT_SCORE` (0.45). **At the shipped defaults the second clause is a second line of defence rather than an independent threshold:** `search_policy_documents` applies `MIN_SUPPORT_SCORE` itself when `min_dense_score` is omitted — and the agent always omits it — so the set the gate is handed is *already* floored at 0.45 and the clause reduces to *fewer than two candidates at all*. It becomes a threshold in its own right only when a call supplies a lower `min_dense_score`, which is a published parameter a model may set. Both clauses are still measured and recorded separately on the span | **Refuse and redirect**, naming five fixed corpus topics from a constant tuple and linking `/policy`, with **no index read** — the redirect is not derived from the document list. **No `tools/call` is made.** Never answer from parametric knowledge. **One exemption:** on a turn whose confirmed write has already been performed the receipt is the evidence, so the turn is answered — G1 still runs once and still records its measured figures, with the reason prefixed `PERFORMED_WRITE` |
 | **G2** | `citation_resolvability` | a cited `chunk_id` is unknown, its displayed metadata mismatches the real chunk, the snippet is not a whitespace-normalised substring of the chunk text, or the chunk is quarantined | Strip the citation; if a `policy_fact` block loses all citations, drop the block; if all blocks drop, refuse. Resolution reads the **real index**, not the retrieved set |
 | **G3** | `fact_vs_recommendation` | a `policy_fact` block with zero citations | Relabel it `recommendation`; the UI renders the two distinctly |
 | **G4** | `injection_shield` | imperative-to-assistant patterns only | Mark the chunk `quarantined`: shown with a warning banner, **uncitable**, matched pattern logged |
@@ -816,7 +815,7 @@ page 8, each with its own unit suite:
 | **G6** | `pii_secret_redaction` | every trace payload before persistence | `redact()` — key-name denylist, value regexes for `sk-ant-` / `sk-` / `AIza`, and an exact-match sweep over every `os.environ` value whose key ends `_KEY`/`_TOKEN`/`_SECRET` |
 
 **G1 decides every turn that reaches the gate — two refusals are decided before it, and one kind of
-turn it measures without deciding** (G5). The two that never reach it are out-of-scope refusals: one
+turn it measures without deciding.** The two that never reach it are out-of-scope refusals: one
 decided by the step-0 pre-filter and one by the router, each calling `_refuse` directly, so neither
 emits a `guardrail` span at all. The one it measures without deciding is a turn whose confirmed write
 has been performed: that turn is answered by its receipt. *"Draft me an email to my manager"* searches
@@ -837,7 +836,7 @@ library was searched and came back empty; `OUT_OF_SCOPE` gets the boundary alone
 decided at the router or the step-0 pre-filter searched nothing; and `CONFIRMATION_INVALID` and
 `CONFIRMATION_MISSING` — an expired, replayed or unmatched confirmation token, or a resumed turn with
 no gated call to confirm — map to `CONFIRMATION_REFUSAL`, which says plainly that **nothing was
-created or sent** and that a fresh confirmation can be asked for (G5: both reasons used to fall
+created or sent** and that a fresh confirmation can be asked for (both reasons used to fall
 through to the policy-search wording, so a reader who had just clicked Confirm was told a search they
 never asked for had come back empty).
 
@@ -859,17 +858,17 @@ failure in which the deterministic layer and the written answer disagreed:
 
 | step | module | what it repairs |
 |---|---|---|
-| citation breadth + claim merge | `agent/breadth.py` | one repair call on an answer narrower than its evidence; duplicate claims fold into one block and union their citations, and a remaining shortfall is recorded. A citation a later step took off a block goes back **on that block**, matched by an identity marker, and never onto a different claim (W10) |
-| compliance restatement | `agent/compliance.py` | a sentence whose polarity opposes a requirement's `status`; a conclusion on a `not_stated` row; a ceiling quoted below the amount the question carries. Since W10 it also **types** its output — a sentence it rewrote is the reader's `record`, an engine `next_step` is a cited `policy_fact` — and says every `not_stated` row explicitly rather than leaving it out |
-| outcome consistency | `agent/outcome.py` | the account of a performed write, and any sentence telling the reader to go and file it themselves. Since W10 a directive to file a request an **earlier turn of the same session** already filed becomes "amend `<reference>`" |
+| citation breadth + claim merge | `agent/breadth.py` | one repair call on an answer narrower than its evidence; duplicate claims fold into one block and union their citations, and a remaining shortfall is recorded. A citation a later step took off a block goes back **on that block**, matched by an identity marker, and never onto a different claim |
+| compliance restatement | `agent/compliance.py` | a sentence whose polarity opposes a requirement's `status`; a conclusion on a `not_stated` row; a ceiling quoted below the amount the question carries. It also **types** its output — a sentence it rewrote is the reader's `record`, an engine `next_step` is a cited `policy_fact` — and says every `not_stated` row explicitly rather than leaving it out |
+| outcome consistency | `agent/outcome.py` | the account of a performed write, and any sentence telling the reader to go and file it themselves. A directive to file a request an **earlier turn of the same session** already filed becomes "amend `<reference>`" |
 | capability check | `agent/capability.py` | a first-person denial of what a permitted tool does; a profile attribute the reader's own envelope contradicts |
-| approver resolution | `agent/approvers.py` | a bare role where the envelope resolved a name; a reader sent to approve their own request. Since W10 a **cited** `policy_fact` is never rewritten, and where no surviving block names the approver one `record` line states it from `approvers[]`, carrying the matrix's own routing sentence verbatim |
-| arithmetic consistency | `agent/arithmetic.py` | a decomposition that does not sum to the total beside it; since W10, a whole sentence whose stated balance total the envelope does not carry, an expiry date no field states, and the forfeiture the balance fields imply |
+| approver resolution | `agent/approvers.py` | a bare role where the envelope resolved a name; a reader sent to approve their own request. A **cited** `policy_fact` is never rewritten, and where no surviving block names the approver one `record` line states it from `approvers[]`, carrying the matrix's own routing sentence verbatim |
+| arithmetic consistency | `agent/arithmetic.py` | a decomposition that does not sum to the total beside it; a whole sentence whose stated balance total the envelope does not carry, an expiry date no field states, and the forfeiture the balance fields imply |
 | date consistency | `agent/dates.py` | a stated deadline whose own parenthetical working contradicts it; a weekday that is not the day it names |
 | snapshot consistency | `agent/snapshot.py` | the snapshot date restated in the answer; a tenure in machine units |
-| next-step entailment | `agent/entailment.py` | a step naming a date, a duration, an amount or a person the answer never established; since W10, also a step whose text the answer above it already prints |
+| next-step entailment | `agent/entailment.py` | a step naming a date, a duration, an amount or a person the answer never established; also a step whose text the answer above it already prints |
 
-**What the turn publishes is what the blocks carry** (W10). The served citations used to be G2's
+**What the turn publishes is what the blocks carry.** The served citations used to be G2's
 set, taken before those nine steps ran, so `/chat`, the `turns` row and the chat page could report
 a set the blocks beside them did not have — and `min_distinct_docs` was scored on it. G2's pure
 cascade now runs once more at the send boundary over the blocks actually served, on **every** path:
@@ -985,7 +984,7 @@ why it is a reversible last step rather than the first thing built — and why t
 stays exactly as published. Independently of it: `/ready`
 turns green only when the model and index are resident, the UI shows a cold-start banner — one
 static sentence, with deliberately no elapsed ticker, because a counter mutating inside a live region
-every 100 ms was 46 screen-reader announcements a turn and told nobody anything (UX W2) — the README
+every 100 ms was 46 screen-reader announcements a turn and told nobody anything — the README
 tells a grader to open `/health` first and wait for a 200, and cold and
 warm latencies are reported separately with their `n`. The image-controlled segments are measured —
 container start → `/health` 200 in **2.2 s**, then `/health` → `/ready` in **0.5 s** — and Render's
@@ -999,12 +998,12 @@ request, and on `workflow_dispatch`**:
 | Job | Does |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check`, then **two** secret scans: `gitleaks-action@v2`'s own scan of the **pushed commits** (it is unbounded only on a dispatch), and an explicit `gitleaks detect --source . --config .gitleaks.toml` over the **whole history on every run** — same pinned 8.30.1 build, reading the full clone `fetch-depth: 0` gives it |
-| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole non-browser suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact. `pyproject.toml`'s `addopts` carries `-m "not ux"`, so this job runs **3,170** of the 3,469 tests collected as of 2026-09-22; the other 299 are the browser checks the `ux` job runs |
-| `ux` | the browser suite — `pytest -q -m ux`, the **299** real-browser checks against the rendered pages in a cached chromium at the three audited viewports, plus a dark-mode and a reduced-motion context. It is the only job needing a browser binary. It still carries **no `needs:` of its own** — nothing has to finish before a browser can start — but since G5b **`deploy` needs it** |
+| `test` | installs from the committed manifests only, restores the cached embedding model, runs `scripts/check_facts.py` and `python -m hrmosaic.rag.ingest --verify-manifest`, then **the whole non-browser suite under `coverage run --branch`** (unit, contract, integration, architecture and e2e-with-stub) behind `coverage report --fail-under=90`, then `scripts/pii_check.py`; `coverage.xml` is uploaded as a build artifact. `pyproject.toml`'s `addopts` carries `-m "not ux"`, so this job runs **3,165** of the 3,464 tests collected as of 2026-10-03; the other 299 are the browser checks the `ux` job runs |
+| `ux` | the browser suite — `pytest -q -m ux`, the **299** real-browser checks against the rendered pages in a cached chromium at the three audited viewports, plus a dark-mode and a reduced-motion context. It is the only job needing a browser binary. It still carries **no `needs:` of its own** — nothing has to finish before a browser can start — but **`deploy` needs it** |
 | `docker` | builds the image, probes `sqlite-vec` inside `python:3.12-slim` (`enable_load_extension` → `sqlite_vec.load` → `vec_version()`), and health-checks the running container |
 | `deploy` | `needs: [test, docker, ux]`, main pushes (or an explicit dispatch) only; POSTs `/v1/services/{id}/deploys` with `RENDER_API_KEY` + `RENDER_SERVICE_ID`, or curls `RENDER_DEPLOY_HOOK_URL` when that optional secret is set |
 
-**A red `ux` job used to ship anyway, and that rationale is withdrawn** (G5b). The job was written
+**A red `ux` job used to ship anyway, and that rationale is withdrawn.** The job was written
 with no `needs:` and nothing needing it, documented three times as *"it must never block `test` or
 `deploy`"*, on the reasoning that a browser-only regression should be reported rather than gate a
 release. Run **35723846982** is what that bought: `ux` red, `deploy` green, the run's own conclusion
@@ -1016,16 +1015,16 @@ flaky browser check can hold a release. Its chromium is cached on the pinned pla
 is most of what keeps that cost down.
 
 **The push filter no longer exempts root-level documents, and since 2026-09-22 it no longer exempts
-`docs/**` either** (G5b, then G5c). `paths-ignore` now keeps exactly two entries off the pipeline —
+`docs/**` either.** `paths-ignore` now keeps exactly two entries off the pipeline —
 `evaluation/results/**` and `evaluation/REPORT.md` — because re-running the suite over a published
 *result* proves nothing new and it protects Render build minutes. Everything else is gated, the docs
 tree included: a `docs/**` edit runs lint, the whole suite and the docs contract tests like any other
 commit. Two exemptions were removed to get there. `*.md` was in the list, and `*.md` does not cross a
 `/`, so it meant *every repository-root document*; `docs/**` was in it too, which exempted the
-architecture page, the demo script and the traceability matrix — the documents most likely to carry a
+architecture page and the traceability matrix — the documents most likely to carry a
 stale claim. The last
 commit before submission is by design a root README edit (the demo-video URL), which would have run no
-lint, no test, **no docs contract tests** and triggered no deploy: the graded tip would have carried no
+lint, no test, **no docs contract tests** and triggered no deploy: the submitted tip would have carried no
 green run and `/health.app.git_sha` would have lagged `HEAD`. The docs contract tests are this
 project's guard against a stale claim, so they have to gate the commits most likely to introduce one.
 `tests/contract/test_deploy_manifests.py` asserts it: a root README commit still runs the suite and
@@ -1041,7 +1040,7 @@ unchanged.
 
 The push path is **keyless and offline** after the model cache fill: the whole agent loop,
 guardrail stack, `/chat` contract and dashboard run against the scripted `StubAdapter`, which is
-why phases P0–P9 of this build needed no credentials at all. Requirement 8's two named tests are
+why the early build phases needed no credentials at all. Requirement 8's two named tests are
 `tests/contract/test_app_starts.py` (boots the app by its documented command and polls `/health`
 for 200 with `mcp.connected` and `index.loaded`) and
 `tests/integration/test_mcp_discovery.py` + `test_mcp_tool_call.py` (a real `initialize` and
@@ -1062,8 +1061,7 @@ deliberately failing test, dispatched with `deploy_only: true`, whose job graph 
 [`docs/evidence/ci-deploy-skipped.png`](docs/evidence/ci-deploy-skipped.png). The run itself is
 open to anyone:
 [`actions/runs/34485304411`](https://github.com/seantmalone/quantic-mosaic/actions/runs/34485304411)
-— `lint` and `docker` green, `test` red, `deploy` skipped — and `CHANGELOG.md` records the same
-URL beside the branch it was dispatched from.
+— `lint` and `docker` green, `test` red, `deploy` skipped.
 
 ### Rejected hosts
 
@@ -1199,7 +1197,7 @@ The published figures above are the **eighth** published measurement against the
 Publishing only the last one would hide what the engineering actually bought, so all eight columns
 are kept, each with the run id and the deployed commit that produced it:
 
-| Metric | Before (`r_1789055103_baseline`, `5419ec5`) | After the quality fixes (`r_1789069158_baseline`, `b24ad32`) | After the performance waves (`r_1789086979_baseline`, `da0dca2`) | After the model-behaviour wave (`r_1789166880_baseline`, `34717b5`) | After the logic waves W8–W10 (`r_1789555212_baseline`, `bd4ac93`) | After round 1 of the grade-and-fix wave (`r_1790074972_baseline`, `8a89310`) | After round 2 (`r_1790110325_baseline`, `80a5a71`) | Published — after round 3 (`r_1790130220_baseline`, `34d50fb`) |
+| Metric | Before (`r_1789055103_baseline`, `5419ec5`) | After the quality fixes (`r_1789069158_baseline`, `b24ad32`) | After the performance fixes (`r_1789086979_baseline`, `da0dca2`) | After the model-behaviour changes (`r_1789166880_baseline`, `34717b5`) | After the demo-path logic fixes (`r_1789555212_baseline`, `bd4ac93`) | After the first correctness fixes (`r_1790074972_baseline`, `8a89310`) | After the second correctness fixes (`r_1790110325_baseline`, `80a5a71`) | Published — after the third correctness fixes (`r_1790130220_baseline`, `34d50fb`) |
 |---|---|---|---|---|---|---|---|---|
 | Items in the dataset | 26 | 26 | 26 | 28 | 28 | 28 | **30** | **30** |
 | Strict pass rate (target ≥ 0.85) | 0.692 | 0.808 | 0.808 | **0.893** | 0.893 | 0.893 | **0.900** | **0.900** |
@@ -1220,7 +1218,7 @@ are kept, each with the run id and the deployed commit that produced it:
 | Estimated cost per run | $0.47 | $0.81 | $0.63 | $0.73 | $0.72 | $0.77 | $0.80 | $0.80 |
 
 **The first three columns are measured over 26 items, columns 4–6 over 28, and columns 7 and 8 over 30.**
-The 2026-09-11 wave added two HR-adjacent out-of-scope questions (`oos-004` tuition reimbursement,
+The 2026-09-11 changes added two HR-adjacent out-of-scope questions (`oos-004` tuition reimbursement,
 `oos-005` referral bonus), so column 4 is not a like-for-like re-run of columns 1–3: both new items
 are refused correctly and pass, which lifts the strict-pass denominator and numerator together, and
 the judged means move because their populations changed as well. Column 7 adds `unsafe-002` (the
@@ -1236,7 +1234,7 @@ carries them unchanged).
 one or two items never called a write tool at all, which is the harness's own wording for why it
 changed; from column 5 it is the population where a write is actually at stake (a gated attempt, an
 `unsafe_action` item, a gold `confirm`, a turn that **performed** a write, or an observed violation —
-the last two added in G5c so that no unconfirmed write can score 0.0 and then be dropped from the one
+the last two added later so that no unconfirmed write can score 0.0 and then be dropped from the one
 metric whose job is to catch it), which on the 28-item set columns 5 and 6 were measured over
 is **one** — `unsafe-001`. In columns 7 and 8 it is **two**: `unsafe-002` puts the second write tool
 (`draft_hr_email`) and an in-prompt waiver into the set, both items stop at the card, and
@@ -1272,7 +1270,7 @@ improved. The interactive gain does not appear in this table at all — the harn
 whole answer, while a browser now receives the first block while later ones are still being
 written.
 
-**Column 3 → 4 is the model-behaviour wave.** Multi-document answers now cite every document their
+**Column 3 → 4 is the model-behaviour work.** Multi-document answers now cite every document their
 evidence spans, with one bounded repair call when the first answer does not; the two blocks the
 citation guardrail had dropped were traced to a quarantined chunk that still carried a citable id
 and to a one-character transcription slip, and both were fixed at the root (`blocks_dropped_by_g2`
@@ -1283,12 +1281,12 @@ lower than column 3 partly because two refusal items joined their populations an
 a wider citation set is a wider set to be precise about; both are inside the one-item margins this
 dataset has.
 
-**Column 4 → 5 is the interface and demo-path waves** (UX W1–W7, then the logic waves W8–W10,
+**Column 4 → 5 is the interface and demo-path work** (interface fixes, then demo-path logic fixes,
 2026-09-12 to 2026-09-16; `docs/optimization-log.md` carries them with their evidence). The
 deterministic layer took ownership of every verdict, date, approver, id and balance figure the answer
 states, and workflow completion moved 0.893 → **0.964** while strict pass held at 0.893: `remote-004`
 now meets its end state, and the confirmation-card miss on `unsafe-001` — an answer where the turn
-should have stopped at the card — **was closed in W10**, leaving `remote-003` the one item still
+should have stopped at the card — **was closed by the last of those fixes**, leaving `remote-003` the one item still
 scoring a workflow 0.00 in that column. The judged means drift down inside the one-item margins this
 dataset has (groundedness 0.984 → 0.975, citation accuracy 0.905 → 0.883, document recall 0.961 →
 0.921). **One metric got worse, and this is the first narrative document to publish it**:
@@ -1296,10 +1294,10 @@ clarification accuracy fell 0.667 → **0.333** (n = 3).
 Because `strict_pass` has no clarification clause, the 0.893 headline hid it — two of the three
 ambiguous items were answered with a question that named nothing the reader had left out. Column 5
 also has **no ablation delta**: the two arms were not re-driven on `bd4ac93`, and the comparison
-block published beside it was still the 2026-09-11 one, which is the second thing this wave fixed.
+block published beside it was still the 2026-09-11 one, which is the second thing the next set of fixes addressed.
 
-**Column 5 → 6 is this grade-and-fix wave (G5, 2026-09-21 to 2026-09-22)**, and it is a correctness
-wave rather than a metrics wave. The clarification defect is fixed at its cause — the question now
+**Column 5 → 6 is a set of correctness fixes (2026-09-21 to 2026-09-22)**, aimed at correctness
+rather than at a metric. The clarification defect is fixed at its cause — the question now
 names *every* unfilled slot rather than the first, and the workflow is inferred from the topic words
 of the turn when the router names none — and measured: **1.000 (n = 3)**, with all three ambiguous
 items naming every missing detail. The write path was repaired three times over: a *confirmed*
@@ -1311,11 +1309,11 @@ ablation arms were re-driven on the published build. The judged means move by le
 (groundedness 0.975 → 0.963, citation accuracy 0.883 → 0.875, document recall 0.921 → 0.947, tool
 selection 0.981 → 0.993) and strict pass and workflow completion hold. **The p50 was the lowest of the
 six columns published at the time** — 19.2 → 15.3 s, with p95 35.7 → 26.0 s (not a project low: the committed
-`r_1790067656_baseline` on `e85305b` measured 24.2 s) — and nothing in this wave targeted latency, so the honest reading is run-to-run spread on a shared 0.1-CPU instance rather than
+`r_1790067656_baseline` on `e85305b` measured 24.2 s) — and nothing in these fixes targeted latency, so the honest reading is run-to-run spread on a shared 0.1-CPU instance rather than
 a win; the drives below make that spread visible.
 
-**Column 6 → 7 is round 2 of the same wave (G5b, 2026-09-22)**, after an independent re-grade of
-column 6's build returned **band 4 with 20 ranked gaps** — no capability failure among them, and
+**Column 6 → 7 is a second set of correctness fixes (2026-09-22)**, after an independent review of
+column 6's build listed **20 gaps** — no capability failure among them, and
 mostly claims a reader can falsify with one command. Four things in it can move a metric, and each is
 visible in the column. **The dataset grew to 30**: `unsafe-002` and `sens-002` widen the safety and
 escalation denominators from one item to two, and `unsafe-001` and `remote-003` are tagged for the
@@ -1344,8 +1342,8 @@ $0.80, and the hard-subset agreement fell 0.875 → **0.750** on two disagreemen
 opposite directions — the first time this protocol has produced that, and *Judge methodology* below
 takes it apart.
 
-**Column 7 → 8 is round 3 of the same wave (G5c, 2026-09-22 to 2026-09-23)**, after a third
-independent grade of column 7's build returned **band 4 with 37 ranked gaps** — again no capability
+**Column 7 → 8 is a third set of correctness fixes (2026-09-22 to 2026-09-23)**, after a further
+independent review of column 7's build listed **37 gaps** — again no capability
 failure, and again mostly sentences a reader can falsify with one command. The dataset did not move, so
 columns 7 and 8 are the first like-for-like pair since 4–6: same 30 items, same dataset sha
 `2c8973147744…`. Four application fixes are in the build. **The rules engine's `unmet:` guards now read
@@ -1370,7 +1368,7 @@ written and action safety is still 1.000 over its two items. The judged means mo
 (groundedness 0.986 → 0.984, citation accuracy 0.889 → 0.873, partial match 0.820 → 0.817). The p50 is
 the lowest of the eight columns — 15.5 → **13.8 s**, with p95 29.6 → 27.9 s over 30 warm turns and
 `n_cold = 0` — and
-nothing in this wave targeted latency, so read it as run-to-run spread on a shared 0.1-CPU instance
+nothing in these fixes targeted latency, so read it as run-to-run spread on a shared 0.1-CPU instance
 rather than a win. The run cost $0.80. **The blind seed subset produced a disagreement**: 1.000 →
 **0.875** on `expenses-001`, which is a better figure than the 1.000 it replaces, for the reason *Judge
 methodology* below sets out at length. It is the second published run to return anything but 1.000
@@ -1456,7 +1454,7 @@ the served answer still opened *"Since your USD 3,000 conference trip is below t
 threshold, your manager Dana can approve it"*: the right authority justified from a threshold the
 failing row is not about. Neither earlier repair reached it — `correct()` reads that sentence's polarity
 as `denies`, which *agrees* with an unmet row, and `correct_ceilings` only matches a ceiling *below* the
-amount. `compliance.correct_authority` (G5c) is the fix: while an amount threshold was checked and
+amount. `compliance.correct_authority` is the fix: while an amount threshold was checked and
 failed, a sentence concluding that the lower authority may approve is replaced by the engine's own
 routing sentence, once. The item still scores 0.79 on this run, so the fix has not yet closed the
 clause — it removes one class of wrong lead sentence rather than every contradicted claim the judge can
@@ -1488,36 +1486,36 @@ two items beside this. A turn that stops early writes nothing, which is the safe
 It *is* a completeness failure, and a step budget is the cause rather than a rule — the same class as a
 turn that runs out of act steps mid-plan. It is also the reason `pto_request`'s per-workflow indicator
 reads 0.67 (n = 3) rather than 1.00. The fix is a step budget that accounts for the proposal turn, or a
-plan that proposes the write before it spends a discretionary retrieval; neither is made in this wave,
+plan that proposes the write before it spends a discretionary retrieval; neither is made in the published build,
 and the item is reported as a failure rather than excused by the safety clause it passes.
 
-They are reported rather than relaxed, and they are what a further wave would take on. Note what is
+They are reported rather than relaxed, and they are what further work would take on. Note what is
 **not** on this list any more: `equipment-001`, column 6's one genuinely wrong answer, now scores
 groundedness 1.000 and passes, because the corpus incoherence under it was resolved rather than the gold
 answer edited to match the model — and **tool recall**, which was a cause on two of column 7's three
 failures and is 1.00 on all 30 items here.
 
 **Every drive of this dataset, and why this one is published.** Six baseline drives ran against the
-deployed service across the three rounds of this wave, each on the build that was live at the time, and
+deployed service across the three sets of correctness fixes, each on the build that was live at the time, and
 the published figures are quoted from **`r_1790130220_baseline` alone** — 2026-09-23, build
 `34d50fb`, 30 items, dataset sha `2c8973147744…`. **It is published because it is the 30-item run on
 the shipped build**: `latest.json` points at it, its `target_git_sha` equals the deployed sha, its
 dataset sha equals `dataset.yaml`'s, its two ablation arms were driven on that same build and dataset,
-and its answers are the ones the blind labels were authored against. Round 1's three 28-item drives are
+and its answers are the ones the blind labels were authored against. The first set's three 28-item drives are
 the columns above — `r_1790062696_baseline` (build `82994ce`, strict **0.964**, clarification 0.667:
 the diagnostic drive
 that exposed the clarification defect, driven *before* the fixes for it, and not committed),
 `r_1790067656_baseline` (build `e85305b`, strict 0.893, committed as history) and
-`r_1790074972_baseline` (build `8a89310`, strict 0.893, column 6). Round 2 drove twice, and round 3 once.
+`r_1790074972_baseline` (build `8a89310`, strict 0.893, column 6). The second set drove twice, and the third once.
 **`r_1790106448_baseline`** (build `7ada32e`, 30 items) was **never judged and was discarded by
 ruling**, not by its numbers: it exposed two gold-side defects in the newly added items — `unsafe-002`
 was scored `tool recall 0.5 / doc recall 0` for correctly reading the balance and the profile and
 stopping at the card, because its gold expected a policy retrieval that task does not need, and
 `amb-003`'s bare *"can you check the balance"* was answered with the PTO balance because nothing made
 that clarification deterministic. Both were fixed (the first in the gold, the second in the code),
-`80a5a71` was deployed, and that re-drive became round 2's published run — `r_1790110325_baseline`
+`80a5a71` was deployed, and that re-drive became the second set's published run — `r_1790110325_baseline`
 (build `80a5a71`, strict 0.900, column 7), which is now **history rather than the published figure**.
-Round 3's single drive, `r_1790130220_baseline` on `34d50fb`, supersedes it because the application tree
+The third set's single drive, `r_1790130220_baseline` on `34d50fb`, supersedes it because the application tree
 moved under it: the four fixes named in the column-8 paragraph above are in that build, so column 7 no
 longer measures what this repository would deploy and column 8 does. Re-driving to find a better sample
 on one dataset would be cherry-picking; the spread between drives is real — 0.964 against 0.893 is one
@@ -1576,9 +1574,9 @@ file, as its subset requires: it can only be chosen from a judged run.
 for the seed draw, `subset B` for the hard one — so the criterion's *name* is not visible to the
 labeller, and neither is any score nor the score ordering, because the items are rendered in item-id
 order. The builder maps each subset to an opaque token and refuses to write a packet whose own
-instructions carry one of the criterion words; the round-2 packet predated that fix and printed the
+instructions carry one of the criterion words; an earlier packet predated that fix and printed the
 selection's name in its header, which is why its successor is the one committed here. Both sessions read
-no run file, no `REPORT.md`, no `CHANGELOG.md`, no phase report, and not each other's labels. Both label
+no run file, no `REPORT.md`, no change history, and not each other's labels. Both label
 files record `labelled_on: 2026-09-23` against the published run `r_1790130220_baseline`, deployed commit
 `34d50fb`, 30 items.
 
@@ -1593,7 +1591,7 @@ and no groundedness score anywhere in either file; the hard packet's header says
 eight items and identifies the subset only as `subset B`, and renders the items in item-id order rather
 than score order. A whole-word check in `tests/contract/test_docs_completeness.py` reads the builder's
 own `CRITERION_WORDS` and fails on any committed packet whose text names one — the allowance that
-exempted the round-2 packet is deleted, so the assertion is now unconditional. What is present is the
+exempted an earlier packet is deleted, so the assertion is now unconditional. What is present is the
 question, the served answer and the real evidence envelopes with their classes. Read them as the packets
 they are, not as transcripts of the sessions, which they are not.
 
@@ -1684,9 +1682,9 @@ last of those three is the guard added after this document was found publishing 
 arms came from a different build than the headline beside them. The three arms of the published sweep
 are `r_1790130220_baseline`, `r_1790130725_dense_only_k2` and `r_1790131123_no_structured_tools`, all
 three on `target_git_sha` **`34d50fb`** and dataset sha `2c8973147744a351…`. **The
-`no_structured_tools` arm genuinely runs without its five tools from this round on**: `MCP_TOOLS_DISABLED`
+`no_structured_tools` arm genuinely runs without its five tools from this sweep on**: `MCP_TOOLS_DISABLED`
 now refuses a withheld tool at the call boundary with `TOOL_DISABLED` instead of merely leaving it out of
-the offered array, and the arm's run file records the five names in `config.tools_disabled`. The round-2
+the offered array, and the arm's run file records the five names in `config.tools_disabled`. The previous
 arm did not have that property — 8 of its 30 items called a withheld tool anyway — which is why its
 numbers are superseded here rather than annotated.
 
@@ -1716,9 +1714,9 @@ numbers are superseded here rather than annotated.
 > the largest since, and the −0.179 of `e85305b` sits between them — a sweep this document previously
 > omitted, which is what made the old "largest since 2026-09-10" sentence false.
 >
-> **The arm's meaning changed twice mid-project and both changes are part of the reading.** P13's R5
-> made `pto_request` require a `lookup_employee_profile` result — a tool this arm disables — so the arm
-> removes something the documented workflow genuinely needs, which is why its delta grew. And G5c made
+> **The arm's meaning changed twice mid-project and both changes are part of the reading.** An early
+> quality fix made `pto_request` require a `lookup_employee_profile` result — a tool this arm disables — so the arm
+> removes something the documented workflow genuinely needs, which is why its delta grew. And a later fix made
 > the withholding real at the call boundary, so this is the first sweep in which no item could reach a
 > disabled tool at all. The deltas are published side by side rather than the newest replacing the
 > oldest, and only the last one is measured against an arm that actually withholds.
@@ -1836,8 +1834,8 @@ about it: the run captured in
 [`docs/evidence/demo-task-2-live-2026-09-11.txt`](docs/evidence/demo-task-2-live-2026-09-11.txt)
 cited four chunks across two documents (`pto-and-holidays`, `manager-approval-matrix`), and earlier
 live turns cited `pto-and-holidays` alone — the approval-matrix chunk is retrieved either way, but
-whether the synthesis cites it varies. The demo script therefore tells the presenter to read the
-chips on screen rather than narrate the number written here.
+whether the synthesis cites it varies. A presenter should therefore read the chips on screen rather
+than narrate the number written here.
 
 Both stub scripts under `tests/fixtures/llm_scripts/` are **recordings of real exchanges** against
 `claude-haiku-4-5` on 2026-09-10 — the provider's own purposes, texts, tool arguments, finish
@@ -1860,13 +1858,13 @@ decides the `passed` flag — not off an earlier one:
    end state asks for. `unsafe-001` fails **workflow completion and behaviour class**: the act loop hit
    its step cap after an extra retrieval and never proposed the ticket, so no confirmation card was
    rendered — gold `confirm`, served `answer`. **Tool recall is 1.00 on all 30 items**, so nothing on this
-   list is a tool-selection failure any more; that was the shape of two of round 2's three.
+   list is a tool-selection failure any more; that was the shape of two of the three failures on the previous published run.
 2. **One of those three is retrieval breadth, and the breadth repair did not fire.** The bounded repair
    call exists for an answer narrower than its evidence, and on `remote-004` it either did not fire or did
    not widen the citation set to the three documents the end state wants. That is the same class this
    dataset has produced on every published run since 2026-09-11 — a wide evidence set and a narrower
    citation set — and the fix is a stronger breadth signal rather than a new metric. `expenses-002`, which
-   was the second instance of it in round 2, **met both of its citation floors here**, so the class is one
+   was the second instance of it on the previous published run, **met both of its citation floors here**, so the class is one
    item wide on this run rather than two.
 3. **A turn can run out of act steps before it reaches the confirmation card, and one did.**
    `unsafe-001`'s step budget was spent on an extra retrieval, so the write it should have proposed was
@@ -1875,7 +1873,7 @@ decides the `passed` flag — not off an earlier one:
    Nothing was written and `action_safety_pass_rate` is 1.000 over its two items, so the failure is in the
    safe direction, but "safe" is not "complete": a reader asking for a ticket got an answer instead of a
    card. The fix is a budget that reserves a step for the proposal, or a plan that proposes the write
-   before spending a discretionary retrieval. Neither is made in this wave.
+   before spending a discretionary retrieval. Neither is made in the published build.
 4. **`next_steps` are not grounded against the evidence set, and this run lost two agreements to it.**
    The next-step entailment step checks a step against the *answer* above it, not against the evidence,
    so a date, amount or deadline no evidence item states can still appear in one. On this run it is
@@ -1885,7 +1883,7 @@ decides the `passed` flag — not off an earlier one:
    disagreement in the blind subset *and* one of the two in the hard subset. Two independent readers
    finding the same defect is the strongest evidence this list carries that the class is real and not a
    labelling quirk. Earlier published runs lost agreements to the same class — `expenses-001`'s month-end
-   deadline on 2026-09-11 and again on the round-2 run, and `pto-003`'s compliance snippet truncated
+   deadline on 2026-09-11 and again on the previous published run, and `pto-003`'s compliance snippet truncated
    mid-word before that.
    Grounding `next_steps` against the evidence set is identified, not implemented, and it is the
    highest-value unimplemented fix in this list.
@@ -1943,7 +1941,7 @@ decides the `passed` flag — not off an earlier one:
     removed; across the nine committed sweeps the observed deltas are −0.192, −0.154, −0.192, −0.231,
     −0.143, −0.179, −0.143, −0.167 and **−0.200**, and none reaches the bar. The largest is the −0.231 of
     2026-09-11; the published −0.200 is the second-largest. Every sweep after the first is measured against
-    an arm that disables a tool the PTO workflow genuinely requires (P13's R5), so part of the movement is
+    an arm that disables a tool the PTO workflow genuinely requires (the profile lookup), so part of the movement is
     a definition change and is reported as one — and only the last is measured against an arm that
     **refuses** a withheld tool at the call boundary rather than merely omitting it from the catalogue.
     Judged metrics are baseline-only, so `expenses-002` accounts for **two of the nine** strict-pass flips,
@@ -1961,7 +1959,7 @@ decides the `passed` flag — not off an earlier one:
     that: `outcome: refused`, span 14 `verdict=refuse`, one `notice` block, no `draft_hr_email · ok`
     span and nothing added to the write ledger. The fix is a dedicated `TurnOutcome` value carried
     through the store, the `/chat` contract and the dashboard's labels — a schema change, and
-    deliberately not made in this wave.
+    deliberately not made in the published build.
 14. **The bare-balance clarification rule keys on a twelve-word list, so an unlisted noun buys one
     extra turn.** `is_bare_balance_ask` decides `amb-003` deterministically and its docstring claims a
     question that names its balance is *"never forced to clarify"*
@@ -1991,39 +1989,39 @@ decides the `passed` flag — not off an earlier one:
     above. All four files are inside the provenance pathspec this document prints, so editing them would
     break the empty-diff contract test that ties the published run to the deployed build.
 
-**Limitations that were on this list and are now closed, with the wave that closed them.** The
+**Limitations that were on this list and are now closed.** The
 **confirmation-card miss** — `unsafe-001` answering where the turn should have stopped at the card,
-which cost it a behaviour, a workflow and a groundedness clause on 2026-09-11 — closed in **W10**
-(2026-09-16): the item stopped at the card on every run from then until round 2, although on the
+which cost it a behaviour, a workflow and a groundedness clause on 2026-09-11 — closed on
+**2026-09-16**: the item stopped at the card on every run from then until the second set of correctness fixes, although on the
 2026-09-16 run it still failed the composite on a different clause (tool recall 0.75). **It is back on
 the failing list on the published run, for a different reason** — the act loop ran out of steps before it
 proposed the write, so the card was never reached at all and the behaviour class misses — which is
 limitation 3 above rather than a reopening of the 2026-09-11 defect: the 2026-09-11 turn answered
 *instead of* confirming a write it had already proposed; this one never got that far and wrote nothing.
-The **gold tool the model reproducibly declined** — `remote-003`'s `lookup_employee_profile`, tool recall 0.67 on four consecutive runs — closed in
-this wave (**G5**, 2026-09-22): the profile debt now keys on the recorded *arguments* of the tools
+The **gold tool the model reproducibly declined** — `remote-003`'s `lookup_employee_profile`, tool recall 0.67 on four consecutive runs — closed on
+**2026-09-22**: the profile debt now keys on the recorded *arguments* of the tools
 that need a profile rather than on an `employee_id` in the result body, so a `check_policy_compliance`
 call for the actor raises it; `remote-003` calls the lookup, scores tool recall 1.00 and passes. **On the
-published run no item scores below 1.00 on tool recall at all** — a claim this document made one round too
+published run no item scores below 1.00 on tool recall at all** — a claim this document made one run too
 early, when `remote-004` and `unsafe-001` were both at 0.75, and which the run file now supports for every
 one of the 30 items. **Clarification accuracy 0.333**
-closed in the same wave: the question now names every unfilled slot rather than the first, and the
+closed in the same set of fixes: the question now names every unfilled slot rather than the first, and the
 workflow is inferred from the turn's topic words when the router names none — 1.000 (n = 3), with all
 three ambiguous items naming every missing detail. The **mixed-build ablation block** — a comparison
 whose arms came from a different build than the headline beside them — closed with the re-drive on
 `8a89310`, and again on `80a5a71` and `34d50fb`, plus an assertion that refuses to write a mixed-build
 comparison at all. And two write-path defects found by driving the live demo rather than the suite closed in the same
-wave: a *confirmed* `draft_hr_email` narrated as an evidence refusal, and a cancelled or failed write
+set of fixes: a *confirmed* `draft_hr_email` narrated as an evidence refusal, and a cancelled or failed write
 rendered under "You approved this — it went ahead".
 
 **And the documentary half of the `not_stated` guard defect is closed, not deferred.** It stood on this
-list as limitation 14 through round 3 on the grounds that
+list as limitation 14 for a time on the grounds that
 `mcp/tools/check_policy_compliance.schema.json` did not name `device_age_months`; the description has
 named both `device_age_months` and `days_since_final_day` since `6a4821a`, an ancestor of the published
 build `34d50fb`, so the entry described a limitation that the published build had already closed and it
 is retired here rather than renumbered forward.
 
-**Three more closed in round 2 (G5b, 2026-09-22).** The **`equipment-001` corpus/dataset
+**Three more closed on 2026-09-22.** The **`equipment-001` corpus/dataset
 contradiction** — the USD 500 director threshold applied to a scheduled laptop refresh, which both the
 judge (0.688) and the blind labeller called not grounded — is resolved **in the corpus**: the threshold
 is scoped to *additional* equipment in the prose, the fact ledger and `corpus/rules.yml`, a scheduled
@@ -2032,24 +2030,24 @@ gold answer was re-authored against that reading rather than against the model's
 groundedness 1.000 on the published run and passes. **Action safety and escalation at `n = 1`** closed
 as far as requirement 9's 20–30 band allows: `unsafe-002` and `sens-002` take both to `n = 2`, and the
 workflow tags on `unsafe-001` and `remote-003` take each per-workflow indicator off a single item. And
-**`amb-001` being served `amb-002`'s question** — the defect a re-grade found underneath the 1.000
+**`amb-001` being served `amb-002`'s question** — the defect an independent review found underneath the 1.000
 clarification figure — closed at its cause: the topic inference reads the reader's message before the
 router's rationale, and a bare balance ask now clarifies deterministically.
 
-**Four more closed in round 3 (G5c, 2026-09-22 to 2026-09-23).** The **`unmet:` guard reading "could
-not check" as "checked and failed"** — limitation 13 of the last two rounds — is fixed at the function:
+**Four more closed between 2026-09-22 and 2026-09-23.** The **`unmet:` guard reading "could
+not check" as "checked and failed"** — formerly limitation 13 — is fixed at the function:
 `guard_holds` reads each decided row's `status`, a `not_stated` row satisfies neither `unmet:` nor `met:`,
 and the two reproductions (an `equipment_request` refresh with no `device_age_months`, an
 `international_remote` with only a destination) now attach nothing derived from the row nobody could
 check. It spanned 18 guards across every scenario, not the four equipment ones the disclosure named.
 The **`MCP_TOOLS_DISABLED` knob that withheld a tool from the offered array without refusing a call to
 it** is fixed at the boundary, with `TOOL_DISABLED` returned on the call — which is what makes the
-ablation arm above an arm that genuinely runs without its five tools, where round 2's called them on 8
+ablation arm above an arm that genuinely runs without its five tools, where the previous arm called them on 8
 of 30 items. The **expense lead sentence justified from the wrong threshold** — *"below the USD 5,000
 director threshold, your manager Dana can approve it"* on a request whose USD 2,500 manager limit the
 engine had scored `unmet` — is fixed by `compliance.correct_authority`, which replaces such a sentence
 with the engine's own routing sentence while an amount row is unmet. And the **labelling packet that
-printed its own selection criterion in its header** — the round-2 hard packet said `subset judge_lowest`
+printed its own selection criterion in its header** — an earlier hard packet said `subset judge_lowest`
 five lines above the sentence swearing the criterion was withheld — is fixed in the builder: each subset
 maps to an opaque token (`subset A`, `subset B`), the builder refuses to write a packet whose
 instructions carry a criterion word, and a now-unconditional contract assertion fails on any committed
@@ -2057,7 +2055,7 @@ packet that names one.
 
 ### Where to see all of this running
 
-The dashboard is entirely synthetic, and since UX W1 it is open to anyone holding the access token:
+The dashboard is entirely synthetic, and it is open to anyone holding the access token:
 a grader follows the tokenized link and clicks **Dashboard** in the masthead switch, in whatever
 persona they happen to be in. Only the three write controls — *Reset sandbox*, *Re-discover now*,
 *Run smoke eval* — need the **HR admin** persona, which is set in the demo panel at the foot of the
@@ -2257,4 +2255,3 @@ reproducible across processes, which nothing needed.
 | `data/index/chunks.manifest.jsonl` | the 205 committed chunks a rebuild must reproduce byte-for-byte |
 | `mcp/tools/*.schema.json` | the nine schemas a live `tools/list` must equal |
 | [`docs/architecture.html`](docs/architecture.html) | the interactive architecture walkthrough |
-| [`docs/demo-script.md`](docs/demo-script.md) | the 7–10 minute recording plan, segment by segment |

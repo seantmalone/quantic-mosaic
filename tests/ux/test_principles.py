@@ -1,6 +1,6 @@
 """The plan's principles, asserted on the **rendered** page (`pytest -m ux`).
 
-`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` §1 states each principle with a
+The UX remediation plan §1 states each principle with a
 mechanical detection rule. The contract suite already asserts the server's bytes; this suite asserts
 what a browser actually paints, at the three viewports the audit measured, because that is where the
 defects were found:

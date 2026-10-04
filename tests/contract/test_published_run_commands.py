@@ -5,8 +5,7 @@ evidence, and the first person to run it after the gates land loses an hour to
 `jq: error (…): Cannot iterate over null`. That is exactly what
 `jq -r '.runs[].config_json.target' evaluation/results/comparison.json` did — `ablation.py` has
 never written a `runs` key or a `config_json` field. It was corrected at source on 2026-09-10 in
-the P11 brief, roadmap §4, `docs/requirements-traceability.md` and `NEEDS-FROM-USER.md`; this test
-is what stops it, or anything like it, coming back.
+`docs/requirements-traceability.md`; this test is what stops it, or anything like it, coming back.
 """
 
 from __future__ import annotations
@@ -22,14 +21,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPARISON = REPO_ROOT / "evaluation" / "results" / "comparison.json"
 
-#: Every *committed* document that prints the published-run block. Each is authoritative for
-#: someone. The dispatch brief under `.superpowers/` carries the same line and was corrected with
-#: them, but that directory is git-ignored, so a fresh checkout has no copy for this test to read.
-DOCUMENTS = (
-    REPO_ROOT / "NEEDS-FROM-USER.md",
-    REPO_ROOT / "docs" / "requirements-traceability.md",
-    REPO_ROOT / "docs" / "superpowers" / "plans" / "2026-09-08-implementation-roadmap.md",
-)
+#: Every committed document that prints the published-run block.
+DOCUMENTS = (REPO_ROOT / "docs" / "requirements-traceability.md",)
 
 COMPARISON_JQ = ".target, (.variants[].variant)"
 IMPOSSIBLE_JQ = ".runs[].config_json.target"
@@ -122,25 +115,16 @@ def test_the_mcp_discovery_screenshot_is_committed_beside_its_json():
     assert [tool["name"] for tool in payload["tools"]] == sorted(tool["name"] for tool in payload["tools"])
 
 
-#: The three files `ls docs/evidence/*.png` is asking for. Two earlier P11 rounds reported the
-#: third as "named nowhere in the repo" — that was wrong, and the grep that found nothing looked
-#: only in the design document. All three are named, in three different files:
+#: The three files `ls docs/evidence/*.png` is asking for, each named in a different file:
 #:
 #:   * `mcp-discovery-4-tools.png`  — spec §13.9 (the ablation arm's 4-tool catalog)
-#:   * `mcp-discovery-page.png`     — `docs/requirements-traceability.md`'s **RUBRIC5.2** row and
-#:                                    roadmap §5's rubric table: "`/dashboard/mcp` renders live
-#:                                    discovery with all nine JSON Schemas"
+#:   * `mcp-discovery-page.png`     — `docs/requirements-traceability.md`'s **RUBRIC5.2** row:
+#:                                    "`/dashboard/mcp` renders live discovery with all nine JSON Schemas"
 #:   * `ci-deploy-skipped.png`      — spec §14.5 (the R8.4 red run's job graph)
-#:
-#: `NEEDS-FROM-USER.md` used to say "`ci-deploy-skipped.png` … plus the two the design document
-#: references", which double-counts the CI graph — the design document references it. That sentence
-#: is what sent two rounds looking for a fourth name; it now carries the table above instead.
 EXPECTED_SCREENSHOTS = {
     "mcp-discovery-4-tools.png",
     "mcp-discovery-page.png",
-    #: Blocked on the R8.4 red run, which needs `git push origin HEAD:ci-red-evidence` — a push
-    #: no phase subagent may make (roadmap §2.2). It is the last file of P11 still outstanding
-    #: that does not need a Render or Turso credential.
+    #: The R8.4 red run's job graph; it needed a push to a throwaway branch to capture.
     "ci-deploy-skipped.png",
 }
 
@@ -182,10 +166,9 @@ def test_docs_evidence_holds_the_capturable_screenshots_and_nothing_unnamed():
 # `git diff 80a5a71..HEAD -- <the application tree>` — the provenance command five documents print
 # --------------------------------------------------------------------------------------
 
-#: The pathspec of the published provenance command, as **one** definition. Five documents print it
-#: (README, `deployed.md`, `docs/pre-submission-checklist.md`, `docs/requirements-traceability.md`
-#: and the `CHANGELOG.md` entry for the wave), the test below runs it, and neither can drift from the
-#: other because both read this tuple.
+#: The pathspec of the published provenance command, as **one** definition. Three documents print it
+#: (README, `deployed.md` and `docs/requirements-traceability.md`), the test below runs it, and
+#: neither can drift from the other because both read this tuple.
 #:
 #: What is in it is *what the image serves*. `src`, the MCP server's code and schemas, the two launch
 #: scripts, the image, the service manifest and the pinned dependencies are the obvious half.
@@ -243,9 +226,7 @@ README = REPO_ROOT / "README.md"
 PROVENANCE_DOCUMENTS = (
     README,
     REPO_ROOT / "deployed.md",
-    REPO_ROOT / "docs" / "pre-submission-checklist.md",
     REPO_ROOT / "docs" / "requirements-traceability.md",
-    REPO_ROOT / "CHANGELOG.md",
 )
 
 LATEST = REPO_ROOT / "evaluation" / "results" / "latest.json"
@@ -274,7 +255,7 @@ def test_the_application_tree_has_not_moved_since_the_measured_build():
 
     When the claim *is* made, two things are checked beyond the diff: that README's base is the build
     the published run actually measured (`target_git_sha` in the run file `latest.json` points at, the
-    sha the service's own `/health` reported while the run was driven), and that the other four
+    sha the service's own `/health` reported while the run was driven), and that the other two
     documents print the same command — so the line a reader copies is the line the suite executes.
 
     The skip for an unresolvable base is earned rather than assumed, the same way

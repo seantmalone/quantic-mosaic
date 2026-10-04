@@ -391,7 +391,7 @@ def test_an_empty_url_is_refused_by_name_and_names_the_secret(script, capsys):
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "DEPLOY_URL" in captured.err
-    assert "NEEDS-FROM-USER.md" in captured.err
+    assert "deployed.md" in captured.err
     assert "Traceback" not in captured.err
 
 

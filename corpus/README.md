@@ -41,7 +41,7 @@ Document ID: pto-and-holidays · Owner: People Operations · Effective 2026-01-0
 Topics: pto, holidays
 ```
 
-The `Topics:` line is the **single source of truth** for a document's topics — the P4 parsers read it into
+The `Topics:` line is the **single source of truth** for a document's topics — the ingest parsers read it into
 `documents.topics` and `chunks.topics`, and the map below is a human-readable restatement of those lines,
 never a second source of truth. Values are drawn from `search_policy_documents`'s `topic` enum.
 
@@ -291,8 +291,8 @@ matching, so the build fails before the corpus can contradict a gold answer.
 output schemas and says the rules come from `rules.yml`, each requirement naming a `fact_key`, a `doc_id`
 and a `heading_path`; it does not say how `met`, `unmet`, the `verdict` (`compliant` / `conditional` /
 `non_compliant` / `insufficient_evidence`) or the applicable subset of `approvals_required` and
-`next_steps` are derived. Those are user-facing outputs, so **P5 owns them**; the P2 report §7.5 carries a
-non-binding proposal. `scripts/check_facts.py` asserts the requirement key vocabulary, so an evaluation
+`next_steps` are derived. Those are user-facing outputs, so they are decided in the MCP server's tool code, not
+in this file. `scripts/check_facts.py` asserts the requirement key vocabulary, so an evaluation
 field cannot reappear here without an explicit edit to `REQUIREMENT_KEYS` in the same commit.
 
 Requirements carry no `chunk_id`, because chunk ids are content hashes computed at ingest.
@@ -308,4 +308,4 @@ heading path is real as well as every `fact_key`.
 3. Run `python scripts/corpus_stats.py` if you added or removed a document.
 4. If you edited `workplace-conduct.src.md`, run `python scripts/build_pdf.py` and commit the regenerated
    PDF; the script pins its creation date, so an unchanged source produces byte-identical output.
-5. From P4 onward, re-run the ingest so `data/index/chunks.manifest.jsonl` matches the new prose.
+5. Re-run the ingest so `data/index/chunks.manifest.jsonl` matches the new prose.

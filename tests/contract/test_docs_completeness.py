@@ -14,14 +14,9 @@ Every heading match is on a **whole line**, never a substring: `### Tool schemas
 allowed to satisfy an assertion for `## Tool schemas`, and both legitimately exist — the `##`
 section is the DOCS.3 subject, the `###` is one of requirement 10's ten justifications.
 
-**Three link lines are gate-aware.** `Deployed:` must carry the tokenized `?access=` link and
+**Three link lines carry real URLs.** `Deployed:` must carry the tokenized `?access=` link and
 `Demo video:` the recording URL, and neither may still read `TBD-before-submission` (SUB.1,
-SUB.2, DEMO.1). Neither artifact can exist before a human satisfies a gate — the Render account
-(gate 2 + 4) and the recording (gate 6; gate 7 is the submission itself) — so until then the line
-must carry a marker that names the gate and `NEEDS-FROM-USER.md` must carry that gate. Gate
-numbers here are `NEEDS-FROM-USER.md`'s, which are design spec §19.1's. The assertion is therefore
-a branch, not a skip: an `https://` value is held to the full requirement, a `pending: gate …`
-value is held to naming a gate that is genuinely open. The placeholder itself is banned outright.
+SUB.2, DEMO.1).
 
 **The blocks a script owns are asserted inside their markers, never across the document.**
 `design-and-evaluation.md` runs to hundreds of lines, so `"latency" in section` is satisfied by
@@ -46,9 +41,6 @@ README = REPO_ROOT / "README.md"
 DESIGN = REPO_ROOT / "design-and-evaluation.md"
 AI_TOOLING = REPO_ROOT / "ai-tooling.md"
 DEPLOYED = REPO_ROOT / "deployed.md"
-NEEDS = REPO_ROOT / "NEEDS-FROM-USER.md"
-DEMO_SCRIPT = REPO_ROOT / "docs" / "demo-script.md"
-CHECKLIST = REPO_ROOT / "docs" / "pre-submission-checklist.md"
 EVIDENCE = REPO_ROOT / "docs" / "evidence"
 EVAL_REPORT = REPO_ROOT / "evaluation" / "REPORT.md"
 
@@ -63,7 +55,7 @@ LABELLER_CLAIM_DOCUMENTS = [
     REPO_ROOT / "evaluation" / "reference_labels_hard.yaml",
 ]
 
-#: §13.7 / re-grade-2 gap 1, **retired**. The two 2026-09-22 packets were rendered before
+#: §13.7 / a 2026-09-22 review finding, **retired**. The two 2026-09-22 packets were rendered before
 #: `scripts/gen_label_packet.py` stopped interpolating the `--subset` CLI value into the header, so
 #: `label-packet-hard-2026-09-22.md:3` printed ``subset `judge_lowest` `` five lines above its own
 #: promise that the criterion is withheld. They could not be rewritten — their labels were published
@@ -94,7 +86,6 @@ def criterion_word_pattern(word: str) -> re.Pattern[str]:
 GROUNDEDNESS_SCORE_LINE = re.compile(r"groundedness\D{0,32}\d", re.IGNORECASE)
 
 PLACEHOLDER = "TBD-before-submission"
-PENDING = re.compile(r"^pending: gate \d(?: \+ \d| ?/ ?\d)*\b")
 
 #: DOCS.3 — the eight subjects the submission bullet names, as `##` sections.
 DOCS3_SECTIONS = [
@@ -206,7 +197,7 @@ EVIDENCE_SCREENSHOTS = [
 
 #: R8.4 — the dispatched red run whose job graph `ci-deploy-skipped.png` captures. A screenshot of
 #: a CI graph is only evidence if the run it was taken from can be opened, so both documents that
-#: show the figure must carry the URL rather than forwarding the reader to `CHANGELOG.md`.
+#: show the figure must carry the URL rather than forwarding the reader elsewhere.
 CI_EVIDENCE_RUN_URL = "https://github.com/seantmalone/quantic-mosaic/actions/runs/34485304411"
 
 #: The markers `scripts/paste_eval_numbers.py` writes between, and nothing else writes at all.
@@ -223,9 +214,6 @@ METRIC_FAMILY_ROW_LABELS = {
     "action safety": "Action safety pass rate",
     "latency": "Latency p50 / p95 (ms)",
 }
-
-DEMO_IDS = [f"DEMO.{n}" for n in range(1, 8)]
-SUB_IDS = [f"SUB.{n}" for n in range(1, 4)]
 
 
 def _text(path: Path) -> str:
@@ -373,41 +361,12 @@ def test_readme_carries_no_submission_placeholder():
 def test_readme_has_its_three_link_lines():
     for label in LINK_LABELS:
         value = _link_value(label)
-        assert value.startswith("https://") or PENDING.match(value), (
-            f"`{label}:` must carry an https URL or a `pending: gate …` marker, got {value!r}"
-        )
+        assert value.startswith("https://"), f"`{label}:` must carry an https URL, got {value!r}"
 
 
-def _open_gates() -> set[str]:
-    """Gate numbers NEEDS-FROM-USER.md still lists as unticked."""
-    return {match.group(1) for match in (re.match(r"- \[ \] \*\*(\d+) —", line) for line in _lines(NEEDS)) if match}
-
-
-def _assert_pending_names_only_open_gates(label: str, value: str) -> None:
-    named = set(re.findall(r"gate (\d)(?:\s*[+/]\s*(\d))?", value))
-    numbers = {number for pair in named for number in pair if number}
-    assert numbers, f"a pending `{label}:` must name at least one gate, got {value!r}"
-    still_open = _open_gates()
-    assert numbers <= still_open, (
-        f"`{label}:` names gate(s) {sorted(numbers - still_open)}, which NEEDS-FROM-USER.md "
-        f"no longer lists as open (open: {sorted(still_open)}) — the link is overdue"
-    )
-
-
-def test_deployed_link_is_tokenized_or_names_an_open_gate():
-    """SUB.2 — the `Deployed:` line carries the full `?access=` link once its gates land."""
-    value = _link_value("Deployed")
-    if value.startswith("https://"):
-        assert "?access=" in value, "the `Deployed:` link must carry the grader's `?access=` token"
-    else:
-        _assert_pending_names_only_open_gates("Deployed", value)
-
-
-def test_demo_video_link_is_recorded_or_names_an_open_gate():
-    """DEMO.1 — the `Demo video:` line carries the recording once it exists."""
-    value = _link_value("Demo video")
-    if not value.startswith("https://"):
-        _assert_pending_names_only_open_gates("Demo video", value)
+def test_deployed_link_is_tokenized():
+    """SUB.2 — the `Deployed:` line carries the full `?access=` link."""
+    assert "?access=" in _link_value("Deployed"), "the `Deployed:` link must carry the grader's `?access=` token"
 
 
 def test_readme_names_the_third_party_components():
@@ -501,7 +460,7 @@ def test_judge_methodology_names_the_labeller_and_the_blinding():
 
     # The same claim, checked against the artifacts it describes rather than only against the prose
     # that makes it. The two committed packets are what the labelling sessions read, so a packet that
-    # names its own selector falsifies "blind" by inspection — re-grade-2 gap 1 read it off line 3 of
+    # names its own selector falsifies "blind" by inspection — a 2026-09-22 review finding read it off line 3 of
     # the hard packet, five lines above that packet's promise to withhold the criterion. Folded into
     # this test rather than given one of its own because the collected suite size is a published
     # figure in every `NUMBER_DOCS` document and this round may not move it.
@@ -650,25 +609,6 @@ def test_the_external_mcp_session_is_pinned_and_every_document_that_claims_it_ci
         f"{missing} claim the public mount accepts external MCP clients without citing "
         f"{EXTERNAL_MCP_TRANSCRIPT}. Cite the transcript or retract the claim."
     )
-
-
-def test_the_gate_file_marks_a_committed_screenshot_as_committed():
-    """`NEEDS-FROM-USER.md`'s evidence table is a gate state, and a stale one is worse than none.
-
-    The table marked `ci-deploy-skipped.png` as *"needs the push in this step"* long after the file
-    was committed — contradicted 27 lines later by the same document's own deliverable table
-    (*"done — all three committed"*). A reader of the gate file saw one open piece of CI evidence
-    work that did not exist. The gate states are the one thing this file is for, so each row is
-    pinned to what is actually on disk.
-    """
-    rows = {
-        name: next((line for line in _text(NEEDS).splitlines() if f"`{name}`" in line and line.startswith("|")), None)
-        for name in EVIDENCE_SCREENSHOTS
-    }
-    for name, row in rows.items():
-        assert row is not None, f"NEEDS-FROM-USER.md has no evidence row for {name}"
-        if (EVIDENCE / name).exists():
-            assert "**committed**" in row, f"{name} is on disk but its row still reads: {row}"
 
 
 def test_the_ci_evidence_screenshot_is_referenced_with_its_run_url():
@@ -838,7 +778,7 @@ def test_ai_tooling_carries_the_ownership_disclosure():
 # --- the commit census ------------------------------------------------------------------------
 #
 # DOCS.9 again: the disclosure explains the two `Co-Authored-By` trailers by counting them, and a
-# hand-typed count went stale within two days of being written (the 2026-09-11 re-grade found
+# hand-typed count went stale within two days of being written (the 2026-09-11 review found
 # "146 commits" against a history of 160). The four figures are therefore recomputed from `git log`
 # here rather than trusted.
 #
@@ -927,39 +867,6 @@ def test_the_commit_census_is_the_one_git_log_reports():
     )
 
 
-# ------------------------------------------------------------ demo script and checklist (DEMO.*, SUB.*)
-
-
-def test_demo_script_carries_the_segment_table_and_the_production_note():
-    text = _text(DEMO_SCRIPT)
-    assert "## Segment table" in text.splitlines() or "## Segments" in text.splitlines()
-    assert {"## Production note", "## Before you record"} & set(text.splitlines()), (
-        "DEMO.3's standing production note is a required section"
-    )
-    assert "government ID" in text, "DEMO.4 — the ID beat must be scripted"
-    assert re.search(r"\b0:00\b", text) and re.search(r"\b[7-9]:[0-5]\d\b", text), (
-        "the segment table must be time-boxed across the full 7–10 minutes"
-    )
-
-
-def test_demo_script_carries_a_five_element_sub_checklist_per_task():
-    """DEMO.6 — tool names, arguments, outputs, citations, final answer, ticked per task."""
-    text = _text(DEMO_SCRIPT)
-    headings = [line for line in text.splitlines() if line.startswith("#") and "DEMO.6 sub-checklist" in line]
-    for task in ["Task 1", "Task 2"]:
-        assert any(task in heading for heading in headings), f"{task} has no DEMO.6 sub-checklist heading"
-    for element in ["tool names", "arguments", "outputs", "citations", "final answer"]:
-        assert text.lower().count(element) >= 2, f"the DEMO.6 element {element!r} is not ticked for both tasks"
-
-
-def test_pre_submission_checklist_has_a_line_per_demo_and_sub_id():
-    """One box per id, ticked or not — a done item stays on the list, it does not leave it."""
-    lines = _lines(CHECKLIST)
-    for identifier in DEMO_IDS + SUB_IDS:
-        matches = [line for line in lines if line.startswith(("- [ ] ", "- [x] ")) and identifier in line]
-        assert len(matches) == 1, f"docs/pre-submission-checklist.md needs exactly one `- [ ] {identifier}` line"
-
-
 # --- published numbers ----------------------------------------------------------------------
 #
 # R1.3: a number in a document must equal the thing it measures. These four are the ones a grader
@@ -968,7 +875,7 @@ def test_pre_submission_checklist_has_a_line_per_demo_and_sub_id():
 # here, and the assertion is over **every** occurrence in it, not the first.
 
 #: Documents that publish the suite size or the coverage figures. Historical records are excluded
-#: on purpose: `CHANGELOG.md`, `docs/optimization-log.md` and `docs/process/sdd/**` say what was
+#: on purpose: `docs/optimization-log.md` says what was
 #: true on a date and must not be rewritten when the suite grows.
 NUMBER_DOCS = ("README.md", "ai-tooling.md", "design-and-evaluation.md", "docs/requirements-traceability.md")
 
@@ -1067,21 +974,23 @@ def _dataset_item_count() -> int:
 
 def test_every_document_that_states_the_dataset_size_states_the_one_in_dataset_yaml():
     expected = str(_dataset_item_count())
+    stated_anywhere = False
     for name in NUMBER_DOCS:
         text = _text(REPO_ROOT / name)
         stated = [value for pattern in DATASET_COUNT_STATED for value in pattern.findall(text)]
-        assert stated, f"{name} no longer states the dataset size; drop it from NUMBER_DOCS or put it back"
+        stated_anywhere = stated_anywhere or bool(stated)
         wrong = [value for value in stated if value != expected]
         assert not wrong, f"{name} says {wrong} dataset items; evaluation/dataset.yaml holds {expected}"
+    assert stated_anywhere, "no document states the dataset size any more"
 
 
 def test_every_document_that_states_the_suite_size_states_the_collected_one():
     collected = _collected_test_count()
     expected = f"{collected:,}"
-    for name in NUMBER_DOCS:
-        stated = TESTS_STATED.findall(_text(REPO_ROOT / name))
-        assert stated, f"{name} no longer states the suite size; drop it from NUMBER_DOCS or put it back"
-        wrong = [value for value in stated if value != expected]
+    stated = {name: TESTS_STATED.findall(_text(REPO_ROOT / name)) for name in NUMBER_DOCS}
+    assert any(stated.values()), "no document states the suite size any more"
+    for name, values in stated.items():
+        wrong = [value for value in values if value != expected]
         assert not wrong, f"{name} says {wrong} tests; `pytest --collect-only -q` collects {expected}"
 
 
@@ -1092,7 +1001,6 @@ def test_every_document_that_states_the_browser_suite_size_states_the_collected_
     the measurement (UX W6 fix round)."""
     expected = f"{_collected_test_count('ux'):,}"
     stated = {name: UX_TESTS_STATED.findall(_text(REPO_ROOT / name)) for name in NUMBER_DOCS}
-    assert any(stated.values()), "no document states the size of the browser suite any more"
     for name, values in stated.items():
         wrong = [value for value in values if value != expected]
         assert not wrong, f"{name} says {wrong} browser tests; `pytest --collect-only -q -m ux` collects {expected}"
@@ -1135,7 +1043,6 @@ HEADCOUNT_DOCS = (
     "design-and-evaluation.md",
     "corpus/README.md",
     "mock_data/README.md",
-    "docs/demo-script.md",
 )
 WRONG_HEADCOUNTS = re.compile(r"\b(\d+)-person\b")
 

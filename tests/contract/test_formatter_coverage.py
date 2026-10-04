@@ -1,6 +1,6 @@
 """**P10**: one convention per concept — every number on a dashboard page goes through a filter.
 
-`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` §1 P10 states the rule mechanically:
+The UX remediation plan §1 P10 states the rule mechanically:
 *"No bare `{{ value }}` for a numeric or temporal expression in any template — every one goes
 through a registered Jinja filter."* It is the principle behind most of W4's numeric findings: a
 rate that read `1.0` on one page and `50.0%` one click away, money at four decimal places on one

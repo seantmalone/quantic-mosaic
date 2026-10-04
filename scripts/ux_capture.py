@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Re-capture the UX audit's screens against the working tree (`make ux-capture`).
 
-The audit that produced `docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` is evidence, and
+The UX audit is evidence, and
 evidence has to be reproducible: this is the harness that reproduces it, so a wave can be checked
 against the same screen ids at the same three viewports rather than eyeballed — each
 viewport a fresh load of the page, never a resize (UX W7).

@@ -571,7 +571,7 @@ def test_an_unparseable_as_of_is_refused_rather_than_defaulted_to_today():
 
 # -- W8: the submission date, the three statuses, the approval chain -------------------
 #
-# The four defects these pin were all live on 2026-09-15 (`demo-path-review-2026-09-15.md`):
+# The four defects these pin were all live on 2026-09-15:
 # notice measured from a frozen snapshot, a requirement nobody evaluated narrated as a settled
 # failure, a director told to get her own approval, and a new hire given the annual open-enrolment
 # window as their election deadline.
@@ -743,7 +743,7 @@ def _roles(body: dict) -> list[str]:
 
 
 def test_a_refresh_with_no_device_age_attaches_nothing_from_the_early_refresh_rows():
-    """The reproduction from the 2026-09-21 grade card, rank 4: a verdict of `insufficient_evidence`
+    """The reproduction from the 2026-09-21 review, rank 4: a verdict of `insufficient_evidence`
     that still told the reader to get a manager's approval for an early refresh, on a request whose
     device age nobody had supplied."""
     body = _equipment({"request_type": "refresh"})

@@ -144,7 +144,7 @@ print("-- dashboard:", turn.get("dashboard_url"))
 # Without this the script exited 0 on an empty answer, zero citations or `outcome: null`.
 # Citations are asserted as non-empty rather than at the three distinct documents
 # `tests/e2e/test_demo_tasks.py` requires under the stub: this script is also run against the live
-# URL, where document breadth varies run to run (see `docs/demo-script.md`, task 1 element ④).
+# URL, where document breadth varies run to run.
 problems = []
 if turn.get("outcome") != "answered":
     problems.append(f"outcome is {turn.get('outcome')!r}, not 'answered'")

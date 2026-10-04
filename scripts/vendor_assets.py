@@ -7,7 +7,7 @@ No runtime CDN: htmx, Alpine.js and Chart.js are downloaded once at their pinned
 
 If a pinned version has been withdrawn (HTTP 404) the script resolves the nearest published
 release of the same major, prints `PINNED <name> <version>` and records the substitution with
-its date in `CHANGELOG.md`, so a vendoring drift is always visible in the history.
+its date in `LICENSES.md`, so a vendoring drift is always visible.
 
 Usage:  python scripts/vendor_assets.py
 """
@@ -25,7 +25,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VENDOR_DIR = REPO_ROOT / "src" / "hrmosaic" / "web" / "static" / "vendor"
 LICENSES = VENDOR_DIR / "LICENSES.md"
-CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 BLOCK_BEGIN = "<!-- vendored-assets:begin -->"
 BLOCK_END = "<!-- vendored-assets:end -->"
@@ -122,8 +121,8 @@ def record_substitutions(substitutions: list[tuple[str, str, str]]) -> None:
         f"{name} ({pinned}); vendored the nearest release {resolved} instead."
         for name, pinned, resolved in substitutions
     ]
-    existing = CHANGELOG.read_text(encoding="utf-8").rstrip()
-    CHANGELOG.write_text(existing + "\n" + "\n".join(lines) + "\n", encoding="utf-8")
+    existing = LICENSES.read_text(encoding="utf-8").rstrip() if LICENSES.exists() else ""
+    LICENSES.write_text(existing + "\n\n" + "\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> int:

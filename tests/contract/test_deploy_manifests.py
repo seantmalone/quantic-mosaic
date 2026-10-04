@@ -214,13 +214,13 @@ def test_a_root_readme_commit_still_runs_the_suite_and_deploys():
     assert ignored == ["evaluation/results/**", "evaluation/REPORT.md"]
     assert "*.md" not in ignored, "a root README edit must run CI and deploy"
     assert not any(entry.startswith("docs/") for entry in ignored), (
-        "the docs contract tests read docs/requirements-traceability.md, docs/pre-submission-checklist.md "
-        "and docs/demo-script.md — a commit that touches only those must run them"
+        "the docs contract tests read docs/requirements-traceability.md and docs/evidence/ — "
+        "a commit that touches only those must run them"
     )
 
 
 def test_the_lint_job_scans_the_whole_history_on_every_run():
-    """The "full-history gitleaks scan" README claims and the demo script narrates (G5b, gap 7).
+    """The "full-history gitleaks scan" README claims.
 
     `gitleaks-action@v2` runs an unbounded scan only on a dispatch or a schedule, and this workflow has
     no `schedule:`; on the graded push it scanned two commits. The explicit step below makes the claim
@@ -352,7 +352,7 @@ def test_the_first_deploy_step_fails_loudly_when_no_trigger_credential_is_set():
         assert name in first["run"]
     assert "DEPLOY_URL" in first["run"]
     assert "exit 1" in first["run"]
-    assert "NEEDS-FROM-USER.md" in first["run"]
+    assert "deployed.md" in first["run"]
 
 
 def test_either_trigger_credential_alone_satisfies_the_guard():

@@ -29,14 +29,14 @@ transport carried the call.
 
 | Mode | `MCP_TRANSPORT` | Where it is used | Endpoint |
 |---|---|---|---|
-| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the graded topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; externally reachable only from a `Host` on `MCP_ALLOWED_HOSTS` — see *Native `Host` / `Origin` allowlist* below |
+| **Streamable HTTP, mounted in-process** | `http` (default) | the deployed service — the production topology | `http://127.0.0.1:${PORT}/mcp-server/mcp`; externally reachable only from a `Host` on `MCP_ALLOWED_HOSTS` — see *Native `Host` / `Origin` allowlist* below |
 | **stdio subprocess** | `stdio` | local dev (`make run-stdio`, MCP Inspector) and the fast CI discovery test — a visibly separate OS process, which is where that property is demonstrated: the recorded walkthrough is driven entirely against the deployed URL, so it has no stdio beat | `python mcp/server_entrypoint.py --stdio` |
 | **Remote Streamable HTTP** | `http` + `MCP_SERVER_URL` | R7.3 — the same client against an external endpoint; CI tests it against a second local uvicorn on another port | any external MCP endpoint |
 
 **Why mounted in-process is the default.** The deployment is one 0.1-CPU Render instance. A second
 process would double the resident set for no architectural gain, and a loopback HTTP hop inside one
 process still exercises the whole MCP protocol — `initialize`, `tools/list`, `tools/call`, session
-ids, SSE framing — so the graded topology is a real MCP client talking to a real MCP server.
+ids, SSE framing — so the deployed topology is a real MCP client talking to a real MCP server.
 
 **What that costs, and how it is paid.** The MCP server shares its event loop with FastAPI. A
 synchronous SQLite read or an ONNX embed on that loop would stall `/chat`, `/health` and the SSE rail
@@ -78,8 +78,7 @@ HTTP loopback.
    client's own `httpx.AsyncClient`: `mcp` 2.2.0's `streamable_http_client` yields only
    `(read, write)` and its `ClientSession` has no `session_id` attribute (see the 1.x → 2.x table
    below), so the response header is the only seam there is. It is `null` on stdio, which has no
-   session id, and was `null` on the HTTP transport too until the hook landed on 2026-09-22 —
-   `docs/evidence/demo-task-1-live-2026-09-15-session.json` is a stored span from before that.
+   session id, and was `null` on the HTTP transport too until the hook landed on 2026-09-22.
 4. Per turn the catalog is converted to OpenAI-shaped function schemas — **the array handed to the
    model is that conversion**, never a hard-coded list.
 5. `tools/call` carries `_meta` (below). Results are read from `structured_content` when present,
@@ -219,7 +218,7 @@ allowlist** first whenever its `host` argument is `127.0.0.1`, `localhost` or `:
 `server.streamable_http_app()` with no arguments, mounted at `/mcp-server`, enables protection with
 `allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]`, and every request arriving with a
 public `Host` header gets `421 Invalid Host header`. That is what the deployed endpoint did until
-P23, and it is why an MCP Inspector session against
+the allowlist below was configured, and it is why an MCP Inspector session against
 `https://mosaic-hr-copilot.onrender.com/mcp-server/mcp` failed with a bearer token that was
 perfectly valid. It is fixed: see *Status on the live service* below.
 
@@ -234,7 +233,7 @@ requests through the mount and asserts all three cases — the public hostname a
 one refused, and loopback unchanged.
 
 **The allowlist is the second control, not the only one.** The mount is also behind the FastAPI
-access gate (`APP_ACCESS_TOKEN`, P8) and the per-IP rate limit, and the two state-changing tools
+access gate (`APP_ACCESS_TOKEN`) and the per-IP rate limit, and the two state-changing tools
 need a one-time confirmation token an external caller cannot obtain.
 
 **Status on the live service, verified 2026-09-11 at 20:32Z: the public mount accepts external MCP
@@ -246,11 +245,9 @@ further on 2026-09-12, and the part of it that survives as a capture is pinned v
 [`docs/evidence/mcp-external-session-2026-09-12.txt`](../docs/evidence/mcp-external-session-2026-09-12.txt):
 `initialize` **200** with a `mcp-session-id`, `notifications/initialized`, `tools/list` returning
 all **nine** tools, and a real `search_policy_documents` call answered out of the deployed index
-with its retrieval span attached. The rest of that session as the 2026-09-12 01:45Z re-grade
-reports it — a `check_pto_balance` call, `create_mock_hr_ticket` refused
+with its retrieval span attached. The rest of that session — a `check_pto_balance` call, `create_mock_hr_ticket` refused
 **`CONFIRMATION_REQUIRED`** with no confirmation token and refused again with a forged one, and
-**401** to a request carrying no bearer — has no surviving capture, so it is attributed to that
-record (`docs/process/sdd/P27-brief.md` item 4) rather than pinned: the access gate and the
+**401** to a request carrying no bearer — has no surviving capture, so it is not pinned: the access gate and the
 confirmation gate above are covered by the test suite, and what the deployed service is *pinned*
 as answering is the transcript above.
 An MCP Inspector session therefore attaches to

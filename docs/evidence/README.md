@@ -1,95 +1,53 @@
 # Evidence — what is here, when it was taken, and on which build
 
 Every artifact in this directory is a capture of something that actually ran: a live transcript, a
-screen set, a probe, an independent report. Several of the older headers call the build they ran on
-**"the final build"** — `f5e86c3` on 2026-09-12, `bd4ac93` on 2026-09-16, `da0dca2` for the Waves 1–2
-cold-start probes. Each of those was true when it was written and none of them is now: read *"the
-final build"* in any header below as **final as of that date**. The build the **published evaluation
-run measures is `34d50fb`** — run `r_1790130220_baseline`, driven 2026-09-23 over the 30-item
-dataset (started 02:23:40Z, judged run file written 02:59:40Z), the run `evaluation/results/latest.json`
-points at and the one `evaluation/REPORT.md`, `design-and-evaluation.md`, `README.md` and `deployed.md`
-publish. Two builds held that place before it and are named in rows below: `8a89310` for ten hours on
-2026-09-22, then `80a5a71` overnight until the round-3 re-drive replaced it.
-Transcripts and headers are never edited to keep up; this index is where the dates are reconciled
-instead.
+screen set, a probe or a labelling packet. Each was taken on the build named in its row, and its
+header is left as written on that date. The build the **published evaluation run measures is
+`34d50fb`**: run `r_1790130220_baseline`, driven 2026-09-23 over the 30-item dataset, the run
+`evaluation/results/latest.json` points at and the one `evaluation/REPORT.md`,
+`design-and-evaluation.md`, `README.md` and `deployed.md` publish. Artifacts captured on earlier
+builds are kept as dated records. A header that calls its build "the final build" means the latest
+build on the date it was written.
 
-A `git log --diff-filter=A -1 -- docs/evidence/<name>` gives the commit any artifact landed in, which
-is how the *Build* column is filled for the screen sets, whose own captures record a harness and a
-date rather than a service sha.
+`git log --diff-filter=A -1 -- docs/evidence/<name>` gives the commit any artifact was added in.
+That is how the *Build* column is filled for the screen sets, which record a harness and a date
+rather than a service sha.
 
 ## Index
 
 | Artifact | Date | Build | What it shows |
 |---|---|---|---|
-| [`mcp-discovery-4-tools.json`](mcp-discovery-4-tools.json) | 2026-09-09 | added at `15bdfe2` | `tools/list` from the **separate stdio server** of the ablation arm: 4 tools, with the five structured-data and write tools genuinely absent from discovery rather than filtered downstream |
-| [`mcp-discovery-4-tools.png`](mcp-discovery-4-tools.png) | 2026-09-10 | added at `73eb047` | the same 4-tool discovery on screen, beside the five removed names |
-| [`mcp-discovery-page.png`](mcp-discovery-page.png) | 2026-09-10 | added at `70faf71` | `/dashboard/mcp` rendering live discovery: the server card (`connected yes`, protocol `2025-11-25`, 32 ms handshake, 9 tools), every tool's `input_schema` / `output_schema` / `annotations`, and the handshake-history row |
-| [`ci-deploy-skipped.png`](ci-deploy-skipped.png) | 2026-09-10 | added at `5419ec5` | the job graph of a recorded **red** CI run — `test` fails, `deploy` is skipped with the reason *"dependent job failed"* (run `34485304411`) |
-| [`cold-start-probes.json`](cold-start-probes.json) | 2026-09-10 → 11 | probe 1 on `bf85ffd`, probes 2–3 on `da0dca2` | the three live cold-start probes behind `deployed.md`'s `## Cold start`: per-segment seconds, their medians and their `n`, transcribed from each run's ledger entry. Its probe-2/3 `build` field is the *"final build (Waves 1-2)"* — final as of 2026-09-11 |
-| [`demo-task-1-live-2026-09-11.txt`](demo-task-1-live-2026-09-11.txt) | 2026-09-11 | `e13a772` (deployed `/health`) | demo task 1 — international remote-work eligibility — driven live against the deployed service, the first pinned transcript |
-| [`demo-task-2-live-2026-09-11.txt`](demo-task-2-live-2026-09-11.txt) | 2026-09-11 | `e13a772` (deployed `/health`) | demo task 2 — a PTO request through the confirmation gate to a mock write, with the citation-breadth caveat in its own header |
-| [`grade-card-2026-09-11.md`](grade-card-2026-09-11.md) | 2026-09-11 | graded at `e13a772` | the **first** independent grade card, read-only against `docs/project-requirements.md`; its findings are the P23 fixes |
-| [`demo-task-2-live-2026-09-12.txt`](demo-task-2-live-2026-09-12.txt) | 2026-09-12 | `f5e86c3` — its header's *"the final build"* | demo task 2 re-run after the P24 breadth repair: the card first, nothing written, then the confirmed write, ticket `MOCK-HR-000006` |
-| [`mcp-external-session-2026-09-12.txt`](mcp-external-session-2026-09-12.txt) | 2026-09-12 | `f5e86c3` — its header's *"the final build"* | the MCP mount reached from **outside** the service by plain `curl` over HTTP/2: `initialize` with a session id, `notifications/initialized`, `tools/list` returning all nine tools, and a real `search_policy_documents` call with its server-side retrieval span |
-| [`ux-audit-2026-09-14/`](ux-audit-2026-09-14/) | 2026-09-14 | captured 23:55Z, added at `af31e7c` | the **original** UX audit's own capture set — 36 of the 53 screens it took, plus the `index.json` that records the harness (LOCAL, `LLM_PROVIDER=stub`, no live model call, every visible number and every overflow measured). The 155 findings it produced are the remediation plan's inventory |
-| [`brand-preview.html`](brand-preview.html) | 2026-09-14 | added at `7792090` | the W0 identity in one self-contained page: the mark, the type pairing and the whole token block, light **and** dark side by side |
-| [`ux-w1/`](ux-w1/) | 2026-09-14 | after-shots at `81f2d3e` | W1 before/after — one masthead on every page in every persona, one gate (roles gate only the three writes), the themed error page, the policy reader route, a conversation that survives a reload |
-| [`ux-w2/`](ux-w2/) | 2026-09-14 | after-shots at `ff9a9a3` | W2 before/after — the chat redesign: one conversation column, plain language, sources as friendly references, the confirmation card, a refusal, the phone. This is the wave that deleted the 22 rem span rail and the per-turn trace panel |
-| [`ux-w3/`](ux-w3/) | 2026-09-15 | after-shots at `42ca1fe` | W3 before/after — the quarantined *Demo & grader* panel, the outcome-aware live region, and refusals that name five example policies and link the library |
-| [`ux-w4/`](ux-w4/) | 2026-09-15 | `before-` at `42ca1fe`, `after-` at `efbbde0` | W4 before/after over **every dashboard route** at 1440×900 (plus `-full` for the two pages whose change is below the fold, and `-390` for the phone): one formatter path per number, ledes and breadcrumbs, tables that scan, KPI tiles that agree with their detail |
-| [`ux-final/`](ux-final/) | 2026-09-15 | added at `3c94353` | **the screen set at the end of the five-wave remediation** (W0–W5), 39 screens and a README: every surface at 1440, the phone, and `prefers-color-scheme: dark`, captured by `make ux-capture` against four stub servers on loopback. Later waves (W6–W9) have their own before/after directories below — this is the W5-era set the report and the README cite, not the last screens taken |
-| [`ux-reaudit-2026-09-15.md`](ux-reaudit-2026-09-15.md) | 2026-09-15 | working tree, added at `63e4754` | the **first** independent re-audit (48 agents) of W0–W5: 138 of 155 inventory findings verified fixed, 6 of 15 principles passing, and a gate failed on four Criticals — three of them regressions the waves introduced |
-| [`ux-w6/`](ux-w6/) | 2026-09-15 | `before-` = the re-audit's own captures, `after-` at `d6d2e64` | W6 before/after, one pair per Critical — the sized chart container, the `performed` block, `next_steps` rendered only where nothing is grouped, date-consistency, and the chat URL that carries its session |
-| [`demo-task-1-live-2026-09-15-cap8-partial.txt`](demo-task-1-live-2026-09-15-cap8-partial.txt) | 2026-09-15 | `4058404` (after UX W6) | the live run that found the tool-call cap: nine calls wanted, eight allowed, so a complete nine-block answer shipped labelled `partial` with the limit preface. The reason `AGENT_MAX_TOOL_CALLS` is 12 (P28) |
-| [`demo-task-1-live-2026-09-15.txt`](demo-task-1-live-2026-09-15.txt) · [`demo-task-2-live-2026-09-15.txt`](demo-task-2-live-2026-09-15.txt) | 2026-09-15 | `ebd665a` (UX W6 + P28) | both demo tasks re-driven on the raised cap: demo 1 answered over four documents, demo 2 through the gate to the write — and the two defects only a real model produced (a write narrated as a *recommendation*, a tenure restated in months with the snapshot date) |
-| [`demo-task-1-live-2026-09-15-session.json`](demo-task-1-live-2026-09-15-session.json) · [`demo-task-2-live-2026-09-15-session.json`](demo-task-2-live-2026-09-15-session.json) | 2026-09-15 | `ebd665a` (`app_version` in the file) | the **store's own rows** for those two turns — session, turns and every span with its payload — so the transcripts can be checked against the audit trail rather than against each other |
-| [`ux-reaudit-2-2026-09-15.md`](ux-reaudit-2-2026-09-15.md) | 2026-09-15 | captured on `7655321`; `48c1c8d` and `d8a2ca3` landed while it ran, as its own caveat records | re-audit #2 (45 agents): 150 of 155 verified fixed, 8 of 15 principles passing, one Critical — a phone that never scrolled to the newest answer — and 36 confirmed findings |
-| [`demo-task-1-live-2026-09-15-p29.txt`](demo-task-1-live-2026-09-15-p29.txt) · [`demo-task-2-live-2026-09-15-p29.txt`](demo-task-2-live-2026-09-15-p29.txt) | 2026-09-15 | `d8a2ca3` (UX W6 + P28 + P29) | the same two tasks after P29 made both defects deterministic: tenure in the tool's own words with no restated snapshot date, and demo 2 leading with *"Done: … Reference MOCK-HR-000008."* Demo 1 here was the run the demo script's timings and citation breadth were read from until 2026-09-22 (46.8 s over 35 spans, 10 passages across four documents); the script now reads them off the live re-capture below — **38.2 s over 39 spans, 8 passages across four documents** — and this pair stays as the P29 record |
-| [`demo-path-review-2026-09-15.md`](demo-path-review-2026-09-15.md) | 2026-09-15 | the deployed build of that day, added at `c051bd4` | the adversarial logic review: 512 captured turns plus 16 fresh persona scenarios through seven lenses with a refuter per class — 22 defect classes (11 Critical) and **11 of 16 scenarios logically wrong for their persona**. The brief for the W8 logic wave |
-| [`ux-w7/`](ux-w7/) | 2026-09-15 | `before-` on `d8a2ca3`, `after-` at `e7f1b60` | W7 before/after, eight pairs — the phone scroller picked at runtime, the reader's own record as a `record` block, the always-expanded demo panel, the eyebrow-and-pill dashboard menu, real eval tabs, and a fresh load per viewport |
-| [`ux-w8/`](ux-w8/) | 2026-09-15 | `before-` on `16217b7`, `after-` at `133e853` | the W8 fix round, four pairs — one per Critical of re-audit #3, including the refusal branch of a blocked write photographed on purpose |
-| [`ux-w9/`](ux-w9/) | 2026-09-15 | `before-` on `133e853`, `after-` at `6f11bcd` | W9 before/after for re-audit #4's two Criticals: the conversation owning the first viewport at 1440 and 1280, and the waterfall's payload disclosures |
-| [`ux-reaudit-3-2026-09-16.md`](ux-reaudit-3-2026-09-16.md) | 2026-09-16 | captured on `16217b7`, added at `98c893f` | re-audit #3 over W7 and W8 — 71 screen ids × 3 viewports, 26 confirmed findings, four Criticals (the four `ux-w8/` closes) |
-| [`ux-reaudit-4-2026-09-16.md`](ux-reaudit-4-2026-09-16.md) | 2026-09-16 | the tree at `133e853`, added at `98c893f` | re-audit #4, scoring the redesign against the plan's 15 principles and the owner's three goals: 9 of 15 principles passing, two Criticals (the two `ux-w9/` closes) |
-| [`scenario-recheck-final-2026-09-16.md`](scenario-recheck-final-2026-09-16.md) | 2026-09-16 | the live build of that day, added at `98c893f` | the same 16 persona scenarios re-driven one turn at a time after W8: **13 of 16 logically right, was 5 of 16** — and no scenario shipping a contradicted write, a non-compliant filing or an unrefused unsafe request |
-| [`final-2026-09-16/`](final-2026-09-16/) | 2026-09-16 | `bd4ac93` — its README's *"the final build"* | six live Playwright screens plus `answer.txt`, against the deployed service with the grader key and one real model turn. `bd4ac93` was the build the **then**-published run `r_1789555212_baseline` measured; the run published now is `r_1790130220_baseline` on `34d50fb` |
-| [`grade-card-2026-09-21.md`](grade-card-2026-09-21.md) | 2026-09-21 | graded at `98c893f` | the **second** independent grade card — an 82-agent read-only grading workflow (assessors, one adversarial skeptic per finding, one synthesising grader): **band 4**, with 27 ranked gaps. Its own header records what the wave then did about them |
-| [`grade-card-2026-09-21-gaps.json`](grade-card-2026-09-21-gaps.json) | 2026-09-21 | graded at `98c893f` | the machine twin of that card's ranked gap list — per gap: severity, section, why it costs marks, the evidence, a proposed fix and an effort estimate. The list the grade-and-fix wave worked through |
-| [`demo-task-1-live-2026-09-22.txt`](demo-task-1-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | demo task 1 on the build carrying round one's fixes — the published build for the ten hours before `80a5a71` replaced it — and the first turn of a cold instance's life (`cold_start: true` before, `false` after): 38.2 s of turn time over 39 spans, 8 passages across four documents, verbatim stdout and stderr. The demo script's task-1 figures are read off this file |
-| [`demo-task-2-live-2026-09-22.txt`](demo-task-2-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | demo task 2 on the build carrying round one's fixes, warm: the confirmation card, nothing written, then the confirmed write and its `performed` lede, with the served block text quoted from the store — and, at seq 1 and seq 27 of one 36-span turn, the two `mcp_discovery` spans a resumed turn carries |
-| [`draft-hr-email-live-2026-09-22.txt`](draft-hr-email-live-2026-09-22.txt) | 2026-09-22 | `8782177` — a docs-only commit over the app build `8a89310`, which round 2 superseded that evening with `80a5a71` | the first live capture of `draft_hr_email`'s **two endings** — the same ask confirmed once and cancelled once — on the build carrying task 1c's fixes, so a cancelled write is answered by its receipt rather than by an evidence refusal |
-| [`grade-card-2026-09-22.md`](grade-card-2026-09-22.md) | 2026-09-22 | graded at `2dee277` | the **third** independent grade card — a 78-agent read-only grading workflow of the same shape as the second, run against the repository the first round of the grade-and-fix wave left: **band 4**, with 20 ranked gaps, led by a provenance command four documents printed that no longer held at HEAD. Its own header records what round two did about them |
-| [`grade-card-2026-09-22-gaps.json`](grade-card-2026-09-22-gaps.json) | 2026-09-22 | graded at `2dee277` | the machine twin of that card's ranked list — per gap: severity, section, why it costs marks, the evidence, a proposed fix and an effort estimate. The list round two worked through |
-| [`label-packet-seed-2026-09-23.md`](label-packet-seed-2026-09-23.md) | 2026-09-23, written 02:38:54Z | the published build `34d50fb` | **the labelling packet the blind seed session actually read**, byte for byte: the instructions, then the 8 `seed_1729_8` items with the question, the answer the deployed service served, and every evidence envelope the synthesis prompt carried, each labelled with its class. Its header names the subset by a neutral token — `subset A` — rather than by the selection. It carries **no** judge output of any kind — `scripts/gen_label_packet.py` never reads `scores` or `verdicts` — and no run file, report or changelog. The labels it produced are `evaluation/reference_labels.yaml`; the agreement it supports is `judge_agreement_rate` **0.875 (n = 8)**, one disagreement. It **supersedes** `label-packet-seed-2026-09-22.md`, which was removed with this commit: that packet was built against `r_1790110325_baseline`, which is no longer the published run, and the labels it produced are no longer committed |
-| [`label-packet-hard-2026-09-23.md`](label-packet-hard-2026-09-23.md) | 2026-09-23, written 03:00:09Z | the published build `34d50fb` | the same for the disclosed-selection `judge_lowest_8` subset. Its header carries a neutral subset token — `subset B` — in place of the selection's name, so the criterion is named nowhere in the packet, and the items are rendered in item-id order rather than score order, so nothing in it separates a low-scoring item from a high-scoring one. The labels it produced are `evaluation/reference_labels_hard.yaml`; the agreement it supports is `judge_agreement_rate_hard` **0.750 (n = 8)**, with the two disagreements pointing in opposite directions. It **supersedes** `label-packet-hard-2026-09-22.md`, which was removed with this commit: that packet printed ``subset `judge_lowest` `` in its header, and the frozen allowance `tests/contract/test_docs_completeness.py` held for it is retired with it |
+| [`mcp-discovery-4-tools.json`](mcp-discovery-4-tools.json) | 2026-09-09 | added at `15bdfe2` | `tools/list` from the ablation arm's separate stdio server: 4 tools, with the five structured-data and write tools absent from discovery itself. |
+| [`mcp-discovery-4-tools.png`](mcp-discovery-4-tools.png) | 2026-09-10 | added at `73eb047` | The same 4-tool discovery on screen, beside the five removed tool names. |
+| [`mcp-discovery-page.png`](mcp-discovery-page.png) | 2026-09-10 | added at `70faf71` | `/dashboard/mcp` rendering live discovery: the connected server, its 9 tools and every tool's input and output schema. |
+| [`ci-deploy-skipped.png`](ci-deploy-skipped.png) | 2026-09-10 | added at `5419ec5` | A recorded red CI run (run `34485304411`) in which `test` fails and `deploy` is skipped with *"dependent job failed"*. |
+| [`cold-start-probes.json`](cold-start-probes.json) | 2026-09-10 → 11 | probe 1 on `bf85ffd`, probes 2–3 on `da0dca2` | The three live cold-start probes behind `deployed.md`'s `## Cold start`: per-segment seconds, their medians and their `n`. |
+| [`demo-task-1-live-2026-09-11.txt`](demo-task-1-live-2026-09-11.txt) | 2026-09-11 | `e13a772` (deployed `/health`) | Demo task 1, international remote-work eligibility, driven live against the deployed service. |
+| [`demo-task-2-live-2026-09-11.txt`](demo-task-2-live-2026-09-11.txt) | 2026-09-11 | `e13a772` (deployed `/health`) | Demo task 2, a PTO request through the confirmation gate to a mock write, with a citation-breadth caveat in its header. |
+| [`demo-task-2-live-2026-09-12.txt`](demo-task-2-live-2026-09-12.txt) | 2026-09-12 | `f5e86c3` | Demo task 2 re-run after a citation-breadth fix: the confirmation card, nothing written, then the confirmed write (ticket `MOCK-HR-000006`). |
+| [`mcp-external-session-2026-09-12.txt`](mcp-external-session-2026-09-12.txt) | 2026-09-12 | `f5e86c3` | The deployed MCP mount reached from outside by plain `curl`: `initialize`, `tools/list` returning all nine tools, and a real `search_policy_documents` call. |
+| [`brand-preview.html`](brand-preview.html) | 2026-09-14 | added at `7792090` | The visual identity in one self-contained page: the mark, the type pairing and the colour tokens, light and dark side by side. |
+| [`ux-final/`](ux-final/) | 2026-09-15 | added at `3c94353` | 39 screens of every surface at 1440 px, at phone width and in dark mode, captured by `make ux-capture` against stub servers; see its README. |
+| [`final-2026-09-16/`](final-2026-09-16/) | 2026-09-16 | `bd4ac93` | Six Playwright screens and `answer.txt` taken against the deployed service with one real model turn; see its README. |
+| [`demo-task-1-live-2026-09-22.txt`](demo-task-1-live-2026-09-22.txt) | 2026-09-22 | `8782177`, a docs-only commit over app build `8a89310` | Demo task 1 as the first turn of a cold instance: 38.2 s of turn time over 39 spans, 8 passages across four documents. |
+| [`demo-task-2-live-2026-09-22.txt`](demo-task-2-live-2026-09-22.txt) | 2026-09-22 | `8782177`, a docs-only commit over app build `8a89310` | Demo task 2 on a warm instance: the confirmation card, nothing written, then the confirmed write, with the two `mcp_discovery` spans a resumed turn carries. |
+| [`draft-hr-email-live-2026-09-22.txt`](draft-hr-email-live-2026-09-22.txt) | 2026-09-22 | `8782177`, a docs-only commit over app build `8a89310` | `draft_hr_email` live with both endings, the same request confirmed once and cancelled once. |
+| [`label-packet-seed-2026-09-23.md`](label-packet-seed-2026-09-23.md) | 2026-09-23 | `34d50fb` (published build) | The exact packet the blind labeller read for the 8 `seed_1729_8` items; its labels are `evaluation/reference_labels.yaml` (`judge_agreement_rate` **0.875, n = 8**). |
+| [`label-packet-hard-2026-09-23.md`](label-packet-hard-2026-09-23.md) | 2026-09-23 | `34d50fb` (published build) | The same for the `judge_lowest_8` subset, with the selection criterion hidden and items in id order; its labels are `evaluation/reference_labels_hard.yaml` (`judge_agreement_rate_hard` **0.750, n = 8**). |
 
-The three 2026-09-22 transcripts are the live re-capture the grade-and-fix wave's first round added;
-the grade-card pair below them is its second round, and the two 2026-09-23 labelling packets are its
-third — the round-2 pair they supersede is no longer in this directory. Everything above predates the
-wave.
-
-**Why the packets are here.** *"The labeller was blind"* is the one claim in §13.7 that a reader
-cannot check from the outputs: the label files record a verdict and a rationale, and a packet that
-had leaked a judge score would produce exactly the same shape. So the inputs are published. Read
-them as evidence of **what was withheld** — no verdict, no per-claim verdict, no rationale, no
-groundedness score, no selection criterion in the hard packet, and no ordering hint — rather than as
-a transcript of the sessions, which is not what they are. They are copies of the files the two
-sessions were handed and have not been edited since, which is also why their answers are the
-**served** answers of `r_1790130220_baseline` and their evidence is the real envelope set of those
-turns. `design-and-evaluation.md`'s *Judge methodology* section points at these two files.
-
-**No `ux-w5/`.** The five-wave remediation's W5 was the accessibility pass (skip link, focus
-management, 44 px targets, token and painted contrast, dark-theme captures), and its evidence is the
-contract and browser tests it added plus the `-dark-1440.png` set inside `ux-final/` — not a
-before/after directory of its own. The numbering below it is unchanged so that every wave report's
-own references keep resolving.
+**Why the label packets are here.** A reader cannot check from the label files alone that the
+labeller was blind, because a packet that had leaked a judge score would produce labels of the same
+shape. So the inputs are published. Each packet holds the question, the answer the deployed service
+served in `r_1790130220_baseline` and the evidence envelopes the synthesis prompt carried. It holds
+no judge verdict, rationale or groundedness score, and the hard packet carries a neutral subset name
+and no score ordering. `scripts/gen_label_packet.py` never reads scores or verdicts. The packets are
+copies of the files the labelling sessions were given and have not been edited since.
+`design-and-evaluation.md`'s *Judge methodology* section points at them.
 
 ## What is not here
 
-Screen captures run to hundreds of megabytes, so each wave directory keeps the pairs that show a
-finding rather than the whole run: the full sets — **72** screen ids × 3 viewports (390 captures; the count `make ux-capture` prints at the
-end of its own run and records in `.ux-capture/index.json`'s `screen_ids`), with their
-`.txt` DOM dumps, `.numbers.json` and `.overflow.json` sidecars — are one `make ux-capture` away in
-the git-ignored `.ux-capture/`, and each wave README names the harness, the stub scripts and the
-commit it was captured on. No capture in this directory made a live model call except the ones whose
-header says it did, and `.env` was never read by any of them.
+Full screen captures run to hundreds of megabytes, so they are not committed. The full set is
+**72** screen ids × 3 viewports (390 captures), with `.txt` DOM dumps and `.numbers.json` and
+`.overflow.json` sidecars. `make ux-capture` regenerates it into the git-ignored `.ux-capture/` and
+prints the count at the end of its run. No capture in this directory made a live model call except
+the ones whose header says so, and none of them read `.env`.

@@ -10,7 +10,7 @@ parts that went badly. It is not a summary of what the tools can do; it is what 
 | Tool | Role |
 |---|---|
 | **Claude Code** (CLI), coordinating session on **Claude Fable 5.1** | Held the plan, wrote each phase brief, dispatched subagents, reviewed diffs, ran the acceptance gate, committed and pushed, watched CI, and adjudicated every ruling |
-| **Claude Opus 5** subagents, in the same CLI | One subagent implemented one phase; a second, independently dispatched subagent reviewed it against that phase's definition of done. `CLAUDE.md` pins `model: "opus"` on every delegated call |
+| **Claude Opus 5** subagents, in the same CLI | One subagent implemented one phase; a second, independently dispatched subagent reviewed it against that phase's definition of done. The project's Claude Code instructions pinned `model: "opus"` on every delegated call |
 | **Anthropic `claude-haiku-4-5`** | The *product's* agent model — not a development tool, but the model every prompt in `agent/prompts/` was iterated against |
 | **Google `gemini-3.5-flash-lite`** | The product's LLM judge and failover path, on two Google AI Studio keys from two Cloud projects — the judge's project on paid billing since 2026-09-10 (≈ $0.16 a judge pass), the failover's still free |
 | `gh`, `ruff`, `pytest`, `gitleaks`, Docker | Ordinary tooling, driven by the sessions above rather than by hand |
@@ -50,9 +50,8 @@ Phases P2 ∥ P3 ∥ P6 ran in **parallel git worktrees** on separate branches a
 coordinating session.
 
 P0–P12 built the system; the same loop then ran to **P29**. P13 onward were quality, review-fix,
-performance and deployment waves rather than new subsystems, and `docs/process/sdd/` carries a brief
-and a report for almost all of them through P27 — two are absent, `P19-brief.md` and
-`P27-report.md`, and `docs/process/sdd/README.md` says why in each case.
+performance and deployment iterations rather than new subsystems. Each phase's brief and report were
+kept as working notes outside the repository.
 
 **4 — Blind labelling by separate sessions (2026-09-10).** The judge-agreement figures in
 `design-and-evaluation.md` come from a fresh **Claude Opus 5** session: the **same vendor as the
@@ -68,96 +67,87 @@ anywhere upstream of it: no run file, no report, no changelog. `design-and-evalu
 run. The suite grew from 72 tests at P1 to **1,590** at P11, and the whole suite runs on the push
 path with zero API keys.
 
-**6 — The human did accounts, keys and the demo.** Every gate that reached me was a browser-only
+**6 — The human did accounts, keys and the demo.** Every request that reached me was a browser-only
 OAuth grant, an API key paste, or the recording itself. Nothing else.
 
-**7 — Waves against an audit of the running product (2026-09-14 → 16).** Eighty-five commits landed
+**7 — Iterations against an audit of the running product (2026-09-14 → 16).** Eighty-five commits landed
 in these three days — 15 on 09-14, 61 on 09-15, 9 on 09-16, by
 `git log --format='%ad' --date=short | sort | uniq -c` — and the unit of work changed. Instead of
-phases against a spec, **waves against an audit of the rendered product**, because the thing the
+phases against a spec, **fix batches against an audit of the rendered product**, because the thing the
 spec could not tell me was that the interface was clunky. A headless browser captured **53 screens**
 (every page and state at desktop, laptop and phone widths, with every visible number and every
 overflow measured); **seven sessions reviewed the renders** through separate lenses; a skeptic
 confirmed each serious finding against its screenshot; the result was **155 verified findings** and a
-plan of **15 principles, each with a mechanical detection rule**
-(`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md`, screens under
-`docs/evidence/ux-audit-2026-09-14/`). Waves W0–W7 implemented it, and after each batch a **fresh
+plan of **15 principles, each with a mechanical detection rule**. A sequence of fix batches
+implemented it, and after each batch a **fresh
 read-only session re-captured every screen and re-scored the plan itself** — four independent
-re-audits, each dispatched with the plan, the wave briefs and the owner rulings, the previous
+re-audits, each dispatched with the plan, the batch briefs and the owner rulings, the previous
 re-audit's report and a fresh capture, and each required to score the 15 principles off the renders
 rather than off the implementing session's account of what it had fixed. The first (48 agents)
-verified **138 of the 155** findings fixed and failed its own gate; the second (45 agents) reached **150 of
-155** and 8 of the 15 principles; the fourth reached **9 of 15**. Every wave and every measure is in
-`docs/optimization-log.md` (sections dated 2026-09-14 → 15 and 2026-09-15), with before/after screens
-committed under `docs/evidence/ux-w*` and `ux-final` and the audit reports themselves at
-`docs/evidence/ux-audit-2026-09-14/` and `docs/evidence/ux-reaudit*.md`.
+verified **138 of the 155** findings fixed and fell short of its own pass threshold; the second (45 agents) reached **150 of
+155** and 8 of the 15 principles; the fourth reached **9 of 15**. Every batch and every measure is in
+`docs/optimization-log.md` (sections dated 2026-09-14 → 15 and 2026-09-15), with the final screens
+committed under `docs/evidence/ux-final/`; the audit reports themselves were kept as working notes
+outside the repository.
 
 A screenshot of my own, not one the capture had taken — "Done — your request is with the HR Time Off
 team" printed above "Submit the request in MosaicOne" — raised a different question: are the demo paths
 *logically* right for the person asking? A second adversarial review, of behaviour rather than
 pixels, read **512 captured turns** and drove **16 fresh persona scenarios** one turn at a time
 through seven lenses with a refuter per triaged class. It confirmed **22 defect classes, 11 of them
-Critical**, and found **11 of the 16 scenarios logically wrong for their persona**
-(`docs/evidence/demo-path-review-2026-09-15.md`). The cause was a single one: the deterministic layer
+Critical**, and found **11 of the 16 scenarios logically wrong for their persona**. The cause was a single one: the deterministic layer
 and the model's prose were never reconciled — the rules engine scored a requirement met while the
 answer called it unmet, a non-compliant request was filed and then denied, a director was told to get
-her director's approval. Waves W8–W10 put verdicts, arithmetic, dates, approvers, ids and the account
+her director's approval. Three further fix batches put verdicts, arithmetic, dates, approvers, ids and the account
 of a write behind the deterministic layer and reconciled or replaced the prose against it; re-driving
-the same sixteen scenarios went **5 → 8 → 13 of 16** right
-(`docs/evidence/scenario-recheck-final-2026-09-16.md`). Over the three days the suite went from
+the same sixteen scenarios went **5 → 8 → 13 of 16** right. Over the three days the suite went from
 **2,002** collected to **3,040** plus **299** real-browser checks at that window's final build
 (`bd4ac93`, 2026-09-16), and the browser test surface from **3 routes to 18**. Both figures are as of
-that date and measure the W8–W10 window, not the submitted repository — the collected count at
+that date and measure that window, not the submitted repository — the collected count at
 submission is the one stated in the ownership disclosure below.
 
-**8 — Graded by one workflow, fixed by another (2026-09-21).** Before submission the repository was
-put through an independent grading workflow of **82 agents**: assessors over grouped rubric sections,
-then one adversarial skeptic per flagged finding whose brief was to *refute* it against the artifact,
-then a synthesising grader. It returned a **band-4 verdict and 27 ranked gaps**, each with its
+**8 — Reviewed by one workflow, fixed by another (2026-09-21).** Before submission the repository was
+put through an independent, read-only rubric review workflow of **82 agents**: assessors over grouped
+rubric sections, then one adversarial skeptic per flagged finding whose job was to *refute* it against
+the artifact, then a synthesising reviewer. It returned a ranked list of findings, each with its
 evidence, a proposed fix and an effort estimate; a further set of candidate findings was overturned on
 verification and recorded as checked rather than worked on. The fixes then ran in the shape the
 phases had used: one Opus implementer per task, an independently dispatched Opus reviewer after it,
-and a fix-and-re-review loop until the reviewer had nothing open — the wave's measurement and
-documentation tasks follow the same pattern. The plan is committed at
-`docs/superpowers/plans/2026-09-21-grade-5.md`, and the grade card and its ranked gap list are
-committed verbatim as [`docs/evidence/grade-card-2026-09-21.md`](docs/evidence/grade-card-2026-09-21.md)
-and `docs/evidence/grade-card-2026-09-21-gaps.json`, beside the earlier `grade-card-2026-09-11.md`,
-so the verdict and every gap behind this wave can be read rather than taken on trust.
+and a fix-and-re-review loop until the reviewer had nothing open — the measurement and documentation
+tasks followed the same pattern.
 
-**And then graded again, because a fix wave is a change like any other (2026-09-22).** The repaired
-repository went back through the same workflow — **78 agents**, the same assessor / skeptic / grader
-shape, read-only at `2dee277` — and it came back **band 4 again, with 20 ranked gaps**
-([`docs/evidence/grade-card-2026-09-22.md`](docs/evidence/grade-card-2026-09-22.md) and its
-`-gaps.json`). That is the most useful thing the second pass produced: the first round had fixed
-what the first card named and introduced or left behind a fresh set of one-command-falsifiable
-claims — a `git diff` four documents printed as proof of build provenance that no longer came back
-empty, a "full-history" secret scan that on a push scanned two commits, a clarification defect
-sitting directly under the 1.000 metric the wave had been proud of. Round two (**G5b**) ran in the
-same shape as round one — one Opus implementer per task, an independently dispatched Opus reviewer,
-fix rounds until the reviewer had nothing open — across code and configuration, the dataset and
-corpus, a re-measurement, and the documents. One thing worth recording honestly: the first round-2
-drive of the evaluation (`r_1790106448`, build `7ada32e`) was **discarded** rather than published,
-because reading its results showed that one dataset item's expected answer demanded a policy
-retrieval the task does not need and another turn had no deterministic rule behind the behaviour
-gold expected. Those were fixed on the gold and code sides, the build was redeployed, and the
-round-2 published run is the drive after that (`r_1790110325_baseline`, build `80a5a71`) — the
-discarded drive scored no better, and what would have been dishonest is re-driving until a number
-improved and publishing only the last one. Both drives are named, with their figures, in the wave
-ledger.
+**And then reviewed again, because a set of fixes is a change like any other (2026-09-22).** The
+repaired repository went back through the same workflow — **78 agents**, the same assessor / skeptic /
+synthesiser shape, read-only at `2dee277`. That is the most useful thing the second pass produced: the
+first set of fixes had closed what the first review named and introduced or left behind a fresh set of
+one-command-falsifiable claims — a `git diff` four documents printed as proof of build provenance that
+no longer came back empty, a "full-history" secret scan that on a push scanned two commits, a
+clarification defect sitting directly under the 1.000 metric the fixes had been proud of. The second
+set of fixes ran in the same shape as the first — one Opus implementer per task, an independently
+dispatched Opus reviewer, fix rounds until the reviewer had nothing open — across code and
+configuration, the dataset and corpus, a re-measurement, and the documents. One thing worth recording
+honestly: the first evaluation drive of that second set (`r_1790106448`, build `7ada32e`) was
+**discarded** rather than published, because reading its results showed that one dataset item's
+expected answer demanded a policy retrieval the task does not need and another turn had no
+deterministic rule behind the behaviour gold expected. Those were fixed on the gold and code sides,
+the build was redeployed, and the run published at that point is the drive after that
+(`r_1790110325_baseline`, build `80a5a71`) — the discarded drive scored no better, and what would have
+been dishonest is re-driving until a number improved and publishing only the last one. Both drives are
+named, with their figures, in `docs/optimization-log.md`.
 
 **And a third time, which is where the pattern became the finding (2026-09-22 to 2026-09-23).** The
-round-2 tip went through the same read-only workflow at `39dc61c` and came back **band 4 again, with
-37 ranked gaps**. What made the third pass worth running is that three of the four claims capping it
-were **defects in code or in a committed artifact, not in prose**: the labelling packet printed the
-very selection criterion two documents swore it withheld, the `no_structured_tools` ablation arm
-called five tools it listed as disabled (8 of 30 items reached one), and the rules engine derived
-approvals from requirement rows it had explicitly declined to check. A documentation pass could not
-have closed any of them. Round three (**G5c**) therefore ran code first and documents last: the four
-application and tooling fixes, then a deploy, then a re-drive of the baseline and both arms on
-`34d50fb`, then a re-authored pair of blind label packets, and only then this and the other graded
-documents. The ordering is the lesson — the three rounds together read as a repository whose *claims*
-were graded harder than its *capability*, and the only durable answer to a falsifiable sentence is a
-measurement plus a test that fails when the sentence stops being true.
+repository went through the same read-only workflow again at `39dc61c`. What made the third pass worth
+running is that three of its four most serious findings were **defects in code or in a committed
+artifact, not in prose**: the labelling packet printed the very selection criterion two documents
+swore it withheld, the `no_structured_tools` ablation arm called five tools it listed as disabled (8
+of 30 items reached one), and the rules engine derived approvals from requirement rows it had
+explicitly declined to check. A documentation pass could not have closed any of them. The third set
+of fixes therefore ran code first and documents last: the four application and tooling fixes, then a
+deploy, then a re-drive of the baseline and both arms on `34d50fb`, then a re-authored pair of blind
+label packets, and only then this and the other submitted documents. The ordering is the lesson — the
+three reviews together read as a repository whose *claims* were scrutinised harder than its
+*capability*, and the only durable answer to a falsifiable sentence is a measurement plus a test that
+fails when the sentence stops being true.
 
 ## What worked well
 
@@ -188,8 +178,8 @@ measurement plus a test that fails when the sentence stops being true.
 - **Refusing to tune the number.** The published evaluation reports 0.900 strict pass against a
   0.85 target — met at the fourth measurement, not the first — with a null ablation beside it and
   each failing item named with its cause, and it reports the 0.692 it started from and the
-  intermediate columns, so the optimization work is visible rather than implied. Round two of the
-  grade-and-fix wave discarded a drive rather than publishing it, because reading the results showed
+  intermediate columns, so the optimization work is visible rather than implied. The fixes after
+  the second rubric review discarded a drive rather than publishing it, because reading the results showed
   two of its expectations were wrong; the drive that replaced it did not score better. The
   coordinating session's standing ruling was that the only permitted lever was fixing an actual
   defect, and that everything else gets published with its cause.
@@ -201,11 +191,11 @@ measurement plus a test that fails when the sentence stops being true.
   implementing session's report. That is what produced findings no code review had produced —
   unrounded numbers on human surfaces, span kinds and guardrail names in chat prose, screens that
   scrolled sideways at 390 px, a completed ticket rendered as advice — and it is why each re-audit
-  kept catching the previous wave's own regressions rather than confirming them fixed.
-- **Refuting a finding before acting on it.** The audit waves and the 2026-09-21 grading pass both put
+  kept catching the previous batch's own regressions rather than confirming them fixed.
+- **Refuting a finding before acting on it.** The interface audits and the 2026-09-21 rubric review both put
   each serious finding to a separate session whose job was to overturn it against the artifact.
   Several were overturned — one on arithmetic the flagging session had not done, one on a truncation
-  convention the repository deliberately enforces in a test — and no wave spent time on them. Without
+  convention the repository deliberately enforces in a test — and no fix batch spent time on them. Without
   that step an audit's output is a list of things that look wrong in a screenshot.
 
 ## What did not work
@@ -238,7 +228,7 @@ measurement plus a test that fails when the sentence stops being true.
   subagent, which resumed it while its previous turn was still executing. Two turns of the same
   agent then wrote into the same working tree, orphaned a `uvicorn` and a runner process, and had
   to be stopped and restarted with a single owner and an explicit sequence. **Lesson recorded in
-  the ledger: do not message a working agent mid-run; wait for its report.** A second agent had to
+  the working notes: do not message a working agent mid-run; wait for its report.** A second agent had to
   be stopped for the same reason before the pattern was recognised.
 - **A blind labelling round was voided.** The first labelling packet carried 320-character display
   snippets rather than the full chunk text the synthesis prompt actually carried, and the labeller
@@ -250,7 +240,7 @@ measurement plus a test that fails when the sentence stops being true.
 - **Subagents write more than they are asked to.** Roughly two dozen "minor, deferred" findings
   across the phases are scope creep: a `--json` flag added speculatively, a helper module nobody
   asked for, a changelog entry written by a phase whose scope did not include the changelog. None
-  broke anything; all of them are recorded in the ledger rather than absorbed silently. Explicit
+  broke anything; all of them are recorded in the phase reviews rather than absorbed silently. Explicit
   file lists in the brief reduced this but never eliminated it.
 - **A commit-trailer instruction was ignored repeatedly.** Several subagent commits carried the
   harness's own attribution line instead of the one the brief specified. It is cosmetic, and it
@@ -267,31 +257,31 @@ measurement plus a test that fails when the sentence stops being true.
 - **Estimates were optimistic.** The plan budgeted ~50 agent-hours across thirteen phases. The
   evaluation phase alone (P10) took four fix rounds, a voided labelling round, a provider outage
   and a two-pass harness rewrite.
-- **Every re-audit found residuals in the previous wave's fixes, and the interface gate never
-  passed.** Four independent re-audits scored the same 15 principles **6 → 8 → 7 → 9**; the dip at the
+- **Every re-audit found residuals in the previous batch's fixes, and the interface audit's pass
+  threshold was never met.** Four independent re-audits scored the same 15 principles **6 → 8 → 7 → 9**; the dip at the
   third is real and is printed in `docs/optimization-log.md` rather than smoothed. Worse, **three of
-  the four Criticals that failed the first re-audit's gate were regressions the waves had introduced**:
+  the four Criticals that failed the first re-audit's threshold were regressions the fix batches had introduced**:
   every dashboard chart collapsed to about a quarter of its panel, a completed HR ticket rendered
   under "What I suggest you do" with the "not company policy" footnote beneath it, and the model's own
   next-steps text painted a deadline computed a month early. Nine of fifteen is where it stopped; the
-  gate itself and three of the sixteen persona scenarios are recorded as open follow-ups in the
+  threshold itself and three of the sixteen persona scenarios are recorded as open follow-ups in the
   optimization log rather than presented as closed. The narrow lesson is not "agents cause
-  regressions" — it is that a wave which fixes a screen without adding a guard on the *class* it fixed
+  regressions" — it is that a fix batch which fixes a screen without adding a guard on the *class* it fixed
   will have the next audit find that class somewhere else, which is why every regression class now has
   a browser test that fails on the build that had it.
 - **The recorded demo fixtures kept passing while the live path was broken.** Both stub recordings
   were verbatim 2026-09-10 exchanges, so they could not show what the current prompt does. Only a live
-  run on the W6 build showed the flagship question needing nine tool calls against a cap of 8, ending
-  the turn partial on top of a complete answer (P28 raised the cap to 12); only a live run showed the
+  run on an interface-fix build showed the flagship question needing nine tool calls against a cap of
+  8, ending the turn partial on top of a complete answer (a later phase raised the cap to 12); only a live run showed the
   model writing "HR ticket MOCK-HR-000007 has been created" as a *recommendation*, which the
   one-account guard then kept, so the "Done" lede never appeared and the re-audit's Critical was back
   on the live path; and only a pair of consecutive live runs showed the tenure wording obeying the
-  prompt's rule in one and not the other (P29 made both deterministic). The fixtures themselves then
+  prompt's rule in one and not the other (a later phase made both deterministic). The fixtures themselves then
   had to be amended, under a contract test
   that fails on the old text. Recording a real model is better than imagining one, but a recording
   ages against the prompt that produced it.
-- **An implementer closing a gap opened a privilege hole (2026-09-21).** One task of the grade-and-fix
-  wave made `MCP_TOOLS_DISABLED` actually take effect, and in doing so made the filter statable per
+- **An implementer closing a gap opened a privilege hole (2026-09-21).** One task of the fixes after
+  the first rubric review made `MCP_TOOLS_DISABLED` actually take effect, and in doing so made the filter statable per
   request: a non-admin caller could send `tools_disabled: []` and switch the operator's default off.
   The implementer's own tests passed. The independent re-reviewer found it, flagged it as outside its
   scope, and it was ruled in and fixed by unioning the process default into the effective filter so no
@@ -313,8 +303,8 @@ the agent, and Google `gemini-3.5-flash-lite` is the evaluation judge and the fa
 and academic **integrity** of everything submitted here. I reviewed the architecture and the
 rulings that shaped it, I set the constraints that every phase was held to, and I accept
 responsibility for the code as submitted work. Concretely: correctness is defended by the whole
-committed suite — 3,469 tests as of 2026-09-22, the count `pytest --collect-only -q` reports and the
-count a contract test holds every graded document to — and by a 30-item evaluation whose real
+committed suite — 3,464 tests as of 2026-10-03, the count `pytest --collect-only -q` reports and the
+count a contract test holds every published document to — and by a 30-item evaluation whose real
 numbers, including the ones below target, are published with their causes — the published run
 `r_1790130220_baseline` drives all 30 of them against the deployed build `34d50fb`; security by
 secrets that exist only in environment variables, two `gitleaks` scans on every CI run (the
@@ -330,22 +320,13 @@ synthetic, written for this project, and describe a fictional company. No propri
 paid data is included or loaded at run time. Runtime and development dependencies are pinned in
 `requirements.txt` and `requirements-dev.txt` and are used under their own licences.
 
-**Where the process is auditable.** The phase-by-phase record is in `CHANGELOG.md` (dated, one
-section per phase, including the corrections); the briefs and phase reports themselves are
-**committed** under [`docs/process/sdd/`](docs/process/sdd/) — the ledger, every `P<n>-brief.md`
-and `P<n>-report.md` with its definition-of-done output pasted verbatim, the binding constraints
-and the independent grade card — and the design history is in `docs/superpowers/`. The audit waves of
-2026-09-14 → 16 are recorded differently, because they were not phases: their method, measures and
-open follow-ups are in `docs/optimization-log.md`, the plan they implemented and the plan for the
-2026-09-21 grade-and-fix pass are under `docs/superpowers/plans/`, and the audit and re-audit reports
-are committed verbatim under `docs/evidence/` beside the before/after screens they scored. The three
-independent grade cards live there too — `grade-card-2026-09-11.md`, `grade-card-2026-09-21.md` with
-its ranked gap list `grade-card-2026-09-21-gaps.json`, which is the list round one of this wave
-worked through, and `grade-card-2026-09-22.md` with `grade-card-2026-09-22-gaps.json`, which re-graded
-the result and is the list round two worked through. The commit history carries one commit per phase with the requirement ids it satisfies in
-the trailer.
-(They are produced in `.superpowers/`, which is git-ignored; `docs/process/sdd/README.md` says what
-was copied, what was not, and how it was scanned for secrets first.)
+**Where the process is auditable.** The commit history carries one commit per phase with the
+requirement ids it satisfies in the trailer, and the design is in
+`docs/superpowers/specs/2026-09-08-hr-agentic-rag-design.md`. The interface and demo-path audits of
+2026-09-14 → 16 and the evaluation work after them are recorded in `docs/optimization-log.md`: their
+method, measures, run ids and open follow-ups. The per-phase briefs and reports, the plans, the review
+reports and the running notes were produced in `.superpowers/`, which is git-ignored, and were kept as
+working notes outside the repository rather than submitted with it.
 
 **One detail a reader of `git log` will notice.** Two `Co-Authored-By` trailers run through the
 history, and the split is not random: of the 160 commits through `5b1bd51`, **122 carry
@@ -355,10 +336,10 @@ session's own commits (the spec, the roadmap, the optimization log, the merges o
 rulings), and **3 are branch merges** with no trailer at all. The rule is the same in all three cases,
 and it held for every commit through 2026-09-16: **the trailer names the model that actually wrote the
 commit.** That census is a **snapshot at `5b1bd51`**, not a running total: the anchor is fixed so the
-figures can be recounted rather than trusted. The 85 wave commits of 2026-09-14 → 16 sit after it and
+figures can be recounted rather than trusted. The 85 commits of the 2026-09-14 → 16 audit work sit after it and
 follow the same rule — 56 carry an Opus trailer because an implementer or reviewer subagent wrote them,
 29 carry `Claude Fable 5.1` for the coordinating session's own plans, rulings and documents.
-`docs/process/sdd/constraints.md` line 14 said it as a fixed string until 2026-09-11 and now says
+The project's binding constraints stated it as a fixed string until 2026-09-11 and now state
 it as that rule, which is what the history has done since P0. None of those four figures is typed
 from memory: `tests/contract/test_docs_completeness.py` recounts them from `git log` at the commit
 this paragraph names and fails if they disagree — an earlier hand-typed census had drifted by
@@ -367,18 +348,14 @@ out at `fetch-depth: 0` like its `lint` job; the test skips only where the commi
 be present (no `git`, or a shallow clone) and **fails** rather than skipping in a full clone that
 does not have it, because a silent skip is how this guard went inert the first time.
 
-**From 2026-09-21 the trailer means something narrower, and a reader should know it.** Every commit of
-the grade-and-fix wave — all three rounds, `G5(…)`, `G5b(…)` and `G5c(…)` — carries `Claude Fable 5.1`, including the
-ones whose diffs an Opus implementer subagent wrote, because that wave's plan fixes the trailer to the coordinating session's model on every
-commit (`docs/superpowers/plans/2026-09-21-grade-5.md`, global constraints), following the same
-harness-is-authoritative clause of `constraints.md` line 14. So for those commits the trailer names
-**the session that coordinated the commit, not the model that wrote it**, and the recount above stops
-being a check on authorship. What the history no longer carries, the tracked plan does:
-`docs/superpowers/plans/2026-09-21-grade-5.md` states the wave's shape as an Opus implementer per task
-with a reviewer per task, and `CLAUDE.md` pins `model: "opus"` on every delegated call. Which session
-took which task, and what each reviewer found, is in that wave's ledger and per-task reports, and
-those are committed — copied verbatim out of the git-ignored `.superpowers/sdd/` working directory
-into [`docs/process/sdd/G5-grade-5/`](docs/process/sdd/G5-grade-5/) the way P0–P27's trail was, with
-a `README.md` there naming what was left out of the copy and how every file was scanned for
-credentials first. The ledger records the models as well: every implementer, reviewer and re-reviewer
-subagent in the wave was dispatched with `model: opus`.
+**From 2026-09-21 the trailer means something narrower, and a reader should know it.** Every commit
+of the fixes that followed the independent rubric reviews carries `Claude Fable 5.1`, including the
+ones whose diffs an Opus implementer subagent wrote, because the plan for that work fixed the trailer
+to the coordinating session's model on every commit, following the same harness-is-authoritative
+clause of the binding constraints. So for those commits the trailer names **the session that
+coordinated the commit, not the model that wrote it**, and the recount above stops being a check on
+authorship. What the history no longer carries, the working notes do: the plan states the shape as an
+Opus implementer per task with a reviewer per task, the project's Claude Code instructions pinned
+`model: "opus"` on every delegated call, and the per-task notes record that every implementer,
+reviewer and re-reviewer subagent was dispatched with `model: opus`. Those notes were kept outside the
+repository with the rest of the working material.

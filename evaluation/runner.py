@@ -133,8 +133,8 @@ def require_base_url(base_url: str) -> str:
     if not url:
         raise BadTargetUrl(
             "EVAL_TARGET_BASE_URL is empty. That is usually "
-            'EVAL_TARGET_BASE_URL="$DEPLOY_URL" with DEPLOY_URL unset — see NEEDS-FROM-USER.md '
-            "(gates 2 and 4), then run scripts/provision_render.py."
+            'EVAL_TARGET_BASE_URL="$DEPLOY_URL" with DEPLOY_URL unset — see deployed.md, '
+            "then run scripts/provision_render.py."
         )
     if not url.startswith(("http://", "https://")):
         raise BadTargetUrl(f"EVAL_TARGET_BASE_URL {url!r} has no http:// or https:// scheme; it is not a base URL.")

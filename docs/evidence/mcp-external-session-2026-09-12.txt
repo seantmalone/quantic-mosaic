@@ -28,12 +28,10 @@ WHAT THIS FILE SHOWS
   4. `tools/call search_policy_documents` returned real ranked hits from the deployed index,
      with the server-side retrieval span attached.
 
-WHAT THIS FILE DOES NOT SHOW. The 2026-09-12 01:45Z re-grade also reports a `check_pto_balance`
-call, `create_mock_hr_ticket` refused `CONFIRMATION_REQUIRED` with no confirmation token and refused
-again with a forged one, and `401` to a request carrying no bearer (see
-docs/process/sdd/P27-brief.md item 4, and the ledger entry of that time in
-docs/process/sdd/progress.md). No capture of those four exchanges survived, so they are NOT pinned
-here and the published documents attribute them to that record rather than stating them as pinned
+WHAT THIS FILE DOES NOT SHOW. The same session also made a `check_pto_balance` call, saw
+`create_mock_hr_ticket` refused `CONFIRMATION_REQUIRED` with no confirmation token and refused again
+with a forged one, and received `401` on a request carrying no bearer. Those four exchanges were not
+captured, so they are NOT pinned here and the published documents do not state them as pinned
 evidence. The bearer gate and the confirmation gate are covered by the test suite independently of
 this file.
 

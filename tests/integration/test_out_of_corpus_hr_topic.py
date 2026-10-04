@@ -1,6 +1,6 @@
 """An HR question this corpus does not answer is refused, not improvised (spec §7.4 G1, P24).
 
-The 2026-09-11 grade card's R3.4 finding: all three `out_of_scope` items were non-HR trivia — a
+The 2026-09-11 review's R3.4 finding: all three `out_of_scope` items were non-HR trivia — a
 capital city, a linked list, a weather forecast — each refused by the router before a single chunk
 was read. The case that actually matters was never probed: a question whose **topic** is HR, that
 an employee would plausibly ask, and that the corpus does not carry, which is exactly where a

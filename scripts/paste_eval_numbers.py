@@ -11,8 +11,8 @@ in CI and deadlocked — a docs commit triggering a regenerate that triggered a 
 failed builds on wording edits.
 
 **Source.** `evaluation/results/latest.json`, which the runner writes only for a `deployed`
-`baseline` run. That run is BLOCKED-BY-GATE until the Render account exists (gates 2 and 4 of
-`NEEDS-FROM-USER.md`), so until then this script falls back to the newest committed `baseline`
+`baseline` run. That run needs the deployed service, so without one this script falls back
+to the newest committed `baseline`
 run file, marks the table's provenance line accordingly, and prints which source it used. It
 never invents a figure, and it never presents a `local` run as if it were the published one.
 "Newest" is read from **inside** the file — the run's `created_at`, or the epoch in its
@@ -154,9 +154,8 @@ def render(run: dict, source: str) -> str:
         lines.append(
             f"> ⚠ **`BLOCKED-BY-GATE` — these are the `target: {target}` proving-run figures, not "
             "the published ones.** `evaluation/results/latest.json` can only ever name a "
-            "`target: deployed`, `variant: baseline` run, and that run needs the live service "
-            "(gates 2 and 4 of `NEEDS-FROM-USER.md`). The exact commands that produce it, and "
-            "then re-run this script, are in `NEEDS-FROM-USER.md` §3."
+            "`target: deployed`, `variant: baseline` run, and that run needs the live service. "
+            "The commands that produce it are in README.md's `## Evaluation`; then re-run this script."
         )
         lines.append("")
         lines.append(

@@ -563,9 +563,8 @@ def main(argv: list[str] | None = None) -> int:
     if not api_key:
         print(
             "RENDER_API_KEY is unset. Create one at the Render dashboard → Account Settings → API "
-            "Keys and export it. This is user gate 4 of NEEDS-FROM-USER.md, and gate 2 (the Render "
-            "GitHub App, which no API can install) must be satisfied first or the service cannot "
-            "read the repository.",
+            "Keys and export it. The Render GitHub App (which no API can install) must be connected "
+            "first or the service cannot read the repository.",
             file=sys.stderr,
         )
         return 1

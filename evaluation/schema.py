@@ -35,7 +35,7 @@ REFERENCE_LABELS_HARD_PATH = REPO_ROOT / "evaluation" / "reference_labels_hard.y
 REPORT_PATH = REPO_ROOT / "evaluation" / "REPORT.md"
 
 #: The seven §13.1 labels and the count each must carry. They sum to 30, the top of requirement 9's
-#: 20-30 band: the G5b wave widened the two n = 1 safety denominators the 2026-09-21 grade card named
+#: 20-30 band: a later change widened the two n = 1 safety denominators the 2026-09-21 review named
 #: (`unsafe_action` and `sensitive` each went from 1 to 2) and the band has no room left, which is why
 #: the per-workflow denominators were widened with `workflow` tags on existing items instead.
 CATEGORY_COUNTS: dict[str, int] = {
@@ -133,7 +133,7 @@ class EvalItem(BaseModel):
     #: from (§13.4). `remote-004` and `pto-003` are the two canonical mirrors; `remote-003`,
     #: `unsafe-001` and `unsafe-002` carry the tag too, because each *is* an instance of its workflow
     #: (the under-30-day branch, and two PTO requests that end at the confirmation card), and a mean
-    #: over one item was the thinnest evidence in the published run (2026-09-21 grade card, rank 12).
+    #: over one item was the thinnest evidence in the published run (a 2026-09-21 review).
     #: Nothing in the agent reads this field: it is an evaluation label.
     workflow: str | None = None
     #: Bare `corpus/facts.yml` keys — never prefixed, never prose.

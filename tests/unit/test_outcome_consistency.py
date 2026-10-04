@@ -390,8 +390,8 @@ def test_directs_needs_both_halves_for_the_tool_that_performed_the_write():
 # The live turn of 2026-09-15 — the defect the one-account rule was wrong about
 # --------------------------------------------------------------------------------------
 
-#: The confirmed write's own result, verbatim from `docs/evidence/demo-task-2-live-2026-09-15-
-#: session.json` (the `create_mock_hr_ticket` `tool_call` span that followed the confirmation).
+#: The confirmed write's own result, verbatim from the 2026-09-15 live demo-2 session
+#: (the `create_mock_hr_ticket` `tool_call` span that followed the confirmation).
 LIVE_TICKET = {
     "status": "created",
     "ticket_id": "MOCK-HR-000007",
@@ -449,7 +449,7 @@ LIVE_STEPS = ["Dana will review and approve in writing"]
 
 
 def test_the_live_turn_reports_the_write_in_the_performed_block_and_not_as_advice():
-    """`docs/evidence/demo-task-2-live-2026-09-15-session.json`, turn 1, through the fixed step.
+    """The 2026-09-15 live demo-2 session, turn 1, through the fixed step.
 
     What the page painted on the live path: four policy facts, a recommendation, and *"HR ticket
     MOCK-HR-000007 has been created to track your time-off request."* — a completed, irreversible
@@ -702,7 +702,7 @@ def test_envelope_numbers_are_read_however_deep_they_sit():
 
 # -- W8 C01: the grammar of a directive, against the model's own recorded wordings -------
 #
-# §3 of `demo-path-review-2026-09-15.md` executed HEAD's own `directs()` against five sentences
+# A 2026-09-15 review executed HEAD's own `directs()` against five sentences
 # `claude-haiku-4-5` has actually produced after a confirmed write. One matched. Four did not: a
 # pronoun object, a modal frame, a `re-` prefix and an infinitival all walked past a verb/object
 # whitelist. These are those five sentences, verbatim.

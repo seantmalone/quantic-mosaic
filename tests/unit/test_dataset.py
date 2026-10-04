@@ -158,7 +158,7 @@ def test_both_demo_workflows_are_mirrored_in_the_dataset():
 
     The two canonical mirrors must be there, every tag must name one of the two demo workflows and
     nothing else, and **no workflow may be left at a single item** — a mean over one was the thinnest
-    evidence in the published run (2026-09-21 grade card, rank 12), and the tag is how it was widened
+    evidence in the published run (a 2026-09-21 review), and the tag is how it was widened
     without pushing the set past requirement 9's 30-item ceiling.
     """
     tagged: dict[str, list[str]] = {}

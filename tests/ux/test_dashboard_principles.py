@@ -1,6 +1,6 @@
 """P1, P9, P10 and P14 on the **rendered** dashboard (`pytest -m ux`, UX W4).
 
-`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` §1 writes each principle as a rule a
+The UX remediation plan §1 writes each principle as a rule a
 machine can check, and each of these four is about what a page *prints*:
 
 * **P1** human precision — no number carries more significant digits than its purpose supports;

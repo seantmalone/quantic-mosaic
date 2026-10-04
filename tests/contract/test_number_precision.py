@@ -1,6 +1,6 @@
 """**P1**: no number on the chat surface carries more digits than its purpose supports.
 
-`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` §1 P1, and the three findings behind it
+The UX remediation plan §1 P1, and the three findings behind it
 (`numbers-precision-overflow-3`, `-12`, `-22`): a cosine threshold inside a refusal sentence
 (*"max dense score 0.583 < 0.60"*), `0.7612` beside `0.774` in a trace panel, `1176→121 tok`, and
 `0 ms` on 16 of 28 rows — all on the page a person reads, none of it rounded, none of it useful

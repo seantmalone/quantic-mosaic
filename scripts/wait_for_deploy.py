@@ -55,7 +55,7 @@ def require_base_url(url: str | None) -> str:
     if not candidate:
         raise BadUrl(
             "--url is empty. In CI that means the DEPLOY_URL repository secret is unset — see "
-            "NEEDS-FROM-USER.md (gates 2 and 4), then run scripts/provision_render.py."
+            "deployed.md, then run scripts/provision_render.py."
         )
     if not candidate.lower().startswith(URL_SCHEMES):
         raise BadUrl(f"--url {candidate!r} has no http:// or https:// scheme; it is not a base URL.")

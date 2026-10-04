@@ -1,7 +1,8 @@
-# The final build, live — 2026-09-16
+# Live screens — 2026-09-16
 
-Captured with Playwright against https://mosaic-hr-copilot.onrender.com on build `bd4ac93` (the run
-the published evaluation `r_1789555212_baseline` measured), viewport 1440×900, signed in with the grader
+Captured with Playwright against https://mosaic-hr-copilot.onrender.com on build `bd4ac93` (the build
+measured by evaluation run `r_1789555212_baseline`, published at the time; the run published now is
+`r_1790130220_baseline` on `34d50fb`), viewport 1440×900, signed in with the grader
 key, persona Priya Raghavan (E1042), one live model turn (the Berlin demo prompt).
 
 | file | what it shows |

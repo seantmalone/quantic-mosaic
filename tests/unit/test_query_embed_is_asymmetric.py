@@ -11,7 +11,7 @@ and the index is rebuilt: `open_index()`'s guard compares `index_meta.query_conv
 running one, so a silent switch cannot serve a query embedded one way against passages embedded the
 other.
 
-The branch taken and the measured fastembed version are recorded in `CHANGELOG.md`.
+The branch taken and the measured fastembed version are recorded in the commit history.
 
 This is the one unit test that loads the real ONNX model. CI runs
 `python -m hrmosaic.rag.download_model` before `pytest`, so the cache is warm.

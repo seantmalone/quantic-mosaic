@@ -8,7 +8,7 @@ committed `data/index/hr_index.sqlite`, the live `/api/corpus` response and `/da
 show — the same words, the same sections, the same pages. It used to import `check_facts.py`'s
 script-local reader instead, which counts a Markdown `##` marker and a TXT underline as words and
 keeps heading-only sections, and the two readings disagreed on screen: 31,007 words and 176-vs-190
-sections published against the index's 30,840 (2026-09-21 grade card, rank 6). `check_facts.py`
+sections published against the index's 30,840 (a 2026-09-21 review). `check_facts.py`
 keeps its own reader for what it alone needs — matching a `facts.yml` quote verbatim against the
 rendered bytes of the file on disk.
 

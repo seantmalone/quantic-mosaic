@@ -63,8 +63,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: The graded documents that publish the keep-alive to a reader. `docs/optimization-log.md` is a
 #: dated record elsewhere, but its cold-start entry ends in a *Status* block that tells a reader
-#: what the service is doing now — it is linked from `README.md` and `deployed.md` and is on screen
-#: in the demo script's 8:45 segment — so that block is held to the same truth as the rest.
+#: what the service is doing now — it is linked from `README.md` and `deployed.md` — so that block
+#: is held to the same truth as the rest.
 PUBLISHED_DOCS = (
     "README.md",
     "deployed.md",

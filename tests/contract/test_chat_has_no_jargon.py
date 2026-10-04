@@ -1,6 +1,6 @@
 """**P2 and P13**: no internal identifier, and no infrastructure vocabulary, anywhere in chat.
 
-The permanent guard for a whole class of defect. `docs/superpowers/plans/2026-09-14-ux-remediation-plan.md`
+The permanent guard for a whole class of defect. The UX remediation plan
 §1 states both principles with a mechanical detection rule, and this file is that rule, run over the
 **rendered** chat surface in every turn state the app can reach:
 

@@ -139,7 +139,7 @@ def test_the_recorded_pair_is_byte_for_byte_what_the_shell_scripts_send():
 
 def test_the_recorded_date_gives_the_recorded_notice():
     """Eight business days from `RECORDED_TODAY` to the scripts' 15 September, holidays excluded —
-    the figure the recorded demo-2 synthesis and `docs/demo-script.md` both state."""
+    the figure the recorded demo-2 synthesis states."""
     start, _end = _dates(api.DEMO_PROMPTS["demo_2"])
     assert start == date(2026, 9, 15)
     assert business_days_between(api.RECORDED_TODAY, start, api._demo_holidays()) == 8

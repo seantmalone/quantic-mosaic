@@ -6,11 +6,10 @@
 
 ## What is live, and what produced it
 
-Gates **2** (Render account + the Render GitHub App), **3** (Turso platform token) and **4**
-(Render API key) all landed on 2026-09-10, plus a gate the file never had — **2a**, a payment
-method on the Render workspace, which Render demands before it will create any service, free ones
-included. Each row below names the command whose output it is; the full sequence is
-`NEEDS-FROM-USER.md` §*The exact steps*.
+The Render account and the Render GitHub App, the Turso platform token and the Render API key were
+all in place on 2026-09-10, plus a payment method on the Render workspace, which Render demands
+before it will create any service, free ones included. Each row below names the command whose
+output it is.
 
 | Value | Produced by | Observed |
 |---|---|---|
@@ -50,28 +49,28 @@ questions. `evaluation/REPORT.md` prints both. The published run records both as
 `34d50fb29429c25613ae23bd328448b4c5ad48af`: the harness ran from the same commit the service was
 serving.
 
-**Runs recorded before 2026-09-11 carry neither.** Until P23 the harness took `git_sha` from
+**Runs recorded before 2026-09-11 carry neither.** Until then the harness took `git_sha` from
 `settings.git_sha`, which resolves `GIT_SHA` → `RENDER_GIT_COMMIT` → `"dev"`, and on the
 development machine that is `"dev"`; there was no `target_git_sha` at all. The committed run files
 are **not** rewritten — a result file is a record of what happened, not a document — so for those
-three runs the serving commit lives here, in prose, taken from the deploy ledger:
+three runs the serving commit lives here, in prose:
 
 | Run | Column | Deployed commit that served it | Recorded in the run file |
 |---|---|---|---|
 | `r_1789055103_baseline` | 2026-09-10 15:53:57Z — before optimization | `5419ec5` | no — prose only |
-| `r_1789069158_baseline` | 2026-09-10 19:49:28Z — after the quality fixes (P13) | `b24ad32` | no — prose only |
-| `r_1789086979_baseline` | 2026-09-11 00:44:19Z — after the performance waves | `da0dca2` | no — prose only |
-| `r_1789166880_baseline` | published 2026-09-11 22:57:30Z — after the model-behaviour wave | `34717b5` | yes — `target_git_sha` and `git_sha` |
-| `r_1789555212_baseline` | published 2026-09-16 10:49:27Z — after the demo-path logic waves (W8–W10) | `bd4ac93` | yes |
+| `r_1789069158_baseline` | 2026-09-10 19:49:28Z — after the quality fixes | `b24ad32` | no — prose only |
+| `r_1789086979_baseline` | 2026-09-11 00:44:19Z — after the performance fixes | `da0dca2` | no — prose only |
+| `r_1789166880_baseline` | published 2026-09-11 22:57:30Z — after the model-behaviour changes | `34717b5` | yes — `target_git_sha` and `git_sha` |
+| `r_1789555212_baseline` | published 2026-09-16 10:49:27Z — after the demo-path logic fixes | `bd4ac93` | yes |
 | `r_1790067656_baseline` | 2026-09-22 09:08:05Z — after the clarification fix; superseded the same day | `e85305b` | yes |
-| `r_1790074972_baseline` | published 2026-09-22 11:10:12Z — superseded that evening by the round-2 re-drive | `8a89310` | yes |
-| `r_1790110325_baseline` | published 2026-09-22 20:59:49Z — on the round-2 build, superseded the next day by the round-3 re-drive | `80a5a71` | yes |
-| **`r_1790130220_baseline`** | **published — 2026-09-23 02:59:40Z, on the round-3 build, over the 30-item dataset** | **`34d50fb`** | **yes** |
+| `r_1790074972_baseline` | published 2026-09-22 11:10:12Z — superseded that evening by the next re-drive | `8a89310` | yes |
+| `r_1790110325_baseline` | published 2026-09-22 20:59:49Z — on the next build, superseded the next day by a further re-drive | `80a5a71` | yes |
+| **`r_1790130220_baseline`** | **published — 2026-09-23 02:59:40Z, on the shipped build, over the 30-item dataset** | **`34d50fb`** | **yes** |
 
 Every time in that column is the run file's own `created_at` in UTC — the instant the drive closed and
 the file was written. A run **id** carries a different instant: `r_<epoch>` is the drive's *start*, so
 `r_1790130220` began at 02:23:40Z on 2026-09-23 and its judged file closed at 02:59:40Z. Where a drive has no committed file (the four
-in `NEEDS-FROM-USER.md`'s import note) the id is the only timestamp there is, and that note says so.
+named in `design-and-evaluation.md`'s account of every drive) the id is the only timestamp there is.
 
 `scripts/smoke_deployed.py` asserts the live `/health` reports a `git_sha` that is not `"dev"`
 before any of those runs is allowed to count, which is what keeps the two shas from being confused.
@@ -90,7 +89,7 @@ measured.
 **The live sha moves; the application tree does not.** Every push to `main` that is not filtered
 out by `ci.yml`'s `paths-ignore` — which since 2026-09-22 keeps only published *results* off the
 build budget, and that is now exactly two entries: `evaluation/results/**` and
-`evaluation/REPORT.md`. Repo-root documents left the list in round 2 and `docs/**` left it in round 3,
+`evaluation/REPORT.md`. Repo-root documents and, later, `docs/**` left the list,
 so a document commit anywhere in the tree now runs the suite and deploys — triggers a build and a
 deploy. So `/health` reports
 whichever commit was last deployed rather than the one a document names, and a documentation push
@@ -132,8 +131,8 @@ name too, and by nothing broader than its name.
 **build** time behind `python -m hrmosaic.rag.ingest --verify-manifest`, which refuses a build whose
 chunks do not match the manifest. So the corpus is not an input the running service reads later — it
 is compiled into the artifact the published run measured, and an edit to a policy document or a change
-of chunking moves the answers `/chat` gives exactly as a code change does. Round 2 is the proof: the
-equipment-policy repair took the live index from 204 chunks to 205 on a build change, and a pathspec
+of chunking moves the answers `/chat` gives exactly as a code change does. The 2026-09-22 equipment-policy repair is the proof: it
+took the live index from 204 chunks to 205 on a build change, and a pathspec
 that named only `src` would have called that the same application. Documentation stays outside,
 because a documentation commit is exactly what this paragraph exists to account for.
 
@@ -197,10 +196,10 @@ carries it too**. **The public mount accepts external MCP clients**, verified on
 [`docs/evidence/mcp-external-session-2026-09-12.txt`](docs/evidence/mcp-external-session-2026-09-12.txt):
 `initialize` **200** with a `mcp-session-id`, `notifications/initialized`, `tools/list` returning
 all **nine** tools, and a real `search_policy_documents` call answered out of the deployed index.
-The remaining calls the 2026-09-12 01:45Z re-grade reports from that session — `check_pto_balance`,
+The remaining calls of that session — `check_pto_balance`,
 `create_mock_hr_ticket` refused **`CONFIRMATION_REQUIRED`** with no confirmation token and refused
 again with a forged one, and **401** to a request carrying no bearer — were not captured, so they
-are attributed to that record rather than pinned here; the bearer gate and the confirmation gate
+are not pinned here; the bearer gate and the confirmation gate
 are held by the test suite on every run. The other two ways to see the same nine tools are
 unchanged: `/dashboard/mcp` and the stdio entrypoint (`mcp/run_stdio.sh`).
 
@@ -214,7 +213,7 @@ unchanged: `/dashboard/mcp` and the stdio entrypoint (`mcp/run_stdio.sh`).
   safe precisely because the container port is reachable through that edge and through nothing
   else. With it the scheme is `https` again, so the `mosaic_access` cookie ships `Secure` as
   constraint 9 requires, and `ACCESS_RATE_LIMIT_PER_MIN` (30) is one bucket per client on Render as
-  it already was locally and under Docker; before P20 it behaved as one shared 30/min bucket across
+  it already was locally and under Docker; before the proxy flags were added it behaved as one shared 30/min bucket across
   every visitor, because the address uvicorn saw was the edge's. The limit does **not** rely on the
   flag to decide whose bucket it is: `'*'` is a broad grant, and under it uvicorn reports the
   **first** `X-Forwarded-For` entry as the client — which is whatever the caller sent, since each
@@ -320,7 +319,7 @@ since the boot that followed. The evidence is `/health`'s own `app.uptime_ms`: *
 18:37Z**, then **69 minutes at 23:56Z → 86 minutes at 00:13Z**, a seventeen-minute window whose only
 other traffic was those two health reads and which is past Render's 15-minute spin-down, and
 **124.5 minutes at 00:51Z** on 2026-09-12. An instance with nothing pinging it cannot show an uptime
-that crosses its own idle timer. `render.yaml` carries the same two values (P23), so re-applying the
+that crosses its own idle timer. `render.yaml` carries the same two values, so re-applying the
 blueprint arms the loop rather than clearing the operator's value; the `Dockerfile` deliberately
 carries neither, because a baked origin would start the loop in every container a developer runs.
 The table above therefore documents what a visitor gets if the loop is ever turned off — see *How
@@ -429,7 +428,7 @@ the last so `mcp/run_stdio.sh` and `mcp/run_http.sh`, whose default is a develop
 
 Two credentials are **operator** environment and belong to no runtime surface, so they are read
 with `os.environ` in the provisioning scripts and are in neither `Settings` nor `.env.example`:
-`RENDER_API_KEY` (gate 4) and `TURSO_PLATFORM_TOKEN` (gate 3).
+`RENDER_API_KEY` and `TURSO_PLATFORM_TOKEN`.
 
 ### The hosted trace store is a hard dependency of `/chat`
 
@@ -443,7 +442,7 @@ raises and the composed answer is discarded: the reader gets the typed 200
 `sweep_stale_turns()`. `tests/contract/test_unmodelled_failure_is_graceful.py` pins that path by
 making `store.batch` raise. So the grading-window failure mode of a Turso outage is *"chat
 answers nothing useful"*, not *"traces are missing"*, and the repository has seen one real live
-Turso 502 during a probe (`docs/evidence/grade-card-2026-09-11.md`).
+Turso 502 during a probe.
 
 **How a reader tells, and the one-variable recovery.** `/health` stays 200 and reports
 `trace_store.reachable: false` with its `last_error`, and `degradations[]` carries the soft
@@ -492,7 +491,7 @@ run had to decompose).
 | Turso database | **$0** — organisation `seantm` on the free **Starter** plan with `overages: false`, holding one database (`mosaic-hr`, group `default`, `aws-us-west-2`) | 2026-09-10 |
 | Embeddings | **$0** — `BAAI/bge-small-en-v1.5` runs in-process | — |
 | Judge + failover (Gemini `gemini-3.5-flash-lite`) | **≈ $0.14–$0.18 a judge pass** — $0.30 / $2.50 per MTok in / out, the paid standard rates on the judge project since **2026-09-10**; the failover project is still on a free key. A pass is 232–296 calls across the ten committed judged baselines, on ~369k input / ~20k output tokens; `REPORT.md` derives that range from those runs at render time rather than carrying a literal. Judge spans written before that day carry `cost_usd_estimate` **$0** because cost is priced at write time, so the pass figure is stated from token counts | 2026-09-10 |
-| Agent (Anthropic `claude-haiku-4-5`) | **$18.54 across the 28 committed evaluation runs** — the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time), re-derived from the files on 2026-09-23 and ranging $0.42–$0.89 a drive — plus **≈ $0.09** for the two live demo turns of 2026-09-11; the live re-captures of 2026-09-22 (`docs/evidence/demo-task-*-live-2026-09-22.txt` and the `draft_hr_email` pair) are turns of the same order and are not separately priced. **This is past §9.8's "under $10 all-in" expectation, and the overrun is the honest number:** the row read $6.84 over twelve runs when it was written on 2026-09-11 and was never re-derived as ten more drives landed. Two further drives of the 2026-09-22 waves were discarded rather than committed and cost **$0.80** (`r_1790062696`) and **$0.83** (`r_1790106448`) by their own runner summaries, recorded in the wave ledger; the two 2026-09-16 drives that live only in the trace store carry no cost figure in any committed artifact. What took the total past $10 was re-driving the baseline **and both ablation arms** on every build that changed application code: the 28 files are **nine such trios plus one lone baseline**, three of the trios were driven on 2026-09-22 alone and a fourth on 2026-09-23, as each round of the grade-and-fix wave landed a new application build. An ablation whose arms sit on different commits measures the commits rather than the ablation, and `evaluation/ablation.py` refuses to compare them, so a code fix costs three drives and not one. That was accepted deliberately: the alternative was publishing a comparison the repository's own checker rejects. Nothing here is infrastructure spend, which is still $0, and `LLM_DAILY_CALL_CAP` (1,500 calls per UTC day) is what bounds it | re-derived 2026-09-23 |
+| Agent (Anthropic `claude-haiku-4-5`) | **$18.54 across the 28 committed evaluation runs** — the sum of their `est_cost_usd` (agent plus judge spans, each priced at write time), re-derived from the files on 2026-09-23 and ranging $0.42–$0.89 a drive — plus **≈ $0.09** for the two live demo turns of 2026-09-11; the live re-captures of 2026-09-22 (`docs/evidence/demo-task-*-live-2026-09-22.txt` and the `draft_hr_email` pair) are turns of the same order and are not separately priced. **This is past §9.8's "under $10 all-in" expectation, and the overrun is the honest number:** the row read $6.84 over twelve runs when it was written on 2026-09-11 and was never re-derived as ten more drives landed. Two further drives of 2026-09-22 were discarded rather than committed and cost **$0.80** (`r_1790062696`) and **$0.83** (`r_1790106448`) by their own runner summaries; the two 2026-09-16 drives that live only in the trace store carry no cost figure in any committed artifact. What took the total past $10 was re-driving the baseline **and both ablation arms** on every build that changed application code: the 28 files are **nine such trios plus one lone baseline**, three of the trios were driven on 2026-09-22 alone and a fourth on 2026-09-23, as each set of correctness fixes landed a new application build. An ablation whose arms sit on different commits measures the commits rather than the ablation, and `evaluation/ablation.py` refuses to compare them, so a code fix costs three drives and not one. That was accepted deliberately: the alternative was publishing a comparison the repository's own checker rejects. Nothing here is infrastructure spend, which is still $0, and `LLM_DAILY_CALL_CAP` (1,500 calls per UTC day) is what bounds it | re-derived 2026-09-23 |
 | GitHub Actions | **$0** — public repository, no minute cap | 2026-09-08 |
 
 **Build wall-clock, measured 2026-09-10** on the development machine (macOS arm64, Docker 29.6.1,
@@ -551,8 +550,7 @@ earlier runs the same day, each on the image built from the commit whose `git_sh
 printed, read **290.4**, **291.3**, **292.1**, **292.1**, **292.2** and **292.9** MB — so the
 spread across eight builds is 4.5 MB, the figure is stable to a few megabytes and the assertion is
 nowhere near its threshold. The reading is `/proc/self/status` `VmRSS` inside the container (a real
-Linux cgroup, under Docker Desktop's `linux/arm64` VM), not the macOS `getrusage` high-water mark
-that `CHANGELOG.md`'s P1 entry distinguishes.
+Linux cgroup, under Docker Desktop's `linux/arm64` VM), not the macOS `getrusage` high-water mark.
 
 **On Render's own `linux/amd64` instance: `rss_mb` 293.6**, read from the live `/health` payload by
 `scripts/smoke_deployed.py` on 2026-09-10 alongside `status: ok`, `deploy_mode: render`,
@@ -560,9 +558,9 @@ that `CHANGELOG.md`'s P1 entry distinguishes.
 an empty `degradations[]`. That is 1.3 MB from the local reading and 126 MB below the 420 MB
 assertion, so the memory budget behaves the same on the platform as it does under the local gate.
 
-### Live provider facts — read at P11 step 0
+### Live provider facts — hosting
 
-Every row of §3.1 that P11 owns, read live on the date shown. Nothing here is inferred.
+Every hosting row of §3.1, read live on the date shown. Nothing here is inferred.
 
 | Fact | Observed | Read on | Source |
 |---|---|---|---|
@@ -593,7 +591,7 @@ grows monotonically with the number of evaluation runs imported, and the live re
 2026-09-23. That growth is what the quota arithmetic has to be read against, not a 300-session ceiling.
 
 **The one thing Turso had never been asked, answered.** Until 2026-09-10 `TursoHTTPStore` had been
-exercised only against an httpx `MockTransport` (P1's carry-forward), so **whether foreign keys are
+exercised only against an httpx `MockTransport`, so **whether foreign keys are
 enforced on the Hrana `/v2/pipeline` path was unknown** — `SqliteStore` issues
 `PRAGMA foreign_keys=ON` per connection and the HTTP store has no connection to issue it on.
 `scripts/provision_turso.py`'s parity smoke asked on the first live run and the answer is **yes**:
@@ -615,7 +613,7 @@ a re-read of Turso's usage page — or caching the three counts for ~30 s, or re
 `max(rowid)` — is the work that would make the arithmetic current. It is named here rather than
 asserted away.
 
-### Live provider facts — read at P10 step 0
+### Live provider facts — model providers
 
 | Fact | Observed | Read on | Source |
 |---|---|---|---|
@@ -637,14 +635,14 @@ the **≈ $0.14–$0.18 a pass (232–296 calls over the ten committed judged ba
 request cap. What bounds the agent is `LLM_DAILY_CALL_CAP` (1,500 Anthropic calls per UTC day) and
 the prompt cache. The failover project is the one still on a free key, and it is exercised only
 when an Anthropic call fails — each such call recorded as `provider_failover` on the span — so the
-unverified figure sits on the path where it can affect nothing a published run depends on. The P10
-sweep issued its judge calls behind the same token-bucket limiter as everything else (`LLM_RPM = 10`
+unverified figure sits on the path where it can affect nothing a published run depends on. The first
+baseline sweep issued its judge calls behind the same token-bucket limiter as everything else (`LLM_RPM = 10`
 — the code default, which is what the harness process runs; the deployed service has been configured
 at `LLM_RPM=60` / `LLM_BURST=30` since 2026-09-10, on the Anthropic account's own 10,000 RPM / 10M
 input-tokens-per-minute limits read from response headers that day, after the deployed sweep
 recorded a 3.9 s/turn mean of bucket waiting at 10, p90 12.2 s), and the observed behaviour — how
 many judge calls the run made and whether any `429` / `Retry-After` was seen — is recorded in
-`CHANGELOG.md` and in the run's `eval_runs.notes`. That observation is the honest substitute for a number this environment
-could not read. **P11 step 0 re-read the row on 2026-09-10 and it is still unpublished**: the AI
+the run's `eval_runs.notes`. That observation is the honest substitute for a number this environment
+could not read. **A re-read of the row on 2026-09-10 found it still unpublished**: the AI
 Studio rate-limit page still requires an authenticated session that this environment does not have.
 So the row waits on an authenticated AI Studio session, not on a measurement this project could take.

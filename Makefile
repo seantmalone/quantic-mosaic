@@ -19,7 +19,7 @@ MOCK_TODAY ?= 2026-09-01
 
 .PHONY: setup lock run run-stdio lint test coverage ingest eval ablation demo1 demo2 docker docker-run-512 ux ux-capture
 
-# The built index, and the rule that builds it when it is missing (G5c, gap 35). Fifteen test files
+# The built index, and the rule that builds it when it is missing. Fifteen test files
 # read the corpus through `core.corpusread`, so `make setup && make test` on a fresh clone used to
 # fail with a bare sqlite "unable to open database file" and no remediation hint — CI never saw it,
 # because `ingest --verify-manifest` runs ahead of the suite there and leaves a real index behind.
@@ -38,7 +38,7 @@ setup:
 
 # The three committed manifests, recompiled from the authoritative `pyproject.toml` (R1.2).
 # `pyproject.toml` has pointed at "the `lock` recipe in the Makefile" since P0 and there was no such
-# target (G5b, gap 20a) — a cross-reference to nothing, in the one file that says where the pins come
+# target — a cross-reference to nothing, in the one file that says where the pins come
 # from. The commands are the ones in each file's own `uv pip compile` header, so re-running this and
 # committing the result is a no-op unless `pyproject.toml` changed.
 #
@@ -81,7 +81,7 @@ coverage: $(INDEX)
 #   .venv/bin/pip install -r requirements-ux.txt && .venv/bin/python -m playwright install chromium
 #
 # `ux` runs the principle tests (P3–P7) against a real browser; `ux-capture` re-captures the audit's
-# screen ids into a git-ignored directory so a wave can be diffed against the evidence that
+# screen ids into a git-ignored directory so a change can be diffed against the evidence that
 # justified it. Both run four stub servers on loopback: LLM_PROVIDER=stub, no live model call.
 UX_OUT ?= .ux-capture
 

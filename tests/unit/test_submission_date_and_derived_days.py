@@ -1,7 +1,7 @@
 """The submission date is the server's, and `days` is derived (W10, rulings 1 and 2).
 
 Two causes between them account for eleven of the sixteen recorded demo paths
-(`scenario-recheck-2026-09-16.md`), and both are the same mistake: a figure the verdict turns on
+(a 2026-09-16 scenario recheck), and both are the same mistake: a figure the verdict turns on
 was left to the model.
 
 * **`submitted_on`.** Six paths supplied one — three the request's own `start_date` (04, 05, 07),

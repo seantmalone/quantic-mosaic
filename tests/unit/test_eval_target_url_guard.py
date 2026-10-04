@@ -33,7 +33,7 @@ def test_an_empty_target_names_the_secret_and_the_gate():
     message = str(caught.value)
     assert "EVAL_TARGET_BASE_URL is empty" in message
     assert "DEPLOY_URL" in message
-    assert "NEEDS-FROM-USER.md" in message
+    assert "deployed.md" in message
     assert "provision_render.py" in message
 
 

@@ -411,8 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     if not platform_token:
         print(
             "TURSO_PLATFORM_TOKEN is unset. Create a Platform API token at https://turso.tech "
-            "(GitHub SSO → Account → API Tokens) and export it. This is user gate 3 of "
-            "NEEDS-FROM-USER.md and nothing here can proceed without it.",
+            "(GitHub SSO → Account → API Tokens) and export it; nothing here can proceed without it.",
             file=sys.stderr,
         )
         return 1

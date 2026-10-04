@@ -1,7 +1,7 @@
 # Mosaic Robotics — brand identity for the HR Copilot
 
-One page. Everything a later wave needs to dress the three surfaces in §2 of
-`docs/superpowers/plans/2026-09-14-ux-remediation-plan.md` without asking a designer a
+One page. Everything later interface work needs to dress the three surfaces (chat, the demo
+panel and the dashboard) without asking a designer a
 question. Assets live in `src/hrmosaic/web/static/brand/`; the token block in §7 is the whole
 colour and spacing system and is reproduced verbatim in `brand/brand.css`.
 
@@ -20,7 +20,7 @@ Many policies, one answer.
 corners rather than soft ones, hairlines rather than drop shadows, a 4 px grid nothing escapes,
 and one accent used sparingly. Nothing in this identity glows, floats, or celebrates.
 
-The tone follows the plan's own rule for the copy: *plain language, shown work*. The assistant
+The tone follows the interface's own rule for the copy: *plain language, shown work*. The assistant
 is never chirpy and never mysterious, and the brand should not be either.
 
 ### Explicitly not this
@@ -296,7 +296,7 @@ ship, and a fourth downloaded file would buy less than 100 characters of the int
   `052e128daf9dc880db9789e045867ffc0e1e87dd`. Licence copied verbatim as `OFL-PublicSans.txt`.
 * Both were subset and converted with `fonttools` 4.65 (`pyftsubset --flavor=woff2`) to the
   Google Fonts `latin` range **plus** `U+2190–2193` (arrows), `U+25A0–25A1`, `U+25B2–25BC`
-  (the disclosure triangles and the status dot) and `U+2713`, because the plan's copy uses
+  (the disclosure triangles and the status dot) and `U+2713`, because the interface copy uses
   them. Layout features kept: `kern, liga, ccmp, locl, mark, mkmk, calt, tnum, lnum, frac,
   sups, subs, case`. Every output file was re-opened with `fontTools.ttLib.TTFont` and the
   OFL name record (ID 13) confirmed present.
@@ -353,30 +353,30 @@ Applied with `:focus-visible`, never removed.
 
 ---
 
-## 6. Applying it — the surfaces in the plan
+## 6. Applying it — the surfaces
 
-Guidance, not markup; W2 owns the templates.
+Guidance, not markup; the templates own the markup.
 
-* **Masthead (§2 shell).** `--card` ground, `--radius-bar`, bottom `--edge`, sticky with
+* **Masthead.** `--card` ground, `--radius-bar`, bottom `--edge`, sticky with
   `--lift-1`. `wordmark.svg` at 26 px tall as the `h1`. The segmented `Chat | Dashboard`
   switch: `--radius-tile`, `--line-strong` edge, the current half filled `--accent` with
   `--on-accent` text and `aria-current="page"`.
-* **Chat turn (§3.3).** The user's message on `--accent-soft`, no border, `--radius`; the
+* **Chat turn.** The user's message on `--accent-soft`, no border, `--radius`; the
   assistant's on `--card` with `--edge`. Answer prose at `--text-body` on `--measure`. An
   inline source reference is a `button` in `--accent` with a dotted 1 px underline — accent
   colour is never the *only* signal. The `Sources (6)` strip is `--sunk` with `--edge`.
-* **Demo & grader panel (§3.7).** `--sunk` ground, `2px dashed var(--line-strong)`,
+* **Demo & grader panel.** `--sunk` ground, `2px dashed var(--line-strong)`,
   `--radius`. Its `[DEMO]` marker is an eyebrow in `--warn` on `--warn-soft` at
   `--radius-tile` — the one place warn is used for something that is not a warning, because
   "this is scaffolding" is exactly what it means. No emoji, ever.
-* **Dashboard table (§3.10).** Header row `--sunk`, `--text-small` at weight 600 in
+* **Dashboard table.** Header row `--sunk`, `--text-small` at weight 600 in
   `--ink-soft`, bottom `--edge`; body rows `--card` separated by `--edge`; numeric cells
   right-aligned `.tabular`. An id chip is `--mono` 13 px on `--sunk`, `--radius-tile`.
-* **KPI tile (§3.10 #1).** `--card`, `--edge`, `--radius`, `--space-4` padding, a 3 px
+* **KPI tile.** `--card`, `--edge`, `--radius`, `--space-4` padding, a 3 px
   `--accent` rule down the left edge. Value in Archivo SemiBold 28 px `.tabular` in `--ink`;
   label in `--text-small` **sentence case** in `--ink-soft`; sub-line in `--text-meta`
   `--ink-mute`.
-* **Access page (§3.8).** `--paper` window, one `--card` panel at `--radius`, the lockup above
+* **Access page.** `--paper` window, one `--card` panel at `--radius`, the lockup above
   the sentence. Error text in `--danger`, and the field's edge goes `--line-strong` →
   `--danger` with `aria-invalid` — never colour alone.
 
@@ -575,7 +575,7 @@ re-declare `--mark-*` on `.brand-mark` in `app.css` or the two paths diverge.
 * No `border-radius` above 6 px, and no pills.
 * No drop shadow on a card, a table, a chip or the mark.
 * No uppercase outside `--text-eyebrow`. `POLICY FACT`, `ESCALATION`, `SESSIONS (24 H)` and
-  `HR ADMIN` are all deleted by the plan; do not reintroduce the shape.
+  `HR ADMIN` were all removed from the interface; do not reintroduce the shape.
 * No Inter, no Space Grotesk, no system-UI fallback chain that lands on Inter. The stack ends
   at Helvetica/Arial on purpose.
 * No second accent hue. `--warn`, `--danger` and `--ok` are semantics, not decoration, and

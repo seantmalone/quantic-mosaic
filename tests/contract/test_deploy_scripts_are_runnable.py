@@ -1,7 +1,7 @@
 """Every deploy-time script runs as `python scripts/<name>.py`, from the repository root (§14.6).
 
 These eight scripts are invoked from a shell — by CI's `docker` and `deploy` jobs, by
-`make docker-run-512`, and by the operator following `NEEDS-FROM-USER.md` — and never by pytest.
+`make docker-run-512`, and by the operator following `deployed.md` — and never by pytest.
 That is exactly how `provision_render.py` and `check_render_hours.py` shipped broken for a few
 minutes during P11: `python scripts/<name>.py` puts *the script's own directory* on `sys.path`,
 not the repository root, so their sibling `from scripts.… import …` lines raised
